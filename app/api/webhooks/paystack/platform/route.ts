@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
+import { handlePaystackBillingEvent } from "@/lib/billing/paystackBilling";
 import { creditCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { CommerceOrder, CommerceBooking, CommerceSettings, PlatformPaystackWebhookEvent } from "@/lib/db/commerceEntities";
 
@@ -46,7 +47,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
   }
 
-  const eventId = event.data?.id !== undefined ? String(event.data.id) : event.data?.subscription_code ? `${event.event}:${event.data.subscription_code}` : null;
+  // Invoice events are per billing period (their own code); subscription events per subscription.
+  const invoiceCode = (event.data as { invoice_code?: string } | undefined)?.invoice_code;
+  const eventId = invoiceCode
+    ? `${event.event}:${invoiceCode}`
+    : event.data?.id !== undefined
+      ? `${event.event === "charge.success" ? "" : `${event.event}:`}${String(event.data.id)}`
+      : event.data?.subscription_code
+        ? `${event.event}:${event.data.subscription_code}`
+        : null;
   if (!eventId) {
     return NextResponse.json({ received: true });
   }
@@ -59,6 +68,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (err) {
     if (isConditionalCheckFailure(err)) return NextResponse.json({ received: true }); // already processed
     throw err;
+  }
+
+  // Plexo's own plan billing and AI top-ups in local currency (lib/billing/paystackBilling.ts).
+  // If applying fails, the claim is released so Paystack's retry gets another go.
+  try {
+    if (await handlePaystackBillingEvent(event as { event?: string; data?: Record<string, unknown> })) {
+      return NextResponse.json({ received: true });
+    }
+  } catch (err) {
+    console.error("Paystack plan billing event failed", err);
+    await PlatformPaystackWebhookEvent.delete({ id: eventId }).go().catch(() => undefined);
+    return NextResponse.json({ error: "Could not process event." }, { status: 500 });
   }
 
   let handledAsOrder = false;

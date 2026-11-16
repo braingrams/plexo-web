@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { storedPlan } from "@/lib/plan/entitlement";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { ApiKey } from "@/lib/db/coreEntities";
@@ -30,11 +31,11 @@ export default async function OverviewPage() {
     redirect("/auth/login");
   }
 
-  // User picked Pro/Ultra at signup but hasn't completed payment yet (subscriptionPlan
-  // only flips once the Stripe webhook confirms an active subscription) — a UX nudge,
+  // User picked a paid plan at signup but hasn't completed payment yet (subscriptionPlan
+  // only flips once the payment webhook confirms an active subscription) — a UX nudge,
   // not the real security boundary: every actual entitlement check reads subscriptionPlan
   // directly regardless of whether the user ever passes through this page.
-  if (user.pendingPlan && user.pendingPlan !== user.subscriptionPlan) {
+  if (user.pendingPlan && storedPlan({ subscriptionPlan: user.pendingPlan, planVersion: user.planVersion }) !== storedPlan(user)) {
     redirect("/auth/complete-subscription");
   }
 

@@ -6,6 +6,8 @@ import { User } from "@/lib/db/coreEntities";
 import { Payment, ReceiptSequence, type PAYMENT_KINDS, type PAYMENT_STATUSES } from "@/lib/db/ledgerEntities";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildPaymentReceiptEmail } from "@/lib/mail/templates";
+import { PLAN_LABELS, type PaidPlanId } from "@/lib/plan/plans";
+import { planFromStripeSubscription } from "./stripePlans";
 
 // Plexo's own record of every charge on its platform Stripe account. Stripe reports each
 // money movement as a charge (charge.succeeded / .failed / .refunded / .updated in
@@ -48,7 +50,11 @@ function cardOf(charge: Stripe.Charge) {
     : {};
 }
 
-const PLAN_NAMES: Record<string, string> = { PRO: "Plexo Pro plan", ULTRA: "Plexo Ultra plan" };
+/** "Plexo Starter plan" — read through the plan-version rule, so an old Pro renewal says Starter. */
+function planName(meta: Record<string, string | undefined>): string | null {
+  const plan = planFromStripeSubscription({ metadata: meta as Record<string, string> });
+  return plan ? `Plexo ${PLAN_LABELS[plan]} plan` : null;
+}
 const PACK_NAMES: Record<string, string> = { SMALL: "Small pack", MEDIUM: "Medium pack", LARGE: "Large pack" };
 
 function formatPeriod(start: number, end: number): string {
@@ -90,7 +96,7 @@ async function describeCharge(stripe: Stripe, charge: Stripe.Charge): Promise<De
       return {
         userId: meta.plexoUserId ?? null,
         kind: isSlot ? "FUNNEL_SLOT" : "SUBSCRIPTION",
-        description: isSlot ? "Funnel add-on slot" : (PLAN_NAMES[meta.plan ?? ""] ?? line?.description ?? "Plexo subscription"),
+        description: isSlot ? "Funnel add-on slot" : (planName(meta) ?? line?.description ?? "Plexo subscription"),
         ...period,
         stripeInvoiceId: invoice.id,
         stripeSubscriptionId: subscriptionId,
@@ -272,4 +278,53 @@ export async function sendReceiptEmail(payment: PaymentItem, options: { to?: str
 export async function listPaymentsForUser(userId: string, limit = 50): Promise<PaymentItem[]> {
   const { data } = await Payment.query.byUser({ userId }).go({ order: "desc", limit });
   return data as PaymentItem[];
+}
+
+/**
+ * Records a Paystack payment (plan subscription or top-up on Plexo's own Paystack account) the
+ * same way recordStripeCharge does — so receipts, payment history and the admin console show
+ * naira/cedi/shilling/rand payments too. Idempotent: the row id is the Paystack reference.
+ */
+export async function recordPaystackPayment(input: {
+  reference: string;
+  userId: string;
+  kind: "SUBSCRIPTION" | "CREDIT_TOPUP";
+  plan?: PaidPlanId | null;
+  credits?: number;
+  amountMinor: number;
+  currency: string;
+  paidAt: string;
+  email?: string | null;
+  cardBrand?: string | null;
+  cardLast4?: string | null;
+  periodEnd?: string | null;
+}): Promise<{ payment: PaymentItem; becamePaid: boolean } | null> {
+  const id = `paystack_${input.reference}`;
+  const { data: existing } = await Payment.get({ id }).go();
+  if (existing) return { payment: existing as PaymentItem, becamePaid: false };
+  const card = input.cardLast4 ? { cardBrand: input.cardBrand ?? undefined, cardLast4: input.cardLast4 } : {};
+  try {
+    const { data: payment } = await Payment.create({
+      id,
+      userId: input.userId,
+      kind: input.kind,
+      status: "PAID",
+      description: input.kind === "SUBSCRIPTION" ? `Plexo ${input.plan ? PLAN_LABELS[input.plan] : ""} plan`.replace("  ", " ") : "AI credit top-up",
+      detail: input.kind === "CREDIT_TOPUP" && input.credits ? `${input.credits.toLocaleString("en-US")} credits` : undefined,
+      amountCents: input.amountMinor,
+      refundedCents: 0,
+      currency: input.currency.toLowerCase(),
+      ...card,
+      billingEmail: input.email ?? undefined,
+      receiptNumber: await nextReceiptNumber(),
+      receiptToken: randomBytes(24).toString("hex"),
+      paidAt: input.paidAt,
+      ...(input.periodEnd ? { periodStart: input.paidAt, periodEnd: input.periodEnd } : {}),
+    }).go();
+    return { payment: payment as PaymentItem, becamePaid: true };
+  } catch (err) {
+    if (!isConditionalCheckFailure(err)) throw err;
+    const { data } = await Payment.get({ id }).go();
+    return data ? { payment: data as PaymentItem, becamePaid: false } : null;
+  }
 }

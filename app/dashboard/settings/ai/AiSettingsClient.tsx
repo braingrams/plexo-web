@@ -40,7 +40,7 @@ function IconArrowRight() {
   );
 }
 
-export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: AiSettingsApiKey[]; isUltra: boolean }) {
+export function AiSettingsClient({ initialApiKeys, canUseHostManagedAi }: { initialApiKeys: AiSettingsApiKey[]; canUseHostManagedAi: boolean }) {
   const [apiKeys, setApiKeys] = useState<AiSettingsApiKey[]>(initialApiKeys);
   const [activeKeyId, setActiveKeyId] = useState<string | null>(
     initialApiKeys.find((item) => item.isActive)?.id ?? initialApiKeys[0]?.id ?? null,
@@ -202,8 +202,8 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                           {ACCESS_MODE_OPTIONS.map((option) => {
                             const active = draftAccessMode === option.value;
-                            const requiresUltra = option.value === "HOST_MANAGED" && !isUltra;
-                            const isBtnDisabled = !activeKey.isActive || requiresUltra;
+                            const requiresUpgrade = option.value === "HOST_MANAGED" && !canUseHostManagedAi;
+                            const isBtnDisabled = !activeKey.isActive || requiresUpgrade;
                             return (
                               <button
                                 key={option.value}
@@ -226,9 +226,9 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                               >
                                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                                   <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600 }}>{option.label}</p>
-                                  {requiresUltra && (
+                                  {requiresUpgrade && (
                                     <span style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--brand)", background: "var(--brand-subtle)", padding: "0.15rem 0.4rem", borderRadius: 5 }}>
-                                      Requires Ultra
+                                      Pro plan
                                     </span>
                                   )}
                                 </div>
@@ -237,9 +237,9 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                             );
                           })}
                         </div>
-                        {draftAccessMode === "HOST_MANAGED" && !isUltra && (
+                        {draftAccessMode === "HOST_MANAGED" && !canUseHostManagedAi && (
                           <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginTop: "0.5rem" }}>
-                            This account is configured for Host-Managed AI access but is not on the Ultra plan — AI requests will be blocked until you upgrade. Upgrade in the Subscription section.
+                            This key is set to let your own app approve and pay for AI, which is part of the Pro plan. AI requests through it are paused until you upgrade to Pro on the Subscription page.
                           </p>
                         )}
                       </div>

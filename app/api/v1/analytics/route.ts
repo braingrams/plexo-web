@@ -1,3 +1,4 @@
+import { getTierFeatures } from "@/lib/subscription";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
@@ -7,6 +8,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveUser(request);
   if (!resolved) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // Visitor analytics come with Starter and above (lib/subscription.ts analyticsEnabled).
+  if (!getTierFeatures(resolved.subscriptionPlan).analyticsEnabled) {
+    return NextResponse.json({ error: "Visitor analytics come with the Starter plan and above. Upgrade in Settings → Billing to see who visits your sites.", code: "PLAN_ANALYTICS", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
   }
 
   const { searchParams } = new URL(request.url);

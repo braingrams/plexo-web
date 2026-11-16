@@ -146,7 +146,7 @@ POST {yourWebhookUrl}/ai-charge
           { id: "chatgpt", label: "ChatGPT Developer Plugin / Remote MCP", icon: Bot },
           { id: "cursor", label: "Cursor & Windsurf IDE", icon: Terminal },
           { id: "gpts", label: "ChatGPT Custom GPT Action", icon: Globe },
-          { id: "hostManaged", label: "Host-Managed AI (Ultra)", icon: ShieldCheck },
+          { id: "hostManaged", label: "Host-Managed AI (Pro)", icon: ShieldCheck },
         ].map((tab) => {
           const Icon = tab.icon;
           const active = activeTab === tab.id;
@@ -453,7 +453,7 @@ POST {yourWebhookUrl}/ai-charge
               </div>
             </div>
             <span className="text-xs font-mono px-2.5 py-1 rounded-lg bg-[#22d3ee]/10 text-[#22d3ee] border border-[#22d3ee]/20 self-start sm:self-auto shrink-0">
-              Ultra plan only
+              Pro plan and above
             </span>
           </div>
 
@@ -479,7 +479,7 @@ POST {yourWebhookUrl}/ai-charge
                   Fails closed
                 </span>
                 <p className="text-xs text-white/60 leading-relaxed">
-                  If your webhook is unreachable, times out, or denies the request, the AI action is blocked — Plexo never falls back to billing it against its own System AI credits. Requires the account to be on the Ultra plan; a downgrade blocks Host-Managed requests (403) until it&apos;s back on Ultra.
+                  If your webhook is unreachable, times out, or denies the request, the AI action is blocked — Plexo never falls back to billing it against its own System AI credits. Requires the Pro plan or above; on a lower plan these requests are blocked until you upgrade again.
                 </p>
               </div>
             </div>

@@ -1,9 +1,10 @@
 "use client";
 
+import type { PlanId } from "@/lib/plan/plans";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { NewSiteWizard } from "../new/NewSiteWizard";
 
-type Plan = "FREE" | "PRO" | "ULTRA";
+type Plan = PlanId;
 type NewSiteContextValue = { openNewSite: () => void };
 
 const NewSiteContext = createContext<NewSiteContextValue | null>(null);

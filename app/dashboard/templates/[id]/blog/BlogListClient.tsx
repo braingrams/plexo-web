@@ -387,9 +387,13 @@ export function BlogListClient({
       <UpgradeModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
-        title="Published post limit reached"
-        message={`Your plan allows a maximum of ${publishedLimit ?? 0} published blog posts on this site. Upgrade to publish more.`}
-        targetPlan={plan === "FREE" ? "PRO" : "ULTRA"}
+        title={publishedLimit ? "Published post limit reached" : "Publishing a blog is part of Starter"}
+        message={
+          publishedLimit
+            ? `Your plan allows ${publishedLimit} published blog posts on this site. Upgrade for unlimited posts.`
+            : "Your posts are saved. Upgrade to Starter to publish your blog — with unlimited posts — alongside a full multi-page site."
+        }
+        targetPlan={plan === "FREE" ? "STARTER" : "PRO"}
         returnTo={`/dashboard/templates/${templateId}/blog`}
       />
     </PageContainer>

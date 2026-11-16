@@ -46,7 +46,7 @@ async function getOrCreateMarketplaceOwner(): Promise<{ userId: string; organiza
   }
 
   const user = await prisma.user.create({
-    data: { email: MARKETPLACE_OWNER_EMAIL, name: "Plexo Templates", isConfirmed: true, subscriptionPlan: "ULTRA" },
+    data: { email: MARKETPLACE_OWNER_EMAIL, name: "Plexo Templates", isConfirmed: true, subscriptionPlan: "ENTERPRISE", planVersion: 2 },
   });
   const org = await prisma.organization.create({
     data: { name: "Plexo Templates", slug: `plexo-templates-${user.id.slice(0, 8)}` },

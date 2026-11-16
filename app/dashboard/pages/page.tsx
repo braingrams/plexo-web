@@ -29,7 +29,7 @@ export default async function PagesOverviewPage() {
   }
 
   const { data: user } = await User.get({ id: session.user.id }).go();
-  const isUltra = getTierFeatures(effectivePlan(user)).multiPageSitesEnabled;
+  const canAddSites = getTierFeatures(effectivePlan(user)).multiPageSitesEnabled;
 
   // Root landing-page templates with at least one sub-page — i.e. multi-site templates,
   // regardless of whether they've been published to a domain yet. Mirrors the root-template
@@ -67,7 +67,7 @@ export default async function PagesOverviewPage() {
   return (
     <PagesShell>
       <PagesOverviewClient
-        isUltra={isUltra}
+        canAddSites={canAddSites}
         pages={withChildren.map((r, i) => ({
           id: r.template.id,
           name: r.template.name,

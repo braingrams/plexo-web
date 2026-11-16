@@ -151,7 +151,7 @@ export async function planGeneration(key: ResolvedAiKey, input: GenerateInput): 
   if (key.aiAccessMode === "HOST_MANAGED") {
     // Host-Managed — the embedding host app authorizes/settles its own end users via webhook
     // AND supplies its own AI provider key. No fallback to System AI, by design.
-    if (!canUseHostManagedAi(key.subscriptionPlan)) return { error: "Host-Managed AI access requires the Ultra plan on this Plexo account.", status: 403 };
+    if (!canUseHostManagedAi(key.subscriptionPlan)) return { error: "Host-Managed AI access is part of the Pro plan on this Plexo account.", status: 403 };
     if (!key.hostAuthWebhookUrl || !key.hostWebhookSecret) {
       return { error: "Host-Managed AI access is not fully configured for this account (missing webhook URL/secret).", status: 503 };
     }

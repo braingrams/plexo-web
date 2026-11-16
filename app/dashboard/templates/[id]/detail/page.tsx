@@ -75,7 +75,7 @@ export default async function TemplateDetailPage(props: {
     blogEnabled: boolean;
     siteLayoutEnabled: boolean;
     commerceEnabled: boolean;
-    /** The site owner's plan includes server apps (ULTRA). Gates the Server app and Variables & secrets tabs. */
+    /** The site owner's plan includes server apps (Pro and above). Gates the Server app and Variables & secrets tabs. */
     ssrEnabled: boolean;
     deployedApp: {
       framework: string;

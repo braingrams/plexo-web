@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { checkoutPlanBlock } from "@/lib/plan/commerceGate";
 import { randomBytes } from "node:crypto";
 import { EntityItem } from "electrodb";
 
@@ -70,6 +71,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!settings || !settings.enabled) {
     return NextResponse.json({ error: "Commerce is not enabled for this site." }, { status: 400 });
   }
+  // The site owner's plan: no store on Free, no real payments during the free trial, own
+  // payment keys only on Pro and above (lib/plan/commerceGate.ts).
+  const planBlock = await checkoutPlanBlock(settings);
+  if (planBlock) return NextResponse.json({ error: planBlock }, { status: 403 });
   const isStripeFlow = settings.paymentProvider === "PLATFORM_STRIPE" || settings.paymentProvider === "BYO_STRIPE";
   const paystackKeys = isStripeFlow
     ? null

@@ -1,5 +1,7 @@
 "use client";
 
+import { getTierFeatures } from "@/lib/subscription";
+import type { PlanId } from "@/lib/plan/plans";
 import { ZipDropzone } from "../_components/ZipDropzone";
 import { ServerBuildProgress } from "./ServerBuildProgress";
 import { stripEnvFilesInBrowser } from "@/lib/projects/clientSsrUpload";
@@ -176,7 +178,7 @@ function primaryButtonStyle(enabled: boolean) {
  * (NewSiteProvider), where `onClose` is set and the page header is hidden.
  * `plan` decides whether the Server app tab is usable.
  */
-export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void; plan?: "FREE" | "PRO" | "ULTRA" } = {}) {
+export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void; plan?: PlanId } = {}) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [startTab, setStartTab] = useState<"marketplace" | "blank" | "ai" | "upload" | "server" | "wordpress">("marketplace");
   const [creatingBlank, setCreatingBlank] = useState(false);
@@ -814,7 +816,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                 >
                   Upload your own
                 </button>
-                {plan === "ULTRA" && (
+                {getTierFeatures(plan).ssrEnabled && (
                   <button
                     type="button"
                     onClick={() => setStartTab("server")}

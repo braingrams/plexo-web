@@ -5,6 +5,8 @@ import { User } from "./coreEntities";
 import { CreditLedgerEntry, StripeEvent } from "./ledgerEntities";
 import type { SubscriptionPlan } from "@/lib/subscription";
 import { planMonthlyCredits } from "@/lib/credits/value";
+import { allowancePlan } from "@/lib/plan/entitlement";
+import { planLabel } from "@/lib/plan/plans";
 import { computeCostUsd, creditsForUsd } from "@/lib/credits/pricing";
 import { MAX_TOKENS } from "@/lib/ai/generate";
 import type { AiActionMode, AiProvider, ConcreteTier, GenerateOutcome } from "@/lib/ai/types";
@@ -352,7 +354,9 @@ export async function ensureCreditPeriod(userId: string): Promise<CreditBalance>
   const allowanceBalance = user.allowanceBalance ?? 0;
   const topupBalance = user.topupBalance ?? 0;
   const allowanceResetAt = user.allowanceResetAt ?? new Date(0).toISOString();
-  const subscriptionPlan = user.subscriptionPlan ?? "FREE";
+  // The plan the account is ENTITLED to right now (a lapsed subscription or ended trial is
+  // Free even before the downgrade is written; a trial adds no AI credits) — not the raw column.
+  const subscriptionPlan = allowancePlan(user);
 
   const now = new Date();
   if (now <= new Date(allowanceResetAt)) {
@@ -373,7 +377,7 @@ export async function ensureCreditPeriod(userId: string): Promise<CreditBalance>
     type: "MONTHLY_GRANT",
     amount: grant,
     balanceAfter: grant + topupBalance,
-    description: `Monthly ${subscriptionPlan} allowance`,
+    description: `Monthly ${planLabel(subscriptionPlan)} allowance`,
   }).params();
 
   try {
@@ -424,7 +428,7 @@ export async function grantPlanChangeAllowance(userId: string, newPlan: Subscrip
     type: "MONTHLY_GRANT",
     amount: grant,
     balanceAfter: grant + topupBalance,
-    description: `Plan changed to ${newPlan} — allowance refreshed`,
+    description: `Plan changed to ${planLabel(newPlan)} — allowance refreshed`,
   }).params();
 
   try {

@@ -53,7 +53,7 @@ export async function POST(
   }
   const plan = getTierFeatures(resolved.subscriptionPlan);
   if (!plan.ssrEnabled) {
-    return NextResponse.json({ error: "Server-rendered apps are available on the ULTRA plan." }, { status: 403 });
+    return NextResponse.json({ error: "Server apps are part of the Pro plan. Upgrade in Settings → Billing to use them." }, { status: 403 });
   }
 
   const source = await readSource(request, templateId, resolved.organizationId);

@@ -1,4 +1,4 @@
-import { effectivePlan } from "@/lib/plan/entitlement";
+import { planFromOwner, workspaceOwner, type WorkspacePlan } from "@/lib/plan/workspacePlan";
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
@@ -9,7 +9,8 @@ import { Organization, Member, Invitation, User } from "@/lib/db/coreEntities";
 import type { OrgRole } from "@/server/accessControl";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildInviteEmail } from "@/lib/mail/templates";
-import { canWhiteLabel } from "@/lib/subscription";
+import { getTierFeatures } from "@/lib/subscription";
+import { planLabel } from "@/lib/plan/plans";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { membershipsForUser, ensurePersonalWorkspace, ACTIVE_ORG_COOKIE } from "@/server/orgMemberships";
 
@@ -35,11 +36,18 @@ export { membershipsForUser, ensurePersonalWorkspace, ACTIVE_ORG_COOKIE } from "
 // configured. canWhiteLabel() itself is pure (a plan-tier lookup table, no I/O) so it's
 // still shared.
 export async function getOrganizationOwnerPlanDynamo(organizationId: string): Promise<string> {
-  const { data: owner } = await Member.query.primary({ organizationId }).where((attr, op) => op.eq(attr.role, "owner")).go();
-  const ownerUserId = owner[0]?.userId;
-  if (!ownerUserId) return "FREE";
-  const { data: ownerUser } = await User.get({ id: ownerUserId }).go();
-  return effectivePlan(ownerUser);
+  return (await getOrganizationOwnerEntitlementDynamo(organizationId)).subscriptionPlan;
+}
+
+/** The workspace's plan and whether it's still a free trial (lib/plan/workspacePlan.ts). */
+export async function getOrganizationOwnerEntitlementDynamo(organizationId: string): Promise<WorkspacePlan> {
+  return planFromOwner(await workspaceOwner(organizationId));
+}
+
+/** White-label: Enterprise, and switched on only once the plan is paid for (not during the trial). */
+export async function orgCanWhiteLabelDynamo(organizationId: string): Promise<boolean> {
+  const { subscriptionPlan, onTrial } = await getOrganizationOwnerEntitlementDynamo(organizationId);
+  return getTierFeatures(subscriptionPlan, { trial: onTrial }).whiteLabelEnabled;
 }
 
 export async function getOrgBrandDynamo(
@@ -47,8 +55,9 @@ export async function getOrgBrandDynamo(
 ): Promise<{ name: string; logoUrl?: string; color?: string; displayMode: "LOGO_ONLY" | "NAME_ONLY" | "BOTH" } | undefined> {
   const { data: org } = await Organization.get({ id: organizationId }).go();
   if (!org) return undefined;
-  const plan = await getOrganizationOwnerPlanDynamo(organizationId);
-  if (!canWhiteLabel(plan) || !org.whiteLabelEnabled) return undefined;
+  const { subscriptionPlan, onTrial } = await getOrganizationOwnerEntitlementDynamo(organizationId);
+  // White-label is Enterprise, and waits for the first payment on a trial.
+  if (!getTierFeatures(subscriptionPlan, { trial: onTrial }).whiteLabelEnabled || !org.whiteLabelEnabled) return undefined;
   return { name: org.name, logoUrl: org.logo, color: org.brandColor, displayMode: org.brandDisplayMode ?? "BOTH" };
 }
 
@@ -234,6 +243,49 @@ export async function getInvitation(id: string): Promise<InvitationView | null> 
   return hydrateInvitation(inv);
 }
 
+// ── Team seats ────────────────────────────────────────────────────────────────────────
+// Each plan includes a number of people besides the workspace owner (getTierFeatures().teamSeats:
+// Free none, Starter 2, Pro 5, Enterprise more). Pending invitations hold a seat, so a burst of
+// invites can't overshoot. Existing teammates are never removed by a downgrade — new invites
+// just wait until a seat is free.
+
+export type SeatUsage = { plan: string; seats: number; used: number; members: number; pendingInvites: number };
+
+export async function seatUsage(organizationId: string): Promise<SeatUsage> {
+  const [{ data: members }, { data: invites }, owner] = await Promise.all([
+    Member.query.primary({ organizationId }).go({ pages: "all" }),
+    Invitation.query.byOrg({ organizationId }).where((attr, op) => op.eq(attr.status, "pending")).go({ pages: "all" }),
+    getOrganizationOwnerEntitlementDynamo(organizationId),
+  ]);
+  const now = Date.now();
+  const teammates = members.filter((m) => m.role !== "owner").length;
+  const pending = invites.filter((i) => Date.parse(i.expiresAt) > now).length;
+  return { plan: owner.subscriptionPlan, seats: getTierFeatures(owner.subscriptionPlan).teamSeats, used: teammates + pending, members: teammates, pendingInvites: pending };
+}
+
+export class SeatLimitError extends Error {
+  readonly status = 403;
+  readonly code = "PLAN_SEAT_LIMIT_EXCEEDED";
+  constructor(message: string) {
+    super(message);
+    this.name = "SeatLimitError";
+  }
+}
+
+function seatLimitMessage(usage: SeatUsage): string {
+  const planName = planLabel(usage.plan);
+  if (usage.seats === 0) return `The ${planName} plan is just for you. Upgrade to Starter to invite teammates (2 people), or Pro for 5.`;
+  return `Your ${planName} plan includes ${usage.seats} teammate${usage.seats === 1 ? "" : "s"}, and ${usage.used === usage.seats ? "they're all taken" : "you're over that"} (${usage.members} joined, ${usage.pendingInvites} invited). Cancel an invite, remove someone, or upgrade for more seats.`;
+}
+
+/** Throws SeatLimitError when inviting one more person would go over the plan's seats. */
+export async function assertSeatAvailable(organizationId: string, opts: { forPendingInvite?: boolean } = {}): Promise<void> {
+  const usage = await seatUsage(organizationId);
+  // Accepting an invite turns its own pending seat into a member — it doesn't take a new one.
+  const needed = opts.forPendingInvite ? usage.members + 1 : usage.used + 1;
+  if (needed > usage.seats) throw new SeatLimitError(seatLimitMessage(usage));
+}
+
 export async function createInvitation(
   organizationId: string,
   organizationName: string,
@@ -287,6 +339,8 @@ export async function acceptInvitation(id: string, userId: string): Promise<{ or
   const { data: inv } = await Invitation.get({ id }).go();
   if (!inv || inv.status !== "pending") return null;
   if (new Date(inv.expiresAt).getTime() < Date.now()) return null;
+  // The workspace may have moved to a smaller plan since this was sent.
+  await assertSeatAvailable(inv.organizationId, { forPendingInvite: true });
 
   try {
     await Member.create({

@@ -38,7 +38,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : email.split("@")[0] || "Plexo User";
-  const pendingPlan = body.pendingPlan === "PRO" || body.pendingPlan === "ULTRA" ? body.pendingPlan : undefined;
+  // ULTRA: a signup page loaded before the plan rename (today's Pro).
+  const pendingPlan: "STARTER" | "PRO" | "ENTERPRISE" | undefined =
+    body.pendingPlan === "ULTRA" ? "PRO" : body.pendingPlan === "STARTER" || body.pendingPlan === "PRO" || body.pendingPlan === "ENTERPRISE" ? body.pendingPlan : undefined;
 
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: { message: "Enter a valid email address." } }, { status: 400 });

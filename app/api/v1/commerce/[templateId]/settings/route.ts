@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { commerceEnableError, commercePlanForOrg, defaultPaymentProvider, paymentProviderError } from "@/lib/plan/commerceGate";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin, maskSecret } from "@/lib/commerce/adminAuthDynamo";
 import {
@@ -162,6 +163,14 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
     );
   }
 
+  // The workspace's plan decides whether there's a store at all and whether it may use its
+  // own payment keys (lib/plan/commerceGate.ts).
+  const commercePlan = await commercePlanForOrg(organizationId);
+  const planError = (enabled === true ? commerceEnableError(commercePlan) : null) ?? paymentProviderError(commercePlan, paymentProvider);
+  if (planError) {
+    return NextResponse.json({ error: planError, code: "PLAN_COMMERCE_LIMIT", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
+  }
+
   // Platform Stripe is admin-gated — see CommerceStripeAccessRequest and the
   // request/approval flow in app/api/v1/commerce/stripe-access/route.ts + plexo-admin.
   // Platform Paystack and BYO Stripe need no such gate — both are opt-in with either
@@ -226,6 +235,12 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
   if (typeof enabled === "boolean") data.enabled = enabled;
   if (typeof currency === "string") data.currency = currency.toUpperCase();
   if (paymentProvider !== undefined) data.paymentProvider = paymentProvider;
+  else if (enabled === true) {
+    // A store opened for the first time starts on a payment option its plan allows, so it
+    // works straight away (own keys need Pro; smaller plans start on Plexo's account).
+    const { data: current } = await CommerceSettings.get({ templateId }).go();
+    if (!current?.paymentProvider) data.paymentProvider = defaultPaymentProvider(commercePlan);
+  }
   if (paystackMode !== undefined) data.paystackMode = paystackMode;
   if (typeof paystackTestPublicKey === "string") {
     if (paystackTestPublicKey) data.paystackTestPublicKey = paystackTestPublicKey;

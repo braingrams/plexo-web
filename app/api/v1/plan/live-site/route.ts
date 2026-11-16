@@ -4,7 +4,7 @@ import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { Template } from "@/lib/db/contentEntities";
 import { findRootTemplateId } from "@/lib/siteLayoutDynamo";
-import { getTierFeatures } from "@/lib/subscription";
+import { getTierFeatures, isHomePageOnlyPlan } from "@/lib/subscription";
 import { makeSiteLive, PlanLifecycleError } from "@/lib/plan/lifecycle";
 
 /**
@@ -27,8 +27,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Site not found." }, { status: 404 });
   }
 
-  if (getTierFeatures(resolved.subscriptionPlan).maxPublishedSites === null) {
-    return NextResponse.json({ error: "Your plan keeps all your sites live already — nothing to switch." }, { status: 400 });
+  // Swapping the one live site is a Free-plan action (it applies Free's limits — homepage only,
+  // Plexo address). Paid plans with a site limit take a site offline from its own settings instead.
+  if (!isHomePageOnlyPlan(resolved.subscriptionPlan)) {
+    return NextResponse.json({ error: getTierFeatures(resolved.subscriptionPlan).maxPublishedSites === null ? "Your plan keeps all your sites live already — nothing to switch." : "Take one of your live sites offline first, then put this one live." }, { status: 400 });
   }
 
   try {

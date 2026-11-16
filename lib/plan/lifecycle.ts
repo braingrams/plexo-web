@@ -13,11 +13,15 @@ import { buildPaymentDeclinedEmail, buildPlanEndedEmail, buildPlanEndingSoonEmai
 import { dueReminder } from "./reminders";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { getStripe } from "@/lib/stripe";
+import { planFields } from "./plans";
+import { planPriceMinor, regionById, regionForCurrency } from "@/lib/billing/pricing";
+import { loadPriceBook } from "@/lib/billing/priceBook";
 import {
   TRIAL_DAYS,
   isPaidPlan,
   paidAccess,
   planSyncAction,
+  storedPlan,
   type DowngradeReason,
   type PlanSyncAction,
   type TrialPlan,
@@ -101,9 +105,10 @@ export async function syncPlanLifecycle(userId: string, now: Date = new Date()):
 async function downgrade(user: UserItem, now: Date): Promise<void> {
   const access = paidAccess(user, now);
   const reason: DowngradeReason = access.entitled ? "ADMIN" : access.reason;
-  const previousPlan = user.subscriptionPlan ?? "PRO";
+  const before = storedPlan(user);
+  const previousPlan = before === "FREE" ? "STARTER" : before;
   await User.patch({ id: user.id })
-    .set({ subscriptionPlan: "FREE", planDowngradedAt: now.toISOString(), planDowngradeReason: reason, planBeforeDowngrade: previousPlan === "ULTRA" ? "ULTRA" : "PRO" })
+    .set({ ...planFields("FREE"), planDowngradedAt: now.toISOString(), planDowngradeReason: reason, planBeforeDowngrade: previousPlan })
     // freeLimitsAppliedAt is cleared so the very next step applies Free's limits afresh.
     .remove(["planAccessUntil", "planAccessSource", "pendingPlan", "freeLimitsAppliedAt", "planAccessReminderSentAt"])
     .go();
@@ -128,7 +133,7 @@ async function enforceFree(user: UserItem, now: Date): Promise<void> {
   // An account moved to Free by an admin, or already on Free when enforcement arrived, is
   // told what changed too — but only if something actually did.
   if (summary.changed) {
-    await notifyPlanEnded(user, user.planBeforeDowngrade ?? "FREE", user.planDowngradeReason ?? "ADMIN", summary);
+    await notifyPlanEnded(user, user.planBeforeDowngrade ? storedPlanOf(user.planBeforeDowngrade, user.planVersion) : "FREE", user.planDowngradeReason ?? "ADMIN", summary);
   }
 }
 
@@ -238,8 +243,10 @@ export async function governedSites(userId: string): Promise<GovernedSite[]> {
 // ── trial ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Starts the one free trial an account gets: full Pro or Ultra for TRIAL_DAYS, no card.
- * When it ends without a subscription, the normal downgrade runs.
+ * Starts the one free trial an account gets: Starter or Pro for TRIAL_DAYS, no card. Custom
+ * domains, live payments and white-label wait for the first payment, and the trial adds no
+ * AI credits (lib/plan/entitlement.ts isOnTrial/allowancePlan). When it ends without a
+ * subscription, the normal downgrade runs.
  */
 export async function startTrial(userId: string, plan: TrialPlan, now: Date = new Date()): Promise<{ endsAt: string }> {
   const { data: user } = await User.get({ id: userId }).go();
@@ -252,7 +259,7 @@ export async function startTrial(userId: string, plan: TrialPlan, now: Date = ne
   try {
     await User.patch({ id: userId })
       .set({
-        subscriptionPlan: plan,
+        ...planFields(plan),
         planAccessUntil: endsAt,
         planAccessSource: "TRIAL",
         trialStartedAt: now.toISOString(),
@@ -265,10 +272,13 @@ export async function startTrial(userId: string, plan: TrialPlan, now: Date = ne
     if (isConditionalCheckFailure(err)) throw new PlanLifecycleError("You've already used your free trial. Choose a plan to keep going.", 409);
     throw err;
   }
-  await grantPlanChangeAllowance(userId, plan).catch((err) => console.error("plan lifecycle: trial allowance failed", err));
   // An account coming back from an earlier downgrade gets its sites back for the trial.
   await syncPlanLifecycle(userId, now);
   return { endsAt };
+}
+
+function storedPlanOf(value: string, planVersion: number | null | undefined): string {
+  return storedPlan({ subscriptionPlan: value, planVersion });
 }
 
 // ── Stripe facts ──────────────────────────────────────────────────────────────────────
@@ -293,7 +303,7 @@ export function mapStripeStatus(status: string): SubscriptionStatus {
 
 /** A subscription recorded before statuses were tracked: ask Stripe once a day whether it's still paying. */
 export async function verifyStripeSubscription(user: UserItem, now: Date = new Date()): Promise<void> {
-  if (!user.stripeSubscriptionId || user.subscriptionStatus || !process.env.STRIPE_SECRET_KEY) return;
+  if (!user.stripeSubscriptionId || user.subscriptionStatus || user.subscriptionProvider === "PAYSTACK" || !process.env.STRIPE_SECRET_KEY) return;
   if (user.subscriptionCheckedAt && now.getTime() - Date.parse(user.subscriptionCheckedAt) < 86_400_000) return;
   let status: SubscriptionStatus;
   try {
@@ -331,9 +341,9 @@ export async function sendAccessEndingReminder(user: UserItem, now: Date = new D
     if (isConditionalCheckFailure(err)) return false;
     throw err;
   }
-  const plan = user.subscriptionPlan ?? "PRO";
+  const plan = storedPlan(user);
   if (due.kind === "RENEWING") {
-    const price = await currentSubscriptionPrice(user.stripeSubscriptionId);
+    const price = await currentSubscriptionPrice(user);
     const { subject, html } = buildPlanRenewalSoonEmail({ plan, renewsAt: due.endsAt, ...price, manageUrl: `${appUrl()}/dashboard/settings/subscription` });
     await sendEmail(user.email, subject, html);
     return true;
@@ -349,8 +359,17 @@ export async function sendAccessEndingReminder(user: UserItem, now: Date = new D
   return true;
 }
 
-/** What the next renewal will charge — best effort; the email simply leaves the amount out if Stripe can't be reached. */
-async function currentSubscriptionPrice(subscriptionId: string | null | undefined): Promise<{ amountMinor?: number; currency?: string }> {
+/** What the next renewal will charge — best effort; the email simply leaves the amount out if it can't be worked out. */
+async function currentSubscriptionPrice(user: UserItem): Promise<{ amountMinor?: number; currency?: string }> {
+  const nextPlan = user.scheduledPlan ?? storedPlan(user);
+  if (user.subscriptionProvider === "PAYSTACK" || user.scheduledPlan) {
+    // Paystack amounts (and a booked plan move) come straight from the price list.
+    const book = await loadPriceBook();
+    const region = regionById(book, user.billingRegion) ?? regionForCurrency(book, user.billingCurrency ?? "USD");
+    if (nextPlan === "FREE" || !region) return {};
+    return { amountMinor: planPriceMinor(region, nextPlan, user.subscriptionInterval ?? "monthly"), currency: region.currency.toLowerCase() };
+  }
+  const subscriptionId = user.stripeSubscriptionId;
   if (!subscriptionId || !process.env.STRIPE_SECRET_KEY) return {};
   try {
     const price = (await getStripe().subscriptions.retrieve(subscriptionId)).items.data[0]?.price;
@@ -362,11 +381,11 @@ async function currentSubscriptionPrice(subscriptionId: string | null | undefine
 
 /** A renewal charge was declined (Stripe webhook). Plan and sites stay fully active while Stripe retries. */
 export async function sendPaymentDeclinedEmail(
-  user: Pick<UserItem, "email" | "subscriptionPlan">,
+  user: Pick<UserItem, "email" | "subscriptionPlan" | "planVersion">,
   invoice: { amountMinor?: number | null; currency?: string | null; retryAt?: string | null },
 ): Promise<void> {
   const { subject, html } = buildPaymentDeclinedEmail({
-    plan: user.subscriptionPlan ?? "PRO",
+    plan: storedPlan(user),
     ...invoice,
     manageUrl: `${appUrl()}/dashboard/settings/subscription`,
   });

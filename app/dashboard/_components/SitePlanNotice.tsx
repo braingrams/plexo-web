@@ -3,14 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { startTrial } from "./trial";
+import { PLAN_LABELS, PLAN_RANK, toPlanId, type PaidPlanId } from "@/lib/plan/plans";
 
 // A slim strip at the top of the site and app editors saying what the owner's plan means
 // for THIS site, with the one action that fixes it. Silent whenever there's nothing to say
 // (every paid plan, and a Free site that's live and only has its homepage).
 
 type SiteStatus = {
-  plan: "FREE" | "PRO" | "ULTRA";
-  previousPlan: "PRO" | "ULTRA" | null;
+  /** Today's plan ids (STARTER/PRO/ENTERPRISE); an older value is read through toPlanId. */
+  plan: string;
+  previousPlan: string | null;
   trialAvailable: boolean;
   homeOnly: boolean;
   isApp: boolean;
@@ -22,7 +24,6 @@ type SiteStatus = {
   secondaryLinks: { href: string; label: string }[];
 };
 
-const PLAN_NAME = { PRO: "Pro", ULTRA: "Ultra" } as const;
 
 export function SitePlanNotice({ templateId, refreshKey }: { templateId: string; refreshKey?: unknown }) {
   const [status, setStatus] = useState<SiteStatus | null>(null);
@@ -41,8 +42,13 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
 
   if (!status || !status.homeOnly || !status.site) return null;
 
-  const previous = status.previousPlan ? PLAN_NAME[status.previousPlan] : "Pro";
-  const upgradeHref = `/dashboard/settings/subscription?upgrade=${status.previousPlan ?? "PRO"}`;
+  const previousId = status.previousPlan ? (toPlanId(status.previousPlan) as PaidPlanId | "FREE") : null;
+  const previousPaid: PaidPlanId | null = previousId && previousId !== "FREE" ? previousId : null;
+  const previous = previousPaid ? PLAN_LABELS[previousPaid] : "Starter";
+  // The plan that fixes each notice: more than one live site needs Pro; pages, a domain or a
+  // whole app need Starter. Coming back from a paid plan, that plan (if it's enough).
+  const planFor = (need: PaidPlanId): PaidPlanId => (previousPaid && PLAN_RANK[previousPaid] >= PLAN_RANK[need] ? previousPaid : need);
+  const upgradeHref = (need: PaidPlanId) => `/dashboard/settings/subscription?upgrade=${planFor(need)}`;
 
   async function makeLive(): Promise<void> {
     setBusy(true);
@@ -64,10 +70,11 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
     }
   }
 
-  const trialPlan = status.previousPlan ?? "PRO";
   // With the free trial still unused, every upgrade button here starts it instead (no card).
-  const Upgrade = ({ label }: { label: string }) =>
-    status.trialAvailable ? (
+  const Upgrade = ({ label, need = "STARTER" }: { label: string; need?: PaidPlanId }) => {
+    const target = planFor(need);
+    const trialPlan: "STARTER" | "PRO" = target === "STARTER" ? "STARTER" : "PRO";
+    return status.trialAvailable ? (
       <button
         type="button"
         disabled={busy}
@@ -80,11 +87,12 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
         }}
         style={{ ...primaryButton, border: "none", cursor: "pointer", fontFamily: "inherit" }}
       >
-        {busy ? "Starting…" : `Try ${PLAN_NAME[trialPlan]} free for 14 days`}
+        {busy ? "Starting…" : `Try ${PLAN_LABELS[trialPlan]} free for 14 days`}
       </button>
     ) : (
-      <Link href={upgradeHref} style={primaryButton}>{label}</Link>
+      <Link href={upgradeHref(need)} style={primaryButton}>{label}</Link>
     );
+  };
 
   const notices: React.ReactNode[] = [];
 
@@ -103,7 +111,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
           <button type="button" onClick={() => void makeLive()} disabled={busy} style={secondaryButton}>
             {busy ? "Switching…" : "Make this my live site"}
           </button>
-          <Upgrade label={"Upgrade to keep both"} />
+          <Upgrade label={"Upgrade to Pro to keep both"} need="PRO" />
         </span>
       </Strip>,
     );
@@ -125,12 +133,12 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
     notices.push(
       <Strip key="pages" tone="info">
         <span>
-          {status.previousPlan
+          {previousPaid
             ? <>Your site contains secondary pages archived from your {previous} plan. Reactivate {previous} to publish them, or keep only 1 page to continue editing on the Free tier.</>
-            : <>You can build and preview every page, but the Free plan publishes only your homepage — visitors can't open the others yet. Upgrade to Pro to put them live.</>}
+            : <>You can build and preview every page, but the Free plan publishes only your homepage — visitors can't open the others yet. Upgrade to Starter to put them live.</>}
         </span>
         <span style={actions}>
-          <Upgrade label={status.previousPlan ? `Reactivate ${previous}` : "Upgrade to Pro"} />
+          <Upgrade label={previousPaid ? `Reactivate ${previous}` : "Upgrade to Starter"} />
         </span>
       </Strip>,
     );

@@ -1,5 +1,6 @@
 "use client";
 
+import type { PlanId } from "@/lib/plan/plans";
 import { LayoutModeProvider, useLayoutMode, type LayoutMode } from "./layout-mode-context";
 import { NewSiteProvider } from "./_components/NewSiteModal";
 import { DashboardShellClassic } from "./dashboard-shell-classic";
@@ -16,7 +17,7 @@ type Props = {
   initialLayoutMode: LayoutMode;
   organizationName: string;
   orgBranding?: OrgBranding;
-  plan: "FREE" | "PRO" | "ULTRA";
+  plan: PlanId;
 };
 
 export function DashboardShell({ children, userName, userEmail, initialLayoutMode, organizationName, orgBranding, plan }: Props) {

@@ -37,7 +37,7 @@ export async function resolveSiteImportSite(
   }
 
   if (!getTierFeatures(resolved.subscriptionPlan).siteMigrationEnabled) {
-    return { error: NextResponse.json({ error: "Importing a full website needs a Pro or Ultra plan." }, { status: 403 }) };
+    return { error: NextResponse.json({ error: "Importing a website isn't available on your plan." }, { status: 403 }) };
   }
 
   return {

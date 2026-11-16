@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import type { EntityItem } from "electrodb";
 import { Template } from "@/lib/db/contentEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
-import { resolveHideBranding, canWhiteLabel } from "@/lib/subscription";
-import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
+import { resolveHideBranding } from "@/lib/subscription";
+import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
 import { buildSitePrefix, getObject } from "./blobStore";
 import { ANALYTICS_BEACON_JS, previewRuntimeJs } from "./previewRuntime";
@@ -216,7 +216,7 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promis
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
   }
-  if (!seo?.faviconUrl && ctx.organization.logo && ctx.organization.whiteLabelEnabled && canWhiteLabel(await getOrganizationOwnerPlanDynamo(ctx.organization.id))) {
+  if (!seo?.faviconUrl && ctx.organization.logo && ctx.organization.whiteLabelEnabled && (await orgCanWhiteLabelDynamo(ctx.organization.id))) {
     html = injectFavicon(html, ctx.organization.logo);
   }
   html = injectAppSeo(html, seo, `https://${ctx.host}${url.pathname}`);

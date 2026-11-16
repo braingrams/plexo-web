@@ -105,8 +105,8 @@ describe("the renewal and declined-payment emails", () => {
   });
 
   it("declined: says it plainly, what still works, what goes offline if unfixed, and how to fix it", () => {
-    const e = buildPaymentDeclinedEmail({ plan: "ULTRA", amountMinor: 4900, currency: "usd", retryAt: "2026-11-17T09:00:00.000Z", manageUrl: "https://plexo.test/m" });
-    expect(e.subject).toBe("Your payment didn't go through — update your card to keep Ultra");
+    const e = buildPaymentDeclinedEmail({ plan: "PRO", amountMinor: 4900, currency: "usd", retryAt: "2026-11-17T09:00:00.000Z", manageUrl: "https://plexo.test/m" });
+    expect(e.subject).toBe("Your payment didn't go through — update your card to keep Pro");
     expect(e.html).toContain("$49.00");
     expect(e.html).toContain("still fully active");
     expect(e.html).toContain("November 17");

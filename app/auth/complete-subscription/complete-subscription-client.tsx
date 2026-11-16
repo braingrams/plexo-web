@@ -2,27 +2,29 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { PLAN_LABELS, type PaidPlanId } from "@/lib/plan/plans";
+import { usePricing } from "@/app/dashboard/_components/usePricing";
 
 type Props = {
-  plan: "PRO" | "ULTRA";
+  plan: PaidPlanId;
   /** The account hasn't used its one free trial yet. */
   canTrial: boolean;
   trialDays: number;
 };
 
-const PLAN_LABEL: Record<Props["plan"], string> = { PRO: "Pro", ULTRA: "Ultra" };
+const PLAN_LABEL = PLAN_LABELS;
 
 export function CompleteSubscriptionClient({ plan, canTrial, trialDays }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState<"trial" | "pay" | "free" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { pricing } = usePricing();
+  const price = pricing ? pricing.plans[plan] : null;
+  const priceText = price ? `${price.isFromPrice ? "from " : ""}${price.monthlyLabel}/month` : null;
 
-  // Hands off to the Subscription settings page (?upgrade=PRO|ULTRA triggers the same
-  // startCheckout flow there automatically on arrival) rather than starting embedded
-  // Checkout here directly — this used to POST /api/billing/checkout itself and expect a
-  // `url` back to redirect to (the older hosted-Checkout response shape); that route now
-  // always creates an embedded-mode session and only ever returns `clientSecret`, so this
-  // unconditionally failed with "Could not start checkout."
+  // Hands off to the Subscription settings page (?upgrade=STARTER|PRO|ENTERPRISE starts the
+  // checkout there on arrival — Stripe's card form or Paystack's popup, whichever the
+  // person's region uses), which handles every outcome and then returns to the dashboard.
   function continueToPayment(): void {
     setLoading("pay");
     router.push(`/dashboard/settings/subscription?upgrade=${plan}&returnTo=${encodeURIComponent("/dashboard")}`);
@@ -75,8 +77,8 @@ export function CompleteSubscriptionClient({ plan, canTrial, trialDays }: Props)
         <h1 className="auth-title">{canTrial ? `Try ${PLAN_LABEL[plan]} free for ${trialDays} days` : `Finish setting up ${PLAN_LABEL[plan]}`}</h1>
         <p className="auth-subtitle">
           {canTrial
-            ? `Your account is ready. Start with every ${PLAN_LABEL[plan]} feature unlocked — no card needed. We'll remind you before the trial ends, and nothing you build is ever deleted.`
-            : `Your account is created — complete payment to activate your ${PLAN_LABEL[plan]} plan and unlock its features.`}
+            ? `Your account is ready. Start with ${PLAN_LABEL[plan]} unlocked — no card needed. Custom domains, taking real payments and your own branding switch on once you subscribe. We'll remind you before the trial ends, and nothing you build is ever deleted.`
+            : `Your account is created — complete payment to activate your ${PLAN_LABEL[plan]} plan${priceText ? ` (${priceText})` : ""} and unlock its features.`}
         </p>
 
         {error ? (
@@ -103,7 +105,7 @@ export function CompleteSubscriptionClient({ plan, canTrial, trialDays }: Props)
           style={canTrial ? { marginTop: "0.75rem", background: "transparent", border: "1px solid var(--surface-border)", color: "var(--text-main)" } : undefined}
         >
           {loading === "pay" ? <span className="auth-spinner" aria-hidden="true" /> : null}
-          {loading === "pay" ? "Redirecting…" : canTrial ? `Pay now and skip the trial` : `Continue to payment for ${PLAN_LABEL[plan]}`}
+          {loading === "pay" ? "Redirecting…" : canTrial ? `Pay now${priceText ? ` (${priceText})` : ""} and skip the trial` : `Continue to payment for ${PLAN_LABEL[plan]}`}
         </button>
 
         <p className="auth-meta">

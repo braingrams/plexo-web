@@ -3,12 +3,12 @@ import { ThemeProvider } from "next-themes";
 
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
-import { ensureActiveOrganization, getOrgBrandDynamo } from "@/server/orgDynamo";
+import { ensureActiveOrganization, getOrgBrandDynamo, getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
 import { DashboardShell } from "./dashboard-shell";
 import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
 import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
 import { AppLiveDialog } from "./_components/AppLiveDialog";
-import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction } from "@/lib/plan/entitlement";
+import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction, storedPlan } from "@/lib/plan/entitlement";
 import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
 
 export default async function DashboardLayout({
@@ -35,8 +35,6 @@ export default async function DashboardLayout({
   }
   const initialLayoutMode = dbUser?.layoutMode ?? "CLASSIC";
   const planBanner = dbUser ? planBannerState(dbUser) : null;
-  // The plan decides which creation options are usable (the Server app tab is ULTRA-only).
-  const plan = effectivePlan(dbUser);
 
   // Org-scoped login: makes sure this session always has an active organization before
   // rendering the dashboard shell (auto-picks a single membership, restores/creates one
@@ -46,7 +44,13 @@ export default async function DashboardLayout({
     redirect("/choose-org");
   }
 
-  const orgBranding = await getOrgBrandDynamo(orgResolution.organizationId);
+  // The workspace's plan (its owner's — a teammate gets the same options as the owner) decides
+  // which creation options are usable (the Server app tab needs Pro or above).
+  const [orgBranding, workspace] = await Promise.all([
+    getOrgBrandDynamo(orgResolution.organizationId),
+    getOrganizationOwnerEntitlementDynamo(orgResolution.organizationId),
+  ]);
+  const plan = workspace.subscriptionPlan;
 
   return (
     // The marketing site's new light/dark toggle (see app/landing-nav.tsx) is a single
@@ -87,7 +91,8 @@ function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngrad
     return null;
   }
   if (user.planDowngradedAt) {
-    return { kind: "downgraded", previousPlan: user.planBeforeDowngrade === "ULTRA" ? "ULTRA" : "PRO", since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
+    const before = storedPlan({ subscriptionPlan: user.planBeforeDowngrade, planVersion: user.planVersion });
+    return { kind: "downgraded", previousPlan: before === "FREE" ? "STARTER" : before, since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
   }
   return null;
 }

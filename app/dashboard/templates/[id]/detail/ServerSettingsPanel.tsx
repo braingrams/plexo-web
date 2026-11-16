@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 
-// Settings for a server-rendered app (ULTRA). Two kinds, kept apart on purpose:
+// Settings for a server-rendered app (Pro and above). Two kinds, kept apart on purpose:
 //   Variables: visible settings. Their values are shown here. A variable marked "needed at build"
 //              (or named with a public prefix such as NEXT_PUBLIC_) is baked into the app, so visitors can read it.
 //   Secrets:   write-only. The value is never shown again, only a short hint. The server fetches

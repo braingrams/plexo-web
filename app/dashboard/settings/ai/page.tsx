@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
 import { ApiKey, User } from "@/lib/db/coreEntities";
-import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { ensureActiveOrganization, getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
+import { getTierFeatures } from "@/lib/subscription";
 
 import { AiSettingsClient } from "./AiSettingsClient";
 import { SettingsShell } from "../../_components/SettingsShell";
@@ -58,7 +59,7 @@ export default async function AiSettingsPage() {
           hostAuthWebhookUrl: k.hostAuthWebhookUrl ?? null,
           hasHostWebhookSecret: !!k.hostWebhookSecret,
         }))}
-        isUltra={user.subscriptionPlan === "ULTRA"}
+        canUseHostManagedAi={getTierFeatures((await getOrganizationOwnerEntitlementDynamo(orgResolution.organizationId)).subscriptionPlan).hostManagedAiEnabled}
       />
     </SettingsShell>
   );

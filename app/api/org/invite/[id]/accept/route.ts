@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/server/authDynamo";
-import { acceptInvitation, getInvitation, setActiveOrganizationCookie } from "@/server/orgDynamo";
+import { SeatLimitError, acceptInvitation, getInvitation, setActiveOrganizationCookie } from "@/server/orgDynamo";
 
 export async function POST(_request: Request, context: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const { id } = await context.params;
@@ -20,7 +20,18 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
     );
   }
 
-  const result = await acceptInvitation(id, session.user.id);
+  let result: Awaited<ReturnType<typeof acceptInvitation>>;
+  try {
+    result = await acceptInvitation(id, session.user.id);
+  } catch (err) {
+    if (err instanceof SeatLimitError) {
+      return NextResponse.json(
+        { error: "This team is full on its current plan, so the invite can't be accepted yet. Ask the person who invited you to free up a seat or upgrade.", code: err.code },
+        { status: 403 },
+      );
+    }
+    throw err;
+  }
   if (!result) {
     return NextResponse.json({ error: "This invitation is no longer valid." }, { status: 409 });
   }

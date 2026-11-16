@@ -31,7 +31,7 @@ type TemplateItem = EntityItem<typeof Template>;
  * resolves any such Template with no changes needed there.
  *
  * Deliberately created via Template.create directly rather than the create_landing_page_subpage
- * MCP tool/route, which gates multi-page sites behind a Pro/Ultra subscription plan
+ * MCP tool/route, which gates multi-page sites behind a paid plan
  * (getTierFeatures(...).multiPageSitesEnabled) — that gate is for a user's own deliberate
  * multi-page site, not for infrastructure a paid Commerce feature already requires to function.
  */

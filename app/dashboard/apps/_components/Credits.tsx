@@ -5,6 +5,7 @@ import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe
 import { Loader2, X } from "lucide-react";
 import { getStripePromise } from "@/lib/stripeClientPromise";
 import { C } from "./ui";
+import { startCheckout } from "@/lib/billing/clientCheckout";
 
 // AI credits in the app editor: a meter that's always visible, a panel to top up before you
 // run out, a card in the chat when you have, and a checkout that finishes in place — the
@@ -39,7 +40,7 @@ export function useCredits() {
   return { credits, monthly, setCredits, refresh };
 }
 
-/** The packs with their real prices and credits (half the price as AI value — lib/credits/value.ts). */
+/** The packs with their prices in the person's currency and the credits each adds (lib/billing/pricing.ts). */
 export function usePacks(enabled: boolean) {
   const [packs, setPacks] = useState<Pack[] | null>(null);
   useEffect(() => {
@@ -184,18 +185,25 @@ export function TopUpSheet({ pack, returnTo, startingCredits, onDone, onClose }:
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/billing/checkout", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: "topup", pack: pack.pack, returnTo, stayInPage: true }) })
-      .then(async (res) => {
-        const data = (await res.json().catch(() => ({}))) as { clientSecret?: string; error?: string };
-        if (cancelled) return;
-        if (!res.ok || !data.clientSecret) throw new Error(data.error ?? "We couldn't open the payment form.");
-        setSecret(data.clientSecret);
+    // Stripe (US dollars) shows its card form in this panel; Paystack (local currency) opens its
+    // own popup over the app — either way the credits are added and the person stays here.
+    void startCheckout({ kind: "topup", pack: pack.pack, returnTo, stayInPage: true }).then((result) => {
+      if (cancelled) return;
+      if (result.kind === "stripe") {
+        setSecret(result.clientSecret);
         setPhase("paying");
-      })
-      .catch((err) => !cancelled && setError(err instanceof Error ? err.message : "We couldn't open the payment form."));
+      } else if (result.kind === "paid" || result.kind === "processing") {
+        onCompleteRef.current();
+      } else if (result.kind === "cancelled") {
+        onClose();
+      } else if (result.kind === "error") {
+        setError(result.message);
+      }
+    });
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pack.pack, returnTo]);
 
   // Paid → the webhook adds the credits within a few seconds; watch for them.
@@ -218,6 +226,10 @@ export function TopUpSheet({ pack, returnTo, startingCredits, onDone, onClose }:
     };
     void tick();
   }, [startingCredits, onDone]);
+  const onCompleteRef = useRef(onComplete);
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Add ${n(pack.credits)} credits`} style={{ position: "fixed", top: 52, right: 0, bottom: 0, width: "min(480px, 100vw)", zIndex: 90, background: C.panelSolid, borderLeft: `1px solid ${C.borderStrong}`, boxShadow: "-24px 0 60px -20px rgba(0,0,0,0.6)", display: "flex", flexDirection: "column" }}>

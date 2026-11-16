@@ -66,7 +66,7 @@ export type TransferWarning = { title: string; detail: string };
  */
 export async function computeTransferWarnings(
   rootId: string,
-  recipientPlan: "FREE" | "PRO" | "ULTRA",
+  recipientPlan: string,
   recipientOrgId: string | null,
 ): Promise<TransferWarning[]> {
   const warnings: TransferWarning[] = [];
@@ -83,7 +83,7 @@ export async function computeTransferWarnings(
   if (customDomain && !recipientFeatures.customDomainEnabled) {
     warnings.push({
       title: "Custom domain on a plan that doesn't support it",
-      detail: `This site uses the custom domain "${customDomain.domain}". Custom domains require a Pro/Ultra plan — on a Free plan, the recipient won't be able to manage its DNS/domain settings (the domain may keep serving until something needs to change).`,
+      detail: `This site uses the custom domain "${customDomain.domain}". Custom domains come with Starter and above — on a Free plan, the recipient won't be able to manage its DNS/domain settings (the domain may keep serving until something needs to change).`,
     });
   }
 
@@ -96,13 +96,13 @@ export async function computeTransferWarnings(
     if (org?.whiteLabelEnabled && senderFeatures.whiteLabelEnabled && !recipientFeatures.whiteLabelEnabled) {
       warnings.push({
         title: "White-label branding on a plan that doesn't support it",
-        detail: "This site's organization has white-label branding turned on. That requires a Pro/Ultra plan — on a Free plan, Plexo's own branding may reappear in the dashboard, emails, and this site's favicon.",
+        detail: "This site's organization has white-label branding turned on. That's part of the Enterprise plan — on a smaller plan, Plexo's own branding may reappear in the dashboard, emails, and this site's favicon.",
       });
     }
     if (senderFeatures.brandingRemovalEnabled && !recipientFeatures.brandingRemovalEnabled) {
       warnings.push({
         title: "\"Hosted with Plexo\" bar will reappear",
-        detail: "The sender's plan currently hides the \"Hosted with Plexo\" bar on published pages. That requires a Pro/Ultra plan — on a Free plan, the bar will reappear on this site's pages.",
+        detail: "The sender's plan currently hides the \"Hosted with Plexo\" bar on published pages. That needs Starter or above — on a Free plan, the bar will reappear on this site's pages.",
       });
     }
   }

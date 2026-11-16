@@ -1,4 +1,5 @@
 import { EMAIL_COLORS } from "@/lib/theme";
+import { planLabel } from "@/lib/plan/plans";
 import { emailShell, type EmailBrand } from "./maildrip";
 
 export const CTA_BUTTON = (href: string, label: string, color = EMAIL_COLORS.brand, colorDeep = EMAIL_COLORS.brandDeep) => `
@@ -756,9 +757,34 @@ export function buildWpMigrationPausedEmail(input: { siteName: string; reason: s
   });
 }
 
+// ── The 2026 plan change (scripts/billing/migrate-plans.ts) ────────────────────────────
+
+/** "Your plan has a new name — and a new price from your next renewal." Sent once per account by the migration. */
+export function buildPlanMoveEmail(input: { oldPlanName: string; newPlan: string; renewsAt: string | null; newPrice: string | null; manageUrl: string }): { subject: string; html: string } {
+  const plan = PLAN_NAME(input.newPlan);
+  const date = input.renewsAt ? new Date(input.renewsAt).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" }) : null;
+  const priceLine = input.newPrice && date ? `From your next renewal on ${date}, you'll pay ${input.newPrice} for ${plan}.` : `Your price stays the same until your next renewal.`;
+  const html = emailShell({
+    title: `Your ${input.oldPlanName} plan is now called ${plan}`,
+    bodyHtml: `
+      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">
+        Your ${input.oldPlanName} plan is now called ${plan}
+      </h1>
+      <p style="margin:0 0 12px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">
+        We've refreshed Plexo's plans. Everything you use today keeps working — nothing changes on your sites.
+      </p>
+      <p style="margin:0 0 20px;font-size:15px;color:#475569;line-height:1.6;text-align:center;">${priceLine} You can change or cancel your plan any time before then.</p>
+      ${CTA_BUTTON(input.manageUrl, "See your plan")}
+      ${FALLBACK_LINK(input.manageUrl)}
+    `,
+  });
+  return { subject: `Your Plexo plan is now ${plan}`, html };
+}
+
 // ── Plan lifecycle (lib/plan/lifecycle.ts) ──────────────────────────────────────────────
 
-const PLAN_NAME: Record<string, string> = { PRO: "Pro", ULTRA: "Ultra", FREE: "Free" };
+// Plan names come from lib/plan/plans.ts — callers pass today's plan ids (ULTRA reads as Pro).
+const PLAN_NAME = (plan: string): string => planLabel(plan);
 
 export function buildPlanEndingSoonEmail(input: {
   plan: string;
@@ -767,7 +793,7 @@ export function buildPlanEndingSoonEmail(input: {
   stage: "WEEK" | "DAY" | "TODAY";
   upgradeUrl: string;
 }): { subject: string; html: string } {
-  const plan = PLAN_NAME[input.plan] ?? input.plan;
+  const plan = PLAN_NAME(input.plan);
   const date = new Date(input.endsAt).toLocaleDateString("en-US", { day: "numeric", month: "long", timeZone: "UTC" });
   const what = input.kind === "TRIAL" ? `Your ${plan} trial` : `Your ${plan} plan`;
   const when = input.stage === "TODAY" ? "ends today" : input.stage === "DAY" ? "ends in 1 day" : "ends in 7 days";
@@ -814,7 +840,7 @@ export function buildPlanRenewalSoonEmail(input: {
   currency?: string | null;
   manageUrl: string;
 }): { subject: string; html: string } {
-  const plan = PLAN_NAME[input.plan] ?? input.plan;
+  const plan = PLAN_NAME(input.plan);
   const date = utcDate(input.renewsAt);
   const amount = planMoney(input.amountMinor, input.currency);
   const headline = `Your ${plan} plan renews on ${date}`;
@@ -844,7 +870,7 @@ export function buildPaymentDeclinedEmail(input: {
   retryAt?: string | null;
   manageUrl: string;
 }): { subject: string; html: string } {
-  const plan = PLAN_NAME[input.plan] ?? input.plan;
+  const plan = PLAN_NAME(input.plan);
   const amount = planMoney(input.amountMinor, input.currency);
   const retry = input.retryAt ? utcDate(input.retryAt) : null;
   const headline = "Your payment didn't go through";
@@ -878,7 +904,7 @@ export function buildPlanEndedEmail(input: {
   customDomainCount: number;
   upgradeUrl: string;
 }): string {
-  const plan = PLAN_NAME[input.previousPlan] ?? input.previousPlan;
+  const plan = PLAN_NAME(input.previousPlan);
   const why =
     input.reason === "TRIAL_ENDED" ? `Your ${plan} trial has ended`
       : input.reason === "PAYMENT_ENDED" ? `Your ${plan} subscription has ended`

@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
+import { workspaceOwner } from "@/lib/plan/workspacePlan";
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { NextRequest, NextResponse } from "next/server";
 import type { EntityItem } from "electrodb";
 import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
-import { resolveHideBranding, canWhiteLabel, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
-import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
+import { resolveHideBranding, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
+import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { fillLatestPostLists } from "@/lib/pub/livePostQueries";
@@ -374,11 +376,14 @@ async function findChildBySlug(parentId: string, slug: string): Promise<Template
 async function servePreviewHost(request: NextRequest, host: string, templateId: string, slugSegments: string[]): Promise<NextResponse> {
   const { data: template } = await Template.get({ id: templateId }).go();
   if (!template) return notFoundResponse();
-  const [{ data: user }, { data: organization }] = await Promise.all([
-    User.get({ id: template.userId }).go(),
+  // Served on the workspace's plan (its owner's), like every published site.
+  const [ownerRow, { data: organization }] = await Promise.all([
+    workspaceOwner(template.organizationId),
     Organization.get({ id: template.organizationId }).go(),
   ]);
-  // An SSR app's preview: its preview function, on the owner's plan (ULTRA only).
+  const ownerUser = ownerRow ?? (await User.get({ id: template.userId }).go()).data;
+  const user = ownerUser ? { ...ownerUser, subscriptionPlan: effectivePlan(ownerUser) } : null;
+  // An SSR app's preview: its preview function, on the owner's plan (Pro and above).
   const { data: deployed } = await DeployedApp.get({ templateId }).go();
   if (deployed?.previewFunctionUrl) {
     const features = getTierFeatures(user?.subscriptionPlan);
@@ -527,7 +532,7 @@ async function serveSite(
     });
   }
   if (deployedApp?.type === "SSR") {
-    // SSR is ULTRA-only for now: a downgraded or ineligible owner's app stops serving.
+    // Server apps are Pro and above: a downgraded or ineligible owner's app stops serving.
     const features = getTierFeatures(published.user.subscriptionPlan);
     if (!features.ssrEnabled) return notFoundResponse();
     return serveDeployedSsr(request, deployedApp, slugSegments, {
@@ -711,15 +716,14 @@ async function serveSite(
       html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
     }
 
-    // White-label favicon — only for orgs entitled to custom branding (Pro/Ultra owner
+    // White-label favicon — only for orgs entitled to custom branding (Enterprise owner
     // plan, same gate as the dashboard chrome/emails/SDK splash) that have explicitly turned
     // white-labeling on (Organization.whiteLabelEnabled — plan eligibility alone isn't
     // enough) and have actually set a logo. BUILDER and RAW_UPLOAD both get this (unlike the
     // branding bar above, this is a single <link> tag in <head>, not a </body> splice, so
     // RAW_UPLOAD's "arbitrary uploaded HTML" safety concern doesn't apply).
     if (published.organization.logo && published.organization.whiteLabelEnabled) {
-      const ownerPlan = await getOrganizationOwnerPlanDynamo(published.organization.id);
-      if (canWhiteLabel(ownerPlan)) {
+      if (await orgCanWhiteLabelDynamo(published.organization.id)) {
         html = injectFavicon(html, published.organization.logo);
       }
     }

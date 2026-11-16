@@ -1,9 +1,8 @@
-import { effectivePlan } from "@/lib/plan/entitlement";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { Template, PublishedDomain, RegisteredDomain } from "@/lib/db/contentEntities";
-import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { ensureActiveOrganization, getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
 import { DomainsClient } from "./domains-client";
 import { PageContainer } from "../_components/PageContainer";
 
@@ -24,6 +23,9 @@ export default async function DomainsPage() {
   if (!user) {
     redirect("/auth/login");
   }
+
+  // Domains follow the workspace's plan (its owner's), the same plan the server enforces.
+  const workspace = await getOrganizationOwnerEntitlementDynamo(orgResolution.organizationId);
 
   const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
 
@@ -99,8 +101,9 @@ export default async function DomainsPage() {
       <DomainsClient
         initialDomains={domains}
         landingPages={landingPages}
-        plan={effectivePlan(user)}
-        customLimit={user.customDomainLimit ?? null}
+        plan={workspace.subscriptionPlan}
+        onTrial={workspace.onTrial}
+        customLimit={workspace.customDomainLimit}
       />
     </PageContainer>
   );

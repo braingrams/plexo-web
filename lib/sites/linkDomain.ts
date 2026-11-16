@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { countLiveCustomDomains, customDomainError } from "@/lib/plan/domainGate";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { getDomainLimit } from "@/lib/domainLimit";
 import { requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
@@ -20,7 +21,7 @@ export const RESERVED_SUBDOMAINS = new Set([
 ]);
 
 export async function linkDomainToTemplate(
-  resolved: { userId: string; organizationId: string; subscriptionPlan: string; customDomainLimit: number | null },
+  resolved: { userId: string; organizationId: string; subscriptionPlan: string; onTrial?: boolean; customDomainLimit: number | null },
   templateId: string,
   rawDomainInput: string,
   domainTypeInput?: "SUBDOMAIN" | "CUSTOM"
@@ -86,6 +87,10 @@ export async function linkDomainToTemplate(
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
     throw new Error(`Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`);
+  }
+  if (domainType === "CUSTOM") {
+    const customError = customDomainError(resolved, countLiveCustomDomains(domainCountBatches.flatMap((b) => b.data).filter((d) => d.domain !== finalDomain)));
+    if (customError) throw new Error(customError);
   }
 
   const { data: domainMatches } = await PublishedDomain.query.byDomain({ domain: finalDomain }).go({ pages: "all" });

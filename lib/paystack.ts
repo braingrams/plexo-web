@@ -123,3 +123,71 @@ export interface PaystackSubscriptionSummary {
 export async function listPaystackSubscriptions(secretKey: string, page = 1): Promise<PaystackSubscriptionSummary[]> {
   return paystackRequest<PaystackSubscriptionSummary[]>(secretKey, "GET", `/subscription?perPage=100&page=${page}`);
 }
+
+/** Creates a plan at any Paystack interval ("monthly", "annually", …). Returns its plan code. */
+export async function createPaystackPlan(params: { secretKey: string; name: string; amountMinor: number; currency: string; interval: "monthly" | "annually"; description?: string }): Promise<string> {
+  const data = await paystackRequest<{ plan_code: string }>(params.secretKey, "POST", "/plan", {
+    name: params.name.slice(0, 100),
+    interval: params.interval,
+    amount: params.amountMinor,
+    currency: params.currency,
+    ...(params.description ? { description: params.description } : {}),
+  });
+  return data.plan_code;
+}
+
+export interface PaystackPlanSummary {
+  plan_code: string;
+  name: string;
+  amount: number;
+  currency: string;
+  interval: string;
+}
+
+/** One page (up to 100) of the account's plans. */
+export async function listPaystackPlans(secretKey: string, page = 1): Promise<PaystackPlanSummary[]> {
+  return paystackRequest<PaystackPlanSummary[]>(secretKey, "GET", `/plan?perPage=100&page=${page}`);
+}
+
+export interface PaystackTransaction {
+  id: number;
+  reference: string;
+  status: string;
+  amount: number;
+  currency: string;
+  paid_at?: string | null;
+  metadata?: unknown;
+  customer?: { email?: string; customer_code?: string };
+  authorization?: { brand?: string; last4?: string; card_type?: string };
+  plan?: unknown;
+}
+
+/** Looks up a transaction by reference — the source of truth after a popup checkout returns. */
+export async function verifyPaystackTransaction(secretKey: string, reference: string): Promise<PaystackTransaction> {
+  return paystackRequest<PaystackTransaction>(secretKey, "GET", `/transaction/verify/${encodeURIComponent(reference)}`);
+}
+
+export interface PaystackSubscriptionDetail {
+  subscription_code: string;
+  email_token: string;
+  status: string;
+  next_payment_date?: string | null;
+  plan?: { plan_code?: string; name?: string; interval?: string; currency?: string; amount?: number };
+  customer?: { email?: string; customer_code?: string };
+}
+
+/** One subscription by code (or id). */
+export async function fetchPaystackSubscription(secretKey: string, code: string): Promise<PaystackSubscriptionDetail> {
+  return paystackRequest<PaystackSubscriptionDetail>(secretKey, "GET", `/subscription/${encodeURIComponent(code)}`);
+}
+
+/** Emails the customer Paystack's own "update your card" link for a subscription. */
+export async function sendPaystackManageLink(secretKey: string, code: string): Promise<void> {
+  await paystackRequest(secretKey, "POST", `/subscription/${encodeURIComponent(code)}/manage/email`);
+}
+
+/** A one-time link where the customer updates the card on a subscription. */
+export async function paystackManageLink(secretKey: string, code: string): Promise<string> {
+  const data = await paystackRequest<{ link: string }>(secretKey, "GET", `/subscription/${encodeURIComponent(code)}/manage/link`);
+  return data.link;
+}

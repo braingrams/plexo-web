@@ -1063,6 +1063,23 @@ export class ComputeStack extends cdk.Stack {
     // CloudFront — behaviors match open-next.output.json exactly: image paths to the
     // image function, everything else dynamic to the server function, static file
     // patterns straight to S3.
+    const billingOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, "BillingOriginRequestPolicy", {
+      originRequestPolicyName: `${this.stackName}-billing`,
+      comment: "Billing API: forwards the viewer's country (CloudFront-Viewer-Country) plus the usual request headers, never Host",
+      cookieBehavior: cloudfront.OriginRequestCookieBehavior.all(),
+      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
+      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
+        "cloudfront-viewer-country",
+        "x-forwarded-host",
+        "accept",
+        "accept-language",
+        "content-type",
+        "origin",
+        "referer",
+        "user-agent",
+      ),
+    });
+
     const distribution = new cloudfront.Distribution(this, "Distribution", {
       domainNames: appDomain ? [appDomain] : undefined,
       certificate: appCert,
@@ -1120,6 +1137,20 @@ export class ComputeStack extends cdk.Stack {
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+          functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+          responseHeadersPolicy: securityHeadersPolicy,
+        },
+        // Billing endpoints need the visitor's country to quote the right price and currency
+        // (lib/billing/region.ts). CloudFront only passes CloudFront-Viewer-Country to the origin
+        // when a policy names it, and the managed "all viewer" policies that do also forward Host,
+        // which a Lambda Function URL rejects. So these routes get a policy that names the headers
+        // they need plus the country; session cookies and query strings pass as usual.
+        "api/billing/*": {
+          origin: new origins.FunctionUrlOrigin(serverFnUrl, { customHeaders: { "x-origin-verify": originVerifySecret! } }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          originRequestPolicy: billingOriginRequestPolicy,
           functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
           responseHeadersPolicy: securityHeadersPolicy,
         },

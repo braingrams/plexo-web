@@ -50,7 +50,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     return NextResponse.json({ error: "Choose which of your organizations should receive this site first, then try again.", needsOrgChoice: true }, { status: 409 });
   }
 
-  const recipientPlan = (await getOrganizationOwnerPlanDynamo(orgResolution.organizationId)) as "FREE" | "PRO" | "ULTRA";
+  const recipientPlan = await getOrganizationOwnerPlanDynamo(orgResolution.organizationId);
   const warnings = await computeTransferWarnings(transfer.templateId, recipientPlan, orgResolution.organizationId);
 
   if (warnings.length > 0 && body.acknowledgeWarnings !== true) {

@@ -139,7 +139,7 @@ export async function PATCH(
     if (!owner) throw new Error(`ApiKey ${existingKey.id}'s owner user ${existingKey.userId} no longer exists`);
     if (!canUseHostManagedAi(owner.subscriptionPlan)) {
       return NextResponse.json(
-        { error: "Host-Managed AI access requires the Ultra plan." },
+        { error: "Host-Managed AI access is part of the Pro plan." },
         { status: 403 },
       );
     }

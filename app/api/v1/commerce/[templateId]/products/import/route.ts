@@ -3,6 +3,7 @@ import { productVariants } from "@/lib/commerce/variants";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { commercePlanForOrg, countStoreProducts, productLimitError } from "@/lib/plan/commerceGate";
 import { slugify } from "@/server/slugDynamo";
 import { CommerceProduct, CommerceCategory } from "@/lib/db/commerceEntities";
 import {
@@ -112,6 +113,9 @@ export async function POST(
 
     const parsedRows = buildProductRows(dataRows, columnMapping, existingSkus);
     const validRows = parsedRows.filter((r) => r.errors.length === 0);
+    // The plan's product limit (lib/plan/commerceGate.ts) — checked before anything is created.
+    const productLimit = productLimitError(await commercePlanForOrg(organizationId), await countStoreProducts(templateId), validRows.length);
+    if (productLimit) return NextResponse.json({ error: productLimit, code: "PLAN_PRODUCT_LIMIT", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
 
     const categoryCache = new Map<string, string>();
     const created: string[] = [];

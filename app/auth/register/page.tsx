@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
-import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2, Eye, EyeOff, Zap } from "lucide-react";
+import { ArrowLeft, ShieldCheck, CheckCircle2, Eye, EyeOff, Zap } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { trackEvent } from "@/lib/analytics";
 import { PASSWORD_MIN_LENGTH, PASSWORD_RULES_TEXT, passwordProblem } from "@/lib/passwordPolicy";
@@ -11,19 +11,21 @@ import { mulish } from "@/lib/mulish";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 
-type Plan = "FREE" | "PRO" | "ULTRA";
+import { PLAN_LABELS, type PlanId } from "@/lib/plan/plans";
+import { usePricing } from "@/app/dashboard/_components/usePricing";
 
-const PLAN_COPY: Record<Plan, { label: string; price: string }> = {
-  FREE: { label: "Free Plan", price: "$0/mo" },
-  PRO: { label: "Pro Plan", price: "$19/mo" },
-  ULTRA: { label: "Ultra Plan", price: "$49/mo" },
-};
+type Plan = PlanId;
 
 function RegisterForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const requestedPlan = searchParams.get("plan")?.toUpperCase();
-  const plan: Plan = requestedPlan === "PRO" || requestedPlan === "ULTRA" ? requestedPlan : "FREE";
+  // ?plan= from the pricing page. ULTRA: a link from before the plan rename (today's Pro).
+  const plan: Plan =
+    requestedPlan === "ULTRA" ? "PRO" : requestedPlan === "STARTER" || requestedPlan === "PRO" || requestedPlan === "ENTERPRISE" ? requestedPlan : "FREE";
+  // The picked plan's price in the visitor's own currency (worked out from where they are).
+  const { pricing } = usePricing();
+  const planPrice = plan !== "FREE" && pricing ? pricing.plans[plan] : null;
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -95,7 +97,10 @@ function RegisterForm() {
           {plan !== "FREE" && (
             <span className="bg-purple-900/80 border border-purple-700 text-purple-300 text-xs font-extrabold px-3 py-1 rounded-full flex items-center gap-1">
               <Zap className="w-3 h-3 fill-purple-300" />
-              <span>{PLAN_COPY[plan].label}</span>
+              <span>
+                {PLAN_LABELS[plan]} plan
+                {planPrice ? ` · ${planPrice.isFromPrice ? "from " : ""}${planPrice.monthlyLabel}/mo` : ""}
+              </span>
             </span>
           )}
         </div>

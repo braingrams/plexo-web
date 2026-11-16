@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { getTierFeatures } from "@/lib/subscription";
+import { effectivePlan } from "@/lib/plan/entitlement";
 
 export async function PATCH(request: Request): Promise<NextResponse> {
   const session = await auth();
@@ -65,12 +66,12 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     if (typeof body.manageLandingPagePublishing !== "boolean") {
       return NextResponse.json({ error: "Invalid value for manageLandingPagePublishing." }, { status: 400 });
     }
-    // Server-side Ultra gate — reject with a clear error rather than silently storing a
+    // Server-side plan gate (Pro and above) — reject with a clear error rather than silently storing a
     // value that resolveManageLandingPagePublishing() would collapse to false everywhere else.
     if (body.manageLandingPagePublishing === true) {
       const { data: currentUser } = await User.get({ id: session.user.id }).go();
-      if (currentUser?.subscriptionPlan !== "ULTRA") {
-        return NextResponse.json({ error: "This feature requires the Ultra plan." }, { status: 403 });
+      if (!getTierFeatures(effectivePlan(currentUser)).manageLandingPagePublishingEnabled) {
+        return NextResponse.json({ error: "This is part of the Pro plan." }, { status: 403 });
       }
     }
     data.manageLandingPagePublishing = body.manageLandingPagePublishing;
@@ -80,13 +81,13 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     if (typeof body.hideBranding !== "boolean") {
       return NextResponse.json({ error: "Invalid value for hideBranding." }, { status: 400 });
     }
-    // Server-side Pro/Ultra gate, same defense-in-depth as manageLandingPagePublishing above —
+    // Server-side plan gate (Starter and above), same defense-in-depth as manageLandingPagePublishing above —
     // resolveHideBranding() would collapse a FREE account's true back to false everywhere else
     // anyway, but rejecting here gives a clearer error instead of a silently-ignored save.
     if (body.hideBranding === true) {
       const { data: currentUser } = await User.get({ id: session.user.id }).go();
-      if (!getTierFeatures(currentUser?.subscriptionPlan).brandingRemovalEnabled) {
-        return NextResponse.json({ error: "This feature requires the Pro or Ultra plan." }, { status: 403 });
+      if (!getTierFeatures(effectivePlan(currentUser)).brandingRemovalEnabled) {
+        return NextResponse.json({ error: "Removing the Plexo badge comes with the Starter plan and above." }, { status: 403 });
       }
     }
     data.hideBranding = body.hideBranding;

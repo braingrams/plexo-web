@@ -14,7 +14,7 @@ type Ctx = { params: Promise<{ id: string }> };
  *   activeBuildId is the server build that is queued or running now (null when none), so the panel can show its log.
  *   status is "ERROR" when the latest push wasn't built or published (statusMessage says why).
  *
- * ULTRA plan only, like the rest of the server app routes.
+ * Pro plan and above, like the rest of the server app routes.
  */
 export async function GET(request: NextRequest, { params }: Ctx): Promise<NextResponse> {
   const resolved = await resolveUser(request);
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
     return NextResponse.json({ error: `No template found with id "${templateId}" for this account.` }, { status: 404 });
   }
   if (!getTierFeatures(resolved.subscriptionPlan).ssrEnabled) {
-    return NextResponse.json({ error: "Server-rendered apps are available on the ULTRA plan." }, { status: 403 });
+    return NextResponse.json({ error: "Server apps are part of the Pro plan. Upgrade in Settings → Billing to use them." }, { status: 403 });
   }
   // The server build that is queued or running right now, if any. The dashboard attaches to it to show the log.
   const activeBuild = (await recentBuilds(templateId, 5)).find((b) => b.kind === "ssr" && !isFinished(b)) ?? null;

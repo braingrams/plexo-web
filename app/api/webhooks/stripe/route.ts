@@ -6,9 +6,12 @@ import type { EntityItem } from "electrodb";
 
 import { grantTopup, grantPlanChangeAllowance } from "@/lib/db/ledgerOperations";
 import { creditsForCompletedTopup } from "@/lib/credits/topupOffer";
+import { loadPriceBook } from "@/lib/billing/priceBook";
 import { getStripe } from "@/lib/stripe";
 import { syncPlanChangeToAlps } from "@/lib/alps";
-import type { SubscriptionPlan } from "@/lib/subscription";
+import { planFromStripeSubscription } from "@/lib/billing/stripePlans";
+import { allowancePlan, storedPlan } from "@/lib/plan/entitlement";
+import { planFields } from "@/lib/plan/plans";
 import { getMarketplaceOwnerUserId } from "@/lib/marketplaceListing";
 import { docClient } from "@/lib/db/client";
 import { User, PlatformSettings, Member } from "@/lib/db/coreEntities";
@@ -164,9 +167,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!plexoUserId) break;
 
       if (checkoutSession.mode === "payment" && checkoutSession.metadata?.kind === "topup") {
-        // Half of what was actually paid (before tax) becomes AI credits — lib/credits/value.ts.
-        // The checkout-time estimate in metadata is only a fallback (non-USD sessions).
-        const credits = creditsForCompletedTopup(checkoutSession) ?? Number(checkoutSession.metadata.credits ?? 0);
+        // Credits at the flat top-up rate for what was actually paid (before tax) —
+        // lib/billing/pricing.ts. The checkout-time amount in metadata is only a fallback.
+        const credits = creditsForCompletedTopup(checkoutSession, await loadPriceBook()) ?? Number(checkoutSession.metadata.credits ?? 0);
         if (credits > 0) {
           await grantTopup(
             plexoUserId,
@@ -238,7 +241,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       const plexoUserId = subscription.metadata?.plexoUserId;
-      const plan = subscription.metadata?.plan as SubscriptionPlan | undefined;
+      // In today's plan terms: a subscription from before the 2026 rename (metadata.plan
+      // PRO/ULTRA, no planVersion) reads as Starter/Pro — forever, on every renewal.
+      const plan = planFromStripeSubscription(subscription);
       if (!plexoUserId || !plan) break;
 
       const { data: userBeforeUpdate } = await User.get({ id: plexoUserId }).go();
@@ -275,24 +280,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // on a genuine plan change — not on every unrelated "customer.subscription.updated"
       // (a payment method swap, a metadata edit, etc.) that happens to match this same
       // event type.
-      const previousPlan = userBeforeUpdate.subscriptionPlan;
+      const previousPlan = storedPlan(userBeforeUpdate);
+      // A trial adds no AI credits, so a trial turning into the same paid plan still refreshes them.
+      const previousAllowancePlan = allowancePlan(userBeforeUpdate);
 
       // Clears pendingPlan unconditionally on any confirmed active/trialing subscription,
       // even if it doesn't match what was originally picked at signup (e.g. the user
       // changed their mind and paid for a different plan) — requiring an exact match would
       // create a stuck "never lets them in" state instead. A paid subscription also ends
       // any trial or time-limited grant: from here the subscription is what counts.
-      const periodEnd = subscription.items?.data?.[0]?.current_period_end;
+      const item = subscription.items?.data?.[0];
+      const periodEnd = item?.current_period_end;
+      const interval = item?.price?.recurring?.interval === "year" ? "yearly" : "monthly";
+      // A plan move booked for the renewal (scripts/billing/migrate-plans.ts) is done once the
+      // subscription is on that plan's new price (metadata planVersion 2).
+      const scheduledDone = !!userBeforeUpdate.scheduledPlan && subscription.metadata?.planVersion === "2";
       await User.patch({ id: plexoUserId })
         .set({
-          subscriptionPlan: plan,
+          ...planFields(plan),
           stripeSubscriptionId: subscription.id,
+          subscriptionProvider: "STRIPE",
+          subscriptionId: subscription.id,
+          subscriptionInterval: interval,
+          ...(subscription.metadata?.region ? { billingRegion: subscription.metadata.region } : {}),
+          ...(userBeforeUpdate.billingCurrency ? {} : { billingCurrency: "USD" as const }),
+          ...(userBeforeUpdate.billingRegionLockedAt ? {} : { billingRegionLockedAt: new Date().toISOString() }),
           subscriptionStatus: status,
           ...(subscription.start_date ? { subscriptionStartedAt: new Date(subscription.start_date * 1000).toISOString() } : {}),
           subscriptionCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
           ...(periodEnd ? { subscriptionPeriodEnd: new Date(periodEnd * 1000).toISOString() } : {}),
         })
-        .remove(["pendingPlan", "planAccessUntil", "planAccessSource", "planAccessReminderSentAt"])
+        .remove(["pendingPlan", "planAccessUntil", "planAccessSource", "planAccessReminderSentAt", ...(scheduledDone ? (["scheduledPlan", "scheduledPlanAt"] as const) : [])])
         .go();
 
       // The subscriptionPlan patch above alone left the AI credit allowance untouched —
@@ -300,7 +318,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // once the CURRENT period naturally expires, so an upgrade mid-period kept showing
       // the OLD (smaller) plan's balance for up to a month. Force it immediately here,
       // once, only on an actual change.
-      if (previousPlan !== plan) {
+      if (previousPlan !== plan || previousAllowancePlan !== plan) {
         syncPlanChangeToAlps({ id: plexoUserId, email: userBeforeUpdate.email, name: userBeforeUpdate.name, image: userBeforeUpdate.image }, plan, subscription.id);
         await grantPlanChangeAllowance(plexoUserId, plan);
         // A downgrade can drop the plan's included funnel-slot allotment (only Ultra ships
@@ -336,7 +354,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         if (!subscriptionId) break;
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
         const plexoUserId = subscription.metadata?.plexoUserId;
-        if (!plexoUserId || subscription.metadata?.kind === "lms_addon_slot" || !subscription.metadata?.plan) break;
+        if (!plexoUserId || !planFromStripeSubscription(subscription)) break;
         const { data: user } = await User.get({ id: plexoUserId }).go();
         // Only the account's current subscription speaks for it (an old one being retired doesn't).
         if (!user || user.stripeSubscriptionId !== subscription.id) break;
@@ -374,7 +392,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // funnel slots. An account an admin keeps on its plan stays on it.
       await User.patch({ id: plexoUserId })
         .set({ subscriptionStatus: "CANCELED" })
-        .remove(["stripeSubscriptionId", "pendingPlan"])
+        .remove(["stripeSubscriptionId", "subscriptionId", "pendingPlan", "scheduledPlan", "scheduledPlanAt"])
         .go();
       await syncAfterWebhook(plexoUserId);
       break;

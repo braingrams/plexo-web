@@ -743,7 +743,7 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
     name: "get_user_profile",
     title: "Get User Profile",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    description: "Retrieves user details, subscription plan (FREE, PRO, ULTRA), AI credit balance, and domain usage limits.",
+    description: "Retrieves user details, subscription plan (FREE, STARTER, PRO, ENTERPRISE), AI credit balance, and domain usage limits.",
     inputSchema: {
       type: "object",
       properties: {},
@@ -1697,16 +1697,19 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
             customDomainLimit: userRow.customDomainLimit ?? null,
           }
         : null;
-      const features = getTierFeatures(user?.subscriptionPlan);
+      const features = getTierFeatures(resolved.subscriptionPlan, { trial: resolved.onTrial });
       toolResult = {
         user,
         features,
-        limit: getDomainLimit(user?.subscriptionPlan ?? "FREE", user?.customDomainLimit ?? null),
+        onTrial: !!resolved.onTrial,
+        limit: getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit ?? null),
         // So an assistant knows up front what publishing will allow, instead of learning it from a refusal.
         publishing:
-          features.maxPublishedSites === null
-            ? "Every site and every page can be live."
-            : `Free plan: ${features.maxPublishedSites} live site, homepage only, on a Plexo address (no custom domain). Other pages stay saved as drafts.`,
+          features.maxPublishedPagesPerSite === 1
+            ? `Free plan: ${features.maxPublishedSites} live site, homepage only, on a Plexo address (no custom domain). Other pages stay saved as drafts.`
+            : `${features.maxPublishedSites === null ? "Every site" : `Up to ${features.maxPublishedSites} live site${features.maxPublishedSites === 1 ? "" : "s"}`}, every page; ${
+                features.customDomainEnabled ? `up to ${features.maxCustomDomains} custom domain${features.maxCustomDomains === 1 ? "" : "s"}` : resolved.onTrial ? "custom domains start once the plan is paid for" : "Plexo addresses only"
+              }.`,
       };
       break;
     }

@@ -1,3 +1,4 @@
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const earliest = memberships.sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))[0];
     recipientOrgId = earliest?.organizationId ?? null;
   }
-  const recipientPlan = (recipientUser?.subscriptionPlan as "FREE" | "PRO" | "ULTRA" | undefined) ?? "FREE";
+  const recipientPlan = effectivePlan(recipientUser);
   const warnings = await computeTransferWarnings(id, recipientPlan, recipientOrgId);
 
   if (body.confirm !== true) {

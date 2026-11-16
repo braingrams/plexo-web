@@ -30,10 +30,35 @@ export const User = new Entity(
       name: { type: "string", default: "Plexo User" },
       image: { type: "string" },
       email: { type: "string", required: true },
-      subscriptionPlan: { type: ["FREE", "PRO", "ULTRA"] as const, default: "FREE" },
+      // FREE | STARTER | PRO | ENTERPRISE. ULTRA is the retired top plan — still a valid stored
+      // value until scripts/billing/migrate-plans.ts rewrites it. Read it with planVersion
+      // (lib/plan/plans.ts normalizeStoredPlan): before the 2026 rename PRO meant today's STARTER.
+      subscriptionPlan: { type: ["FREE", "STARTER", "PRO", "ULTRA", "ENTERPRISE"] as const, default: "FREE" },
+      // Which meaning subscriptionPlan/pendingPlan/planBeforeDowngrade were written with.
+      // Missing = before the rename; 2 = today's plans. Always written via planFields().
+      planVersion: { type: "number", default: 2 },
       // Billing / credits
       stripeCustomerId: { type: "string" },
       stripeSubscriptionId: { type: "string" },
+      // Provider-agnostic plan subscription — Stripe (USD) or Paystack (NGN/GHS/KES/ZAR).
+      // subscriptionId is the Stripe subscription id or the Paystack subscription code. For
+      // Stripe it always equals stripeSubscriptionId (kept for the code that predates this).
+      subscriptionProvider: { type: ["STRIPE", "PAYSTACK"] as const },
+      subscriptionId: { type: "string" },
+      subscriptionInterval: { type: ["monthly", "yearly"] as const },
+      // Paystack: the customer, and the email token Paystack needs to cancel a subscription.
+      paystackCustomerCode: { type: "string" },
+      paystackEmailToken: { type: "string" },
+      // Where this account pays from (lib/billing/pricing.ts). Fixed at the first checkout so
+      // prices can't flip with a VPN or a trip; billingCurrency "USD" also records "pay in USD instead".
+      billingCountry: { type: "string" },
+      billingCurrency: { type: ["USD", "NGN", "GHS", "KES", "ZAR"] as const },
+      billingRegion: { type: "string" },
+      billingRegionLockedAt: { type: "string" },
+      // A plan change already booked for the next renewal (the 2026 plan move: old Pro → Starter
+      // price). Shown on the billing page; cleared once the renewal goes through.
+      scheduledPlan: { type: ["STARTER", "PRO", "ENTERPRISE"] as const },
+      scheduledPlanAt: { type: "string" },
       allowanceBalance: { type: "number", default: 0 },
       topupBalance: { type: "number", default: 0 },
       allowanceResetAt: { type: "string", default: () => new Date().toISOString() },
@@ -60,7 +85,7 @@ export const User = new Entity(
       manageLandingPagePublishing: { type: "boolean", default: false },
       // Plan picked at signup before email verification completes — see server/auth.ts's
       // databaseHooks and app/auth/complete-subscription. Null once resolved.
-      pendingPlan: { type: ["PRO", "ULTRA"] as const },
+      pendingPlan: { type: ["STARTER", "PRO", "ULTRA", "ENTERPRISE"] as const },
       // Per-user override of the plan-default published-domain cap — null defers to
       // getDomainLimit()'s plan-based default (app/api/v1/domains/route.ts).
       customDomainLimit: { type: "number" },
@@ -129,7 +154,7 @@ export const User = new Entity(
       // explains, and what tells the lifecycle there's an archive to restore on upgrade.
       planDowngradedAt: { type: "string" },
       planDowngradeReason: { type: ["PAYMENT_ENDED", "TRIAL_ENDED", "GRANT_ENDED", "NO_PAYMENT", "ADMIN"] as const },
-      planBeforeDowngrade: { type: ["PRO", "ULTRA"] as const },
+      planBeforeDowngrade: { type: ["STARTER", "PRO", "ULTRA", "ENTERPRISE"] as const },
       // When Free's limits (one live site, homepage only, no custom domain) were last
       // applied to this account's sites. Cleared on upgrade, so a later downgrade re-applies.
       freeLimitsAppliedAt: { type: "string" },
@@ -472,6 +497,57 @@ export const PlatformSettings = new Entity(
       primary: {
         pk: { field: "pk", composite: [], template: "PLATFORM#global" },
         sk: { field: "sk", composite: [], template: "PLATFORM#global" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// The price book (lib/billing/pricing.ts): country groups with currency, provider and prices,
+// edited in plexo-admin's Pricing page. One row — "current" — so a save is atomic and the app
+// reads it in one get (cached ~60s by lib/billing/priceBook.ts). `version` is bumped by every
+// save and checked on write, so two admins saving at once can't silently overwrite each other.
+// Missing row = the built-in defaults (DEFAULT_PRICE_BOOK).
+export const PriceBookRecord = new Entity(
+  {
+    model: { entity: "priceBook", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", default: "current", readOnly: true },
+      version: { type: "number", required: true },
+      defaultGroupId: { type: "string", required: true },
+      groups: { type: "any", required: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      updatedBy: { type: "string" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["id"], template: "PRICEBOOK#${id}" },
+        sk: { field: "sk", composite: [], template: "PRICEBOOK#METADATA" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Who changed the price book, when, and what (a short summary plus both versions in full).
+// Written by plexo-admin in the same transaction as the PriceBookRecord save. Newest first.
+export const PriceBookAudit = new Entity(
+  {
+    model: { entity: "priceBookAudit", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      changedAt: { type: "string", required: true },
+      changedById: { type: "string", required: true },
+      changedByEmail: { type: "string" },
+      version: { type: "number", required: true },
+      summary: { type: "list", items: { type: "string" } },
+      before: { type: "any" },
+      after: { type: "any" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "PRICEBOOKAUDIT" },
+        sk: { field: "sk", composite: ["changedAt", "id"], template: "AUDIT#${changedAt}#${id}" },
       },
     },
   },

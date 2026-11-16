@@ -1,19 +1,19 @@
-// Extracted out of app/api/v1/domains/route.ts (which is Prisma-backed and being cut over)
-// into its own pure, dependency-free file — same reasoning as lib/vercelDomains.ts: a plain
-// function with nothing to do with the data layer, needed by every already-ported call site
-// without pulling in that route's Prisma imports.
+// Pure, dependency-free: how many addresses (Plexo subdomains + custom domains) an account
+// can have published at once. Custom domains have their own, smaller cap per plan
+// (getTierFeatures(plan).maxCustomDomains) — this is the overall address count.
+
+import { toPlanId, type PlanId } from "@/lib/plan/plans";
+
+const PUBLISHED_ADDRESS_LIMIT: Record<PlanId, number> = {
+  FREE: 5,
+  STARTER: 10,
+  PRO: 25,
+  ENTERPRISE: 100,
+};
 
 export function getDomainLimit(plan: string, customLimit: number | null): number {
   if (customLimit !== null && customLimit !== undefined) {
     return customLimit;
   }
-  switch (plan) {
-    case "FREE":
-      return 5;
-    case "PRO":
-      return 10;
-    case "ULTRA":
-    default:
-      return 25;
-  }
+  return PUBLISHED_ADDRESS_LIMIT[toPlanId(plan)];
 }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveOrgContext } from "@/app/api/org/_context";
 import { requirePermission } from "@/server/requirePermissionDynamo";
-import { createInvitation, listPendingInvitations } from "@/server/orgDynamo";
+import { SeatLimitError, assertSeatAvailable, createInvitation, listPendingInvitations, seatUsage } from "@/server/orgDynamo";
 import { User, Organization } from "@/lib/db/coreEntities";
 import { roles, type OrgRole } from "@/server/accessControl";
 
@@ -11,8 +11,8 @@ export async function GET(): Promise<NextResponse> {
   const ctx = await resolveOrgContext();
   if (ctx.error) return ctx.error;
 
-  const invitations = await listPendingInvitations(ctx.organizationId);
-  return NextResponse.json({ invitations });
+  const [invitations, seats] = await Promise.all([listPendingInvitations(ctx.organizationId), seatUsage(ctx.organizationId)]);
+  return NextResponse.json({ invitations, seats });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -50,6 +50,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   ]);
   if (!inviter || !org) {
     return NextResponse.json({ error: "Could not resolve inviter or organization." }, { status: 500 });
+  }
+
+  // Team seats follow the workspace's plan (Free: just you, Starter: 2, Pro: 5, …).
+  try {
+    await assertSeatAvailable(ctx.organizationId);
+  } catch (err) {
+    if (err instanceof SeatLimitError) {
+      return NextResponse.json({ error: err.message, code: err.code, upgradeUrl: "/dashboard/settings/subscription" }, { status: err.status });
+    }
+    throw err;
   }
 
   const invitation = await createInvitation(

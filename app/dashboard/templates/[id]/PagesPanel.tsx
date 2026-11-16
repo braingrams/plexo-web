@@ -865,7 +865,7 @@ function ManagePagesModal({
 				<div style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
 					{homeOnly && (
 						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)" }}>
-							Build and preview as many pages as you like. On the Free plan only your <strong>home page</strong> goes live for visitors — upgrade to <strong>Pro</strong> to publish the rest.
+							Build and preview as many pages as you like. On the Free plan only your <strong>home page</strong> goes live for visitors — upgrade to <strong>Starter</strong> to publish the rest.
 						</div>
 					)}
 					{root && renderNode(root, 0)}

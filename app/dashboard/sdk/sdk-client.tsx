@@ -18,7 +18,7 @@ type SimpleKey = {
 type Props = {
   initialKeys: SimpleKey[];
   initialManageLandingPagePublishing: boolean;
-  isUltra: boolean;
+  canSelfManagePublishing: boolean;
 };
 
 function IconTerminal() {
@@ -46,7 +46,7 @@ function IconCopy() {
   );
 }
 
-export function SdkClient({ initialKeys, initialManageLandingPagePublishing, isUltra }: Props) {
+export function SdkClient({ initialKeys, initialManageLandingPagePublishing, canSelfManagePublishing }: Props) {
   const [selectedKeyId, setSelectedKeyId] = useState<string>(initialKeys[0]?.id ?? "");
   const [copiedInstall, setCopiedInstall] = useState(false);
   const [copiedReact, setCopiedReact] = useState(false);
@@ -58,7 +58,7 @@ export function SdkClient({ initialKeys, initialManageLandingPagePublishing, isU
   const [publishSettingError, setPublishSettingError] = useState<string | null>(null);
 
   async function toggleManageLandingPagePublishing(): Promise<void> {
-    if (!isUltra) return;
+    if (!canSelfManagePublishing) return;
     const next = !manageLandingPagePublishing;
     setManageLandingPagePublishing(next);
     setPublishSettingSaving(true);
@@ -231,9 +231,9 @@ const text = compileToPlainText(template.designJson);
           </div>
 
           <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
-            {!isUltra && (
+            {!canSelfManagePublishing && (
               <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--brand)", background: "var(--brand-subtle)", padding: "0.2rem 0.5rem", borderRadius: 5 }}>
-                Requires Ultra
+                Pro plan
               </span>
             )}
             <button
@@ -241,14 +241,14 @@ const text = compileToPlainText(template.designJson);
               role="switch"
               aria-checked={manageLandingPagePublishing}
               id="toggle-manage-landing-page-publishing"
-              disabled={!isUltra || publishSettingSaving}
+              disabled={!canSelfManagePublishing || publishSettingSaving}
               onClick={() => void toggleManageLandingPagePublishing()}
               style={{
                 position: "relative", width: 44, height: 24, borderRadius: 999,
                 background: manageLandingPagePublishing ? "var(--brand)" : "rgba(255,255,255,0.1)",
                 border: manageLandingPagePublishing ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.12)",
-                cursor: (isUltra && !publishSettingSaving) ? "pointer" : "not-allowed",
-                opacity: isUltra ? 1 : 0.5,
+                cursor: (canSelfManagePublishing && !publishSettingSaving) ? "pointer" : "not-allowed",
+                opacity: canSelfManagePublishing ? 1 : 0.5,
                 transition: "background 0.2s, border-color 0.2s", flexShrink: 0,
               }}
             >
@@ -257,9 +257,9 @@ const text = compileToPlainText(template.designJson);
           </div>
         </div>
 
-        {!isUltra && (
+        {!canSelfManagePublishing && (
           <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginTop: "1rem" }}>
-            Upgrade to Ultra on the Subscription page to unlock self-managed publishing.
+            Upgrade to Pro on the Subscription page to let your app publish pages without a limit.
           </p>
         )}
         {publishSettingError && (

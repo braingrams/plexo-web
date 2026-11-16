@@ -6,30 +6,33 @@ import { mulish } from "@/lib/mulish";
 import { Check, Globe, Layers, LayoutTemplate, MessageSquare, ShoppingBag, Rocket, CreditCard } from "lucide-react";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { planMonthlyCredits } from "@/lib/credits/value";
+import { getTierFeatures } from "@/lib/subscription";
+import { PLAN_LABELS } from "@/lib/plan/plans";
+import { usePricing } from "@/app/dashboard/_components/usePricing";
 
-type TrialPlan = "PRO" | "ULTRA";
+type TrialPlan = "STARTER" | "PRO";
 
-const PLANS: Record<TrialPlan, { name: string; price: string; tagline: string; perks: { icon: typeof Globe; text: string }[] }> = {
-  PRO: {
-    name: "Pro",
-    price: "$19/mo after",
-    tagline: "For your own brand, on your own domain.",
+// What each trial plan is for, from the plan table itself (lib/subscription.ts). Prices come
+// from the price list in the visitor's own currency (usePricing), never written here.
+const PLANS: Record<TrialPlan, { name: string; tagline: string; perks: { icon: typeof Globe; text: string }[] }> = {
+  STARTER: {
+    name: PLAN_LABELS.STARTER,
+    tagline: "One full website for your business.",
     perks: [
-      { icon: Globe, text: "Your own domain (yourname.com)" },
-      { icon: Rocket, text: "All your sites live at once" },
-      { icon: LayoutTemplate, text: "No “Hosted with Plexo” bar" },
-      { icon: MessageSquare, text: `${planMonthlyCredits("PRO").toLocaleString("en-US")} AI credits a month` },
+      { icon: Layers, text: "Every page of your site live, plus a blog" },
+      { icon: ShoppingBag, text: `A store with up to ${getTierFeatures("STARTER").maxCommerceProducts.toLocaleString("en-US")} products` },
+      { icon: Globe, text: "Your own domain (yourname.com) once you subscribe" },
+      { icon: MessageSquare, text: `${planMonthlyCredits("STARTER").toLocaleString("en-US")} AI credits a month when you subscribe` },
     ],
   },
-  ULTRA: {
-    name: "Ultra",
-    price: "$49/mo after",
-    tagline: "Everything Plexo can do, with room to grow.",
+  PRO: {
+    name: PLAN_LABELS.PRO,
+    tagline: "Several websites, with room to grow.",
     perks: [
-      { icon: Layers, text: "Sites with as many pages as you like" },
-      { icon: ShoppingBag, text: "A funnel included, plus everything in Pro" },
-      { icon: Globe, text: "Your own domain, every site live" },
-      { icon: MessageSquare, text: `${planMonthlyCredits("ULTRA").toLocaleString("en-US")} AI credits a month` },
+      { icon: Rocket, text: `Up to ${getTierFeatures("PRO").maxPublishedSites} websites live at once` },
+      { icon: ShoppingBag, text: `${getTierFeatures("PRO").includedFunnelSlots} funnels and a store with your own payment keys` },
+      { icon: LayoutTemplate, text: "Server apps, and no “Hosted with Plexo” badge" },
+      { icon: MessageSquare, text: `${planMonthlyCredits("PRO").toLocaleString("en-US")} AI credits a month when you subscribe` },
     ],
   },
 };
@@ -38,6 +41,7 @@ export function TrialOffer({ firstName, highlighted, trialDays }: { firstName: s
   const router = useRouter();
   const [busy, setBusy] = useState<TrialPlan | "free" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { pricing } = usePricing();
 
   async function choose(choice: TrialPlan | "free"): Promise<void> {
     setBusy(choice);
@@ -72,12 +76,12 @@ export function TrialOffer({ firstName, highlighted, trialDays }: { firstName: s
                 Try everything, free for {trialDays} days.
               </h1>
               <p className="max-w-md text-base font-medium leading-relaxed text-slate-400">
-                Build with every feature switched on. No card needed — you only pay if you decide to keep it.
+                Build with your plan switched on. No card needed — you only pay if you decide to keep it. Your own domain, taking real payments and your own branding start once you subscribe.
               </p>
             </div>
 
             <ol className="relative space-y-5 border-l border-slate-800 pl-6">
-              <TimelineStep day="Today" title="Everything unlocked" text="Your own domain, every page live, more AI." />
+              <TimelineStep day="Today" title="Your plan unlocked" text="Every page live, a blog and a store to set up. Your AI credits stay at the Free amount during the trial." />
               <TimelineStep day={`Day ${trialDays - 3}`} title="A friendly reminder" text="We'll email you before the trial ends." />
               <TimelineStep
                 day={`Day ${trialDays}`}
@@ -94,8 +98,9 @@ export function TrialOffer({ firstName, highlighted, trialDays }: { firstName: s
           {/* The two plans, side by side. */}
           <section className="space-y-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              {(["PRO", "ULTRA"] as const).map((key) => {
+              {(["STARTER", "PRO"] as const).map((key) => {
                 const plan = PLANS[key];
+                const price = pricing ? `${pricing.plans[key].monthlyLabel}/mo after` : "";
                 const isHighlighted = key === highlighted;
                 return (
                   <div
@@ -106,7 +111,7 @@ export function TrialOffer({ firstName, highlighted, trialDays }: { firstName: s
                   >
                     <div className="flex items-baseline justify-between gap-3">
                       <h2 className="text-2xl font-extrabold">{plan.name}</h2>
-                      <span className="text-xs font-bold text-slate-400">{plan.price}</span>
+                      <span className="text-xs font-bold text-slate-400">{price}</span>
                     </div>
                     <p className="mt-1 text-sm font-medium text-slate-400">{plan.tagline}</p>
                     <ul className="mt-6 flex-1 space-y-3.5">

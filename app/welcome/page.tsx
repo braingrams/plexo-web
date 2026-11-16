@@ -2,11 +2,11 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
-import { TRIAL_DAYS } from "@/lib/plan/entitlement";
+import { TRIAL_DAYS, storedPlan } from "@/lib/plan/entitlement";
 import { TrialOffer } from "./trial-offer";
 
 /**
- * Shown once, right after signing up: try Pro or Ultra free for 14 days, no card. Anyone
+ * Shown once, right after signing up: try Starter or Pro free for 14 days, no card. Anyone
  * who isn't eligible (already trialled, already paying) goes straight to the dashboard.
  */
 export default async function WelcomePage(props: { searchParams: Promise<{ plan?: string }> }) {
@@ -14,10 +14,13 @@ export default async function WelcomePage(props: { searchParams: Promise<{ plan?
   if (!session?.user) redirect("/auth/login?redirectTo=/welcome");
 
   const { data: user } = await User.get({ id: session.user.id }).go();
-  if (!user || user.trialStartedAt || user.stripeSubscriptionId || user.subscriptionPlan !== "FREE") redirect("/dashboard");
+  if (!user || user.trialStartedAt || user.subscriptionId || user.stripeSubscriptionId || storedPlan(user) !== "FREE") redirect("/dashboard");
 
   const { plan } = await props.searchParams;
-  const highlighted = plan?.toUpperCase() === "ULTRA" ? "ULTRA" : user.pendingPlan === "ULTRA" ? "ULTRA" : "PRO";
+  // The plan they came in for (?plan= or the one picked at signup); ULTRA (before the rename) = Pro.
+  const pending = user.pendingPlan ? storedPlan({ subscriptionPlan: user.pendingPlan, planVersion: user.planVersion }) : null;
+  const asked = plan?.toUpperCase();
+  const highlighted = asked === "ULTRA" || asked === "PRO" || (!asked && (pending === "PRO" || pending === "ENTERPRISE")) ? "PRO" : "STARTER";
   const firstName = (user.name ?? "").split(" ")[0] || null;
 
   return <TrialOffer firstName={firstName} highlighted={highlighted} trialDays={TRIAL_DAYS} />;

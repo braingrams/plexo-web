@@ -141,8 +141,8 @@ export function BrandingForm({
             lineHeight: 1.5,
           }}
         >
-          Custom branding is a Pro/Ultra feature. Upgrade the organization owner's plan to
-          replace the Plexo name, logo, and color shown here.
+          Your own branding (white-label) is part of the Enterprise plan, and starts once it&apos;s
+          paid for. Upgrade the workspace owner&apos;s plan to replace the Plexo name, logo, and color shown here.
         </div>
       )}
       {planAllowsWhiteLabel && !canManage && (
@@ -180,7 +180,7 @@ export function BrandingForm({
           </p>
           <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", marginTop: "0.25rem", maxWidth: 460 }}>
             Turn this on to replace "Plexo" with your name, logo, and color across the dashboard,
-            emails, and published pages. Off by default even on Pro/Ultra.
+            emails, and published pages. Off by default, even on Enterprise.
           </p>
         </div>
         <button

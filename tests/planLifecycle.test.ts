@@ -56,14 +56,14 @@ function stripeEvent(type: string, subscription: Record<string, unknown>) {
   const body = JSON.stringify({ id: `evt_${++eventSeq}`, type, data: { object: subscription } });
   return stripeWebhook(new NextRequest("https://plexo.test/api/webhooks/stripe", { method: "POST", body, headers: { "stripe-signature": "t=1,v1=x" } }));
 }
-const sub = (id: string, status: string, plan = "PRO") => ({ id, status, metadata: { plexoUserId: "u1", plan } });
+const sub = (id: string, status: string, plan = "PRO") => ({ id, status, metadata: { plexoUserId: "u1", plan, planVersion: "2" } });
 
 const PAGE_EDITED = "2026-10-05T00:00:00.000Z";
 
 function seed(userOverrides: Record<string, unknown> = {}) {
   resetFakeDb();
   sent.emails.length = 0;
-  fakeDb.users.set("u1", { id: "u1", email: "owner@example.com", subscriptionPlan: "PRO", stripeSubscriptionId: "sub_1", subscriptionStatus: "ACTIVE", ...userOverrides });
+  fakeDb.users.set("u1", { id: "u1", email: "owner@example.com", subscriptionPlan: "PRO", planVersion: 2, stripeSubscriptionId: "sub_1", subscriptionStatus: "ACTIVE", ...userOverrides });
   fakeDb.members.push({ userId: "u1", organizationId: "org1", role: "owner" });
   const t = (id: string, extra: Record<string, unknown>) => fakeDb.templates.set(id, { id, userId: "u1", organizationId: "org1", kind: "LANDING_PAGE", name: id, createdAt: "2026-01-01T00:00:00.000Z", ...extra });
   // "blog" — its homepage is older than "shop", but its About page was edited most recently.
@@ -180,16 +180,16 @@ describe("the 14-day trial", () => {
 
   it("starts once, with no card, and ends in the normal downgrade", async () => {
     const start = new Date("2026-10-10T12:00:00.000Z");
-    const { endsAt } = await startTrial("u1", "ULTRA", start);
+    const { endsAt } = await startTrial("u1", "PRO", start);
     expect(endsAt).toBe("2026-10-24T12:00:00.000Z");
-    expect(user()).toMatchObject({ subscriptionPlan: "ULTRA", planAccessSource: "TRIAL", planAccessUntil: endsAt });
+    expect(user()).toMatchObject({ subscriptionPlan: "PRO", planAccessSource: "TRIAL", planAccessUntil: endsAt });
     await expect(startTrial("u1", "PRO", start)).rejects.toThrow(/already used your free trial/);
 
     // Day 13: nothing happens.
     expect(await syncPlanLifecycle("u1", new Date("2026-10-23T12:00:00.000Z"))).toEqual([]);
     // Day 15: the trial is over.
     expect(await syncPlanLifecycle("u1", new Date("2026-10-25T12:00:00.000Z"))).toEqual(["downgrade"]);
-    expect(user()).toMatchObject({ subscriptionPlan: "FREE", planDowngradeReason: "TRIAL_ENDED", planBeforeDowngrade: "ULTRA" });
+    expect(user()).toMatchObject({ subscriptionPlan: "FREE", planDowngradeReason: "TRIAL_ENDED", planBeforeDowngrade: "PRO" });
     expect(page("about").isPublished).toBe(false);
   });
 });
@@ -243,7 +243,7 @@ describe("a declined renewal (Stripe invoice.payment_failed)", () => {
   const invoice = (extra: Record<string, unknown> = {}) => ({ id: "in_1", billing_reason: "subscription_cycle", attempt_count: 1, amount_due: 1900, currency: "usd", next_payment_attempt: Date.parse("2026-11-17T09:00:00Z") / 1000, parent: { subscription_details: { subscription: "sub_1" } }, ...extra });
   beforeEach(() => {
     seed();
-    sent.subs["sub_1"] = { id: "sub_1", metadata: { plexoUserId: "u1", plan: "PRO" } };
+    sent.subs["sub_1"] = { id: "sub_1", metadata: { plexoUserId: "u1", plan: "PRO", planVersion: "2" } };
   });
 
   it("emails the owner that the payment was declined, while the plan stays fully active", async () => {
@@ -266,7 +266,7 @@ describe("a declined renewal (Stripe invoice.payment_failed)", () => {
 
   it("ignores a failed first payment, a superseded subscription and a funnel add-on slot", async () => {
     await stripeEvent("invoice.payment_failed", invoice({ billing_reason: "subscription_create" }));
-    sent.subs["sub_old"] = { id: "sub_old", metadata: { plexoUserId: "u1", plan: "PRO" } };
+    sent.subs["sub_old"] = { id: "sub_old", metadata: { plexoUserId: "u1", plan: "PRO", planVersion: "2" } };
     await stripeEvent("invoice.payment_failed", invoice({ parent: { subscription_details: { subscription: "sub_old" } } }));
     sent.subs["sub_slot"] = { id: "sub_slot", metadata: { plexoUserId: "u1", kind: "lms_addon_slot" } };
     await stripeEvent("invoice.payment_failed", invoice({ parent: { subscription_details: { subscription: "sub_slot" } } }));

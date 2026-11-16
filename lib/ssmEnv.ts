@@ -102,12 +102,13 @@ const APP_SECRET_KEYS = [
   // deploy-production.yml/deploy-staging.yml's "Build the app" step).
   "PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY",
   "PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET",
-  "STRIPE_PRICE_PRO",
-  "STRIPE_PRICE_ULTRA",
-  "STRIPE_PRICE_TOPUP_SMALL",
-  "STRIPE_PRICE_TOPUP_MEDIUM",
-  "STRIPE_PRICE_TOPUP_LARGE",
-  // A recurring per-slot add-on subscription, separate from the plan prices above — see
+  // Plan prices and AI top-ups need no Stripe price ids: they come from the price book that
+  // plexo-admin edits, and checkout makes the matching Stripe prices on demand
+  // (lib/billing/stripePrices.ts). Plexo's own Paystack account — Commerce's PLATFORM_PAYSTACK
+  // AND plan billing in naira/cedis/shillings/rand (lib/billing/paystackBilling.ts):
+  "PLATFORM_PAYSTACK_SECRET_KEY",
+  "PLATFORM_PAYSTACK_PUBLIC_KEY",
+  // A recurring per-slot add-on subscription, separate from the plan prices — see
   // lib/lms/funnelSlots.ts and app/api/billing/checkout/route.ts's "funnel_addon_slot" kind.
   "STRIPE_PRICE_LMS_ADDON_SLOT",
   "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE",

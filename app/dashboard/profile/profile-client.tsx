@@ -1,5 +1,7 @@
 "use client";
 
+import { getTierFeatures } from "@/lib/subscription";
+import { planLabel, toPlanId } from "@/lib/plan/plans";
 import { FormEvent, useState } from "react";
 import { Card } from "../_components/Card";
 import { PageHeader } from "../_components/PageHeader";
@@ -23,8 +25,9 @@ type Props = {
 
 const PLAN_COLORS: Record<string, { bg: string; color: string; border: string }> = {
   FREE: { bg: "rgba(255,255,255,0.06)", color: "rgba(240,242,255,0.55)", border: "rgba(255,255,255,0.1)" },
-  PRO: { bg: "var(--brand-subtle)", color: "var(--brand)", border: "rgba(var(--brand-rgb),0.25)" },
-  ULTRA: { bg: "rgba(129,140,248,0.1)", color: "#818cf8", border: "rgba(129,140,248,0.25)" },
+  STARTER: { bg: "var(--brand-subtle)", color: "var(--brand)", border: "rgba(var(--brand-rgb),0.25)" },
+  PRO: { bg: "rgba(129,140,248,0.1)", color: "#818cf8", border: "rgba(129,140,248,0.25)" },
+  ENTERPRISE: { bg: "rgba(52,211,153,0.1)", color: "#34d399", border: "rgba(52,211,153,0.25)" },
 };
 
 function IconUser() {
@@ -77,7 +80,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
     .toUpperCase()
     .slice(0, 2) || email.slice(0, 2).toUpperCase();
 
-  const planStyle = PLAN_COLORS[subscriptionPlan.toUpperCase()] ?? PLAN_COLORS.FREE;
+  const planStyle = PLAN_COLORS[toPlanId(subscriptionPlan)] ?? PLAN_COLORS.FREE;
 
   async function onSubmit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -162,7 +165,7 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
               border: `1px solid ${planStyle.border}`,
               flexShrink: 0,
             }}>
-              {subscriptionPlan}
+              {planLabel(subscriptionPlan)}
             </span>
           </div>
 
@@ -318,22 +321,19 @@ export function ProfileClient({ userId: _userId, initialName, email, subscriptio
 }
 
 function BrandingSection({ subscriptionPlan, initialHideBranding }: { subscriptionPlan: string; initialHideBranding: boolean }) {
-  const isProOrAbove = subscriptionPlan === "PRO" || subscriptionPlan === "ULTRA";
+  const isProOrAbove = getTierFeatures(subscriptionPlan).brandingRemovalEnabled;
   const [hideBranding, setHideBranding] = useState(initialHideBranding);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [upgradeRedirecting, setUpgradeRedirecting] = useState(false);
 
   // FREE users clicking this get a seamless upgrade path instead of an inert control —
-  // hands off to the Subscription settings page (?upgrade=PRO triggers its own
-  // startCheckout flow automatically on arrival) rather than starting embedded Checkout
-  // here directly. This used to POST /api/billing/checkout itself and expect a `url` back
-  // (the older hosted-Checkout response shape); that route now always creates an
-  // embedded-mode session and only returns `clientSecret`, so this unconditionally failed.
+  // hands off to the Subscription settings page (?upgrade=STARTER starts the checkout there
+  // on arrival, whichever way the person pays) and comes back here afterwards.
   async function onToggleClick(): Promise<void> {
     if (!isProOrAbove) {
       setUpgradeRedirecting(true);
-      window.location.href = "/dashboard/settings/subscription?upgrade=PRO&returnTo=" + encodeURIComponent("/dashboard/profile");
+      window.location.href = "/dashboard/settings/subscription?upgrade=STARTER&returnTo=" + encodeURIComponent("/dashboard/profile");
       return;
     }
 
@@ -367,7 +367,7 @@ function BrandingSection({ subscriptionPlan, initialHideBranding }: { subscripti
             Plexo Branding
           </h2>
           <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.35)", maxWidth: 520 }}>
-            Pages published on your plexopages.io subdomain show a &quot;Hosted with Plexo&quot; bar. Hide it on Pro or Ultra.
+            Pages published on your plexopages.io subdomain show a &quot;Hosted with Plexo&quot; badge. Hide it on any paid plan, from Starter up.
           </p>
         </div>
 
@@ -380,7 +380,7 @@ function BrandingSection({ subscriptionPlan, initialHideBranding }: { subscripti
                 background: "var(--brand-subtle)", padding: "0.2rem 0.5rem", borderRadius: 5,
               }}
             >
-              Requires Pro
+              Starter plan
             </span>
           )}
           <button
@@ -418,7 +418,7 @@ function BrandingSection({ subscriptionPlan, initialHideBranding }: { subscripti
 
       {!isProOrAbove && (
         <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginTop: "1rem" }}>
-          {upgradeRedirecting ? "Redirecting to checkout…" : "Click the toggle to upgrade to Pro and hide the Plexo badge on your published pages."}
+          {upgradeRedirecting ? "Redirecting to checkout…" : "Click the toggle to upgrade to Starter and hide the Plexo badge on your published pages."}
         </p>
       )}
       {error && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{error}</p>}

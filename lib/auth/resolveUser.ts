@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { effectivePlan, planSyncAction } from "@/lib/plan/entitlement";
+import { planSyncAction } from "@/lib/plan/entitlement";
+import { workspacePlan } from "@/lib/plan/workspacePlan";
 import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
 import { type NextRequest, after } from "next/server";
 
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { ApiKey, User } from "@/lib/db/coreEntities";
-import { resolveManageLandingPagePublishing } from "@/lib/subscription";
 import { describeActivity } from "@/lib/activity";
 import type { OrgRole } from "@/server/accessControl";
 import type { EntityItem } from "electrodb";
@@ -71,7 +71,10 @@ export async function resolveUser(
   userId: string;
   organizationId: string;
   role: OrgRole | null;
+  /** The WORKSPACE's plan — its owner's, so teammates get the same limits as the owner. */
   subscriptionPlan: string;
+  /** The workspace owner's plan is on its free trial (no custom domains, live payments or white-label yet). */
+  onTrial: boolean;
   customDomainLimit: number | null;
   manageLandingPagePublishing: boolean;
 } | null> {
@@ -90,12 +93,7 @@ export async function resolveUser(
         userId: user.id,
         organizationId: orgResolution.organizationId,
         role: orgResolution.role,
-        subscriptionPlan: effectivePlan(user),
-        customDomainLimit: user.customDomainLimit ?? null,
-        manageLandingPagePublishing: resolveManageLandingPagePublishing(
-          effectivePlan(user),
-          user.manageLandingPagePublishing ?? false,
-        ),
+        ...(await workspacePlan(orgResolution.organizationId, user, orgResolution.role)),
       };
     }
   }
@@ -127,11 +125,7 @@ export async function resolveUser(
     userId: apiKey.userId,
     organizationId: apiKey.organizationId,
     role: null,
-    subscriptionPlan: effectivePlan(user),
-    customDomainLimit: user.customDomainLimit ?? null,
-    manageLandingPagePublishing: resolveManageLandingPagePublishing(
-      effectivePlan(user),
-      user.manageLandingPagePublishing ?? false,
-    ),
+    // An API key acts in its workspace, so it gets the workspace owner's plan too.
+    ...(await workspacePlan(apiKey.organizationId, user, null)),
   };
 }

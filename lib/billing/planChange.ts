@@ -1,8 +1,9 @@
 import type Stripe from "stripe";
 
-import { PLAN_PRICE_ENV, resolvePriceId } from "@/lib/credits/catalog";
+import { PLAN_LABELS, PLAN_RANK, type PaidPlanId } from "@/lib/plan/plans";
+import { planFromStripeSubscription } from "./stripePlans";
 
-// One person, one plan subscription. Changing plan (Pro → Ultra, or back) edits that
+// One person, one plan subscription. Changing plan (Starter → Pro, or back) edits that
 // subscription in place and prorates it — it never opens a second one. A second live plan
 // subscription is a double charge every month, and this file is what makes it impossible:
 //   • changePlanInPlace — used by POST /api/billing/checkout instead of a new Checkout session.
@@ -11,16 +12,13 @@ import { PLAN_PRICE_ENV, resolvePriceId } from "@/lib/credits/catalog";
 // Stripe is the source of truth here, not the User row: the row can lag or, as it once did,
 // be overwritten by an old subscription's renewal.
 
-export type PaidPlan = "PRO" | "ULTRA";
+export type PaidPlan = PaidPlanId;
 
-const PLAN_RANK: Record<PaidPlan, number> = { PRO: 1, ULTRA: 2 };
 const LIVE_STATUSES = new Set<Stripe.Subscription.Status>(["active", "trialing", "past_due"]);
 
-/** A Plexo plan subscription (not a funnel add-on slot, not anything else on the customer). */
+/** A Plexo plan subscription (not a funnel add-on slot, not anything else on the customer), in today's plan terms. */
 export function subscriptionPlan(sub: Stripe.Subscription): PaidPlan | null {
-  if (sub.metadata?.kind === "lms_addon_slot") return null;
-  const plan = sub.metadata?.plan;
-  return plan === "PRO" || plan === "ULTRA" ? plan : null;
+  return planFromStripeSubscription(sub);
 }
 
 /** Every live plan subscription on the customer, newest first. */
@@ -44,29 +42,39 @@ export class PlanChangeError extends Error {
 export type PlanChangeResult = { changed: true; plan: PaidPlan; subscriptionId: string; message: string };
 
 /**
- * Moves the customer's existing plan subscription to `plan`. Returns null when they have no
- * live plan subscription (the caller then starts a normal Checkout). An upgrade is charged
- * right away for the difference only; a downgrade credits the unused time to the next bill.
+ * Moves the customer's existing plan subscription to `plan` (and/or a new interval) at
+ * `priceId`. Returns null when they have no live plan subscription (the caller then starts a
+ * normal Checkout). An upgrade is charged right away for the difference only; a downgrade
+ * credits the unused time to the next bill. A plan move already booked for the next renewal
+ * (the 2026 plan change) is dropped first — this choice replaces it.
  */
-export async function changePlanInPlace(stripe: Stripe, customerId: string, plan: PaidPlan): Promise<PlanChangeResult | null> {
+export async function changePlanInPlace(
+  stripe: Stripe,
+  customerId: string,
+  plan: PaidPlan,
+  priceId: string,
+  metadata: Record<string, string>,
+): Promise<PlanChangeResult | null> {
   const live = await listLivePlanSubscriptions(stripe, customerId);
   if (live.length === 0) return null;
 
   // Prefer the newest; any older duplicates are retired by the webhook once this one updates.
   const current = live[0];
   const currentPlan = subscriptionPlan(current)!;
-  if (currentPlan === plan) {
-    throw new PlanChangeError(`You're already on the ${plan === "PRO" ? "Pro" : "Ultra"} plan.`);
-  }
   const item = current.items.data[0];
   if (!item) throw new PlanChangeError("We couldn't find your current plan to change. Please contact support.", 409);
+  if (currentPlan === plan && item.price?.id === priceId) {
+    throw new PlanChangeError(`You're already on the ${PLAN_LABELS[plan]} plan.`);
+  }
 
-  const upgrading = PLAN_RANK[plan] > PLAN_RANK[currentPlan];
-  const label = plan === "PRO" ? "Pro" : "Ultra";
+  const upgrading = PLAN_RANK[plan] > PLAN_RANK[currentPlan] || (PLAN_RANK[plan] === PLAN_RANK[currentPlan] && (item.price?.recurring?.interval ?? "month") === "month");
+  const label = PLAN_LABELS[plan];
   try {
+    const scheduleId = typeof current.schedule === "string" ? current.schedule : current.schedule?.id;
+    if (scheduleId) await stripe.subscriptionSchedules.release(scheduleId);
     const updated = await stripe.subscriptions.update(current.id, {
-      items: [{ id: item.id, price: resolvePriceId(PLAN_PRICE_ENV[plan]) }],
-      metadata: { ...current.metadata, plan },
+      items: [{ id: item.id, price: priceId }],
+      metadata: { ...current.metadata, ...metadata },
       cancel_at_period_end: false,
       // Upgrade: bill the prorated difference now. Downgrade: credit the unused time.
       proration_behavior: upgrading ? "always_invoice" : "create_prorations",
@@ -78,7 +86,7 @@ export async function changePlanInPlace(stripe: Stripe, customerId: string, plan
       plan,
       subscriptionId: updated.id,
       message: upgrading
-        ? `You're on ${label} now. You only paid the difference for the rest of this month.`
+        ? `You're on ${label} now. You only paid the difference for the rest of this period.`
         : `You'll move to ${label}. The unused time on your old plan is credited to your next bill.`,
     };
   } catch (err) {

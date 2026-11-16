@@ -1,5 +1,7 @@
 "use client";
 
+import { getTierFeatures } from "@/lib/subscription";
+import { PLAN_LABELS, planLabel, toPlanId, type PaidPlanId } from "@/lib/plan/plans";
 import { UpgradeModal } from "../_components/UpgradeModal";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -62,6 +64,8 @@ type Props = {
   initialDomains: DomainRecord[];
   landingPages: LandingPage[];
   plan: string;
+  /** The workspace's plan is on its free trial: custom domains wait for the first payment. */
+  onTrial?: boolean;
   customLimit: number | null;
 };
 
@@ -193,7 +197,7 @@ function initialDnsStatus(records: DomainRecord[]): Record<string, { checking: b
   return status;
 }
 
-export function DomainsClient({ initialDomains, landingPages, plan, customLimit }: Props) {
+export function DomainsClient({ initialDomains, landingPages, plan, onTrial = false, customLimit }: Props) {
   const searchParams = useSearchParams();
   const [domains, setDomains] = useState<DomainRecord[]>(initialDomains);
   // NEXT_PUBLIC_ vars are inlined into the client bundle at build time, so this is
@@ -254,18 +258,13 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
   const [deleteConfirmInfo, setDeleteConfirmInfo] = useState<{ id: string; domain: string } | null>(null);
   const [customAlertInfo, setCustomAlertInfo] = useState<{ title: string; message: string } | null>(null);
 
-  const canUseCustomDomain = plan === "PRO" || plan === "ULTRA";
+  const canUseCustomDomain = getTierFeatures(plan, { trial: onTrial }).customDomainEnabled;
+  // On a trial, the same plan unlocks them once it's paid for; on Free, Starter is the first plan with one.
+  const domainPlan: PaidPlanId = onTrial && plan !== "FREE" ? (toPlanId(plan) as PaidPlanId) : "STARTER";
 
-  // Custom domains are a Pro/Ultra feature — a FREE user clicking this should be offered a
-  // seamless path to upgrade rather than just sitting on an inert disabled control. Rather
-  // than start embedded Checkout here directly, hand off to the Subscription settings page
-  // (?upgrade=PRO triggers the same startCheckout flow there automatically on arrival) —
-  // that's the one place already wired for EmbeddedCheckoutProvider's clientSecret flow;
-  // this used to call POST /api/billing/checkout directly and expect back a `url` to
-  // redirect to, which was the OLDER hosted-Checkout response shape — that route now
-  // always creates an embedded-mode session (ui_mode: "embedded_page") and only ever
-  // returns `clientSecret`, never `url`, so this unconditionally failed.
-  // Now opens the shared upgrade prompt, which also offers the free trial when it's available.
+  // Custom domains need a paid plan — a Free user clicking this is offered a seamless path to
+  // upgrade (the shared upgrade prompt pays right here, and offers the free trial when it's
+  // available) rather than an inert disabled control.
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   function startUpgradeCheckout(): void {
     setUpgradeOpen(true);
@@ -540,7 +539,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
                 textTransform: "uppercase", color: "var(--brand)",
                 background: "var(--brand-subtle)", padding: "0.2rem 0.5rem", borderRadius: 5
               }}>
-                {plan} PLAN
+                {planLabel(plan)} PLAN
               </span>
             </div>
           </div>
@@ -1116,9 +1115,13 @@ export function DomainsClient({ initialDomains, landingPages, plan, customLimit 
       <UpgradeModal
         open={upgradeOpen}
         onClose={() => setUpgradeOpen(false)}
-        title="Custom domains are part of Pro"
-        message="Put your site on your own address (yourname.com) and remove the Plexo bar."
-        targetPlan="PRO"
+        title={onTrial ? "Custom domains start once you subscribe" : "Custom domains start on Starter"}
+        message={
+          onTrial
+            ? `Your free trial covers everything else. Subscribe to ${PLAN_LABELS[domainPlan]} to connect your own address (yourname.com).`
+            : "Put your site on your own address (yourname.com) and remove the Plexo badge. Starter includes 1 custom domain, Pro includes 3 plus a free domain."
+        }
+        targetPlan={domainPlan}
         returnTo="/dashboard/domains"
       />
     </>

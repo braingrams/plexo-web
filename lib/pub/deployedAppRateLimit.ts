@@ -13,7 +13,7 @@ function ttlInSeconds(): number {
 /**
  * Increments the daily Lambda-invocation counter for a deployed app and returns whether
  * the request is within the owner's plan limit. Returns true (allowed) when `limit` is
- * null (ULTRA — no cap). Non-linearizable under extreme concurrency (see
+ * null (Pro and above — no cap). Non-linearizable under extreme concurrency (see
  * checkCommerceRateLimit's own comment) — acceptable here because a soft cost-protection
  * cap does not need database-enforced atomicity.
  */

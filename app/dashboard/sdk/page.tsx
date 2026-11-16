@@ -2,7 +2,8 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
 import { ApiKey, User } from "@/lib/db/coreEntities";
-import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { ensureActiveOrganization, getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
+import { getTierFeatures } from "@/lib/subscription";
 import { SdkClient } from "./sdk-client";
 import { SettingsShell } from "../_components/SettingsShell";
 
@@ -34,7 +35,7 @@ export default async function DashboardSdkPage() {
       <SdkClient
         initialKeys={apiKeys}
         initialManageLandingPagePublishing={user.manageLandingPagePublishing ?? false}
-        isUltra={user.subscriptionPlan === "ULTRA"}
+        canSelfManagePublishing={getTierFeatures((await getOrganizationOwnerEntitlementDynamo(orgResolution.organizationId)).subscriptionPlan).manageLandingPagePublishingEnabled}
       />
     </SettingsShell>
   );
