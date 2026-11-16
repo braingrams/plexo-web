@@ -8,7 +8,7 @@ import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdap
 // The site's Brand card: which Strata brand this site uses, whether it stays in sync on its own, and what happened last — in
 // plain words. Linking applies the brand to every page of the site, whatever it's made of (lib/brand/siteBrand.ts).
 
-type BrandState = {
+export type BrandState = {
   linked: boolean;
   projectId: string | null;
   projectName: string | null;
@@ -22,7 +22,7 @@ type BrandState = {
   useOnSite: boolean;
   canUseOnSite: boolean;
 };
-type Project = { id: string; name: string; color?: string | null };
+export type StrataProject = { id: string; name: string; color?: string | null };
 
 const MUTED: React.CSSProperties = { fontSize: "0.8rem", color: "rgba(240,242,255,0.5)", margin: 0, lineHeight: 1.5 };
 const ROW: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "0.85rem 0", borderTop: "1px solid rgba(255,255,255,0.06)" };
@@ -57,7 +57,7 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
   const [available, setAvailable] = useState<boolean | null>(null);
   const [state, setState] = useState<BrandState | null>(null);
   const [connected, setConnected] = useState(false);
-  const [projects, setProjects] = useState<Project[] | null>(null);
+  const [projects, setProjects] = useState<StrataProject[] | null>(null);
   const [choice, setChoice] = useState("");
   const [picking, setPicking] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);

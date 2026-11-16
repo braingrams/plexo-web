@@ -70,6 +70,9 @@ const APP_SECRET_KEYS = [
   // Runtime flag (not a secret): "true" creates NEW landing pages in the new editor's V2 format
   // (lib/v2/design.ts defaultDesignFormat). Unset/anything else = classic V1.
   "TEMPLATES_V2_NEW",
+  // Runtime flag (not a secret): "true" turns on the v3 dashboard redesign for everyone
+  // (lib/dashboardV3/flag.ts). A user's own dashboardV3 field overrides it (staff testing).
+  "DASHBOARD_V3",
   "MAILDRIP_API_URL",
   "MAILDRIP_API_KEY",
   // Alps CRM sync (lib/alps.ts). Leave ALPS_API_KEY unset to switch the integration off; the

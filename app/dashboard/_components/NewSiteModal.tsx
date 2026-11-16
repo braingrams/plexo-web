@@ -72,3 +72,8 @@ export function useNewSite(): NewSiteContextValue {
   if (!ctx) throw new Error("useNewSite must be used inside NewSiteProvider (mounted by the dashboard shell).");
   return ctx;
 }
+
+/** Same as useNewSite, but null outside NewSiteProvider (used by the v3 shell's site switcher). */
+export function useOptionalNewSite(): NewSiteContextValue | null {
+  return useContext(NewSiteContext);
+}

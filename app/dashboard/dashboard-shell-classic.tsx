@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { ClassicSwitchItems } from "./_versions/SwitchMenuItems";
 import { NAV_ITEMS } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
@@ -649,6 +650,7 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
               </div>
             </div>
           )}
+          {!collapsed && <ClassicSwitchItems compact />}
           <button
             onClick={() => void handleSignOut()}
             disabled={isSigningOut}

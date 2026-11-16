@@ -22,7 +22,7 @@ import {
   type SolPromptPreferences,
 } from "./solAgent";
 import { ASK_USER_QUESTION_TOOL_NAME } from "./solToolSchema";
-import type { SolBuildProfile } from "./solBuildContext";
+import { loadBuildProfile } from "./solBuildContext";
 import { maybeExtractMemoryFact } from "./memoryExtraction";
 import { maybeGenerateConversationTitle } from "./titleGeneration";
 import { recordSolUsageEvent, type SolToolCallRecord } from "@/lib/solAnalytics";
@@ -107,11 +107,6 @@ async function loadMemoryContext(userId: string): Promise<{ memoryEnabled: boole
   return { memoryEnabled: true, facts: facts.map((f) => f.text), preferences };
 }
 
-/** What the owner is building, from onboarding. TODO: read it from the user record once the
- *  onboarding workstream stores it there (SolBuildProfile in lib/ai/solBuildContext.ts). */
-async function loadBuildProfile(_userId: string): Promise<SolBuildProfile | undefined> {
-  return undefined;
-}
 
 interface SolAiRouting {
   provider: AiProvider;

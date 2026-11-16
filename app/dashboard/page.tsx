@@ -11,6 +11,9 @@ import { OverviewClient, type NeedsAttentionItem, type ActivityItem, type Overvi
 import { OverviewSetup, type StarterTemplate } from "./_components/OverviewSetup";
 import { PageContainer } from "./_components/PageContainer";
 import { effectivePlan, shouldOfferTrial } from "@/lib/plan/entitlement";
+import { usesNewShell } from "@/lib/dashboardVersions/state";
+import { ONBOARDING_PATH, v3EntryDestination } from "@/lib/dashboardV3/flag";
+import { V3Home } from "./_v3/home/V3Home";
 
 export default async function OverviewPage() {
   const session = await auth();
@@ -42,6 +45,14 @@ export default async function OverviewPage() {
   // A brand-new account is offered the 14-day trial once (app/welcome).
   if (shouldOfferTrial(user)) {
     redirect("/welcome");
+  }
+
+  // v3 (DASHBOARD_V3): everyone sees the new setup once (unless they chose "Continue later"),
+  // then lands on the guided Home.
+  if (await usesNewShell(user)) {
+    if (v3EntryDestination(user) === "onboarding") redirect(ONBOARDING_PATH);
+    if (user.preferredSurface === "SOL") redirect("/dashboard/sol");
+    return <V3Home user={user} organizationId={organizationId} userId={user.id} />;
   }
 
   // A user who's picked SOL (the AI agent chat) as their landing surface skips the normal

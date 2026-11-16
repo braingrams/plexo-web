@@ -1,0 +1,56 @@
+"use client";
+
+import { ChevronDown } from "lucide-react";
+import { Card } from "../ui";
+import { CONNECT_TOOLS, editorConfig, mcpUrl, type ConnectToolId } from "@/lib/dashboardV3/connectTools";
+import { CopyBox, SectionHead } from "./bits";
+
+const MARK: Record<ConnectToolId, string> = { claude: "C", chatgpt: "G", cursor: "›" };
+
+/** One simple card per tool: copy one link, follow three steps. The technical bits are tucked away. */
+export function ConnectSection({ baseUrl, apiKeyHint }: { baseUrl: string; apiKeyHint: string }) {
+  const link = mcpUrl(baseUrl);
+  return (
+    <>
+      <SectionHead title="Connect AI tools">Already use Claude or ChatGPT? Connect them to Plexo and ask for changes in your own words.</SectionHead>
+      <div className="plx-tools" data-tour="connect-cards">
+        {CONNECT_TOOLS.map((t) => (
+          <Card key={t.id} className="plx-tool" padding="lg">
+            <div className="plx-tool__head">
+              <span className="plx-tool__mark" aria-hidden>{MARK[t.id]}</span>
+              <div>
+                <h2 className="plx-h2">{t.name}</h2>
+                <p>{t.tagline}</p>
+              </div>
+            </div>
+            <div>
+              <span className="plx-field__label" style={{ display: "block", marginBottom: 8 }}>Your Plexo link</span>
+              <CopyBox value={link} label={`Plexo link for ${t.name}`} wrap />
+            </div>
+            <ol className="plx-steps">
+              {t.steps.map((s) => (
+                <li key={s}><span style={{ lineHeight: 1.5, paddingTop: 6 }}>{s}</span></li>
+              ))}
+            </ol>
+            <details className="plx-adv">
+              <summary>
+                {t.advancedTitle} <ChevronDown size={18} aria-hidden />
+              </summary>
+              {t.id === "cursor" ? (
+                <>
+                  <p className="plx-small" style={{ margin: "8px 0 0" }}>Rather not sign in? Put this in your editor&apos;s MCP settings, with one of your API keys in place of the example.</p>
+                  <pre className="plx-code">{editorConfig(baseUrl, apiKeyHint)}</pre>
+                </>
+              ) : (
+                <>
+                  <p className="plx-small" style={{ margin: "8px 0 0" }}>Plexo&apos;s sign-in is handled automatically, so you don&apos;t need to fill in any extra fields. If {t.name} asks for them, leave them empty.</p>
+                  <pre className="plx-code plx-code--wrap">{`Name: ${t.connectionName}\nServer URL: ${link}\nSign-in: OAuth (automatic)`}</pre>
+                </>
+              )}
+            </details>
+          </Card>
+        ))}
+      </div>
+    </>
+  );
+}

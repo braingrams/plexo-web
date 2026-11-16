@@ -1,3 +1,4 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/settingsContext";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { ApiKey } from "@/lib/db/coreEntities";
@@ -5,7 +6,8 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import IntegrationsClient from "./integrations-client";
 import { SettingsShell } from "../_components/SettingsShell";
 
-export default async function IntegrationsPage() {
+export default async function IntegrationsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await redirectIfV3("integrations/page.tsx", "/dashboard/settings/connect", await searchParams);
   let session = null;
 
   try {

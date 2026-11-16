@@ -59,7 +59,7 @@ function AppBanner({ summary }: { summary: AppSummary | null }) {
       <div style={{ flex: "1 1 240px", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: "1.2rem", fontWeight: 750, color: C.text }}>{summary.name}</span>
-          <Pill color={summary.published ? C.success : C.muted}>{summary.published ? "Live" : "Not published yet"}</Pill>
+          <Pill color={summary.published ? C.success : C.muted}>{summary.published ? "Live" : "Draft"}</Pill>
         </div>
         <div style={{ fontSize: "0.82rem", color: C.muted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {address ? (

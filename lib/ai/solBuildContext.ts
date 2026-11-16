@@ -86,3 +86,25 @@ export function solBuildProfilePrompt(profile?: SolBuildProfile): string {
   }
   return parts.join("\n\n");
 }
+
+/**
+ * What the owner is building, read from their user record (`buildProfile`, written by the
+ * onboarding at /welcome/setup; their dashboard `experience` choice wins over the onboarding
+ * answer). undefined when there's nothing — SOL then behaves normally. Never throws: a failed
+ * read just means SOL works without the extra context.
+ */
+export async function loadBuildProfile(userId: string): Promise<SolBuildProfile | undefined> {
+  try {
+    // Imported lazily so the prompt helpers above stay free of database code (and cheap to test).
+    const [{ User }, { readBuildProfile }, { parseExperience }] = await Promise.all([import("@/lib/db/coreEntities"), import("@/lib/dashboardV3/profile"), import("@/lib/dashboardV3/nav")]);
+    const { data: user } = await User.get({ id: userId }).go({ attributes: ["buildProfile", "experience"] });
+    if (!user) return undefined;
+    const profile = readBuildProfile(user.buildProfile) ?? {};
+    const experience = parseExperience(user.experience);
+    if (experience) profile.experience = experience;
+    return Object.keys(profile).length ? profile : undefined;
+  } catch (err) {
+    console.error("loadBuildProfile failed", err);
+    return undefined;
+  }
+}

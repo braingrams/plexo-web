@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
+import { ClassicSwitchItems } from "./_versions/SwitchMenuItems";
 import { NAV_ITEMS } from "./nav-items";
 import { Avatar } from "./_components/Avatar";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
@@ -354,6 +355,8 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
                 <IconSettings />
                 Branding
               </Link>
+
+              <ClassicSwitchItems onPick={() => setMenuOpen(false)} />
 
               <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0.3rem 0" }} />
 

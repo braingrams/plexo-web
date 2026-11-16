@@ -173,6 +173,37 @@ export const User = new Entity(
       subscriptionStartedAt: { type: "string" },
       subscriptionPeriodEnd: { type: "string" },
       subscriptionCancelAtPeriodEnd: { type: "boolean" },
+      // ── Dashboard versions (docs/DASHBOARD_VERSIONS.md; lib/dashboardVersions) ──────
+      // Which dashboard they chose / were moved to (a registry id, e.g. "classic", "v3"). The
+      // LAST entry of the history is the truth; this mirrors it for fast reads.
+      dashboardVersion: { type: "string" },
+      // Admin-locked: they can't switch away (mandatory rollout needs no flag).
+      dashboardVersionLocked: { type: "boolean" },
+      // [{ at, from, to, by: "user"|"admin"|"rollout", adminId?, note? }], capped at 50.
+      dashboardVersionHistory: { type: "any" },
+      // The audience: { [versionId]: "optional" | "locked" } — added by an admin (SELECTED/OFFERED).
+      dashboardVersionAccess: { type: "any" },
+      // Offer answers: { [versionId]: { snoozeUntil?, never?, askedAt? } }.
+      dashboardOffers: { type: "any" },
+      // ── v3 dashboard (docs/redesign/SPEC.md; lib/dashboardV3) ───────────────────────
+      // Per-user override of the DASHBOARD_V3 env flag (staff/testing). Unset = follow the env.
+      dashboardV3: { type: "boolean" },
+      // "beginner" = guided view with fewer menu items; "pro" = everything, denser. Switchable
+      // in Settings and from Home. Unset reads as beginner (lib/dashboardV3/profile.ts).
+      experience: { type: ["beginner", "intermediate", "pro"] as const },
+      // What they're building, from onboarding — read by SOL (lib/ai/solBuildContext.ts
+      // loadBuildProfile) and by Home's guided tasks. Shape: SolBuildProfile, validated by
+      // lib/dashboardV3/profile.ts sanitizeBuildProfile before it's stored.
+      buildProfile: { type: "any" },
+      // 3 = finished the redesign's onboarding (/welcome/setup). Below 3 they see it once.
+      onboardingVersion: { type: "number" },
+      // "Continue later" on onboarding: Home then shows a "Set up your first site" card instead.
+      onboardingDeferredAt: { type: "string" },
+      // Light / Dark / System (default System when unset). Mirrored in the plexo-theme cookie.
+      themePreference: { type: ["light", "dark", "system"] as const },
+      // The product walkthrough (app/dashboard/_v3/tour): whether they've been asked, which tour
+      // and where they are in it, so it resumes across pages and devices. lib/dashboardV3/tour.ts.
+      tourState: { type: "any" },
     },
     indexes: {
       primary: {
@@ -775,6 +806,36 @@ export const plexoCoreService = new Service(
     Notification,
     NotificationPreferences,
     Invitation,
+  },
+  { table, client: docClient },
+);
+
+// The dashboard version registry (docs/DASHBOARD_VERSIONS.md): one row per dashboard version,
+// edited in plexo-admin ("Versions"), read by plexo-web (lib/dashboardVersions/store.ts). Rows
+// share one partition so the whole registry is a single cheap query. plexo-admin keeps a copy.
+export const DashboardVersion = new Entity(
+  {
+    model: { entity: "dashboardVersion", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      label: { type: "string", required: true },
+      description: { type: "string" },
+      whatsNew: { type: "any" },
+      status: { type: ["beta", "stable", "retired"] as const, default: "beta" },
+      isDefault: { type: "boolean", default: false },
+      rolloutMode: { type: ["OFF", "SELECTED", "OFFERED", "MANDATORY"] as const, default: "OFF" },
+      offerAudience: { type: ["everyone", "selected"] as const, default: "everyone" },
+      remindAfterDays: { type: "number", default: 7 },
+      sortOrder: { type: "number", default: 0 },
+      updatedBy: { type: "string" },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "DASHBOARDVERSIONS" },
+        sk: { field: "sk", composite: ["id"], template: "VERSION#${id}" },
+      },
+    },
   },
   { table, client: docClient },
 );

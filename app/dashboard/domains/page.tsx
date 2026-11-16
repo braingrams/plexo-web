@@ -1,3 +1,4 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/settingsContext";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
@@ -6,7 +7,10 @@ import { ensureActiveOrganization, getOrganizationOwnerEntitlementDynamo } from 
 import { DomainsClient } from "./domains-client";
 import { PageContainer } from "../_components/PageContainer";
 
-export default async function DomainsPage() {
+export default async function DomainsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // "?classic=1" keeps the old screen reachable for buying a domain until that step is rebuilt.
+  const sp = await searchParams;
+  if (sp.classic !== "1") await redirectIfV3("/dashboard/domains", "/dashboard/settings/domains");
   const session = await auth();
 
   if (!session?.user) {

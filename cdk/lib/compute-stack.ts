@@ -1207,6 +1207,15 @@ export class ComputeStack extends cdk.Stack {
           cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
           responseHeadersPolicy: securityHeadersPolicy,
         },
+        // Brand images (logos, the email wordmark PNGs). public/ is synced to the assets bucket by
+        // DeployAssets; without this behavior /brand/* fell through to the server function, which
+        // doesn't carry public/, so every email logo 404ed.
+        "brand/*": {
+          origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
+          responseHeadersPolicy: securityHeadersPolicy,
+        },
         "uploads/*": {
           origin: origins.S3BucketOrigin.withOriginAccessControl(assetsBucket, { originPath: "/_assets" }),
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

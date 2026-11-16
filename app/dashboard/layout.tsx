@@ -10,6 +10,9 @@ import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
 import { AppLiveDialog } from "./_components/AppLiveDialog";
 import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction, storedPlan } from "@/lib/plan/entitlement";
 import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
+import { getDashboardVersionState } from "@/lib/dashboardVersions/state";
+import { VersionProvider } from "./_versions/VersionUi";
+import { V3DashboardLayout } from "./_v3/V3DashboardLayout";
 
 export default async function DashboardLayout({
   children,
@@ -52,6 +55,27 @@ export default async function DashboardLayout({
   ]);
   const plan = workspace.subscriptionPlan;
 
+  // Which dashboard this person sees (docs/DASHBOARD_VERSIONS.md): admin-controlled rollout,
+  // resolved once per request. A version with no shell of its own renders the classic one.
+  const version = dbUser ? await getDashboardVersionState(dbUser) : null;
+  const versionUi = version ? { currentLabel: version.label, targets: version.targets, offer: version.offer } : { currentLabel: "", targets: [], offer: null };
+  if (dbUser && version?.shell === "v3") {
+    return (
+      <V3DashboardLayout
+        versions={versionUi}
+        user={{ ...dbUser, name: userName, email: userEmail, image: dbUser.image ?? session.user.image ?? null }}
+        organizationId={orgResolution.organizationId}
+        orgBranding={orgBranding}
+        plan={plan}
+      >
+        <MigrationBanner />
+        {planBanner ? <PlanBanner state={planBanner} /> : null}
+        {children}
+        <AppLiveDialog />
+      </V3DashboardLayout>
+    );
+  }
+
   return (
     // The marketing site's new light/dark toggle (see app/landing-nav.tsx) is a single
     // global next-themes provider at the root layout, so its stored preference would
@@ -60,6 +84,7 @@ export default async function DashboardLayout({
     // provider forces "dark" for this whole subtree regardless of what a visitor picked
     // on the homepage, which next-themes explicitly supports for exactly this case.
     <ThemeProvider forcedTheme="dark" attribute="class">
+      <VersionProvider data={versionUi}>
       <DashboardShell
         userName={userName}
         userEmail={userEmail}
@@ -75,6 +100,7 @@ export default async function DashboardLayout({
         {/* "Your app is live", opened from any page once a server app goes live. */}
         <AppLiveDialog />
       </DashboardShell>
+      </VersionProvider>
     </ThemeProvider>
   );
 }

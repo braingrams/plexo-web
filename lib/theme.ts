@@ -176,7 +176,12 @@ export const TEXT_LIGHT = { main: "#0b0d12", muted: "#55596b", faint: "#9297ab" 
 export const EDITOR_THEME = { accent: BRAND.primary, background: SURFACES.bg, text: TEXT.main } as const;
 
 /** Email palette: emails can't use CSS variables, so they read these. Brand colours are the dark-mode ones (they sit on white). */
-export const EMAIL_COLORS: { brand: string; brandDeep: string; brandTint: string; ink: string } = { brand: BRAND_MODES.light.primary, brandDeep: BRAND_MODES.light.deep, brandTint: "#ede9fe", ink: SURFACES_LIGHT.ink };
+/** Emails use the NEW Plexo brand (lime + deep green on warm neutrals) — deliberately separate from BRAND_MODES above,
+ * which still drives the old dashboard until the redesign replaces it. */
+export const EMAIL_COLORS: { brand: string; brandDeep: string; brandTint: string; ink: string; onBrand: string; muted: string; border: string; canvas: string; elevated: string; amber: string } = {
+  brand: "#B8F34A", brandDeep: "#517A12", brandTint: "#F0F6DF", ink: "#121212", onBrand: "#111111", muted: "#5B5B58",
+  border: "#E8E8E4", canvas: "#F7F8F3", elevated: "#F4F5F0", amber: "#F5AC05",
+};
 
 function modeBlock(selector: string, b: (typeof BRAND_MODES)[keyof typeof BRAND_MODES], s: { bg: string; bg1: string; bg2: string; bg3: string; surface: string; border: string }, t: { main: string; muted: string; faint: string }, extra: string): string {
   return `${selector}{

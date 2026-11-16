@@ -67,7 +67,7 @@ export function UploadRawClient() {
         }}>
           <p style={{ color: "#34d399", fontWeight: 700, marginBottom: "0.5rem" }}>✓ "{result.name}" uploaded</p>
           <p style={{ color: "rgba(240,242,255,0.6)", fontSize: "0.85rem", marginBottom: "1rem" }}>
-            It's saved but not live yet — link it to a subdomain or custom domain to publish it.
+            It's saved as a draft — link it to a subdomain or custom domain to publish it.
           </p>
           <div style={{ display: "flex", gap: "0.6rem" }}>
             <Link href={`/dashboard/templates/${result.templateId}`} className="btn-primary" style={{

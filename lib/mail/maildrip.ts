@@ -1,5 +1,4 @@
 import { EMAIL_COLORS } from "@/lib/theme";
-import { darken } from "@/lib/color";
 import { decryptMaildripKey } from "@/lib/crypto";
 import { logEmailDelivery, type EmailDeliveryContext } from "./logEmail";
 
@@ -104,79 +103,107 @@ export type EmailBrand = {
   color?: string;
 };
 
+/** Public base URL emails use for hosted images (Gmail can't show SVG, so logos are PNGs). */
+export const EMAIL_SITE_URL = SITE_URL;
+
+/** The two Plexo wordmark PNGs in public/brand — dark ink for light mode, light ink for dark mode. */
+export const EMAIL_LOGO = { onLight: `${SITE_URL}/brand/plexo-wordmark-dark.png`, onDark: `${SITE_URL}/brand/plexo-wordmark-light.png` };
+
 /**
- * Shared branded card shell used by every transactional email (verification, password
- * reset, invites, mention/reply notifications) so the logo/header/card markup lives in
- * exactly one place instead of being copy-pasted per email. Falls back to the real Plexo
- * mark when `brand` is omitted entirely — account-security emails (verification, password
- * reset) always omit it intentionally, see lib/mail/templates.ts.
+ * Dark-mode overrides. Colours are inline everywhere (the only thing every mail client keeps), so
+ * each rule matches the inline colour by attribute and swaps it. Clients that ignore
+ * prefers-color-scheme (Outlook desktop, Gmail) simply keep the light design, which is fully
+ * legible on its own. Text on the lime button uses #111111 (not #121212) so it is never swapped.
+ */
+const DARK_CSS = `
+  :root { color-scheme: light dark; supported-color-schemes: light dark; }
+  @media (prefers-color-scheme: dark) {
+    html, body, .em-outer { background:#0B0B12 !important; }
+    .em-card { background:#15161C !important; border-color:#2C2E35 !important; }
+    .logo-l { display:none !important; } .logo-d { display:block !important; max-height:none !important; }
+    [style*="color:#121212"] { color:#F4F5F0 !important; }
+    [style*="color:#3F3F3C"] { color:#D6D7D1 !important; }
+    [style*="color:#5B5B58"], [style*="color:#76766F"] { color:#A6A7A2 !important; }
+    [style*="color:#517A12"] { color:#B8F34A !important; }
+    [style*="color:#B42318"] { color:#FF8A7A !important; }
+    [style*="color:#8A5A00"], [style*="color:#7A4B00"] { color:#F5AC05 !important; }
+    [style*="background:#F4F5F0"] { background:#1D1F26 !important; }
+    [style*="background:#F0F6DF"] { background:#1F2614 !important; }
+    [style*="background:#F7F8F3"]:not(.em-outer) { background:#1D1F26 !important; }
+    [style*="background:#FDF0CC"], [style*="background:#FFF8E6"] { background:#2B2310 !important; }
+    [style*="#E8E8E4"] { border-color:#2C2E35 !important; }
+    .em-card a:not(.em-btn) { color:#B8F34A !important; }
+  }`;
+
+const escAttr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+/**
+ * Shared branded shell used by every transactional email, so the logo/header/card/footer markup
+ * lives in exactly one place. Falls back to the real Plexo wordmark when `brand` is omitted —
+ * account-security emails always omit it intentionally. White-label org logos always win.
  */
 export function emailShell(input: {
   title: string;
   bodyHtml: string;
   footerHtml?: string;
   brand?: EmailBrand;
+  /** Inbox preview text (hidden in the body, shown beside the subject). */
+  preheader?: string;
+  /** Marketing-style emails link a one-click unsubscribe/preferences page in the footer. */
+  unsubscribeUrl?: string;
 }): string {
-  const accent = input.brand?.color ?? EMAIL_COLORS.brand;
-  const accentDeep = input.brand?.color ? darken(accent, 0.12) : EMAIL_COLORS.brandDeep;
-  const brandName = input.brand?.name ?? "Plexo";
-  // Plexo's own default mark uses app/icon.tsx's real rendered PNG (already hosted at this
-  // exact URL -- see app/layout.tsx's JSON-LD logo field for the same reference) rather than
-  // an inline <svg>: Gmail (web + app) has no support at all for embedded/inline SVG on any
-  // platform, so every account-security email's logo was silently invisible there. A
-  // branded-but-logo-less org (has a name/color override, no logoUrl yet) keeps the existing
-  // generic gradient-mark placeholder unchanged -- that's a distinct, pre-existing case this
-  // fix isn't meant to touch, since showing Plexo's own logo there would undercut the whole
-  // point of white-labeling.
+  const brandName = escAttr(input.brand?.name ?? "Plexo");
+  const accent = input.brand?.color ?? EMAIL_COLORS.brandDeep;
+  const isPlexo = !input.brand;
   const logoMarkup = input.brand?.logoUrl
-    ? `<img src="${input.brand.logoUrl}" width="36" height="36" alt="${brandName}" style="display:block;border-radius:8px;object-fit:cover;" />`
-    : !input.brand
-      ? `<img src="${SITE_URL}/icon" width="36" height="36" alt="Plexo" style="display:block;border-radius:8px;" />`
-      : `<table cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="width:36px;height:36px;background:linear-gradient(135deg,${accent},${accentDeep});border-radius:8px;text-align:center;vertical-align:middle;">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;vertical-align:middle;margin-top:2px;">
-                      <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="#ffffff" opacity="0.95" />
-                      <path d="M9 12l2 2 4-4" stroke="${accent}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
-                    </svg>
-                  </td>
-                </tr>
-              </table>`;
+    ? `<img src="${escAttr(input.brand.logoUrl)}" height="36" alt="${brandName}" style="display:block;margin:0 auto;height:36px;width:auto;max-width:200px;border:0;border-radius:8px;" />`
+    : isPlexo
+      ? `<img class="logo-l" src="${EMAIL_LOGO.onLight}" width="124" height="32" alt="Plexo" style="display:block;margin:0 auto;width:124px;height:32px;border:0;" />
+         <img class="logo-d" src="${EMAIL_LOGO.onDark}" width="124" height="32" alt="" style="display:none;max-height:0;overflow:hidden;margin:0 auto;width:124px;height:32px;border:0;" />`
+      : `<table align="center" cellpadding="0" cellspacing="0" role="presentation" style="margin:0 auto;"><tr>
+           <td width="36" height="36" align="center" style="width:36px;height:36px;background:${accent};border-radius:10px;color:#ffffff;font-size:18px;font-weight:800;line-height:36px;font-family:Arial,sans-serif;">${brandName.charAt(0).toUpperCase()}</td>
+           <td style="padding-left:10px;font-size:18px;font-weight:800;color:#121212;letter-spacing:-0.3px;">${brandName}</td>
+         </tr></table>`;
+
+  const help = isPlexo
+    ? `Need a hand? Just reply to this email &mdash; a real person reads it.<br/>`
+    : "";
+  const unsub = input.unsubscribeUrl
+    ? `<a href="${input.unsubscribeUrl}" style="color:#5B5B58;text-decoration:underline;">Unsubscribe or change which emails you get</a><br/>`
+    : "";
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="supported-color-schemes" content="light dark" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${input.title}</title>
+  <!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->
+  <style>${DARK_CSS}</style>
 </head>
-<body style="margin:0;padding:0;background:#ffffff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;padding:48px 16px;">
+<body style="margin:0;padding:0;background:#F7F8F3;font-family:'Plus Jakarta Sans',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-text-size-adjust:100%;">
+  ${input.preheader ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">${input.preheader}${"&nbsp;&zwnj;".repeat(40)}</div>` : ""}
+  <table class="em-outer" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F7F8F3;">
     <tr>
-      <td align="center">
-        <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
+      <td align="center" style="padding:48px 16px 40px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+          <tr><td align="center" style="padding:0 8px 28px;text-align:center;">${logoMarkup}</td></tr>
           <tr>
-            <td style="vertical-align:middle;padding-right:10px;">
-              ${logoMarkup}
-            </td>
-            <td style="vertical-align:middle;">
-              <span style="color:#0f172a;font-size:22px;font-weight:800;letter-spacing:-0.3px;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">${brandName}</span>
-            </td>
-          </tr>
-        </table>
-
-        <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#f8fafc;border-radius:16px;border:1px solid #e2e8f0;box-shadow:0 8px 24px rgba(0,0,0,0.03);">
-          <tr>
-            <td style="padding:44px 36px;text-align:center;">
+            <td class="em-card" style="background:#FFFFFF;border:1px solid #E8E8E4;border-radius:20px;padding:44px 40px;text-align:left;color:#121212;">
               ${input.bodyHtml}
             </td>
           </tr>
+          <tr>
+            <td align="left" style="padding:24px 8px 0;font-size:12px;line-height:1.7;color:#5B5B58;">
+              ${input.footerHtml ?? ""}
+              ${help}${unsub}
+              &copy; ${new Date().getFullYear()} ${brandName}${isPlexo ? " &middot; Made by Charisol &middot; plexopages.com" : ""}
+            </td>
+          </tr>
         </table>
-
-        <p style="margin:24px 0 0 0;font-size:12px;color:#94a3b8;line-height:1.5;text-align:center;">
-          ${input.footerHtml ?? ""}
-          &copy; ${new Date().getFullYear()} ${brandName}. All rights reserved.
-        </p>
       </td>
     </tr>
   </table>

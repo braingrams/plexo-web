@@ -1,3 +1,4 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/settingsContext";
 import { redirect } from "next/navigation";
 
 import { ensureCreditPeriod } from "@/lib/db/ledgerOperations";
@@ -16,7 +17,8 @@ import { PLAN_LABELS } from "@/lib/plan/plans";
 import { loadPriceBook } from "@/lib/billing/priceBook";
 import { formatMoney, planPrice, regionById, regionForCurrency } from "@/lib/billing/pricing";
 
-export default async function SubscriptionPage() {
+export default async function SubscriptionPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await redirectIfV3("settings/subscription/page.tsx", "/dashboard/settings/plan", await searchParams);
   const session = await auth();
 
   if (!session?.user) {

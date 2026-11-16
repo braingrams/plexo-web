@@ -721,14 +721,14 @@ function ManagePagesModal({
 									)}
 									{!isHome && (node.isPublished === false || homeOnly) && (
 										<span
-											title={homeOnly || node.archivedByPlan ? "Saved, not published — upgrade to publish it" : "Saved, not published"}
+											title={homeOnly || node.archivedByPlan ? "Draft: saved, not published. Upgrade to publish it" : "Draft: saved, not published"}
 											style={{
 												marginLeft: "0.4rem", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em",
 												textTransform: "uppercase", color: "#fbbf24", background: "rgba(245,183,74,0.1)",
 												padding: "0.1rem 0.4rem", borderRadius: 4, verticalAlign: "middle",
 											}}
 										>
-											Not live
+											Draft
 										</span>
 									)}
 								</span>

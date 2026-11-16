@@ -1,3 +1,4 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/settingsContext";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
@@ -15,7 +16,8 @@ export type SettingsApiKey = {
   isActive: boolean;
 };
 
-export default async function ApiKeysPage() {
+export default async function ApiKeysPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await redirectIfV3("settings/api-keys/page.tsx", "/dashboard/settings/developers", await searchParams);
   const session = await auth();
 
   if (!session?.user) {

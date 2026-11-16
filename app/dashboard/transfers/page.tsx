@@ -1,3 +1,4 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/settingsContext";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
@@ -7,7 +8,8 @@ import { Organization, User } from "@/lib/db/coreEntities";
 import { SettingsShell } from "../_components/SettingsShell";
 import { TransfersListClient } from "./TransfersListClient";
 
-export default async function TransfersPage() {
+export default async function TransfersPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await redirectIfV3("transfers/page.tsx", "/dashboard/settings/moving", await searchParams);
   const session = await auth();
   if (!session?.user?.id || !session.user.email) redirect("/auth/login?redirectTo=/dashboard/transfers");
 

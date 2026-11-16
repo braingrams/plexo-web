@@ -51,11 +51,11 @@ function badge(label: string, bg: string, color: string): string {
 }
 
 function detailsBlock(rows: string): string {
-  return `<div style="margin:20px 0;padding:16px 20px;background:#f1f5f9;border-radius:10px;text-align:left;font-size:14px;color:#334155;line-height:1.8;">${rows}</div>`;
+  return `<div style="margin:20px 0;padding:16px 20px;background:#F4F5F0;border-radius:10px;text-align:left;font-size:14px;color:#3F3F3C;line-height:1.8;">${rows}</div>`;
 }
 
 function detailRow(label: string, value: string): string {
-  return `<p style="margin:0;"><strong style="color:#0f172a;">${label}:</strong> ${value}</p>`;
+  return `<p style="margin:0;"><strong style="color:#121212;">${label}:</strong> ${value}</p>`;
 }
 
 function twoButtonRow(
@@ -63,9 +63,9 @@ function twoButtonRow(
   rightHref: string, rightLabel: string, rightColor: string,
 ): string {
   return `
-  <table align="center" cellpadding="0" cellspacing="0" style="margin:0 auto 24px auto;">
+  <table cellpadding="0" cellspacing="0" style="margin:0 0 24px 0;">
     <tr>
-      <td style="padding:0 6px;">
+      <td style="padding:0 12px 0 0;">
         <table cellpadding="0" cellspacing="0"><tr><td style="border-radius:10px;background:${leftColor};">
           <a href="${leftHref}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:10px;">${leftLabel}</a>
         </td></tr></table>
@@ -152,8 +152,8 @@ export async function sendTestimonialNotificationEmail(testimonial: SendTestimon
     title: "New Testimonial Submitted",
     bodyHtml: `
       ${badge("New Testimonial Submitted", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
-      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A new review requires your approval</h1>
-      <p style="margin:0 0 8px;font-size:15px;color:#334155;line-height:1.6;font-style:italic;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">
+      <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">A new review requires your approval</h1>
+      <p style="margin:0 0 8px;font-size:16px;color:#3F3F3C;line-height:1.65;font-style:italic;background:#F4F5F0;border-radius:10px;padding:16px 20px;text-align:left;">
         &ldquo;${escapeHtml(testimonial.quote)}&rdquo;
       </p>
       ${detailsBlock([
@@ -162,7 +162,7 @@ export async function sendTestimonialNotificationEmail(testimonial: SendTestimon
         detailRow("Rating", `${"&#9733;".repeat(testimonial.rating)} (${testimonial.rating}/5)`),
         testimonial.avatarUrl ? detailRow("Avatar URL", `<a href="${escapeHtml(testimonial.avatarUrl)}" style="color:${EMAIL_COLORS.brandDeep};">${escapeHtml(testimonial.avatarUrl)}</a>`) : "",
       ].filter(Boolean).join(""))}
-      ${twoButtonRow(approveUrl, "Approve & Publish", "#10b981", rejectUrl, "Reject", "#ef4444")}
+      ${twoButtonRow(approveUrl, "Approve & Publish", "#517A12", rejectUrl, "Reject", "#B42318")}
     `,
   });
 
@@ -195,12 +195,12 @@ export async function sendFeedbackNotificationEmail(feedback: SendFeedbackEmailP
     title: "New Feedback",
     bodyHtml: `
       ${badge("New Feedback", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
-      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A user submitted feedback</h1>
+      <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">A user submitted feedback</h1>
       ${detailsBlock([
         detailRow("From", `${escapeHtml(feedback.userName)} (${escapeHtml(feedback.userEmail)})`),
         feedback.pageUrl ? detailRow("Page", escapeHtml(feedback.pageUrl)) : "",
       ].filter(Boolean).join(""))}
-      <p style="margin:0;font-size:14px;color:#334155;line-height:1.6;white-space:pre-wrap;background:#f1f5f9;border-radius:10px;padding:16px 20px;text-align:left;">${escapeHtml(feedback.message)}</p>
+      <p style="margin:0;font-size:14px;color:#3F3F3C;line-height:1.6;white-space:pre-wrap;background:#F4F5F0;border-radius:10px;padding:16px 20px;text-align:left;">${escapeHtml(feedback.message)}</p>
     `,
   });
 
@@ -238,7 +238,7 @@ export async function sendWithdrawalRequestNotificationEmail(withdrawal: SendWit
     title: "New Withdrawal Request",
     bodyHtml: `
       ${badge("New Withdrawal Request", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
-      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A seller has requested a payout</h1>
+      <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">A seller has requested a payout</h1>
       ${detailsBlock([
         detailRow("Requested by", `${escapeHtml(withdrawal.userName)} (${escapeHtml(withdrawal.userEmail)})`),
         detailRow("Amount", `$${amount}`),
@@ -281,7 +281,7 @@ export async function sendScriptAccessRequestNotificationEmail(req: SendScriptAc
     title: "Full Script Preview Requested",
     bodyHtml: `
       ${badge("Full Script Preview Requested", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
-      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A user wants scripts enabled in their template preview</h1>
+      <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">A user wants scripts enabled in their template preview</h1>
       ${detailsBlock([
         detailRow("Requested by", `${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})`),
         detailRow("Template", escapeHtml(req.templateName)),
@@ -327,7 +327,7 @@ export async function sendCommerceStripeAccessRequestNotificationEmail(req: Send
     title: "Platform Stripe Requested",
     bodyHtml: `
       ${badge("Platform Stripe Requested", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
-      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">An org wants platform-hosted Stripe for Commerce</h1>
+      <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">An org wants platform-hosted Stripe for Commerce</h1>
       ${detailsBlock([
         detailRow("Organization", escapeHtml(req.organizationName)),
         detailRow("Requested by", `${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})`),
@@ -376,7 +376,7 @@ export async function sendCommerceWithdrawalRequestNotificationEmail(req: SendCo
     title: "New Commerce Withdrawal Request",
     bodyHtml: `
       ${badge("New Commerce Withdrawal Request", EMAIL_COLORS.brandTint, EMAIL_COLORS.brandDeep)}
-      <h1 style="margin:0 0 16px;font-size:24px;font-weight:700;color:#0f172a;letter-spacing:-0.3px;text-align:center;">A Commerce wallet payout has been requested</h1>
+      <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">A Commerce wallet payout has been requested</h1>
       ${detailsBlock([
         detailRow("Organization", escapeHtml(req.organizationName)),
         detailRow("Requested by", `${escapeHtml(req.userName)} (${escapeHtml(req.userEmail)})`),

@@ -141,6 +141,10 @@ describe("planSite", () => {
   });
 });
 
+// Building a whole site (pages, shop, blog) in one call is slow on a cold start or a busy machine;
+// it took ~5s alone, which hit vitest's default limit.
+vi.setConfig({ testTimeout: 30_000 });
+
 describe("site_create", () => {
   it("is in the MCP catalog with the other new tools", () => {
     const names = PLEXO_MCP_TOOLS.map((t) => t.name);

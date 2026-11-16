@@ -377,7 +377,7 @@ export function BlogOverviewClient({
                     color: "rgba(240,242,255,0.35)",
                   }}
                 >
-                  Not published yet
+                  Draft
                 </span>
               )}
 
