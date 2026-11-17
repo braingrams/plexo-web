@@ -3,15 +3,24 @@
 import { useState } from "react";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 
-export type Testimonial = { quote: string; name: string; role: string; initials: string };
+export type Testimonial = { quote: string; name: string; role?: string; initials: string; /** A picture in /public (their logo or photo). Falls back to the initials tile. */ avatar?: string };
 
-/** What owners say about Plexo. Add more entries and the arrows appear. */
+/** What owners say about Plexo. Two or more entries show the next / previous arrows. */
 export const TESTIMONIALS: Testimonial[] = [
   {
     quote: "Being able to publish HTML straight from Claude has transformed our workflow. We can launch faster, test and iterate without slowing down",
     name: "Ebitimi Jumbo",
-    role: "Founder, MeetHQ",
+    role: "Founder, MeerHQ",
     initials: "EJ",
+    avatar: "/brand/testimonials/meerhq.png",
+  },
+  {
+    // PLACEHOLDER QUOTE: written for the design, not something this organisation said. Replace it with their real words before launch.
+    quote: "We moved our donation page and event sign-ups onto Plexo over a weekend. Our team updates everything ourselves now, and supporters finally find what they need without calling us.",
+    name: "Yeshua Helimax Foundation",
+    role: "CEO",
+    initials: "YH",
+    avatar: "/brand/testimonials/yeshua-helimax.png",
   },
 ];
 
@@ -27,10 +36,15 @@ export function Testimonials({ items = TESTIMONIALS }: { items?: Testimonial[] }
       <blockquote key={i}>{t.quote}</blockquote>
       <figcaption>
         <span className="ax-quote-who">
-          <span className="ax-quote-tile" aria-hidden="true">{t.initials}</span>
+          {t.avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img className="ax-quote-tile ax-quote-img" src={t.avatar} alt="" width={34} height={34} />
+          ) : (
+            <span className="ax-quote-tile" aria-hidden="true">{t.initials}</span>
+          )}
           <span>
             <span className="ax-quote-name">{t.name}</span>
-            <span className="ax-quote-role">{t.role}</span>
+            {t.role ? <span className="ax-quote-role">{t.role}</span> : null}
           </span>
         </span>
         {many ? (
