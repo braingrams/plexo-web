@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import type { PricingView } from "@/lib/billing/pricing";
 
 // The prices this person sees, in their own currency (GET /api/billing/pricing — worked out
@@ -17,8 +17,6 @@ function fetchPricing(): Promise<PricingView | null> {
 
 export function usePricing(): {
   pricing: PricingView | null;
-  /** "Pay in USD instead" (and back). Resolves to an error message, or null when it worked. */
-  switchCurrency: (to: "USD" | "LOCAL") => Promise<string | null>;
 } {
   const [pricing, setPricing] = useState<PricingView | null>(null);
   useEffect(() => {
@@ -37,24 +35,7 @@ export function usePricing(): {
     };
   }, []);
 
-  const switchCurrency = useCallback(async (to: "USD" | "LOCAL"): Promise<string | null> => {
-    try {
-      const res = await fetch("/api/billing/currency", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ currency: to }),
-      });
-      const data = (await res.json().catch(() => ({}))) as PricingView & { error?: string };
-      if (!res.ok) return data.error ?? "We couldn't change the currency. Please try again.";
-      shared = Promise.resolve(data);
-      setPricing(data);
-      return null;
-    } catch {
-      return "We couldn't change the currency. Please try again.";
-    }
-  }, []);
-
-  return { pricing, switchCurrency };
+  return { pricing };
 }
 
 /** "Prices in Naira" — the currency's everyday name. */

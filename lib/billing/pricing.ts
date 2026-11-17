@@ -11,8 +11,8 @@
 // Prices are set by value for each market, not converted at today's exchange rate.
 // Checkout makes the matching Stripe price / Paystack plan on demand from these amounts
 // (lib/billing/stripePrices.ts, lib/billing/paystackBilling.ts) — a price edit needs no deploy
-// and no manual setup in Stripe or Paystack. People already subscribed keep the price they
-// signed up at.
+// and no manual setup in Stripe or Paystack. People who already subscribe move to a new price at
+// their next renewal on/after the effective date the admin picks (lib/billing/priceChanges.ts).
 //
 // Pure and dependency-free (safe in client components, the SOL Lambda, scripts, tests and
 // plexo-admin, which keeps a copy of this file — keep them identical).
@@ -40,7 +40,12 @@ export type PriceGroup = {
   provider: BillingProvider;
   /** Price per paid plan for one month / one year, in WHOLE currency units. Enterprise is a "from" price. */
   monthly: Record<PaidPlanId, number>;
-  yearly: Record<PaidPlanId, number>;
+  /**
+   * Yearly price per plan, whole units — OPTIONAL and independent of monthly. A plan with no
+   * entry (absent, null or 0) is monthly-only: no yearly option anywhere, and nothing yearly is
+   * ever created at Stripe or Paystack for it.
+   */
+  yearly: Partial<Record<PaidPlanId, number | null>>;
   /** What 1,000 AI credits cost as a top-up, in whole currency units. */
   topupPer1000Credits: number;
   /** ISO 3166-1 alpha-2 countries in this group. The catch-all group (WORLD) lists none. */
@@ -69,7 +74,7 @@ export const AFRICAN_COUNTRIES = [
   "ST", "SN", "SC", "SL", "SO", "ZA", "SS", "SD", "TZ", "TG", "TN", "UG", "ZM", "ZW", "EH", "RE", "YT", "SH",
 ];
 
-/** Yearly billing by default = 2 months free (pay for 10). */
+/** Seed only: the default price book starts yearly at 10 months of the monthly price. Nothing enforces it. */
 export const YEARLY_MONTHS_CHARGED = 10;
 const yearlyOf = (m: Record<PaidPlanId, number>): Record<PaidPlanId, number> => ({
   STARTER: m.STARTER * YEARLY_MONTHS_CHARGED,
@@ -116,7 +121,9 @@ export function validatePriceBook(book: PriceBook): string[] {
     for (const p of PAID) {
       for (const interval of ["monthly", "yearly"] as const) {
         const v = g[interval]?.[p];
-        if (!(typeof v === "number" && Number.isFinite(v) && v > 0)) errors.push(`"${label}": the ${p.toLowerCase()} ${interval} price must be more than zero.`);
+        // Yearly is optional (no entry = monthly only); when it's set it just has to be a real price.
+        if (interval === "yearly" && (v === undefined || v === null)) continue;
+        if (!(typeof v === "number" && Number.isFinite(v) && v > 0)) errors.push(`"${label}": the ${p.toLowerCase()} ${interval} price must be more than zero${interval === "yearly" ? " (or choose no yearly option)" : ""}.`);
       }
     }
     if (!(typeof g.topupPer1000Credits === "number" && g.topupPer1000Credits > 0)) errors.push(`"${label}": the AI top-up price must be more than zero.`);
@@ -209,14 +216,30 @@ export function minorUnits(_currency: BillingCurrency | string): number {
   return 100;
 }
 
-/** Price of a plan for one billing period, in whole units. Free is 0. */
-export function planPrice(region: Pick<PriceGroup, "monthly" | "yearly">, plan: PlanId, interval: BillingInterval): number {
-  if (plan === "FREE") return 0;
-  return interval === "yearly" ? region.yearly[plan] : region.monthly[plan];
+/** Whether a plan can be bought yearly in this price list. */
+export function yearlyOffered(region: Pick<PriceGroup, "yearly">, plan: PlanId): boolean {
+  if (plan === "FREE") return false;
+  const v = region.yearly?.[plan];
+  return typeof v === "number" && Number.isFinite(v) && v > 0;
 }
 
+/** Whether any plan in this price list can be bought yearly (decides if a monthly/yearly switch is shown at all). */
+export function anyYearlyOffered(region: Pick<PriceGroup, "yearly">): boolean {
+  return PAID.some((p) => yearlyOffered(region, p));
+}
+
+/** Price of a plan for one billing period, in whole units. Free is 0; null when that period isn't offered (yearly on a monthly-only plan). */
+export function planPrice(region: Pick<PriceGroup, "monthly" | "yearly">, plan: PlanId, interval: BillingInterval): number | null {
+  if (plan === "FREE") return 0;
+  if (interval === "yearly") return yearlyOffered(region, plan) ? (region.yearly[plan] as number) : null;
+  return region.monthly[plan];
+}
+
+/** Charge amount in minor units. Throws for a period that isn't offered, so nothing yearly is ever created for a monthly-only plan. */
 export function planPriceMinor(region: Pick<PriceGroup, "monthly" | "yearly" | "currency">, plan: PlanId, interval: BillingInterval): number {
-  return Math.round(planPrice(region, plan, interval) * minorUnits(region.currency));
+  const price = planPrice(region, plan, interval);
+  if (price === null) throw new Error(`The ${plan.toLowerCase()} plan isn't offered ${interval}.`);
+  return Math.round(price * minorUnits(region.currency));
 }
 
 /** "$9", "₦3,000", "GH₵35", "R69", "KSh 450". Whole amounts drop the decimals. */
@@ -244,30 +267,34 @@ export type PlanPriceView = {
   plan: PaidPlanId;
   currency: BillingCurrency;
   monthly: number;
-  yearly: number;
+  /** null = this plan has no yearly option. */
+  yearly: number | null;
   monthlyLabel: string;
-  yearlyLabel: string;
+  yearlyLabel: string | null;
   /** What yearly works out to per month. */
-  yearlyPerMonthLabel: string;
-  /** Months saved by paying yearly (2 = "2 months free"), 0 when there's no saving. */
+  yearlyPerMonthLabel: string | null;
+  /** Information only: how much cheaper yearly is than 12 months at the monthly price, as a whole percent (0 when it isn't cheaper). */
+  yearlySavingPercent: number;
+  /** Whole months saved by paying yearly (2 = "2 months free"), 0 when there's no saving. */
   yearlyMonthsFree: number;
   /** Enterprise prices are a starting point. */
   isFromPrice: boolean;
 };
 
 export function planPriceView(region: PriceGroup, plan: PaidPlanId): PlanPriceView {
-  const monthly = planPrice(region, plan, "monthly");
+  const monthly = region.monthly[plan];
   const yearly = planPrice(region, plan, "yearly");
-  const perMonth = Math.round((yearly / 12) * 100) / 100;
+  const perMonth = yearly === null ? 0 : Math.round((yearly / 12) * 100) / 100;
   return {
     plan,
     currency: region.currency,
     monthly,
     yearly,
     monthlyLabel: formatMoney(monthly, region.currency),
-    yearlyLabel: formatMoney(yearly, region.currency),
-    yearlyPerMonthLabel: formatMoney(perMonth, region.currency),
-    yearlyMonthsFree: monthly > 0 ? Math.max(0, Math.round(12 - yearly / monthly)) : 0,
+    yearlyLabel: yearly === null ? null : formatMoney(yearly, region.currency),
+    yearlyPerMonthLabel: yearly === null ? null : formatMoney(perMonth, region.currency),
+    yearlySavingPercent: yearly !== null && monthly > 0 ? Math.max(0, Math.round((1 - yearly / (monthly * 12)) * 100)) : 0,
+    yearlyMonthsFree: yearly !== null && monthly > 0 ? Math.max(0, Math.round(12 - yearly / monthly)) : 0,
     isFromPrice: plan === "ENTERPRISE",
   };
 }
@@ -280,6 +307,8 @@ export type PricingView = {
   provider: BillingProvider;
   plans: Record<PaidPlanId, PlanPriceView>;
   topup: { per1000: number; per1000Label: string; packs: TopupPackView[] };
+  /** Whether a monthly/yearly switch should be shown at all (some plan has a yearly price). */
+  yearlyAvailable: boolean;
   /** Offered when a local currency is available: switch between it and USD. */
   currencyChoice: { localCurrency: BillingCurrency; payingInUsd: boolean } | null;
   /** The country these prices are for (null when nothing is known yet). */
@@ -296,6 +325,7 @@ export function pricingView(region: PriceGroup, opts: { choices?: { local: Price
     currency: region.currency,
     provider: region.provider,
     plans: { STARTER: planPriceView(region, "STARTER"), PRO: planPriceView(region, "PRO"), ENTERPRISE: planPriceView(region, "ENTERPRISE") },
+    yearlyAvailable: anyYearlyOffered(region),
     topup: { per1000: region.topupPer1000Credits, per1000Label: formatMoney(region.topupPer1000Credits, region.currency), packs: topupPacksFor(region) },
     currencyChoice: opts.choices && !opts.locked ? { localCurrency: opts.choices.local.currency, payingInUsd: region.id === opts.choices.usd.id } : null,
     locked: !!opts.locked,

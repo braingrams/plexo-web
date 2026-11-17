@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  choosePromo,
   PROMO_FEATURES, SEED_DEVELOPER_PROMO, SEED_PROMO, SEED_PROMOS, isDeveloper, isDismissed, pickPromo, promoClasses, promoHiddenOn, promoStatus, readDismissed,
   validatePromo, validatePromoHref, withDismissed, type PromoRecord,
 } from "@/lib/promos/promos";
@@ -49,6 +50,25 @@ describe("where the strip stays out of the way", () => {
     for (const path of ["/dashboard/templates/abc", "/dashboard/apps/x", "/dashboard/sol", "/dashboard/sol/123", "/dashboard/onboarding", "/dashboard/settings/subscription", "/dashboard/new"]) expect(promoHiddenOn(path), path).toBe(true);
     expect(promoHiddenOn("/dashboard/settings/moving", "/dashboard/settings/moving")).toBe(true);
     for (const path of ["/dashboard", "/dashboard/sites", "/dashboard/commerce", "/dashboard/templates/upload"]) expect(promoHiddenOn(path, "/dashboard/blog"), path).toBe(false);
+  });
+});
+
+describe("choosePromo (who sees the developer promo)", () => {
+  const dev = { ...p({ id: "dev" }), audience: "developers" as const };
+  it("a lone developer promo shows to a developer (it used to never show)", async () => {
+    expect((await choosePromo([dev], {}, NOW, async () => true))?.id).toBe("dev");
+  });
+  it("and not to someone who isn't one", async () => {
+    expect(await choosePromo([dev], {}, NOW, async () => false)).toBeNull();
+  });
+  it("a promo for everyone wins without asking who is a developer", async () => {
+    let asked = false;
+    const got = await choosePromo([dev, p({ id: "all", priority: 500 })], {}, NOW, async () => { asked = true; return true; });
+    expect(got?.id).toBe("all");
+    expect(asked).toBe(false);
+  });
+  it("a non-developer still gets the promo for everyone when both exist", async () => {
+    expect((await choosePromo([dev, p({ id: "all", priority: 500 })], {}, NOW, async () => false))?.id).toBe("all");
   });
 });
 

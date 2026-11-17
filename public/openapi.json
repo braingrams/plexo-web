@@ -120,6 +120,173 @@
         }
       }
     },
+    "/api/v1/sites/{id}/brand": {
+      "get": {
+        "summary": "Get a site's brand",
+        "description": "The brand this site uses now and its Strata link. `resolved` has colours with roles, fonts, radius and logo; precedence is the linked Strata project, then the site's own saved brand, then the account's onboarding brand. Same data as the MCP tool get_site_brand.",
+        "operationId": "getSiteBrand",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The site (its home page id)."
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Link state (linked, projectId, projectName, autoSync, status, lastResult) plus `resolved`."
+          }
+        }
+      },
+      "post": {
+        "summary": "Link a Strata project, or create one from the site's brand",
+        "description": "Body `{ projectId, projectName?, autoSync? }` links the site to one of the owner's Strata projects (auto-sync on by default). Body `{ createProject: true, name?, autoSync? }` makes a new Strata project from the site's current brand and links it. Same as the MCP tools link_site_brand and create_strata_project_from_brand.",
+        "operationId": "linkSiteBrand",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The site (its home page id)."
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectId": {
+                    "type": "string"
+                  },
+                  "projectName": {
+                    "type": "string"
+                  },
+                  "createProject": {
+                    "type": "boolean"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "autoSync": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The new link state plus `resolved`."
+          }
+        }
+      },
+      "patch": {
+        "summary": "Brand switches",
+        "description": "`{ autoSync?, useOnSite?, applyBrand?, syncNow? }`.",
+        "operationId": "updateSiteBrand",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The site (its home page id)."
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new link state plus `resolved`."
+          }
+        }
+      },
+      "delete": {
+        "summary": "Stop using the linked brand",
+        "operationId": "unlinkSiteBrand",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "The site (its home page id)."
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The new link state."
+          }
+        }
+      }
+    },
+    "/api/v1/strata/projects": {
+      "get": {
+        "summary": "List the owner's Strata projects",
+        "description": "Needs the owner to have connected Strata. Same as the MCP tool list_strata_projects.",
+        "operationId": "listStrataProjects",
+        "security": [
+          {
+            "ApiKeyAuth": []
+          },
+          {
+            "BearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "{ projects: [{ id, name, color, logo, role }] }"
+          },
+          "401": {
+            "description": "Not signed in, or the Strata session ran out (kind: expired)."
+          }
+        }
+      }
+    },
     "/api/templates": {
       "get": {
         "summary": "List User Templates & Pages",

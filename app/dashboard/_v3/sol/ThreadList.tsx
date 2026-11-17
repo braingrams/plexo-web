@@ -109,9 +109,8 @@ export function ThreadList({ activeConversationId, refreshSignal }: { activeConv
   }
 
   return (
-    <aside className="sol3-list" aria-label="Your conversations">
+    <div className="sol3-list" role="region" aria-label="Your conversations">
       <div className="sol3-list__head">
-        <h2 className="sol3-list__title">Conversations</h2>
         <Button fullWidth leftIcon={<Plus size={18} aria-hidden />} onClick={newChat}>
           New chat
         </Button>
@@ -218,6 +217,6 @@ export function ThreadList({ activeConversationId, refreshSignal }: { activeConv
         </Link>
       </div>
       <ShareDialog conversationId={sharingId} onClose={() => setSharingId(null)} />
-    </aside>
+    </div>
   );
 }

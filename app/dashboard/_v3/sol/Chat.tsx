@@ -72,7 +72,6 @@ export function CreditsPill({ refreshKey }: { refreshKey?: number }) {
 }
 
 function Header({ conversation, onRename, refreshKey, titleJustGenerated, onTitleRevealDone, onShare }: { conversation: ConversationSummary | null; onRename: (t: string) => void; refreshKey: number; titleJustGenerated: boolean; onTitleRevealDone: () => void; onShare: () => void }) {
-  const v3 = useSolV3();
   const { openMobileSidebar } = useSolSidebar();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(conversation?.title ?? "");
@@ -106,14 +105,9 @@ function Header({ conversation, onRename, refreshKey, titleJustGenerated, onTitl
     const t = draft.trim();
     if (t && t !== conversation?.title) onRename(t);
   };
-  const togglePanel = () => {
-    if (typeof window !== "undefined" && window.matchMedia("(max-width: 860px)").matches) openMobileSidebar();
-    else v3?.toggleList();
-  };
-
   return (
     <header className="sol3-head">
-      <button type="button" className="plx-iconbtn" aria-label="Show or hide your conversations" title="Conversations" onClick={togglePanel}>
+      <button type="button" className="plx-iconbtn sol3-head__panel" aria-label="Your conversations" title="Your conversations" onClick={openMobileSidebar}>
         <PanelLeft size={21} aria-hidden />
       </button>
       <div className="sol3-head__title">
@@ -199,7 +193,7 @@ function Empty({ userName, composer, props }: { userName: string | null; compose
             const Icon = SUGGESTION_ICONS[s.id] ?? Globe;
             return (
               <button key={s.id} type="button" role="listitem" className="sol3-sg" onClick={() => props.onSuggestion(s.prompt)}>
-                <span className="sol3-sg__ico"><Icon size={20} aria-hidden /></span>
+                <span className="sol3-sg__ico"><Icon size={16} aria-hidden /></span>
                 <b>{s.title}</b>
               </button>
             );

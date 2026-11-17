@@ -9,7 +9,9 @@ import { BlogPost, LmsEnrollment, LmsPage } from "@/lib/db/contentEntities";
 import { CommerceOrder, CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
 import { FormSubmission, PageView } from "@/lib/db/opsEntities";
 import { formatMoney } from "@/lib/commerce/formatMoney";
+import { bucketVisitsByDay } from "./visitsTrend";
 import { readSiteBrand } from "./brandLook";
+import { resolveSiteBrand } from "@/lib/brand/resolveSiteBrand";
 import { EMPTY_FACTS, taskVariantFor, type SiteFacts, type TaskVariant } from "./tasks";
 import type { SiteSummary } from "./sites";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
@@ -39,7 +41,8 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
     safe("lessons", async () => (await LmsPage.query.primary({ templateId: id }).go({ pages: "all", attributes: ["id", "kind"] })).data, []),
     safe("course", async () => (await import("@/lib/db/contentEntities").then((m) => m.LmsFunnel.get({ templateId: id }).go())).data, null),
   ]);
-  const own = readSiteBrand(tpl?.brand);
+  // This site's OWN brand only: its linked Strata project or its saved colours and logo, never the account's (resolveSiteBrand with no profile).
+  const own = await resolveSiteBrand({ siteId: id }).catch(() => null).then((r) => (r ? { logoUrl: r.logoUrl, noLogo: r.noLogo, colors: r.colours.map((c) => c.value) } : readSiteBrand(tpl?.brand)));
   const commerceEnabled = !!settings?.enabled;
   const variant = taskVariantFor({ kind: site.kind, sells: commerceEnabled }, profile?.goal);
   const created = tpl?.createdAt ? Date.parse(tpl.createdAt) : NaN;
@@ -76,6 +79,8 @@ export type SiteStats = {
   activity: OrderRow[];
   activityTitle: string;
   activityEmpty: string;
+  /** Visits for each of the last 7 days, oldest first (for the little trend chart). */
+  visitsByDay?: number[];
 };
 
 const num = (n: number) => n.toLocaleString("en");
@@ -84,7 +89,8 @@ const num = (n: number) => n.toLocaleString("en");
 export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Promise<SiteStats> {
   const id = site.id;
   const since = new Date(Date.now() - 7 * DAY).toISOString();
-  const visits = await safe("visits", async () => (await PageView.query.primary({ templateId: id }).between({ createdAt: since }, { createdAt: new Date().toISOString() }).go({ pages: "all", attributes: ["id"] })).data.length, 0);
+  const visitTimes = await safe("visits", async () => (await PageView.query.primary({ templateId: id }).between({ createdAt: since }, { createdAt: new Date().toISOString() }).go({ pages: "all", attributes: ["createdAt"] })).data.map((v) => v.createdAt), [] as (string | undefined)[]);
+  const visits = visitTimes.length;
   const stats: Stat[] = [{ id: "visits", label: "Visits this week", value: num(visits) }];
   let activity: OrderRow[] = [];
   let activityTitle = "Latest activity";
@@ -123,5 +129,5 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
     activityTitle = "Messages and sign-ups";
     activityEmpty = "Nothing yet. When someone fills in a form on your site, it appears here.";
   }
-  return { stats, activity, activityTitle, activityEmpty };
+  return { stats, activity, activityTitle, activityEmpty, visitsByDay: bucketVisitsByDay(visitTimes) };
 }

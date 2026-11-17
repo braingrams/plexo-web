@@ -1,9 +1,9 @@
 "use client";
 
-import { Eye, Pencil, Plus } from "lucide-react";
+import { Pencil, Plus } from "lucide-react";
 import type { HomeSiteRow } from "./homeTypes";
 import { Card, ButtonLink, StatusPill } from "../ui";
-import { siteHref } from "./SideCards";
+import { OpenSiteButton, PreviewButton } from "./SiteButtons";
 
 function statLine(r: HomeSiteRow) {
   return r.stats.stats.map((s) => `${s.value} ${s.label.toLowerCase()}`).join(" · ");
@@ -32,10 +32,10 @@ export function AllSites({ rows, dense, newSiteHref }: { rows: HomeSiteRow[]; de
       </div>
       {dense ? (
         <Card padding="none" style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%", minWidth: 680, borderCollapse: "collapse", fontSize: 15 }}>
+          <table style={{ width: "100%", minWidth: 960, borderCollapse: "collapse", fontSize: 15 }}>
             <thead>
               <tr style={{ textAlign: "left", color: "var(--plx-muted)" }}>
-                {["Site", "Type", "Status", "This week", ""].map((h, i) => (
+                {["Site", "Type", "Status", "This week", "Actions"].map((h, i) => (
                   <th key={i} scope="col" style={{ padding: "14px 20px", fontWeight: 600, fontSize: 13 }}>{h}</th>
                 ))}
               </tr>
@@ -49,9 +49,13 @@ export function AllSites({ rows, dense, newSiteHref }: { rows: HomeSiteRow[]; de
                   </td>
                   <td style={{ padding: "12px 20px" }}>{r.site.kind}</td>
                   <td style={{ padding: "12px 20px" }}><StatusPill status={r.site.status} /></td>
-                  <td style={{ padding: "12px 20px", color: "var(--plx-muted)" }}>{statLine(r)}</td>
-                  <td style={{ padding: "8px 20px", textAlign: "right" }}>
-                    <ButtonLink href={`/dashboard/sites/${r.site.id}`} variant="secondary" size="sm" leftIcon={<Pencil size={14} aria-hidden />}>Edit</ButtonLink>
+                  <td style={{ padding: "12px 20px", color: "var(--plx-muted)", minWidth: 220 }}>{statLine(r)}</td>
+                  <td style={{ padding: "8px 20px" }}>
+                    <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "nowrap" }}>
+                      <ButtonLink href={`/dashboard/sites/${r.site.id}`} variant="strong" leftIcon={<Pencil size={16} aria-hidden />}>Edit</ButtonLink>
+                      <PreviewButton site={r.site} />
+                      <OpenSiteButton site={r.site} />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -61,7 +65,6 @@ export function AllSites({ rows, dense, newSiteHref }: { rows: HomeSiteRow[]; de
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 16 }}>
           {rows.map((r) => {
-            const href = siteHref(r.site);
             return (
               <Card key={r.site.id} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
@@ -80,9 +83,11 @@ export function AllSites({ rows, dense, newSiteHref }: { rows: HomeSiteRow[]; de
                   ))}
                 </div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <ButtonLink href={`/dashboard/sites/${r.site.id}`} variant="strong" size="sm" leftIcon={<Pencil size={14} aria-hidden />}>Edit site</ButtonLink>
-                  {href ? <ButtonLink href={href} target="_blank" rel="noopener noreferrer" variant="secondary" size="sm" leftIcon={<Eye size={14} aria-hidden />}>Preview</ButtonLink> : null}
+                  <ButtonLink href={`/dashboard/sites/${r.site.id}`} variant="strong" leftIcon={<Pencil size={16} aria-hidden />}>Edit site</ButtonLink>
+                  <PreviewButton site={r.site} />
+                  <OpenSiteButton site={r.site} />
                 </div>
+                {r.site.status !== "live" || !r.site.address ? <span className="plx-small">Put your site online first to open it for visitors. Preview shows what you have so far.</span> : null}
               </Card>
             );
           })}

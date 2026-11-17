@@ -23,10 +23,10 @@
 .plx-sum__card span { display: block; font-size: 13px; color: var(--plx-muted); margin-top: 2px; }
 @media (max-width: 560px) { .plx-sum__card { padding: 14px; gap: 10px; } .plx-sum__card b { font-size: 24px; } .plx-sum__ic { width: 38px; height: 38px; border-radius: 12px; } }
 
-.plx-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
-.plx-search { position: relative; flex: 1 1 260px; max-width: 420px; min-width: 0; }
-.plx-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--plx-faint); pointer-events: none; }
-.plx-search .plx-input { padding-left: 42px; }
+.plx-ltools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.plx-lsearch { position: relative; flex: 1 1 260px; max-width: 420px; min-width: 0; }
+.plx-lsearch svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--plx-faint); pointer-events: none; }
+.plx-lsearch .plx-input { padding-left: 42px; }
 
 .plx-tbl { border-radius: var(--plx-radius-card-lg); background: var(--plx-surface); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-card); overflow: hidden; }
 .plx-tbl__head, .plx-tbl__row { display: grid; grid-template-columns: minmax(220px, 2.2fr) minmax(150px, 1.4fr) minmax(110px, 1fr) minmax(170px, 1.2fr) 52px; gap: 16px; align-items: center; padding: 0 20px; }
@@ -54,10 +54,10 @@
   .plx-tbl__row > :nth-child(5) { grid-area: act; }
 }
 
-.plx-menu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 230px; padding: 6px; border-radius: 14px; background: var(--plx-surface); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-overlay); display: flex; flex-direction: column; }
-.plx-menu button { font: inherit; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 0; background: none; color: var(--plx-text); cursor: pointer; text-align: left; }
-.plx-menu button:hover { background: var(--plx-elevated); }
-.plx-menu button[data-danger="true"] { color: var(--plx-danger); }
+.plx-lmenu { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 230px; padding: 6px; border-radius: 14px; background: var(--plx-surface); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-overlay); display: flex; flex-direction: column; }
+.plx-lmenu button { font: inherit; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border-radius: 10px; border: 0; background: none; color: var(--plx-text); cursor: pointer; text-align: left; }
+.plx-lmenu button:hover { background: var(--plx-elevated); }
+.plx-lmenu button[data-danger="true"] { color: var(--plx-danger); }
 
 .plx-drawer-ov { position: fixed; inset: 0; z-index: 80; background: var(--plx-overlay); backdrop-filter: blur(2px); display: flex; justify-content: flex-end; animation: plx-fade .16s ease; }
 .plx-drawer { width: min(480px, 100%); height: 100%; background: var(--plx-surface); color: var(--plx-text); border-left: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-overlay); display: flex; flex-direction: column; animation: plx-drawer-in .22s cubic-bezier(.2, .8, .2, 1); }
@@ -117,3 +117,5 @@ button.plx-course--add { font: inherit; cursor: pointer; background: transparent
 .plx-ncl li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--plx-border); }
 .plx-ncl li:first-child { border-top: 0; }
 .plx-ncl li span { font-weight: 700; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plx-lchip { font: inherit; font-size: 14px; font-weight: 700; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 2px solid var(--plx-border); background: var(--plx-surface); color: var(--plx-text); cursor: pointer; }
+.plx-lchip[aria-checked="true"] { border-color: var(--plx-focus); background: var(--plx-tint); }

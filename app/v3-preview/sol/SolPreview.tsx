@@ -5,8 +5,13 @@ import { useEffect, useState } from "react";
 import { SolChatFrame } from "@/app/dashboard/_v3/sol/Chat";
 import { ShareDialog } from "@/app/dashboard/_v3/sol/ShareDialog";
 import { SolV3Shell } from "@/app/dashboard/_v3/sol/SolV3Context";
+import { SolSettingsV3 } from "@/app/dashboard/_v3/sol/SolSettingsV3";
+import { SolMemoryV3 } from "@/app/dashboard/_v3/sol/SolMemoryV3";
+import { SolSplash } from "@/app/dashboard/_v3/sol/SolSplash";
 import { useSolSidebar } from "@/app/dashboard/sol/_components/SolSidebarContext";
 import type { ActiveArtifact } from "@/app/dashboard/sol/_components/ArtifactCanvas";
+import type { SolMemoryItem } from "@/app/dashboard/sol/memory/page";
+import type { SolPreferencesData } from "@/app/dashboard/sol/settings/page";
 import type { ContentBlock, ConversationSummary, ModelTier, SolMessage, ToolUseBlock } from "@/app/dashboard/sol/_components/types";
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
@@ -58,6 +63,14 @@ const CONVERSATION: SolMessage[] = [
   msg("m4", "assistant", [text("Done. Your buttons are now green across the site.\n\n- Home\n- Order a cake\n- About\n\n> Tip: you can change any word on the page by tapping it.\n\nWant me to **publish** it now?")], 2.4),
 ];
 
+const MEMORIES: SolMemoryItem[] = [
+  { id: "m1", text: "My shop is called Ama's Bakery and we deliver across Accra.", category: "FACT", source: "USER_ADDED", sourceConversationId: null, createdAt: hoursAgo(30) },
+  { id: "m2", text: "I like short, warm replies with no jargon.", category: "TONE", source: "LLM_EXTRACTED", sourceConversationId: "c0", createdAt: hoursAgo(50) },
+  { id: "m3", text: "Most of my customers are young families who order cakes for birthdays.", category: "FACT", source: "LLM_EXTRACTED", sourceConversationId: "c1", createdAt: hoursAgo(80) },
+  { id: "m4", text: "Prices are in Ghana cedis.", category: "PREFERENCE", source: "USER_ADDED", sourceConversationId: null, createdAt: hoursAgo(120) },
+];
+const PREFS: SolPreferencesData = { tonePreset: "FRIENDLY", customInstructions: "I run a bakery in Accra. Keep things warm and simple.", defaultModelTier: "MEDIUM", memoryEnabled: true, responseLength: "BALANCED" };
+
 const ARTIFACT: ActiveArtifact = { templateId: "tpl1", name: "Home", publishedUrl: null };
 
 const PAGE_HTML = `<!doctype html><html><body style="margin:0;font-family:system-ui;background:#fbf7ef"><div style="padding:48px 32px;text-align:center"><h1 style="font-size:40px;margin:0 0 12px">Ama's Bakery</h1><p style="color:#555">Fresh cakes and pastries, baked in Accra.</p><a style="display:inline-block;margin-top:16px;padding:14px 24px;border-radius:12px;background:#1f6f4a;color:#fff">Order a cake</a></div></body></html>`;
@@ -77,6 +90,8 @@ function installFake() {
     if (/\/api\/v1\/profile/.test(url)) return json({ user: { totalCredits: q.get("low") === "1" ? 12 : 1240 } });
     if (/\/api\/billing\/topup-packs/.test(url)) return json({ packs: [{ pack: "SMALL", credits: 500, price: "$2.50" }, { pack: "MEDIUM", credits: 1500, price: "$6" }, { pack: "LARGE", credits: 4000, price: "$14" }] });
     if (/\/api\/templates\//.test(url)) return json({ page: { id: "tpl1", name: "Home", kind: "BUILDER", compiledHtml: PAGE_HTML, previewHtml: PAGE_HTML } });
+    if (/\/api\/v1\/sol\/whatsapp/.test(url)) return json({ available: true, phone: q.get("wa") === "1" ? "233201234567" : null });
+    if (/\/api\/v1\/sol\/(preferences|memories)/.test(url) && (init?.method ?? "GET") !== "GET") return json({ memory: { id: "m-new", text: "New", category: "PREFERENCE", source: "USER_ADDED", sourceConversationId: null, createdAt: new Date().toISOString() } });
     if (url.startsWith("/api/") && (init?.method ?? "GET") === "GET") return json({});
     return real(input, init);
   };
@@ -115,6 +130,17 @@ export function SolPreview() {
     }, 800);
     return () => clearTimeout(t);
   }, [q]);
+  // ?sidebar=menu: start the left column on the Menu view (the switch is a click in real use).
+  useEffect(() => {
+    try {
+      if (q.get("sidebar")) sessionStorage.setItem("plx:solSidebar", q.get("sidebar") as string);
+    } catch {
+      // fine
+    }
+  }, [q]);
+  if (state === "settings" || state === "memory" || state === "memory-empty" || state === "splash") {
+    return <SolV3Shell>{state === "settings" ? <SolSettingsV3 initialPreferences={PREFS} /> : state === "splash" ? <SolSplash /> : <SolMemoryV3 initialMemories={state === "memory" ? MEMORIES : []} />}</SolV3Shell>;
+  }
   return (
     <SolV3Shell>
       <SheetOpener on={state === "sheet"} />

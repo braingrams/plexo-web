@@ -1,14 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { Check, Copy, Eye, Mail, MessageCircle, Pencil } from "lucide-react";
-import { NEW_EMAIL_HREF, solEmailHref } from "@/lib/dashboardV3/emails";
+import { Check, ChevronRight, Copy, Mail, MessageCircle, Pencil, Plus } from "lucide-react";
+import { NEW_EMAIL_HREF } from "@/lib/dashboardV3/emails";
+import { liveHref, OPEN_SITE_HINT } from "@/lib/dashboardV3/siteLinks";
 import type { SiteSummary } from "@/lib/dashboardV3/sites";
 import { Button, ButtonLink, Card, StatusPill } from "../ui";
 import type { HomeBrand } from "./homeTypes";
+import { OpenSiteButton, PreviewButton } from "./SiteButtons";
 
+/** The live address (https) only when the site is online; never a preview. */
 export function siteHref(s: SiteSummary) {
-  return s.address ? `https://${s.address}` : null;
+  return liveHref(s);
 }
 
 /** What the site looks like right now, in the owner's own colour, with Edit and Preview. */
@@ -42,14 +46,19 @@ export function SitePreviewCard({ site, brand }: { site: SiteSummary; brand: Hom
           ))}
         </div>
       </div>
-      <div style={{ padding: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <ButtonLink href={`/dashboard/sites/${site.id}`} variant="strong" leftIcon={<Pencil size={16} aria-hidden />} style={{ flex: "1 1 130px" }}>
-          Edit site
-        </ButtonLink>
-        {/* Online: the real site. Not online yet: a private preview of what you have so far, never the editor again. */}
-        <ButtonLink href={href ?? `/api/v1/templates/${site.id}/draft-preview`} target="_blank" rel="noopener noreferrer" variant="secondary" leftIcon={<Eye size={16} aria-hidden />} style={{ flex: "1 1 130px" }}>
-          Preview
-        </ButtonLink>
+      <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <ButtonLink href={`/dashboard/sites/${site.id}`} variant="strong" leftIcon={<Pencil size={16} aria-hidden />} style={{ flex: "1 1 130px" }}>
+            Edit site
+          </ButtonLink>
+          {/* Preview is always the private working copy. Open my site is only the live address. */}
+          <PreviewButton site={site} style={{ flex: "1 1 130px" }} />
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <OpenSiteButton site={site} style={{ flex: "1 1 150px" }} />
+          <CopyLinkButton address={href ? site.address : null} disabled={!href} style={{ flex: "1 1 130px" }} />
+        </div>
+        {!href ? <span className="plx-small">{OPEN_SITE_HINT}. Until then, Preview shows what you have so far.</span> : null}
       </div>
     </Card>
   );
@@ -67,15 +76,19 @@ export function AskSolCard({ prompt }: { prompt: string }) {
   );
 }
 
-/** Copies the site's link and says so. */
-export function CopyLinkButton({ address, variant = "secondary" }: { address?: string | null; variant?: "secondary" | "strong" }) {
+/** Copies the site's live link and says so. Disabled (not hidden) until the site has an address. */
+export function CopyLinkButton({ address, variant = "secondary", disabled, style }: { address?: string | null; variant?: "secondary" | "strong"; disabled?: boolean; style?: React.CSSProperties }) {
   const [copied, setCopied] = useState(false);
-  if (!address) return null;
+  if (!address && !disabled) return null;
   return (
     <Button
       variant={variant}
+      disabled={disabled || !address}
+      title={!address ? OPEN_SITE_HINT : undefined}
+      style={style}
       leftIcon={copied ? <Check size={16} aria-hidden /> : <Copy size={16} aria-hidden />}
       onClick={async () => {
+        if (!address) return;
         try {
           await navigator.clipboard.writeText(`https://${address}`);
           setCopied(true);
@@ -90,16 +103,31 @@ export function CopyLinkButton({ address, variant = "secondary" }: { address?: s
   );
 }
 
-/** A quick way to make an email without opening the menu: a welcome note, a receipt, a newsletter. */
-export function MakeEmailCard() {
+function ActionRow({ href, icon: Icon, title, sub, tour }: { href: string; icon: typeof Mail; title: string; sub: string; tour?: string }) {
   return (
-    <Card data-tour="home-make-email" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <span className="plx-h3">Make an email</span>
-      <span className="plx-body">A welcome note, a receipt or a newsletter. Start blank, from a design, or let SOL write it.</span>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <ButtonLink href={NEW_EMAIL_HREF} variant="secondary" leftIcon={<Mail size={18} aria-hidden />}>Make an email</ButtonLink>
-        <ButtonLink href={solEmailHref()} variant="ghost" leftIcon={<MessageCircle size={18} aria-hidden />}>Ask SOL to write it</ButtonLink>
-      </div>
+    <li>
+      <Link href={href} className="plx-action" data-tour={tour}>
+        <span className="plx-action__icon" aria-hidden><Icon size={20} /></span>
+        <span className="plx-action__text">
+          <span className="plx-action__title">{title}</span>
+          <span className="plx-action__sub">{sub}</span>
+        </span>
+        <ChevronRight size={18} aria-hidden className="plx-action__go" />
+      </Link>
+    </li>
+  );
+}
+
+/** One tidy card for the things people do next that aren't about this one site: SOL, email, another website. */
+export function OtherActionsCard({ solPrompt, newSiteHref }: { solPrompt: string; newSiteHref: string }) {
+  return (
+    <Card padding="none" data-tour="home-actions">
+      <h2 className="plx-card__title" style={{ padding: "18px 20px 6px" }}>Other actions</h2>
+      <ul className="plx-actions">
+        <ActionRow href="/dashboard/sol" icon={MessageCircle} title="Ask SOL" sub={`Try: “${solPrompt}”`} tour="home-ask-sol" />
+        <ActionRow href={NEW_EMAIL_HREF} icon={Mail} title="Make an email" sub="A welcome note, receipt or newsletter" tour="home-make-email" />
+        <ActionRow href={newSiteHref} icon={Plus} title="Create another website" sub="Your first one keeps running as it is" tour="home-create-another" />
+      </ul>
     </Card>
   );
 }

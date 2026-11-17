@@ -124,7 +124,7 @@ export function LookCard({ siteId, siteName, own, defaults, sourceType }: Props)
       <CardHeader title="Colours and logo" description="Yours alone: other sites you make keep their own. They go straight into this site's pages." />
       <div className="plx-form" style={{ gap: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <span className="plx-row__thumb" style={{ width: 72, height: 72 }}>
+          <span className="plx-hrow__thumb" style={{ width: 72, height: 72 }}>
             {logoUrl ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={logoUrl} alt={`${siteName} logo`} style={{ objectFit: "contain" }} /> : <ImagePlus size={26} aria-hidden />}
           </span>
           <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void upload(f); }} />

@@ -9,6 +9,8 @@ export const VIEWPORTS = {
   desktop: { width: 1440, height: 900 },
   tablet: { width: 768, height: 1024 },
   mobile: { width: 375, height: 812 },
+  // A current phone (SOL's visual review of draft pages). The browser Lambda must be redeployed to know it.
+  phone: { width: 390, height: 844 },
 } as const;
 export type Viewport = keyof typeof VIEWPORTS;
 

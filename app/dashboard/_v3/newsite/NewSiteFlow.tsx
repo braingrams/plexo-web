@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, FilePlus2, LoaderCircle, Truck } from "lucide-react";
-import { Button, ButtonLink, Input, Modal, Notice } from "../ui";
+import { Button, ButtonLink, Input, Modal, Notice, useToast } from "../ui";
+import { StrataBrandPicker, type PickedBrand, type StrataPickerClient } from "../brand/StrataBrandPicker";
+import { NO_SELECTION, selectionToChoice, type PickerSelection } from "@/lib/dashboardV3/strataPicker";
+import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import { CURRENT_SITE_COOKIE } from "@/lib/dashboardV3/sites";
 import { siteHubHref } from "@/lib/dashboardV3/hubPaths";
 import {
@@ -25,13 +28,16 @@ export type NewSiteContext = {
   liveSiteNames: string[];
 };
 
-type Screen = "fork" | "goal" | "look" | "all" | "making";
+type Screen = "fork" | "goal" | "brand" | "look" | "all" | "making";
 type Design = { id: string; name: string; description: string; html?: string };
 
-const STEP_OF: Record<Screen, string> = { fork: "", goal: "Step 1 of 3: What is it for?", look: "Step 2 of 3: Pick a look", all: "Step 2 of 3: All designs", making: "Step 3 of 3: Making your website" };
+const STEP_TITLE: Record<Screen, string> = { fork: "", goal: "What is it for?", brand: "Your brand", look: "Pick a look", all: "All designs", making: "Making your website" };
+const STEP_NO: Record<Screen, number> = { fork: 0, goal: 1, brand: 2, look: 3, all: 3, making: 4 };
+/** "Step 2 of 4: Your brand". The brand step only exists when Strata is on, so without it the steps are numbered out of 3. */
+const stepText = (screen: Screen, withBrand: boolean) => `Step ${withBrand ? STEP_NO[screen] : STEP_NO[screen] - (STEP_NO[screen] > 2 ? 1 : 0)} of ${withBrand ? 4 : 3}: ${STEP_TITLE[screen]}`;
 
 /** Make a new website: choose new or move one, what it is for + a name, three designs, then it is made. A dialog (phones: a full sheet) or a page. */
-export function NewSiteFlow({ mode, context, onClose, preview }: { mode: "dialog" | "page"; context: NewSiteContext; onClose?: () => void; /** Dev preview only: open on a later screen. */ preview?: { screen: "goal" | "look" | "all"; goal: NewSiteGoal; mock?: boolean } }) {
+export function NewSiteFlow({ mode, context, onClose, preview }: { mode: "dialog" | "page"; context: NewSiteContext; onClose?: () => void; /** Dev preview only: open on a later screen. */ preview?: { screen: "goal" | "brand" | "look" | "all"; goal: NewSiteGoal; mock?: boolean; strata?: StrataPickerClient } }) {
   const flow = <Steps mode={mode} context={context} onClose={onClose} preview={preview} />;
   if (mode === "page") return <div className="plx-page plx-ns plx-ns--page">{flow}</div>;
   return (
@@ -43,9 +49,9 @@ export function NewSiteFlow({ mode, context, onClose, preview }: { mode: "dialog
   );
 }
 
-function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; context: NewSiteContext; onClose?: () => void; preview?: { screen: "goal" | "look" | "all"; goal: NewSiteGoal; mock?: boolean } }) {
+function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; context: NewSiteContext; onClose?: () => void; preview?: { screen: "goal" | "brand" | "look" | "all"; goal: NewSiteGoal; mock?: boolean; strata?: StrataPickerClient } }) {
   const router = useRouter();
-  const [screen, setScreen] = useState<Screen>(preview?.screen === "goal" ? "goal" : preview?.screen === "all" ? "all" : "fork");
+  const [screen, setScreen] = useState<Screen>(preview?.screen === "goal" ? "goal" : preview?.screen === "brand" ? "brand" : preview?.screen === "all" ? "all" : "fork");
   const [goal, setGoal] = useState<NewSiteGoal | "">(preview?.goal ?? "");
   const [name, setName] = useState(() => defaultSiteName(context.brand?.name, "", context.siteNames));
   const [nameEdited, setNameEdited] = useState(false);
@@ -55,8 +61,17 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const [error, setError] = useState("");
   const [loadingDesigns, setLoadingDesigns] = useState(false);
   const request = useRef(0);
+  const toast = useToast();
+  // "Your brand": the owner's choice of a Strata project (or "make one from my brand"), sent with the create request.
+  const [brandPick, setBrandPick] = useState<PickerSelection>(NO_SELECTION);
+  const [picked, setPicked] = useState<PickedBrand | null>(null);
+  const [brandStep, setBrandStep] = useState(preview?.screen === "brand");
   const note = useMemo(() => limitNote(context.plan, context.liveSiteNames), [context.plan, context.liveSiteNames]);
-  const brand = context.brand ?? undefined;
+  // The designs and the new site use the chosen Strata brand's colours and logo (they win over the account's).
+  const brand = useMemo(() => {
+    const base = context.brand ?? undefined;
+    return picked && (picked.colors.length || picked.logoUrl) ? { ...(base ?? {}), ...(picked.colors.length ? { colors: picked.colors } : {}), ...(picked.logoUrl ? { logoUrl: picked.logoUrl } : {}) } : base;
+  }, [context.brand, picked]);
 
   const pickGoal = (g: NewSiteGoal) => {
     setGoal(g);
@@ -71,13 +86,25 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     } else setScreen("goal");
   };
 
-  const toLook = async () => {
+  /** After "what is it for": ask about their brand when Strata is on (it can be skipped), otherwise go straight to the designs. */
+  const toBrand = async () => {
     if (!goal) return;
     if (isAppGoal(goal)) {
       onClose?.();
       router.push(appHref(name));
       return;
     }
+    if (!name.trim()) return setError("Give your website a name, like your business name.");
+    setError("");
+    let on = false;
+    try { on = await (preview?.strata ?? createStrataAdapter()).available(); } catch { on = false; }
+    setBrandStep(on);
+    if (on) setScreen("brand");
+    else void toLook();
+  };
+
+  const toLook = async () => {
+    if (!goal) return;
     if (!name.trim()) return setError("Give your website a name, like your business name.");
     setError("");
     setScreen("look");
@@ -106,9 +133,11 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     try {
       if (preview?.mock) { await new Promise((r) => setTimeout(r, 600)); setScreen("look"); return; }
       for (let i = 0; i < tries; i++) {
-        const res = await fetch("/api/dashboard/new-site", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ goal: who.goal, name: who.name, ...extra }) });
+        const res = await fetch("/api/dashboard/new-site", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ goal: who.goal, name: who.name, ...extra, ...(selectionToChoice(brandPick) ? { brand: selectionToChoice(brandPick) } : {}) }) });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.site) {
+          if (data.brand?.ok && data.brand.project?.name) toast.show({ title: `Your "${data.brand.project.name}" brand is on your website`, tone: "success" });
+          else if (data.brand && !data.brand.ok && data.brand.message) toast.show({ title: "Your website is ready", description: data.brand.message, tone: "info" });
           try { document.cookie = `${CURRENT_SITE_COOKIE}=${encodeURIComponent(data.site.id)}; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax`; sessionStorage.removeItem(PENDING_KEY); } catch { /* the server set it too */ }
           onClose?.();
           router.push(siteHubHref(data.site.id));
@@ -184,7 +213,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     const app = goal !== "" && isAppGoal(goal);
     return (
       <>
-        <div className="plx-ns__top">{back("fork")}<p className="plx-ns__step">{STEP_OF.goal}</p></div>
+        <div className="plx-ns__top">{back("fork")}<p className="plx-ns__step">{stepText("goal", brandStep)}</p></div>
         {heading("What is it for?", "Pick the closest one. You can add more to your website later.")}
         <div className="plx-ns__goals" role="radiogroup" aria-label="What is your website for?">
           {NEW_SITE_GOALS.map((g) => (
@@ -205,9 +234,34 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         />
         <div className="plx-ns__actions">
           <span />
-          <Button size="lg" disabled={!goal} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={toLook}>{app ? "Build it with SOL" : "Show me designs"}</Button>
+          <Button size="lg" disabled={!goal} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={toBrand}>{app ? "Build it with SOL" : "Continue"}</Button>
         </div>
         {!goal ? <p className="plx-ns__other" style={{ marginTop: -12 }}>Pick one to continue</p> : null}
+      </>
+    );
+  }
+
+  if (screen === "brand") {
+    const hasColours = !!(context.brand?.colors?.length || picked?.colors.length);
+    return (
+      <>
+        <div className="plx-ns__top">{back("goal")}<p className="plx-ns__step">{stepText("brand", brandStep)}</p></div>
+        {heading("Use your brand?", "If you keep your colours, fonts and logo in Strata, pick them here. Your website will look like your brand from the start and follow it when you change it. You can skip this.")}
+        <div style={{ maxWidth: 760 }}>
+        <StrataBrandPicker
+          mode="draft"
+          client={preview?.strata}
+          value={brandPick}
+          allowSkip
+          canCreate={hasColours}
+          createHint="Once your website is made, add your colours on its Brand page and Plexo can create your Strata brand from them."
+          onChange={(v, p) => { setBrandPick(v); setPicked(p ?? null); }}
+        />
+        </div>
+        <div className="plx-ns__actions">
+          <span />
+          <Button size="lg" rightIcon={<ArrowRight size={18} aria-hidden />} onClick={toLook}>{brandPick.kind === "project" || brandPick.kind === "create" ? "Continue with this brand" : "Continue without it"}</Button>
+        </div>
       </>
     );
   }
@@ -224,7 +278,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   if (screen === "all" && goal && goal !== "app") {
     return (
       <>
-        <div className="plx-ns__top">{back("look")}<p className="plx-ns__step">{STEP_OF.all}</p></div>
+        <div className="plx-ns__top">{back("look")}<p className="plx-ns__step">{stepText("all", brandStep)}</p></div>
         {heading(`All designs for ${name.trim() || "your website"}`, "Made by designers on Plexo, best fit first. Free ones cost nothing; paid ones are a one-time price. Your logo and colours are added to your Brand page.")}
         {error ? <Notice kind="warning" title="Something went wrong">{error}</Notice> : null}
         <SeeAllDesigns goal={goal} name={name.trim()} brand={brand} mock={preview?.mock} onUse={useMarketDesign} />
@@ -235,7 +289,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const list = designs.length ? designs : [null, null, null];
   return (
     <>
-      <div className="plx-ns__top">{back("goal")}<p className="plx-ns__step">{STEP_OF.look}</p></div>
+      <div className="plx-ns__top">{back(brandStep ? "brand" : "goal")}<p className="plx-ns__step">{stepText("look", brandStep)}</p></div>
       {heading(`Pick a look for ${name.trim() || "your website"}`, "These are already filled in with your name. You can change the words, pictures, colours and the design itself later.")}
       {error ? <Notice kind="warning" title="Something went wrong">{error}</Notice> : null}
       <div className="plx-ns__designs" role="radiogroup" aria-label="Designs">

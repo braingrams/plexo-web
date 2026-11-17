@@ -3,6 +3,7 @@
 // block added to SOL's system prompt for a new build. The model fills in the specific words; this
 // fixes the structure, the quality bar and the facts it must not lose.
 
+import { brandPromptBlock } from "@/lib/brand/brandModel";
 import { askArgsFor, parseBrief, planQuestions, type Brief, type BriefAttachment, type KnownBrand, type PageGoal, type PlannedQuestion, type QuestionPlan } from "./solBrief";
 import type { SolBuildProfile } from "./solBuildContext";
 import { NEW_SITE_LABEL, SITE_QUESTION, SITE_TOUCH_RE, addToLabel, displayName, newOrAddQuestion, resolveSite, type OwnerSite, type SiteResolution } from "./solSiteResolution";
@@ -261,6 +262,15 @@ export function discoveryPrompt(b: Brief, plan: QuestionPlan, site?: SiteResolut
   return parts.join("\n\n");
 }
 
+/**
+ * The standing brand rules, in the system prompt on every turn. The per-site brand itself (colours with roles, fonts, logo, whether it
+ * is linked to Strata) arrives as the "This site's brand" block, resolved by lib/brand/resolveSiteBrand.ts, so it is fresh every turn.
+ */
+export const BRAND_RULES_GUIDE = `## The owner's brand (applied on every change, without being asked)
+When a "This site's brand" block is in this prompt, that IS the owner's brand for that site. Use it on everything you build or change for the site, whatever it is made with (visual pages, classic pages, uploaded HTML, an app, an email, a blog or store layout, a funnel or course page), in the very first version and on every later change, without the owner ever mentioning it. Say plainly once, near the start, "I'll use your <brand name> brand." Never ask for their colours, fonts or logo while it exists. If a page you made isn't using it, fix that yourself. A change published in Strata shows up in that block on the next turn: always use what the block says now, not what you used earlier. You can read it any time with get_site_brand.
+A NEW website with no brand yet: if the owner hasn't given colours or a logo, call list_strata_projects once. If they have projects, offer them with ask_user_question ("Use one of your Strata brands?" with the project names, plus "No, choose for me") and pass the choice to site_create as strataProjectId. If they aren't connected to Strata or have none, don't mention Strata, just choose a brand to suit the business. For an existing site with no linked brand, you may offer once to connect one (link_site_brand) or to keep the one they have in Strata (create_strata_project_from_brand), and never push it.
+APPS WITH THEIR OWN CODE (hosted server apps): when you create or edit such an app for a site with a linked brand, write its styles with the brand's variables (var(--color-brand-primary-500), var(--color-text-primary), var(--color-bg-canvas), var(--font-family-heading), var(--font-family-body), var(--radius-md)) instead of fixed colours or fonts, and keep <link rel=\"stylesheet\" href=\"/__plexo/brand/<site id>.css\"> in the app's shared layout or HTML shell. The owner can also switch on \"Add my brand to my app\" (Brand tab) so Plexo adds that link to the pages it serves; the link is never added twice, and <meta name=\"plexo-brand\" content=\"off\"> keeps a page out. Don't ask the owner to do any of this.`;
+
 /** Offer to save new brand facts (colours, no-logo) to the site's brand, in the owner's words. */
 export const SAVE_BRAND_GUIDE =
   "When you learn colours or a logo choice in chat that the site's brand doesn't hold yet, and you've built or are about to build with them, ask once with ask_user_question: \"Want me to save these as your brand for every page on this site?\" (Yes, save them / Not now). On yes, call site_save_look with the site's id, the colours and (if they said they have none) noLogo true, or the public logo address. Then tell them in one line it's saved and applied. Don't ask again if they decline.";
@@ -279,7 +289,7 @@ export function siteResolutionPrompt(site: SiteResolution, plan: QuestionPlan): 
     case "new":
       return `${head}\nThis is a NEW website. Don't edit, describe or take colours, logo or wording from any of their existing sites.`;
     case "use":
-      return `${head}\nWork on the site "${displayName(site.site)}" (site id ${site.site.id}); pass that id to the page and site tools. ${site.announce ? `Start by saying "I'll work on ${displayName(site.site)}." in your own words, once. ` : ""}Use only this site's own brand; never another site's colours, logo or wording.`;
+      return `${head}\nWork on the site "${displayName(site.site)}" (site id ${site.site.id}); pass that id to the page and site tools. ${site.announce ? `Start by saying "I'll work on ${displayName(site.site)}." in your own words, once. ` : ""}Use only this site's own brand; never another site's colours, logo or wording.${(() => { const b = brandPromptBlock(site.site.resolvedBrand, displayName(site.site)); return b ? `\n\n${b}` : ""; })()}`;
     case "ask-which":
       return `${head}\nThe owner has ${site.options.length - 1} websites and hasn't said which one this is about, so you don't know. Do not guess and do not use the most recent one. ${plan.mode === "ask" ? "" : "Ask: "}"${SITE_QUESTION}" with their sites by name and "${NEW_SITE_LABEL}" as the choices (in the card). Until they answer, don't read, change or take brand details from any site. After they answer, say "I'll work on <site>." once. Never ask again in this conversation.`;
     case "ask-new-or-add":

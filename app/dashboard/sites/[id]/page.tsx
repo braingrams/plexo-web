@@ -10,7 +10,10 @@ import { BrandTab, type HubBrand } from "../../_v3/hub/BrandTab";
 import { VisitsTab } from "../../_v3/hub/VisitsTab";
 import { SettingsTab } from "../../_v3/hub/SettingsTab";
 import { AddMoreCards } from "../../_v3/hub/AddMore";
+import { AdvancedArea } from "../../_v3/hub/advanced/AdvancedArea";
 import { hubTabs, resolveHubTab } from "@/lib/dashboardV3/hubTabs";
+import { advancedKind, advancedSections, resolveAdvancedSection } from "@/lib/dashboardV3/hubAdvanced";
+import { loadAdvancedData, loadServerPlan } from "@/lib/dashboardV3/hubAdvancedData";
 import { loadHubPages, loadHubProducts, loadHubSite, loadHubVisits, requireHubContext } from "@/lib/dashboardV3/hubData";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +30,7 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
   let content: React.ReactNode;
   switch (tab) {
     case "app":
-      content = site.app ? <AppTab siteId={id} siteName={site.name} info={site.app} /> : null;
+      content = site.app ? <AppTab siteId={id} siteName={site.name} info={site.app} experience={ctx.experience} /> : null;
       break;
     case "products":
       content = <ProductsTab siteId={id} products={await loadHubProducts(id)} currency={site.currency} experience={ctx.experience} startWithService={query.new === "service"} />;
@@ -53,6 +56,14 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
     case "settings":
       content = <SettingsTab site={site} features={site.features} experience={ctx.experience} />;
       break;
+    case "advanced": {
+      // Pros only (hubTabs never offers it otherwise): the old per-site tools, shown here in place.
+      const plan = await loadServerPlan(ctx.organizationId);
+      const sections = advancedSections({ kind: advancedKind(site.features), experience: ctx.experience, ssrEnabled: plan.ssrEnabled, server: site.app?.kind === "server", ownCode: site.features.ownCode });
+      const section = resolveAdvancedSection(Array.isArray(query.section) ? query.section[0] : query.section, sections);
+      content = section ? <AdvancedArea site={site} sections={sections} current={section} data={await loadAdvancedData(ctx.organizationId, id, section, plan.allowedTiers)} /> : null;
+      break;
+    }
     default: {
       const pages = await loadHubPages(ctx.organizationId, id);
       content = (

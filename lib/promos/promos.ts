@@ -224,6 +224,17 @@ export function pickPromo(promos: PromoRecord[], dismissed: DismissedPromos, now
   );
 }
 
+/**
+ * The promo to show one person. Promos for everyone win; a developer-only promo is a candidate when it is the best live
+ * one, and only then is `isDev` asked. (Asking for "promos for everyone" first and giving up when there are none would
+ * mean a lone developer promo never shows.)
+ */
+export async function choosePromo(promos: PromoRecord[], dismissed: DismissedPromos, now: number, isDev: () => Promise<boolean>): Promise<PromoRecord | null> {
+  const candidate = pickPromo(promos, dismissed, now, { developer: true });
+  if (!candidate || promoAudience(candidate) === "all") return candidate;
+  return (await isDev()) ? candidate : pickPromo(promos, dismissed, now, { developer: false });
+}
+
 /** Pages where the strip stays out of the way: editors, SOL, onboarding, checkout and billing flows. */
 export function promoHiddenOn(pathname: string, href?: string): boolean {
   const p = pathname.split(/[?#]/)[0].replace(/\/+$/, "") || "/";

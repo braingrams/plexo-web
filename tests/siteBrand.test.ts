@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   mappings: new Map<string, Row>(),
   hooks: new Map<string, Row>(),
   sites: new Map<string, Row>(),
+  deployed: new Map<string, Row>(),
   sheets: new Map<string, string>(),
   systems: new Map<string, any>(),
   rebuilt: [] as string[],
@@ -65,6 +66,7 @@ vi.mock("@/lib/db/contentEntities", () => ({
   Template: { get: ({ id }: { id: string }) => ({ go: async () => ({ data: state.sites.get(id) ?? null }) }) },
   TemplateAsset: { query: { primary: () => ({ go: async () => ({ data: [] }) }) } },
 }));
+vi.mock("@/lib/db/appEntities", () => ({ DeployedApp: { get: ({ templateId }: { templateId: string }) => ({ go: async () => ({ data: state.deployed.get(templateId) ?? null }) }) } }));
 vi.mock("@/lib/strata/session", () => ({ loadStrataToken: async () => state.userToken }));
 vi.mock("@/lib/auth/resolveUser", () => ({ resolveUser: async () => ({ userId: "u1", organizationId: "org1", role: null }) }));
 vi.mock("@/lib/commerceRateLimitDynamo", () => ({ checkCommerceRateLimit: async () => true }));
@@ -73,7 +75,7 @@ vi.mock("next/server", async (orig) => ({ ...(await orig<typeof import("next/ser
 
 import { setBrandBackend } from "@/lib/brand/store";
 import { signStrataPayload, verifyStrataSignature } from "@/lib/brand/webhookSignature";
-import { applyPublishedEvent, getSiteBrandState, linkSiteBrand, runAllSiteBrandSyncs, runSiteBrandUpdate, sitesForProject, unlinkSiteBrand, writeBrandSheet, forgetServingMemo } from "@/lib/brand/siteBrand";
+import { applyPublishedEvent, brandForServing, setSiteBrandOptions, getSiteBrandState, linkSiteBrand, runAllSiteBrandSyncs, runSiteBrandUpdate, sitesForProject, unlinkSiteBrand, writeBrandSheet, forgetServingMemo } from "@/lib/brand/siteBrand";
 import { applyBrandMappingToCss, applyBrandMappingToHtml, computeBrandMapping, normalizeColor } from "@/lib/brand/mapping";
 import { applySiteBrandToHtml, brandLinkTag, insertBrandLink } from "@/lib/brand/inject";
 import { POST as webhookRoute } from "@/app/api/v1/strata/webhook/route";
@@ -99,7 +101,7 @@ beforeEach(() => {
   process.env.STRATA_API_URL = "https://strata.test/v1";
   process.env.STRATA_TOKEN_ENCRYPTION_SECRET = "test-secret-for-strata-tokens";
   process.env.NEXT_PUBLIC_APP_URL = "https://plexo.test";
-  for (const m of [state.brands, state.mappings, state.hooks, state.sites, state.sheets, state.systems]) m.clear();
+  for (const m of [state.brands, state.mappings, state.hooks, state.sites, state.deployed, state.sheets, state.systems]) m.clear();
   state.rebuilt.length = 0;
   state.pending.length = 0;
   state.userToken = "user-session";
@@ -207,7 +209,8 @@ describe("linking a site to a Strata brand", () => {
     seedSite("s1");
     remote.published = false;
     const s = await linkSiteBrand({ siteId: "s1", userId: "u1", organizationId: "org1", projectId: "p1" });
-    expect(s.lastResult).toMatch(/hasn't been published yet/);
+    expect(s.lastResult).toMatch(/Press Publish there once/);
+    expect(s.awaitingPublish).toBe(true);
   });
 
   it("explains a missing Strata sign-in in plain words, and refuses another organisation's site", async () => {
@@ -268,10 +271,11 @@ describe("keeping a site in sync", () => {
     expect(state.rebuilt).toEqual(["s1"]);
   });
 
-  it("a revision already applied stops without asking Strata; a switched-off site is left alone", async () => {
+  it("a revision already applied stops after one small revision read (nothing downloaded); a switched-off site is left alone", async () => {
     linkedSite();
+    remote.revision = "r0";
     expect((await runSiteBrandUpdate("s1", { source: "webhook", revision: "r0" })).outcome).toBe("unchanged");
-    expect(calls).toHaveLength(0);
+    expect(calls.map((c) => c.url)).toEqual([expect.stringContaining("/design-system/revision?source=published")]);
     state.brands.get("s1")!.autoSync = false;
     expect((await runSiteBrandUpdate("s1", { source: "webhook", revision: "r9" })).outcome).toBe("skipped");
   });
@@ -433,5 +437,35 @@ describe("serving the brand on every kind of page", () => {
 
   it("a site with no brand is served exactly as it was", async () => {
     expect(await applySiteBrandToHtml(page, "nobrand", "v2")).toBe(page);
+  });
+});
+
+// ------------------------------------------------------------------------------------------------ server apps: opt-in only
+describe("the brand link in a server app's pages is opt-in", () => {
+  it("a site linked before the flag existed serves with the flag off, and only the owner's switch turns it on", async () => {
+    seedSite("a1", { sourceType: "REACT_PROJECT" });
+    state.deployed.set("a1", { templateId: "a1", type: "SSR" });
+    seedBrand("a1", { revision: "r9" }); // an existing row: no injectServerApp
+    expect((await brandForServing("a1"))?.serverInject).toBe(false);
+    expect((await getSiteBrandState("a1")).brandInApp).toBe(false);
+    await setSiteBrandOptions({ siteId: "a1", brandInApp: true });
+    expect((await brandForServing("a1"))?.serverInject).toBe(true);
+    expect((await getSiteBrandState("a1")).brandInApp).toBe(true);
+    await setSiteBrandOptions({ siteId: "a1", brandInApp: false });
+    expect((await brandForServing("a1"))?.serverInject).toBe(false);
+  });
+  it("the switch is refused for a site that isn't a server app, and changes nothing", async () => {
+    seedSite("b1");
+    seedBrand("b1");
+    await expect(setSiteBrandOptions({ siteId: "b1", brandInApp: true })).rejects.toThrow(/own code/);
+    expect(state.brands.get("b1")!.injectServerApp).toBeUndefined();
+  });
+  it("linking a server app from now on turns it on; linking an ordinary site never does", async () => {
+    seedSite("a2");
+    state.deployed.set("a2", { templateId: "a2", type: "SSR" });
+    seedSite("s2");
+    for (const id of ["a2", "s2"]) await linkSiteBrand({ siteId: id, userId: "u1", organizationId: "org1", projectId: "p1" });
+    expect(state.brands.get("a2")!.injectServerApp).toBe(true);
+    expect(state.brands.get("s2")!.injectServerApp).toBe(false);
   });
 });

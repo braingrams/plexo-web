@@ -195,8 +195,13 @@
 .plx-findrow > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 
 /* ── Connect AI tools ─────────────────────────────────── */
-.plx-tools { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 24px; align-items: start; }
-.plx-tool { padding: 28px; display: flex; flex-direction: column; gap: 22px; }
+.plx-tools { display: flex; flex-direction: column; gap: 20px; }
+.plx-tool { padding: 28px; display: flex; flex-direction: column; gap: 16px; }
+.plx-tool__row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px 40px; align-items: start; }
+.plx-tool__who { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.plx-tool__how { min-width: 0; padding-left: 40px; border-left: 1px solid var(--plx-border); }
+@media (max-width: 900px) { .plx-tool__row { grid-template-columns: 1fr; } .plx-tool__how { padding-left: 0; border-left: 0; padding-top: 20px; border-top: 1px solid var(--plx-border); } }
+@media (max-width: 600px) { .plx-tool { padding: 20px; } }
 .plx-tool__head { display: flex; align-items: center; gap: 14px; }
 .plx-tool__mark { width: 52px; height: 52px; border-radius: 14px; background: var(--plx-tint); color: var(--plx-deep); border: 1px solid var(--plx-border); display: grid; place-items: center; font-weight: 800; font-size: 22px; flex: none; }
 .plx-tool__head h3 { margin: 0; font-size: 20px; font-weight: 800; }
@@ -233,6 +238,10 @@
 .plx-switchrow__text span { color: var(--plx-muted); font-size: 14px; line-height: 1.5; }
 
 /* ── Connect: how it works strip ──────────────────────── */
+.plx-howstrip { margin: 0; padding: 14px 20px; list-style: none; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; border: 1px solid var(--plx-border); border-radius: var(--plx-radius-card); background: var(--plx-elevated); }
+.plx-howstrip li { display: flex; gap: 10px; align-items: center; font-size: 14px; line-height: 1.4; color: var(--plx-muted); }
+.plx-howstrip b { width: 26px; height: 26px; border-radius: 999px; background: var(--plx-tint); color: var(--plx-deep); display: grid; place-items: center; flex: none; font-size: 13px; }
+@media (max-width: 900px) { .plx-howstrip { grid-template-columns: 1fr; } }
 .plx-howsteps { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; }
 .plx-howsteps li { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; line-height: 1.45; }
 .plx-howsteps b { width: 32px; height: 32px; border-radius: 999px; background: var(--plx-deep); color: var(--plx-on-brand); display: grid; place-items: center; flex: none; font-size: 15px; }
@@ -287,3 +296,11 @@
 }
 @media (max-width: 480px) { .plx-addrtools { grid-template-columns: minmax(0, 1fr); } }
 .plx-sp__side > * { flex: none; }
+/* credit activity rows in Plan (own copy so they never depend on another section's stylesheet) */
+.plx-sprow { display: flex; align-items: center; gap: 16px; padding: 14px 20px; border-top: 1px solid var(--plx-border); min-height: 72px; min-width: 0; }
+.plx-sprow:first-child { border-top: 0; }
+.plx-sprow__main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.plx-sprow__title { font-weight: 800; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plx-sprow__sub { color: var(--plx-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plx-sprow__price { font-weight: 800; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) { .plx-sprow { padding: 14px 16px; gap: 12px; } }

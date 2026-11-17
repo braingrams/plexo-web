@@ -32,12 +32,12 @@ export function BlogTab({ siteId, experience }: { siteId: string; experience: st
               const s = STATUS[p.status] ?? STATUS.DRAFT;
               return (
                 <li key={p.id} style={{ display: "contents" }}>
-                  <a className="plx-row" href={`/dashboard/templates/${siteId}/blog/${p.id}`}>
-                    <span className="plx-row__main">
-                      <span className="plx-row__title">{p.title}</span>
-                      <span className="plx-row__sub">{new Date(p.publishedAt ?? p.updatedAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{p.status === "PUBLISHED" ? ` · ${p.viewCount} views` : ""}</span>
+                  <a className="plx-hrow" href={`/dashboard/templates/${siteId}/blog/${p.id}`}>
+                    <span className="plx-hrow__main">
+                      <span className="plx-hrow__title">{p.title}</span>
+                      <span className="plx-hrow__sub">{new Date(p.publishedAt ?? p.updatedAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{p.status === "PUBLISHED" ? ` · ${p.viewCount} views` : ""}</span>
                     </span>
-                    <span className="plx-row__end"><Badge tone={s.tone}>{s.text}</Badge></span>
+                    <span className="plx-hrow__end"><Badge tone={s.tone}>{s.text}</Badge></span>
                   </a>
                 </li>
               );

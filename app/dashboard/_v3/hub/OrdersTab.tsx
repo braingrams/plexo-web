@@ -124,10 +124,10 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
   return (
     <>
       <TabBar title="Your orders" sub="Everything people have bought. Tap an order to see what to do next." />
-      <Input label="Search orders" hideLabel type="search" fieldClassName="plx-search" placeholder="Search by name, email or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
+      <Input label="Search orders" hideLabel type="search" fieldClassName="plx-hsearch" placeholder="Search by name, email or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
       <div className="plx-filters" role="group" aria-label="Show orders">
         {FILTERS.map((f) => (
-          <button key={f.id} type="button" className="plx-chip" role="radio" aria-checked={filter === f.id} onClick={() => { setPage(1); setFilter(f.id); }}>
+          <button key={f.id} type="button" className="plx-hchip" role="radio" aria-checked={filter === f.id} onClick={() => { setPage(1); setFilter(f.id); }}>
             {f.label}
           </button>
         ))}
@@ -136,7 +136,7 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
       {orders === null && !error ? (
         <Card padding="none" className="plx-listcard">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="plx-row">
+            <div key={i} className="plx-hrow">
               <Skeleton style={{ height: 20, width: "60%" }} />
             </div>
           ))}
@@ -150,16 +150,16 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
               const l = orderLabel(o);
               return (
                 <li key={o.id} style={{ display: "contents" }}>
-                  <button type="button" className="plx-row" onClick={() => setOpen(o)}>
-                    <span className="plx-row__main">
-                      <span className="plx-row__title">{o.customerName || o.customerEmail}</span>
-                      <span className="plx-row__sub">
+                  <button type="button" className="plx-hrow" onClick={() => setOpen(o)}>
+                    <span className="plx-hrow__main">
+                      <span className="plx-hrow__title">{o.customerName || o.customerEmail}</span>
+                      <span className="plx-hrow__sub">
                         Order #{o.orderNumber} · {new Date(o.createdAt).toLocaleDateString("en", { month: "short", day: "numeric" })} · {o.items.map((i) => i.nameSnapshot).join(", ")}
                       </span>
                     </span>
-                    <span className="plx-row__end">
+                    <span className="plx-hrow__end">
                       <Badge tone={l.tone}>{l.text}</Badge>
-                      <span className="plx-row__price">{formatMoney(o.amountMinor, o.currency ?? currency)}</span>
+                      <span className="plx-hrow__price">{formatMoney(o.amountMinor, o.currency ?? currency)}</span>
                     </span>
                   </button>
                 </li>
@@ -191,8 +191,8 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
             </div>
             <ul className="plx-list" style={{ border: "1px solid var(--plx-border)", borderRadius: 14 }}>
               {open.items.map((i, n) => (
-                <li key={n} className="plx-row" style={{ minHeight: 56, padding: "10px 16px" }}>
-                  <span className="plx-row__main"><span className="plx-row__title">{i.nameSnapshot}</span></span>
+                <li key={n} className="plx-hrow" style={{ minHeight: 56, padding: "10px 16px" }}>
+                  <span className="plx-hrow__main"><span className="plx-hrow__title">{i.nameSnapshot}</span></span>
                   <span className="plx-small">{i.quantity} × {formatMoney(i.unitPriceMinor, open.currency ?? currency)}</span>
                 </li>
               ))}

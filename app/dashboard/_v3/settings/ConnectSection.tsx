@@ -14,32 +14,37 @@ export function ConnectSection({ baseUrl, apiKeyHint }: { baseUrl: string; apiKe
       title="AI tools"
       purpose="Already use Claude or ChatGPT? Connect them to Plexo and ask for changes in your own words."
     >
-      <Panel tone="tint" title="How it works">
-        <ol className="plx-howsteps">
-          <li><b>1</b><span>Copy one link and paste it into your AI tool, once.</span></li>
-          <li><b>2</b><span>Sign in to Plexo, so the tool can only touch your sites.</span></li>
-          <li><b>3</b><span>Then just ask, like &ldquo;make me a pricing page&rdquo;.</span></li>
-        </ol>
-      </Panel>
+      <ol className="plx-howstrip" aria-label="How it works">
+        <li><b>1</b><span>Copy your link into your AI tool, once.</span></li>
+        <li><b>2</b><span>Sign in to Plexo, so it only touches your sites.</span></li>
+        <li><b>3</b><span>Just ask, like &ldquo;add a pricing page&rdquo;.</span></li>
+      </ol>
       <div className="plx-tools" data-tour="connect-cards">
         {CONNECT_TOOLS.map((t) => (
           <Panel key={t.id} className="plx-tool">
-            <div className="plx-tool__head">
-              <span className="plx-tool__mark" aria-hidden>{MARK[t.id]}</span>
-              <div>
-                <h3>{t.name}</h3>
-                <p>{t.tagline}</p>
+            <div className="plx-tool__row">
+              <div className="plx-tool__who">
+                <div className="plx-tool__head">
+                  <span className="plx-tool__mark" aria-hidden>{MARK[t.id]}</span>
+                  <div>
+                    <h3>{t.name}</h3>
+                    <p>{t.tagline}</p>
+                  </div>
+                </div>
+                <div>
+                  <span className="plx-field__label" style={{ display: "block", marginBottom: 8 }}>Your Plexo link</span>
+                  <CopyBox value={link} label={`Plexo link for ${t.name}`} wrap />
+                </div>
+              </div>
+              <div className="plx-tool__how">
+                <span className="plx-field__label" style={{ display: "block", marginBottom: 8 }}>Connect in three steps</span>
+                <ol className="plx-steps">
+                  {t.steps.map((s) => (
+                    <li key={s}><span style={{ lineHeight: 1.5, paddingTop: 6 }}>{s}</span></li>
+                  ))}
+                </ol>
               </div>
             </div>
-            <div>
-              <span className="plx-field__label" style={{ display: "block", marginBottom: 8 }}>Your Plexo link</span>
-              <CopyBox value={link} label={`Plexo link for ${t.name}`} wrap />
-            </div>
-            <ol className="plx-steps">
-              {t.steps.map((s) => (
-                <li key={s}><span style={{ lineHeight: 1.5, paddingTop: 6 }}>{s}</span></li>
-              ))}
-            </ol>
             <details className="plx-adv">
               <summary>
                 {t.advancedTitle} <ChevronDown size={18} aria-hidden />

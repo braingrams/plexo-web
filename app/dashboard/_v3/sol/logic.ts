@@ -101,6 +101,9 @@ const SPECIAL: Record<string, [string, string]> = {
   app_read_files: ["Reading your app", "Read your app"],
   app_list_files: ["Looking through your app", "Looked through your app"],
   ask_user_question: ["Asking you a question", "Asked you a question"],
+  sol_check_page: ["Checking the page", "Checked the page"],
+  sol_polish_page: ["Polishing a few details", "Polished a few details"],
+  sol_review_look: ["Looking it over on desktop and phone", "Looked it over on desktop and phone"],
   get_user_profile: ["Checking your account", "Checked your account"],
   get_analytics: ["Checking your visits", "Checked your visits"],
 };

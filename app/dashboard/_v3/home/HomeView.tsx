@@ -5,9 +5,9 @@ import { ArrowRight, PartyPopper } from "lucide-react";
 import type { HomeProps } from "./homeTypes";
 import { Button, ButtonLink, Card, HelpVideoLink } from "../ui";
 import { GuidedChecklist } from "./GuidedChecklist";
-import { ActivityCard, CreateAnotherCard, StatGrid } from "./LiveDashboard";
+import { ActivityCard, StatGrid, VisitsCard } from "./LiveDashboard";
 import { AllSites } from "./AllSites";
-import { AskSolCard, CopyLinkButton, MakeEmailCard, SitePreviewCard, siteHref } from "./SideCards";
+import { AskSolCard, CopyLinkButton, OtherActionsCard, SitePreviewCard } from "./SideCards";
 import { SkippedHome } from "./SkippedHome";
 
 function greeting(): string {
@@ -32,7 +32,7 @@ export function HomeView(props: HomeProps) {
   if (mode === "none" || !site) {
     return (
       <Page eyebrow="Welcome to Plexo" title="Look around. Your site is ready when you are.">
-        <SkippedHome setupHref="/welcome/setup" />
+        <SkippedHome setupHref={newSiteHref} />
       </Page>
     );
   }
@@ -94,29 +94,19 @@ export function HomeView(props: HomeProps) {
     );
   }
 
-  // Live: this site's dashboard.
+  // Live: this site's dashboard. Stats across the top, then activity and visits on the left with a slim rail on the right.
   const stats = site.stats;
-  const href = siteHref(site.site);
   return (
     <Page tuneHref={tuneHref} eyebrow={`${greeting()}, ${firstName}`} title={site.site.name}>
-      <div className="plx-page__grid">
-        <section data-tour="home-main" style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
-          {stats ? <StatGrid stats={stats.stats} /> : null}
+      {stats ? <StatGrid stats={stats.stats} /> : null}
+      <div className="plx-home__body">
+        <section data-tour="home-main" className="plx-home__main">
           {stats ? <ActivityCard stats={stats} site={site.site} /> : null}
+          {stats ? <VisitsCard days={stats.visitsByDay ?? new Array(7).fill(0)} /> : null}
         </section>
-        <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+        <aside className="plx-home__rail">
           <SitePreviewCard site={site.site} brand={brand} />
-          {href ? (
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <CopyLinkButton address={site.site.address} />
-              <ButtonLink href={href} target="_blank" rel="noopener noreferrer" variant="ghost">
-                Open my site
-              </ButtonLink>
-            </div>
-          ) : null}
-          <AskSolCard prompt={SOL_IDEAS[progress.variant]} />
-          <MakeEmailCard />
-          <CreateAnotherCard href={newSiteHref} />
+          <OtherActionsCard solPrompt={SOL_IDEAS[progress.variant]} newSiteHref={newSiteHref} />
         </aside>
       </div>
     </Page>

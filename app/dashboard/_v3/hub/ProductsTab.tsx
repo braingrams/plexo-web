@@ -180,7 +180,7 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
       ) : null}
       {products.length > 4 && (!full || section === "products") ? (
         <div className="plx-viewswitch">
-          <Input label="Search your products" hideLabel type="search" fieldClassName="plx-search" placeholder="Search your products" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <Input label="Search your products" hideLabel type="search" fieldClassName="plx-hsearch" placeholder="Search your products" value={search} onChange={(e) => setSearch(e.target.value)} />
           <SegmentedControl label="Show" value={stock} onChange={setStock} options={[{ value: "all", label: "All" }, { value: "in", label: "In stock" }, { value: "out", label: "Sold out" }]} />
         </div>
       ) : null}
@@ -199,21 +199,21 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
       ) : (
         <Card padding="none" className="plx-listcard" data-tour="hub-products">
           <ul className="plx-list">
-            {shown.length === 0 ? <li className="plx-row"><span className="plx-small">Nothing matches that. Try another word or show all.</span></li> : null}
+            {shown.length === 0 ? <li className="plx-hrow"><span className="plx-small">Nothing matches that. Try another word or show all.</span></li> : null}
             {shown.map((p) => (
               <li key={p.id} style={{ display: "contents" }}>
-                <button type="button" className="plx-row" aria-pressed={picking ? picked.has(p.id) : undefined} style={picking && picked.has(p.id) ? { background: "var(--plx-tint)" } : undefined} onClick={() => (picking ? setPicked((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; }) : open(p))}>
-                  <span className="plx-row__thumb">{p.imageUrl ? <img src={p.imageUrl} alt="" /> : <Package size={22} aria-hidden />}</span>
-                  <span className="plx-row__main">
-                    <span className="plx-row__title">{p.name}</span>
-                    <span className="plx-row__sub">
+                <button type="button" className="plx-hrow" aria-pressed={picking ? picked.has(p.id) : undefined} style={picking && picked.has(p.id) ? { background: "var(--plx-tint)" } : undefined} onClick={() => (picking ? setPicked((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; }) : open(p))}>
+                  <span className="plx-hrow__thumb">{p.imageUrl ? <img src={p.imageUrl} alt="" /> : <Package size={22} aria-hidden />}</span>
+                  <span className="plx-hrow__main">
+                    <span className="plx-hrow__title">{p.name}</span>
+                    <span className="plx-hrow__sub">
                       {KIND_LABEL[p.kind]}
                       {p.kind === "PHYSICAL" && p.stockQuantity != null ? ` · ${p.stockQuantity} in stock` : ""}
                     </span>
                   </span>
-                  <span className="plx-row__end">
+                  <span className="plx-hrow__end">
                     {!p.active ? <Badge>Hidden</Badge> : p.kind === "PHYSICAL" && p.stockQuantity === 0 ? <Badge tone="warning">Sold out</Badge> : null}
-                    <span className="plx-row__price">{formatMoney(p.priceMinor, currency)}</span>
+                    <span className="plx-hrow__price">{formatMoney(p.priceMinor, currency)}</span>
                   </span>
                 </button>
               </li>
@@ -264,7 +264,7 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
             <div>
               <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
               <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <span className="plx-row__thumb" style={{ width: 72, height: 72 }}>{form.imageUrl ? <img src={form.imageUrl} alt="" /> : <ImagePlus size={24} aria-hidden />}</span>
+                <span className="plx-hrow__thumb" style={{ width: 72, height: 72 }}>{form.imageUrl ? <img src={form.imageUrl} alt="" /> : <ImagePlus size={24} aria-hidden />}</span>
                 <Button variant="secondary" loading={uploading} leftIcon={<ImagePlus size={18} aria-hidden />} onClick={() => fileRef.current?.click()}>
                   {form.imageUrl ? "Change photo" : "Add a photo"}
                 </Button>

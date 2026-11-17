@@ -25,10 +25,10 @@ export function Track({ steps, current }: { steps: string[]; current: number }) 
 /** One number with a plain label ("12 pages"). */
 export function StatCard({ value, label, icon, tone }: { value: React.ReactNode; label: string; icon?: React.ReactNode; tone?: "warning" }) {
   return (
-    <div className="plx-stat" data-tone={tone}>
-      {icon ? <span className="plx-stat__icon" aria-hidden>{icon}</span> : null}
-      <span className="plx-stat__num">{value}</span>
-      <span className="plx-stat__label">{label}</span>
+    <div className="plx-mvstat" data-tone={tone}>
+      {icon ? <span className="plx-mvstat__icon" aria-hidden>{icon}</span> : null}
+      <span className="plx-mvstat__num">{value}</span>
+      <span className="plx-mvstat__label">{label}</span>
     </div>
   );
 }

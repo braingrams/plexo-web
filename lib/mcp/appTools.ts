@@ -126,7 +126,7 @@ export const APP_MCP_TOOLS = [
       properties: {
         appId,
         path: { type: "string", description: "Page to open, e.g. /dashboard (default /)." },
-        viewport: { type: "string", enum: Object.keys(VIEWPORTS), description: "desktop (default), tablet or mobile." },
+        viewport: { type: "string", enum: Object.keys(VIEWPORTS), description: "desktop (default), tablet, mobile or phone." },
         fullPage: { type: "boolean", description: "Capture the whole scrolling page instead of the first screen." },
       },
       required: ["appId"],

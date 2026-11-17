@@ -6,7 +6,6 @@ import { FullReportV3 } from "@/app/dashboard/_v3/migrate/FullReportV3";
 import type { Counts, JobStatus, Preview, Report } from "@/app/dashboard/migrate/wordpress/wizard/types";
 import type { CutoverView } from "@/app/dashboard/migrate/wordpress/WordPressMigrationClient";
 
-export const MIGRATE_STATES = ["start", "start-error", "start-free", "review", "progress", "progress-error", "report", "domain", "done"];
 
 const noop = () => {};
 const counts: Counts = { pages: 24, pagesDone: 9, pagesFailed: 0, posts: 62, postsDone: 62, postsFailed: 0, assets: 410, assetsDone: 120, assetsFailed: 0, assetsSkipped: 0 };

@@ -45,7 +45,7 @@ export function FullReportV3({ report: r, templateId }: { report: Report; templa
         </div>
       ) : null}
       {r.missingOnSource.length > 0 ? <p className="plx-small" style={{ margin: 0 }}>{r.missingOnSource.length} file{r.missingOnSource.length === 1 ? " was" : "s were"} already missing on WordPress, so visitors see no change.</p> : null}
-      <div className="plx-row">
+      <div className="plx-mvrow">
         {r.summary.postsCopied > 0 ? <ButtonLink size="sm" variant="secondary" href={`/dashboard/templates/${templateId}/blog`}>Manage your blog</ButtonLink> : null}
         {r.summary.formsReconnected > 0 ? <ButtonLink size="sm" variant="secondary" href={`/dashboard/templates/${templateId}/form-submissions`}>Form replies</ButtonLink> : null}
       </div>

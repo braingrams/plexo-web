@@ -61,3 +61,11 @@ export function resolveModel(provider: AiProvider, tier: ConcreteTier): string {
   }
   return providerTable[tier];
 }
+
+/** Whether the model behind this provider and tier can read pictures (SOL's screenshot review needs it). Every model
+ *  in the table above takes images; a tier that doesn't would be listed here so the review is skipped for it. */
+const NO_IMAGE_INPUT = new Set<string>();
+export function modelSupportsImages(provider: AiProvider, tier: ConcreteTier): boolean {
+  const id = MODEL_REGISTRY[provider]?.[tier];
+  return Boolean(id) && !NO_IMAGE_INPUT.has(id);
+}

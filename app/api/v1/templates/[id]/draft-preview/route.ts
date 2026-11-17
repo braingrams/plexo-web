@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
+import { verifyDraftPreviewToken } from "@/lib/draftPreviewToken";
 
 /**
  * GET /api/v1/templates/[id]/draft-preview[?page=<pageId>]
  * What the owner's site looks like right now, before it is online: the working copy (draftHtml) when there is one,
  * otherwise what was last published. Only people in the site's workspace can open it.
  * Served in a sandbox (no cookies, no access to the dashboard) because it is the owner's own page code.
+ *
+ * Signed link: `?sig=&exp=` (lib/draftPreviewToken.ts, 5 minutes, for that one page) opens the page without a
+ * sign-in, so Plexo's own browser can take a screenshot of a draft (SOL's visual review). It never grants anything
+ * but GET of that page's draft HTML; with `shot=1` the preview bar is left out of the picture.
  */
 function esc(s: string): string {
   return s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
@@ -19,12 +24,18 @@ function shell(title: string, body: string, status = 200): NextResponse {
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<NextResponse> {
-  const resolved = await resolveUser(request);
-  if (!resolved) return shell("Sign in to preview", `<h1 style="font-size:22px">Please sign in</h1><p>Sign in to Plexo to preview your site.</p>`, 401);
-
   const { id } = await context.params;
+  const params = request.nextUrl.searchParams;
+  const signed = params.has("sig");
+  const shot = signed && params.get("shot") === "1";
+  if (signed && !verifyDraftPreviewToken({ templateId: id, pageId: params.get("page"), shot }, { sig: params.get("sig"), exp: params.get("exp") })) {
+    return shell("Link expired", `<h1 style="font-size:22px">This preview link has expired</h1><p>Open the preview again from your site.</p>`, 403);
+  }
+  const resolved = signed ? null : await resolveUser(request);
+  if (!signed && !resolved) return shell("Sign in to preview", `<h1 style="font-size:22px">Please sign in</h1><p>Sign in to Plexo to preview your site.</p>`, 401);
+
   const { data: root } = await Template.get({ id }).go();
-  if (!root || root.organizationId !== resolved.organizationId) return shell("Not found", `<h1 style="font-size:22px">We can't find that site</h1><p>It may have been deleted.</p>`, 404);
+  if (!root || (!signed && root.organizationId !== resolved!.organizationId)) return shell("Not found", `<h1 style="font-size:22px">We can't find that site</h1><p>It may have been deleted.</p>`, 404);
 
   const { data: children } = await Template.query.byParent({ parentId: root.id }).go({ pages: "all" });
   const wanted = request.nextUrl.searchParams.get("page");
@@ -39,7 +50,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   const html = page.draftHtml || page.compiledHtml || "";
   // thumb=1: the small inert picture on the site's page cards. No bar, no scripts, and an empty page stays blank so
   // the card's own sketch shows through.
-  const thumb = request.nextUrl.searchParams.get("thumb") === "1";
+  const thumb = !signed && request.nextUrl.searchParams.get("thumb") === "1";
   if (thumb) {
     const csp = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, max-age=60", "Content-Security-Policy": "sandbox" };
     if (!html.trim()) return new NextResponse("<!doctype html><meta charset=\"utf-8\"><body style=\"margin:0;background:transparent\">", { headers: csp });
@@ -58,7 +69,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   });
 
   const bar = `<div style="position:fixed;z-index:2147483647;left:0;right:0;bottom:0;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;padding:10px 16px;background:#121212;color:#fff;font:600 14px system-ui,sans-serif"><span>Preview: only you can see this. It is not online yet.</span><a href="${back}" target="_top" style="color:#b8f34a">Back to my site</a></div>`;
-  out = /<\/body>/i.test(out) ? out.replace(/<\/body>/i, `${bar}</body>`) : out + bar;
+  if (!shot) out = /<\/body>/i.test(out) ? out.replace(/<\/body>/i, `${bar}</body>`) : out + bar;
 
   return new NextResponse(out, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation" } });
 }

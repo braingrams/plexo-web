@@ -6,6 +6,8 @@ import { makeSiteFromKit, makeSiteFromMarketDesign } from "@/lib/onboarding/site
 import { readBuildProfile } from "@/lib/dashboardV3/profile";
 import { CURRENT_SITE_COOKIE } from "@/lib/dashboardV3/sites";
 import { createArgs, parseCreateRequest } from "@/lib/dashboardV3/newSite";
+import { applyNewSiteBrandChoice } from "@/lib/brand/siteBrand";
+import { parseBrandChoice } from "@/lib/brand/brandModel";
 
 /**
  * "Make a new website" (new dashboard): builds the site with site_create, the same path onboarding
@@ -36,7 +38,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!args) return NextResponse.json({ error: "Pick what your website is for first." }, { status: 400 });
       made = await makeSiteFromKit(resolved, args, brand);
     }
-    const res = NextResponse.json({ site: { id: made.siteId, name: made.name }, warnings: made.warnings ?? [] });
+    // "Your brand" step: the owner's chosen Strata project (or "make one from my brand") is linked to the new site, so it follows that brand from the start.
+    const brandChoice = parseBrandChoice((body as { brand?: unknown })?.brand);
+    const brandResult = brandChoice ? await applyNewSiteBrandChoice({ siteId: made.siteId, userId: resolved.userId, organizationId: resolved.organizationId, choice: brandChoice }) : undefined;
+    const res = NextResponse.json({ site: { id: made.siteId, name: made.name }, warnings: made.warnings ?? [], ...(brandResult ? { brand: brandResult } : {}) });
     res.cookies.set(CURRENT_SITE_COOKIE, made.siteId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
     return res;
   } catch (err) {

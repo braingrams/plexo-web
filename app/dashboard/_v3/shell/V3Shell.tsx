@@ -14,6 +14,7 @@ import {
   GraduationCap,
   House,
   LayoutGrid,
+  LayoutList,
   LifeBuoy,
   LogOut,
   Mail,
@@ -25,19 +26,25 @@ import {
   UserRound,
 } from "lucide-react";
 import { activeNavId, type Experience, type NavIcon, type V3NavItem } from "@/lib/dashboardV3/nav";
+import { parseSidebarChoice, sidebarModeForPath, sidebarViewFor, type SidebarView } from "@/lib/dashboardV3/sidebarMode";
 import type { SiteSummary } from "@/lib/dashboardV3/sites";
 import type { TourContext, TourState, TourStep } from "@/lib/dashboardV3/tour";
 import type { OrgBranding } from "../../dashboard-shell";
 import { switchLabel, useVersionSwitch } from "../../_versions/VersionUi";
+import { SolSidebarProvider } from "../../sol/_components/SolSidebarContext";
+import { SolChatsColumn } from "../sol/SolChatsColumn";
 import { PlexoLogo } from "../brand/PlexoLogo";
 import { ThemeSwitch } from "../theme/ThemeContext";
 import { TourProvider, persistTourState, useTour } from "../tour/TourProvider";
 import { Avatar } from "../ui/Avatar";
 import { Modal } from "../ui/Modal";
+import { SegmentedControl } from "../ui/SegmentedControl";
 import { MenuPanel, useMenu } from "./Menu";
 import { SiteSwitcher } from "./SiteSwitcher";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { WorkspaceList, WorkspaceSwitcher, type Workspace } from "./WorkspaceSwitcher";
+
+const SIDEBAR_KEY = "plx:solSidebar";
 
 const ICONS: Record<NavIcon, React.ComponentType<{ size?: number; "aria-hidden"?: boolean; strokeWidth?: number }>> = {
   home: House,
@@ -102,7 +109,9 @@ export function V3Shell(props: V3ShellProps) {
       offerOn={props.tourOfferOn}
       initialDriving={props.tourAutoDrive}
     >
-      <ShellFrame {...props} />
+      <SolSidebarProvider>
+        <ShellFrame {...props} />
+      </SolSidebarProvider>
     </TourProvider>
   );
 }
@@ -112,6 +121,31 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
   const active = activeNavId(nav, pathname);
   const beginner = experience === "beginner";
   const [moreOpen, setMoreOpen] = useState(false);
+
+  // Inside SOL the left column is the conversations, with a Chats | Menu switch. The choice is
+  // remembered while in SOL; arriving at SOL from elsewhere starts on Chats, and leaving restores the menu.
+  const mode = sidebarModeForPath(pathname);
+  const [choice, setChoice] = useState<SidebarView | null>(null);
+  useEffect(() => {
+    if (mode !== "sol") {
+      setChoice(null);
+      return;
+    }
+    try {
+      setChoice(parseSidebarChoice(sessionStorage.getItem(SIDEBAR_KEY)));
+    } catch {
+      // private mode: starts on Chats
+    }
+  }, [mode]);
+  const view = sidebarViewFor(mode, choice);
+  const pickView = (next: SidebarView) => {
+    setChoice(next);
+    try {
+      sessionStorage.setItem(SIDEBAR_KEY, next);
+    } catch {
+      // fine
+    }
+  };
 
   if (isChromeless(pathname)) return <div className="plx-shell" data-chrome="none">{children}</div>;
 
@@ -126,24 +160,42 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
 
   return (
     <div className="plx-shell">
-      <aside className="plx-sidebar" aria-label="Main">
+      <aside className="plx-sidebar" aria-label={view === "chats" ? "Your conversations" : "Main"} data-mode={mode} data-view={view}>
         <Link href="/dashboard" className="plx-sidebar__brand" aria-label={`${orgBranding?.name ?? "Plexo"} home`}>
           {brand}
         </Link>
-        <WorkspaceSwitcher workspaces={workspaces} currentId={currentWorkspaceId} onSwitch={onWorkspaceSwitch} />
-        {switcher}
-        <nav className="plx-nav" aria-label="Main menu" data-tour="main-nav">
-          {nav.map((item) => {
-            const Icon = ICONS[item.icon];
-            return (
-              <Link key={item.id} href={item.href} className="plx-nav__link" aria-current={active === item.id ? "page" : undefined}>
-                <Icon size={20} aria-hidden />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-        <HelpCard />
+        {mode === "sol" ? (
+          <SegmentedControl<SidebarView>
+            label="Show"
+            className="plx-sbswitch"
+            value={view}
+            onChange={pickView}
+            options={[
+              { value: "chats", label: "Chats", icon: <MessageCircle size={17} aria-hidden /> },
+              { value: "menu", label: "Menu", icon: <LayoutList size={17} aria-hidden /> },
+            ]}
+          />
+        ) : null}
+        {view === "chats" ? (
+          <SolChatsColumn />
+        ) : (
+          <>
+            <WorkspaceSwitcher workspaces={workspaces} currentId={currentWorkspaceId} onSwitch={onWorkspaceSwitch} />
+            {switcher}
+            <nav className="plx-nav" aria-label="Main menu" data-tour="main-nav">
+              {nav.map((item) => {
+                const Icon = ICONS[item.icon];
+                return (
+                  <Link key={item.id} href={item.href} className="plx-nav__link" aria-current={active === item.id ? "page" : undefined}>
+                    <Icon size={20} aria-hidden />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+            <HelpCard />
+          </>
+        )}
       </aside>
 
       <div className="plx-main-col">

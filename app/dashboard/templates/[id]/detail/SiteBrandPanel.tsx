@@ -21,6 +21,11 @@ export type BrandState = {
   lastSource: "webhook" | "schedule" | "owner" | null;
   useOnSite: boolean;
   canUseOnSite: boolean;
+  /** A deployed server app, and whether its pages get the brand link (owner's switch; off by default). */
+  serverApp?: boolean;
+  brandInApp?: boolean;
+  /** The brand this site really uses now (lib/brand/resolveSiteBrand.ts): the linked project, else the site's saved brand, else the account's. */
+  resolved?: import("@/lib/brand/brandModel").ResolvedBrand | null;
 };
 export type StrataProject = { id: string; name: string; color?: string | null };
 

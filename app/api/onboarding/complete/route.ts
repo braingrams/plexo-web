@@ -6,12 +6,14 @@ import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
 import { MarketplaceUseError } from "@/lib/marketplaceUse";
 import { makeSiteFromKit, makeSiteFromMarketDesign } from "@/lib/onboarding/siteMaking";
 import { completeOnboarding, OnboardingError } from "@/lib/onboarding/complete";
+import { applyNewSiteBrandChoice } from "@/lib/brand/siteBrand";
+import { parseBrandChoice } from "@/lib/brand/brandModel";
 
 /** "Use this design" / "Skip, just personalise": save the answers, build the site with site_create, finish onboarding. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveUser(request);
   if (!resolved) return NextResponse.json({ error: "Please sign in again to continue." }, { status: 401 });
-  let body: { profile?: unknown; designId?: unknown; marketDesignId?: unknown; skipSite?: unknown };
+  let body: { profile?: unknown; designId?: unknown; marketDesignId?: unknown; skipSite?: unknown; brand?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -30,7 +32,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         createFromMarketDesign: (designId, name) => makeSiteFromMarketDesign(resolved, designId, name, ownBrand()),
       },
     );
-    return NextResponse.json(result);
+    // The brand step of the look screen: link the chosen Strata project (or make one from their brand) to the site just made.
+    const choice = parseBrandChoice(body.brand);
+    const brand = choice && result.site ? await applyNewSiteBrandChoice({ siteId: result.site.id, userId: resolved.userId, organizationId: resolved.organizationId, choice }) : undefined;
+    return NextResponse.json(brand ? { ...result, brand } : result);
   } catch (err) {
     if (err instanceof MarketplaceUseError) return NextResponse.json({ error: err.message, ...err.extra, needsPurchase: err.status === 403 && !err.extra.plan }, { status: err.status });
     if (err instanceof OnboardingError) return NextResponse.json({ error: err.message }, { status: 400 });

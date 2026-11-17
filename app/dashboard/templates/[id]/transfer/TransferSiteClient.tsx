@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { PageContainer } from "../../../_components/PageContainer";
+import { PageContainer, useEmbeddedScreen } from "../../../_components/PageContainer";
 
 const PANEL: React.CSSProperties = { border: "1px solid var(--ed-w-080)", borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem", background: "var(--ed-w-020)" };
 const FIELD_LABEL: React.CSSProperties = { fontSize: "0.75rem", fontWeight: 700, color: "var(--ed-t-500)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: "0.4rem" };
@@ -12,6 +12,7 @@ type Warning = { title: string; detail: string };
 type PendingTransfer = { id: string; toEmail: string; createdAt: string; expiresAt: string };
 
 export function TransferSiteClient({ templateId, siteName }: { templateId: string; siteName: string }) {
+  const embedded = useEmbeddedScreen();
   const [pending, setPending] = useState<PendingTransfer | null | undefined>(undefined);
   const [toEmail, setToEmail] = useState("");
   const [checking, setChecking] = useState(false);
@@ -90,9 +91,9 @@ export function TransferSiteClient({ templateId, siteName }: { templateId: strin
 
   return (
     <PageContainer style={{ maxWidth: 640 }}>
-      <Link href={`/dashboard/templates/${templateId}`} style={{ fontSize: "0.8rem", color: "var(--ed-t-450)", textDecoration: "none", display: "inline-block", marginBottom: "0.75rem" }}>
+      {!embedded && <Link href={`/dashboard/templates/${templateId}`} style={{ fontSize: "0.8rem", color: "var(--ed-t-450)", textDecoration: "none", display: "inline-block", marginBottom: "0.75rem" }}>
         ← Back to editor
-      </Link>
+      </Link>}
       <h1 style={{ fontSize: "1.35rem", fontWeight: 600, color: "var(--ed-text)", margin: "0 0 0.25rem" }}>Transfer &quot;{siteName}&quot;</h1>
       <p style={{ fontSize: "0.85rem", color: "var(--ed-t-500)", marginBottom: "1.5rem" }}>
         Move full ownership of this site — every page, and any Commerce catalog/orders it has — to another Plexo account. They'll get an email and have to explicitly accept before anything moves.

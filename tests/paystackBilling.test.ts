@@ -138,3 +138,17 @@ describe("Paystack plan billing (mocked Paystack)", () => {
     expect(db.topups[0][1]).toBe(20_000); // NGN 30,000 at 1,500 per 1,000
   });
 });
+
+describe("pre-renewal webhook: invoice.create moves the subscriber to a changed price", () => {
+  it("asks the price-move job to reconcile just that person, and handles nobody else's event", async () => {
+    const { handlePaystackBillingEvent } = await import("@/lib/billing/paystackBilling");
+    db.users.set("u-pm", { id: "u-pm", email: "pm@x.com", subscriptionProvider: "PAYSTACK" });
+    const reconcilePriceMove = vi.fn(async () => undefined);
+    const handled = await handlePaystackBillingEvent({ event: "invoice.create", data: { customer: { email: "pm@x.com" }, subscription: { subscription_code: "SUB_1" } } }, { reconcilePriceMove });
+    expect(handled).toBe(true);
+    expect(reconcilePriceMove).toHaveBeenCalledWith("u-pm");
+    const none = await handlePaystackBillingEvent({ event: "invoice.create", data: { customer: { email: "nobody@x.com" }, subscription: { subscription_code: "S" } } }, { reconcilePriceMove });
+    expect(none).toBe(false);
+    expect(reconcilePriceMove).toHaveBeenCalledTimes(1);
+  });
+});

@@ -156,14 +156,14 @@ export function ReviewScreen(props: {
       <div className="plx-mv__cols">
         <div className="plx-mv__col">
           <Card padding="lg">
-            <div className="plx-row" style={{ marginBottom: 18, flexWrap: "nowrap" }}>
+            <div className="plx-mvrow" style={{ marginBottom: 18, flexWrap: "nowrap" }}>
               <span className="plx-mv__icon" style={{ width: 52, height: 52, background: "var(--plx-tint)", fontWeight: 800, fontSize: 22 }}>{name.charAt(0).toUpperCase()}</span>
               <div style={{ minWidth: 0 }}>
                 <b style={{ fontSize: 18 }}>{name}</b>
                 <div className="plx-small" style={{ overflowWrap: "anywhere" }}>{hostOf(preview.homeUrl)}{preview.siteDescription ? ` · ${preview.siteDescription}` : ""}</div>
               </div>
             </div>
-            <div className="plx-stats">
+            <div className="plx-mvstats">
               <StatCard icon={<FileText size={20} />} value={n(preview.counts.pages)} label={preview.counts.pages === 1 ? "page" : "pages"} />
               <StatCard icon={<Newspaper size={20} />} value={n(preview.counts.posts)} label={preview.counts.posts === 1 ? "blog post" : "blog posts"} />
               <StatCard icon={<ImageIcon size={20} />} value={n(preview.counts.media)} label="pictures and files" />
@@ -219,12 +219,12 @@ export function ReviewScreen(props: {
               <div className="plx-fact"><ShieldCheck size={20} aria-hidden /><div className="plx-fact__text"><b>WordPress stays as it is</b><span>Nothing changes there until you choose to switch.</span></div></div>
             </div>
             <div className="plx-stack">
-              <label className="plx-row" style={{ flexWrap: "nowrap", alignItems: "flex-start", cursor: "pointer" }}>
+              <label className="plx-mvrow" style={{ flexWrap: "nowrap", alignItems: "flex-start", cursor: "pointer" }}>
                 <input type="checkbox" checked={props.owns} onChange={(e) => props.onOwns(e.target.checked)} style={{ width: 22, height: 22, marginTop: 1, accentColor: "var(--plx-deep)", flex: "none" }} />
                 <span>This is my website, or I have the owner's permission to move it.</span>
               </label>
               {props.needsAup ? (
-                <label className="plx-row" style={{ flexWrap: "nowrap", alignItems: "flex-start", cursor: "pointer" }}>
+                <label className="plx-mvrow" style={{ flexWrap: "nowrap", alignItems: "flex-start", cursor: "pointer" }}>
                   <input type="checkbox" checked={props.aup} onChange={(e) => props.onAup(e.target.checked)} style={{ width: 22, height: 22, marginTop: 1, accentColor: "var(--plx-deep)", flex: "none" }} />
                   <span>I agree to Plexo's <Link href="/legal/acceptable-use" target="_blank">Acceptable Use Policy</Link>.</span>
                 </label>
@@ -278,7 +278,7 @@ export function ProgressScreen({ job, siteName, onRetry }: { job: JobStatus; sit
           </Card>
 
           {c ? (
-            <div className="plx-stats">
+            <div className="plx-mvstats">
               <StatCard icon={<FileText size={20} />} value={<>{n(c.pagesDone)}<small style={{ fontSize: 16, color: "var(--plx-muted)" }}> / {n(c.pages)}</small></>} label="pages built" />
               <StatCard icon={<Newspaper size={20} />} value={<>{n(c.postsDone)}<small style={{ fontSize: 16, color: "var(--plx-muted)" }}> / {n(c.posts)}</small></>} label="blog posts copied" />
               {(c.products ?? 0) > 0 ? <StatCard icon={<ShoppingBag size={20} />} value={<>{n(c.productsDone ?? 0)}<small style={{ fontSize: 16, color: "var(--plx-muted)" }}> / {n(c.products ?? 0)}</small></>} label="products copied" /> : null}
@@ -296,7 +296,7 @@ export function ProgressScreen({ job, siteName, onRetry }: { job: JobStatus; sit
                     {failed ? "Check your WordPress site opens in a browser, then start a new move. If it keeps happening, Ask SOL to take a look." : "This is usually your WordPress host being slow or briefly offline. Tap Try again. If it keeps stopping, wait a few minutes first."}
                   </p>
                 </div>
-                <div className="plx-row">
+                <div className="plx-mvrow">
                   {paused ? <Button size="lg" onClick={onRetry} leftIcon={<RefreshCw size={18} />}>Try again</Button> : <ButtonLink size="lg" href="/dashboard/migrate/wordpress">Start a new move</ButtonLink>}
                   <ButtonLink variant="secondary" size="lg" href={solHref(`My WordPress move for ${siteName} ${failed ? "stopped" : "paused"}: ${job.errors[job.errors.length - 1] ?? "unknown problem"}. What should I do?`)}>Ask SOL for help</ButtonLink>
                 </div>
@@ -363,7 +363,7 @@ export function ReportScreen(props: {
 
       <div className="plx-mv__cols">
         <div className="plx-mv__col">
-          <div className="plx-stats">
+          <div className="plx-mvstats">
             <StatCard icon={<FileText size={20} />} value={n(sum.pages)} label={sum.pages === 1 ? "page moved" : "pages moved"} />
             <StatCard icon={<Newspaper size={20} />} value={n(sum.posts)} label={sum.posts === 1 ? "blog post" : "blog posts"} />
             <StatCard icon={<ImageIcon size={20} />} value={n(sum.pictures)} label="pictures and files" />
@@ -405,7 +405,7 @@ export function ReportScreen(props: {
               <SitePreview url={previewUrl} srcDoc={props.previewSrcDoc} shown={props.preview?.domain ?? `${props.subdomain}.${PAGES_DOMAIN}`} />
             ) : (
               <div className="plx-stack">
-                <div className="plx-addr">
+                <div className="plx-mvaddr">
                   <input aria-label="Preview address" value={props.subdomain} onChange={(e) => props.onSubdomain(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))} />
                   <span>.{PAGES_DOMAIN}</span>
                 </div>
@@ -445,7 +445,7 @@ export function GoLiveScreen({ host, onBack, templateId, forceDone, children }: 
           </Card>
           <Card tone="tint" padding="lg">
             <CardHeader title="Want us to help?" description="Ask SOL and it will walk you through it, or do the checking for you." />
-            <div className="plx-row">
+            <div className="plx-mvrow">
               <ButtonLink variant="secondary" leftIcon={<LifeBuoy size={18} />} href={solHref(`Help me put ${host} on my new Plexo site. Where do I make the change and what do I type?`)}>We'll help you</ButtonLink>
               <Button variant="ghost" onClick={onBack} leftIcon={<ArrowLeft size={16} />}>Back to my new site</Button>
             </div>
@@ -464,7 +464,7 @@ function DoneHero({ host, templateId }: { host: string; templateId: string }) {
           <span className="plx-done__mark"><CheckCircle2 size={38} aria-hidden /></span>
           <h1 className="plx-mv__title">Your site is on Plexo</h1>
           <p className="plx-mv__sub" style={{ margin: 0 }}>{host} now opens your Plexo site. Every page kept its address. It's safe to cancel your old WordPress hosting.</p>
-          <div className="plx-row" style={{ justifyContent: "center", marginTop: 8 }}>
+          <div className="plx-mvrow" style={{ justifyContent: "center", marginTop: 8 }}>
             <ButtonLink size="lg" href={`https://${host}`} target="_blank" rel="noreferrer" rightIcon={<ExternalLink size={18} />}>Visit my site</ButtonLink>
             <ButtonLink size="lg" variant="secondary" href={`/dashboard/sites/${templateId}`}>Go to my site</ButtonLink>
           </div>

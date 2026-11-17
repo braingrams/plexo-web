@@ -191,3 +191,23 @@ export async function paystackManageLink(secretKey: string, code: string): Promi
   const data = await paystackRequest<{ link: string }>(secretKey, "GET", `/subscription/${encodeURIComponent(code)}/manage/link`);
   return data.link;
 }
+
+export interface PaystackNewSubscription {
+  subscription_code: string;
+  email_token: string;
+  status: string;
+  next_payment_date?: string | null;
+}
+
+/**
+ * Starts a subscription on a plan for an existing customer, with the first charge on `startDate`
+ * (the customer's most recent card is used). Nothing is charged now.
+ */
+export async function createPaystackSubscription(params: { secretKey: string; customer: string; plan: string; startDate: string }): Promise<PaystackNewSubscription> {
+  return paystackRequest<PaystackNewSubscription>(params.secretKey, "POST", "/subscription", { customer: params.customer, plan: params.plan, start_date: params.startDate });
+}
+
+/** A customer's subscriptions on one plan (to find one we already made before retrying). */
+export async function listPaystackSubscriptionsFor(secretKey: string, params: { customer: string; plan: string }): Promise<PaystackSubscriptionSummary[]> {
+  return paystackRequest<PaystackSubscriptionSummary[]>(secretKey, "GET", `/subscription?perPage=20&customer=${encodeURIComponent(params.customer)}&plan=${encodeURIComponent(params.plan)}`);
+}

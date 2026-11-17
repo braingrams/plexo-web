@@ -18,8 +18,10 @@ import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
 import { trimOldToolWork } from "@/lib/ai/solHistoryTrim";
 import { solBuildProfilePrompt, type SolBuildProfile } from "@/lib/ai/solBuildContext";
-import { applyQualityGate, newGateState, pageLoaderFor, unfinishedNote } from "@/lib/ai/solQualityRun";
-import { QUALITY_BAR, SAVE_BRAND_GUIDE, briefFromConversation, discoveryPrompt } from "@/lib/ai/solDiscovery";
+import { GATE_TOOLS, applyQualityGate, leftoverMessage, newGateState, pageLoaderFor, touchedPageIds, unfinishedNote } from "@/lib/ai/solQualityRun";
+import { createFinalHold } from "@/lib/ai/solFinalHold";
+import { captureForReview, isLooksGood, newVisualState, noteTouchedPage, reviewDepsFor, visualReviewContent, visualReviewEnabled, type ReviewDeps } from "@/lib/ai/solVisualReview";
+import { BRAND_RULES_GUIDE, QUALITY_BAR, SAVE_BRAND_GUIDE, briefFromConversation, discoveryPrompt } from "@/lib/ai/solDiscovery";
 import { createAttachmentResolver, publishAttachedImage, PRIVATE_ATTACHMENT_PATH } from "@/lib/ai/solAttachments";
 
 /** A tool call SOL runs itself (see solToolSchema.ts) or a Plexo MCP tool. */
@@ -139,6 +141,10 @@ export interface AgentTurnDeps {
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
   /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
   onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
+  /** Calm progress lines made by the loop itself ("Checking the page…"), not real tool calls: shown, never saved. */
+  onStep?: (step: { id: string; name: string; phase: "start" | "done" }) => void;
+  /** Test seam for the screenshot review (defaults to the real screenshot service). */
+  visualReviewDeps?: ReviewDeps;
   /** `messageId` is the PENDING SolMessage row's own id — the client needs it (not just the
    * Anthropic tool_use id) to actually resume the turn (see the confirm/answer routes),
    * and sending it in this same callback/frame is what lets the client act on a pause the
@@ -197,6 +203,10 @@ export interface ResumeAgentTurnDeps {
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
   /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
   onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
+  /** Calm progress lines made by the loop itself ("Checking the page…"), not real tool calls: shown, never saved. */
+  onStep?: (step: { id: string; name: string; phase: "start" | "done" }) => void;
+  /** Test seam for the screenshot review (defaults to the real screenshot service). */
+  visualReviewDeps?: ReviewDeps;
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: (progress: TurnProgress) => Promise<boolean>;
@@ -386,7 +396,9 @@ If one request mixes things (a marketing site plus a members' area), say how you
 - **Publishing.** page_publish puts a page live; for a site's home page pass an address. Never ask for a page's name or address before building — name pages yourself (they can be renamed any time). When it's built and they want it live, ask with ask_user_question, offering two or three short addresses from the business's name (the interface lets them type their own or use a domain they own). Skip that when they already said where it should go. Other pages of a site go live at the same address — publish them too.
 - **Blogs** use blog_layout_describe and blog_layout_edit for their post and listing designs, and create_blog_post for posts (write real, useful posts for their audience).
 - **Selling one product from a page** (a course, ebook, download or product): call sell_product_on_page — never a hand-made payment link or a paste-your-own-link button. One call creates the product from name + price (pass deliveryUrl, the link buyers get after paying, if you know it), turns selling on with Plexo's own payments (no keys), switches the page's existing payment links (Flutterwave, Paystack, Selar…) to Plexo's checkout, or adds a buy card. If the owner hasn't said where buyers get the product after paying, ask once for that link — nothing else. Pass on any warnings in plain words; for a React app, make the edit it describes with the app tools, then publish the app.
-- Choose the brand to suit the business (site_create does it from the brief; on a single page use a setBrand command) rather than leaving the default.
+- Choose the brand to suit the business (site_create does it from the brief; on a single page use a setBrand command) rather than leaving the default, unless the site already has a brand (see "The owner's brand" below): then that brand is used, always.
+
+${BRAND_RULES_GUIDE}
 
 ${QUALITY_BAR}
 
@@ -450,6 +462,10 @@ interface LoopContext {
   onToolCallStart: (call: { id: string; name: string; args: any }) => void;
   /** While the model is still writing a tool call's input (see GenerateWithToolsParams). */
   onToolCallPreparing?: (progress: { id: string; name: string; characters: number }) => void;
+  /** Calm progress lines made by the loop itself ("Checking the page…"), not real tool calls: shown, never saved. */
+  onStep?: (step: { id: string; name: string; phase: "start" | "done" }) => void;
+  /** Test seam for the screenshot review (defaults to the real screenshot service). */
+  visualReviewDeps?: ReviewDeps;
   onToolCallAwaitingConfirmation: (call: { id: string; name: string; args: any; messageId: string }) => Promise<void>;
   onToolCallResult: (result: { id: string; name: string; status: "success" | "error" | "cancelled"; result?: any }) => void;
   budgetGuard: (progress: TurnProgress) => Promise<boolean>;
@@ -501,6 +517,27 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   // The quality gate: pages built or edited this turn are checked in code and SOL can't finish while a must-fix item is open.
   const gate = newGateState();
   const loadPage = pageLoaderFor(ctx.resolvedUser);
+  // The answer is held back (never streamed, never saved) while a page built this turn is still being judged.
+  let built = false;
+  const visual = newVisualState();
+  const visualOn = !ctx.boundAppId && visualReviewEnabled(ctx.provider, ctx.modelTier);
+  let stepCount = 0;
+  let openStep: string | null = null;
+  const finishStep = () => {
+    if (openStep) ctx.onStep?.({ id: openStep, name: "", phase: "done" });
+    openStep = null;
+  };
+  const startStep = (name: "sol_check_page" | "sol_polish_page" | "sol_review_look") => {
+    finishStep();
+    openStep = `sol-step-${++stepCount}`;
+    ctx.onStep?.({ id: openStep, name, phase: "start" });
+  };
+  /** Saves and streams the one final answer of the turn. `text` is streamed unless it already was. */
+  const finish = async (content: unknown, usage: TokenUsage, text: string, stream: boolean) => {
+    if (stream && text) ctx.onTextDelta(text);
+    await SolMessage.create({ id: randomUUID(), conversationId: ctx.conversationId, userId: ctx.resolvedUser.userId, role: "assistant", content: content as never, usage, confirmationState: "AUTO" }).go();
+    return { finalText: text, usage: totals };
+  };
 
   // Building an app takes many rounds (write → build → fix → screenshot); once a turn is
   // working on an app it gets the larger allowance. Every round is still balance-checked.
@@ -510,6 +547,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       throw new InsufficientCreditsError();
     }
 
+    const hold = createFinalHold(ctx.onTextDelta, () => built, () => startStep("sol_check_page"));
     const callStarted = Date.now();
     const result = await generateWithTools({
       model,
@@ -518,10 +556,14 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       conversationHistory: await resolveAttachments(trimOldToolWork(pairToolCalls(ctx.history))),
       tools,
       maxTokens: ctx.maxOutputTokens ?? MAX_TOKENS.agent_chat,
-      onTextDelta: ctx.onTextDelta,
-      onToolInputProgress: ctx.onToolCallPreparing,
+      onTextDelta: hold.onTextDelta,
+      onToolInputProgress: (progress) => {
+        hold.onToolStart(); // text before a tool call is narration, not the final answer
+        ctx.onToolCallPreparing?.(progress);
+      },
     });
     logModelCall(ctx.conversationId, iteration, Date.now() - callStarted, result);
+    finishStep();
 
     totals.inputTokens += result.usage.inputTokens;
     totals.outputTokens += result.usage.outputTokens;
@@ -531,6 +573,13 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
     if (toolUseBlocks.some((b) => b.name === "create_app" || String(b.name).startsWith("app_"))) iterationLimit = MAX_APP_TOOL_ITERATIONS;
     // Building a whole site (create it, then publish, fill in posts/products, polish pages) also takes more rounds than an edit.
     else if (toolUseBlocks.some((b) => SITE_BUILD_TOOLS.has(String(b.name)))) iterationLimit = Math.max(iterationLimit, MAX_SITE_TOOL_ITERATIONS);
+
+    const isFinalAnswer = result.stopReason !== "tool_use" || toolUseBlocks.length === 0;
+    if (!isFinalAnswer || result.stopReason === "max_tokens") hold.release();
+    if (!isFinalAnswer) {
+      visual.reviewing = false;
+      visual.candidate = undefined;
+    }
 
     // Cut off at the answer-length limit — typically while writing many files in one call. The
     // half-written tool call can't run; keep any finished text, tell SOL to work in smaller
@@ -554,29 +603,55 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       continue;
     }
 
-    if ((result.stopReason !== "tool_use" || toolUseBlocks.length === 0) && iteration < iterationLimit - 1) {
+    if (isFinalAnswer) {
+      const canLoop = iteration < iterationLimit - 1;
+      const said = (Array.isArray(result.content) ? result.content : []).filter((b) => b?.type === "text" && String(b.text ?? "").trim());
+
+      // The visual review round said "nothing to fix": the answer given before it is the one the owner gets.
+      if (visual.reviewing && visual.candidate && isLooksGood(extractText(result.content))) {
+        hold.discard();
+        const c = visual.candidate;
+        visual.reviewing = false;
+        return finish(c.content, result.usage, c.text, true);
+      }
+      visual.reviewing = false;
+
       // SOL is about to say it's done: not while the quality check still has must-fix items open (bounded by MAX_GATE_ROUNDS).
-      const unfinished = unfinishedNote(gate);
+      // What it wrote is dropped unseen: never streamed, never saved.
+      const unfinished = canLoop ? unfinishedNote(gate) : null;
       if (unfinished) {
         gate.rounds += 1;
-        const said = (Array.isArray(result.content) ? result.content : []).filter((b) => b?.type === "text" && String(b.text ?? "").trim());
-        ctx.history.push({ role: "assistant", content: said.length ? said : [{ type: "text", text: "(Checking my work.)" }] });
+        hold.discard();
+        startStep("sol_polish_page");
+        ctx.history.push({ role: "assistant", content: [{ type: "text", text: "(Checking my work.)" }] });
         ctx.history.push({ role: "user", content: [{ type: "text", text: unfinished }] });
         continue;
       }
-    }
 
-    if (result.stopReason !== "tool_use" || toolUseBlocks.length === 0) {
-      await SolMessage.create({
-        id: randomUUID(),
-        conversationId: ctx.conversationId,
-        userId: ctx.resolvedUser.userId,
-        role: "assistant",
-        content: result.content,
-        usage: result.usage,
-        confirmationState: "AUTO",
-      }).go();
-      return { finalText: extractText(result.content), usage: totals };
+      // The page passed: once per turn, look at it the way a visitor would (fails open).
+      if (canLoop && built && visualOn && !visual.done && visual.target && gate.open.size === 0) {
+        visual.done = true;
+        startStep("sol_review_look");
+        const shots = await captureForReview(visual.target, ctx.visualReviewDeps ?? reviewDepsFor(ctx.resolvedUser));
+        finishStep();
+        if (shots) {
+          visual.candidate = { text: hold.take(), content: Array.isArray(result.content) ? result.content : said };
+          visual.reviewing = true;
+          ctx.history.push({ role: "assistant", content: said.length ? said : [{ type: "text", text: "(Done.)" }] });
+          ctx.history.push({ role: "user", content: visualReviewContent(shots) });
+          continue;
+        }
+      }
+
+      // Rounds used up with something still open: say plainly what is left instead of a cheerful "done".
+      if (gate.open.size > 0) {
+        hold.discard();
+        const text = leftoverMessage(gate);
+        return finish([{ type: "text", text }], result.usage, text, true);
+      }
+
+      hold.release();
+      return finish(result.content, result.usage, extractText(result.content), false);
     }
 
     // Anthropic requires every tool_use block in an assistant message to be answered by a
@@ -639,6 +714,10 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       try {
         const rawResult = await runSolTool(block.name, block.input, ctx.resolvedUser, ctx.history, guard);
         const toolResult = await applyQualityGate(block.name, rawResult, intake?.brief, gate, loadPage);
+        if (GATE_TOOLS.has(block.name)) {
+          built = true;
+          noteTouchedPage(visual, touchedPageIds(rawResult));
+        }
         ctx.onToolCallResult({ id: block.id, name: block.name, status: "success", result: toolResult });
         resultBlocks.push(buildToolResultBlock(block.id, toolResult, false));
       } catch (err) {
@@ -740,6 +819,8 @@ export async function runAgentTurn(deps: AgentTurnDeps): Promise<RunAgentTurnRes
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,
     onToolCallPreparing: deps.onToolCallPreparing,
+    onStep: deps.onStep,
+    visualReviewDeps: deps.visualReviewDeps,
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,
@@ -871,6 +952,8 @@ export async function resumeAgentTurn(deps: ResumeAgentTurnDeps): Promise<RunAge
     onTextDelta: deps.onTextDelta,
     onToolCallStart: deps.onToolCallStart,
     onToolCallPreparing: deps.onToolCallPreparing,
+    onStep: deps.onStep,
+    visualReviewDeps: deps.visualReviewDeps,
     onToolCallAwaitingConfirmation: deps.onToolCallAwaitingConfirmation,
     onToolCallResult: deps.onToolCallResult,
     budgetGuard: deps.budgetGuard,

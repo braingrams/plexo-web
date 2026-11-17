@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Plus } from "lucide-react";
 import type { SiteSummary } from "@/lib/dashboardV3/sites";
 import type { SiteStats } from "@/lib/dashboardV3/homeData";
-import { Badge, ButtonLink, Card, CardHeader, EmptyState } from "../ui";
+import { dayLabels } from "@/lib/dashboardV3/visitsTrend";
+import { Badge, Card, CardHeader, EmptyState } from "../ui";
 import { timeAgo } from "./api";
 
 export function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
@@ -19,7 +19,7 @@ export function StatTile({ label, value, hint }: { label: string; value: string;
 
 export function StatGrid({ stats }: { stats: SiteStats["stats"] }) {
   return (
-    <div data-tour="home-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 14 }}>
+    <div data-tour="home-stats" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 200px), 1fr))", gap: 16 }}>
       {stats.map((s) => (
         <StatTile key={s.id} label={s.label} value={s.value} hint={s.hint} />
       ))}
@@ -53,16 +53,29 @@ export function ActivityCard({ stats, site }: { stats: SiteStats; site: SiteSumm
   );
 }
 
-export function CreateAnotherCard({ href }: { href: string }) {
+/** A calm seven-day bar chart of visits, with a friendly empty state when nobody has visited yet. */
+export function VisitsCard({ days, now }: { days: number[]; now?: number }) {
+  const total = days.reduce((a, b) => a + b, 0);
+  const max = Math.max(1, ...days);
+  const labels = dayLabels(now);
   return (
-    <Card tone="tint" style={{ display: "flex", flexDirection: "column", gap: 10 }} data-tour="home-create-another">
-      <span className="plx-h3">Have another idea?</span>
-      <span className="plx-body">Start a second website. Your first one keeps running as it is.</span>
-      <div>
-        <ButtonLink href={href} variant="secondary" leftIcon={<Plus size={18} aria-hidden />} rightIcon={<ArrowRight size={16} aria-hidden />}>
-          Create another website
-        </ButtonLink>
-      </div>
+    <Card padding="lg" data-tour="home-visits">
+      <CardHeader title="Visits this week" description={total ? `${total.toLocaleString("en")} visit${total === 1 ? "" : "s"} in the last 7 days` : undefined} />
+      {total ? (
+        <div className="plx-trend" role="img" aria-label={`Visits per day: ${days.map((n, i) => `${labels[i]} ${n}`).join(", ")}`}>
+          {days.map((n, i) => (
+            <div key={i} className="plx-trend__col">
+              <span className="plx-trend__n">{n}</span>
+              <span className="plx-trend__plot">
+                <span className="plx-trend__bar" style={{ height: `${Math.max(3, Math.round((n / max) * 100))}%` }} data-today={i === days.length - 1 ? "true" : undefined} />
+              </span>
+              <span className="plx-trend__day">{labels[i]}</span>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <EmptyState compact title="No visits yet" body="Share your link and the first visitors will show up here, day by day." />
+      )}
     </Card>
   );
 }

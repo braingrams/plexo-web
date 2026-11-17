@@ -98,7 +98,7 @@ export function PrivateDataPanel({ templateId, jobId, fixture }: { templateId: s
       </p>
 
       {!connector ? (
-        <div className="plx-row">
+        <div className="plx-mvrow">
           <Button leftIcon={<KeyRound size={18} />} loading={busy === "start"} loadingLabel="Preparing" onClick={() => void start()}>Connect with a code</Button>
         </div>
       ) : null}
@@ -250,7 +250,7 @@ export function DomainPanel({ templateId, jobId, fixture, onSafe }: { templateId
               <b>Tell Plexo your domain</b>
               <span>This tells us to answer when someone visits <b>{plan.domain}</b>.</span>
               {bothConnected ? (
-                <div className="plx-row">
+                <div className="plx-mvrow">
                   {view.connected.map((c) => <Badge key={c.domain} tone={c.ready ? "success" : "neutral"} dot>{c.domain}: {c.ready ? "ready" : "waiting for step 2"}</Badge>)}
                 </div>
               ) : <div><Button loading={busy === "connect"} loadingLabel="Connecting" onClick={() => void connect()}>Connect {plan.domain}</Button></div>}
@@ -268,7 +268,7 @@ export function DomainPanel({ templateId, jobId, fixture, onSafe }: { templateId
                     <Records records={plan.plexo} />
                     {!plan.plexo.some((r) => /certificate/i.test(r.why)) ? <p className="plx-small" style={{ margin: 0 }}>One more line appears here a few seconds after connecting. Refresh if it's missing.</p> : null}
                     {plan.keep.length > 0 ? (<><b>Leave these exactly as they are{plan.email ? ` (your ${plan.email.provider} email needs them)` : ""}</b><Records records={plan.keep} /></>) : null}
-                    <div className="plx-row">
+                    <div className="plx-mvrow">
                       <Button size="sm" variant="secondary" leftIcon={<Download size={16} />} onClick={downloadZone}>Download as a file</Button>
                       <Button size="sm" variant="secondary" leftIcon={<RefreshCw size={16} />} onClick={() => void load()}>Refresh</Button>
                     </div>

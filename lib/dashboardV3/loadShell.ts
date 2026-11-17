@@ -72,7 +72,11 @@ export async function loadV3ShellData(user: ShellUser, organizationId: string): 
   const currentSite = pickCurrentSite(sites, jar.get(CURRENT_SITE_COOKIE)?.value);
   const workspaces = await membershipsForUser(user.id)
     .then((ms) => ms.map((m) => ({ id: m.organizationId, name: m.organization.name, role: m.role as string })))
-    .catch(() => []);
+    .catch((err) => {
+      // The workspace switcher only shows with 2+ workspaces, so a failed lookup would hide it without a trace: say so in the log.
+      console.error("v3 shell: loading workspaces failed (the workspace switcher will be hidden)", err);
+      return [];
+    });
   return {
     workspaces,
     experience,

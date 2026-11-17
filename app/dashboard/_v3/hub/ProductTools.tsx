@@ -267,12 +267,12 @@ export function DiscountsPanel({ siteId, currency }: { siteId: string; currency:
           <div className="plx-pt__bar"><span className="plx-small">Codes people can use at checkout.</span><Button size="sm" leftIcon={<Plus size={16} aria-hidden />} onClick={open}>New code</Button></div>
           <ul className="plx-list">
             {list.map((d) => (
-              <li key={d.id} className="plx-row">
-                <span className="plx-row__main">
-                  <span className="plx-row__title plx-mono">{d.code}</span>
-                  <span className="plx-row__sub">{d.type === "PERCENT" ? `${d.value}% off` : `${formatMoney(d.value, currency)} off`} · used {d.usedCount}{d.usageLimit ? ` of ${d.usageLimit}` : ""} {d.expiresAt ? `· ends ${new Date(d.expiresAt).toLocaleDateString()}` : ""}</span>
+              <li key={d.id} className="plx-hrow">
+                <span className="plx-hrow__main">
+                  <span className="plx-hrow__title plx-mono">{d.code}</span>
+                  <span className="plx-hrow__sub">{d.type === "PERCENT" ? `${d.value}% off` : `${formatMoney(d.value, currency)} off`} · used {d.usedCount}{d.usageLimit ? ` of ${d.usageLimit}` : ""} {d.expiresAt ? `· ends ${new Date(d.expiresAt).toLocaleDateString()}` : ""}</span>
                 </span>
-                <span className="plx-row__end">
+                <span className="plx-hrow__end">
                   {d.active ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>}
                   <Button variant="secondary" size="sm" onClick={() => toggle(d)}>{d.active ? "Turn off" : "Turn on"}</Button>
                   <Button variant="ghost" size="sm" iconOnly aria-label={`Delete ${d.code}`} onClick={() => remove(d)}><Trash2 size={18} aria-hidden /></Button>
@@ -389,12 +389,12 @@ export function DeliveryPanel({ siteId, currency }: { siteId: string; currency: 
           <ul className="plx-list">
             {methods.map((m) => (
               <li key={m.id} style={{ display: "contents" }}>
-                <div className="plx-row">
-                  <button type="button" className="plx-row__main plx-linklike" onClick={() => edit(m)}>
-                    <span className="plx-row__title">{m.name}</span>
-                    <span className="plx-row__sub">{m.type === "PICKUP" ? "Pickup" : "Delivery"} · {m.feeMinor ? formatMoney(m.feeMinor, currency) : "Free"}{m.estimatedTimeLabel ? ` · ${m.estimatedTimeLabel}` : ""}</span>
+                <div className="plx-hrow">
+                  <button type="button" className="plx-hrow__main plx-linklike" onClick={() => edit(m)}>
+                    <span className="plx-hrow__title">{m.name}</span>
+                    <span className="plx-hrow__sub">{m.type === "PICKUP" ? "Pickup" : "Delivery"} · {m.feeMinor ? formatMoney(m.feeMinor, currency) : "Free"}{m.estimatedTimeLabel ? ` · ${m.estimatedTimeLabel}` : ""}</span>
                   </button>
-                  <span className="plx-row__end">{m.status === "ACTIVE" ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>}<Button variant="ghost" size="sm" iconOnly aria-label={`Delete ${m.name}`} onClick={() => remove(m)}><Trash2 size={18} aria-hidden /></Button></span>
+                  <span className="plx-hrow__end">{m.status === "ACTIVE" ? <Badge tone="success">On</Badge> : <Badge>Off</Badge>}<Button variant="ghost" size="sm" iconOnly aria-label={`Delete ${m.name}`} onClick={() => remove(m)}><Trash2 size={18} aria-hidden /></Button></span>
                 </div>
               </li>
             ))}

@@ -123,10 +123,10 @@ export function OrderMore<T extends OrderExtras & { id: string }>({ siteId, orde
           <p className="plx-h3" style={{ marginBottom: 8 }}>Downloads they bought</p>
           <ul className="plx-list" style={{ border: "1px solid var(--plx-border)", borderRadius: 14 }}>
             {downloads.map((d) => (
-              <li key={d.id} className="plx-row" style={{ minHeight: 56, padding: "10px 16px" }}>
-                <span className="plx-row__main">
-                  <span className="plx-row__title">{d.productName}</span>
-                  <span className="plx-row__sub">
+              <li key={d.id} className="plx-hrow" style={{ minHeight: 56, padding: "10px 16px" }}>
+                <span className="plx-hrow__main">
+                  <span className="plx-hrow__title">{d.productName}</span>
+                  <span className="plx-hrow__sub">
                     {d.deliveredAt ? `Sent ${new Date(d.deliveredAt).toLocaleDateString()}` : "Not sent yet"} · opened {d.downloadCount}
                     {d.maxDownloads ? ` of ${d.maxDownloads}` : ""} time{d.downloadCount === 1 ? "" : "s"}
                   </span>

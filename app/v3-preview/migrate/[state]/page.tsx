@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import { MigratePreview, MIGRATE_STATES } from "../MigratePreview";
+import { MigratePreview } from "../MigratePreview";
+import { MIGRATE_STATES } from "../states";
 
 /** DEV ONLY: one migration screen with fake data. */
 export default async function V3PreviewMigratePage({ params }: { params: Promise<{ state: string }> }) {

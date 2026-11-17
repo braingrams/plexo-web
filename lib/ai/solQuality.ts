@@ -19,7 +19,7 @@ export type GateReport = {
 export type GateInput = {
   /** The page's compiled document (draftHtml or compiledHtml). */
   html: string;
-  brief?: Pick<Brief, "name" | "colors" | "logo" | "fonts" | "cta" | "language" | "content">;
+  brief?: Pick<Brief, "name" | "colors" | "logo" | "fonts" | "cta" | "language" | "content" | "strataProject">;
   /** Paths that exist on the site ("/", "/about" ...). When given, internal links are checked against it. */
   knownRoutes?: string[];
   /** Layout fragments (header/footer) are checked less strictly. */
@@ -387,7 +387,9 @@ export function checkPage(input: GateInput): GateReport {
     const wanted = (brief.colors?.value ?? []).filter((c) => /^#[0-9a-f]{6}$/i.test(c));
     if (brief.colors?.status === "known" && wanted.length) {
       const miss = wanted.filter((c) => !cssText.includes(c.toLowerCase()));
-      if (!cssText.includes(wanted[0].toLowerCase())) add("brand-colour", "must", `The owner's main colour ${wanted[0]} isn't used anywhere on the page.`, `Apply it with setBrand (primaryColor ${wanted[0]}) so buttons and accents use it.`);
+      // A page of a site linked to a Strata brand may take its main colour from the brand's variables (the hosted sheet defines them).
+      const usesBrandVar = !!brief.strataProject && /var\(--(?:color-action-primary-bg|color-brand-primary(?:-\d+)?|plx-accent)\b/.test(cssText + " " + html.toLowerCase());
+      if (!cssText.includes(wanted[0].toLowerCase()) && !usesBrandVar) add("brand-colour", "must", `The owner's main colour ${wanted[0]} isn't used anywhere on the page.`, `Apply it with setBrand (primaryColor ${wanted[0]}) so buttons and accents use it.`);
       else if (miss.length) add("brand-colour-2", "should", `The owner's colour${miss.length > 1 ? "s" : ""} ${miss.join(", ")} isn't used.`, "Use it as the secondary colour or a background.");
     }
     const name = brief.name?.status === "known" ? brief.name.value : undefined;

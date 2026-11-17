@@ -3,6 +3,7 @@
 import { FileText } from "lucide-react";
 import { ASK_USER_QUESTION_TOOL_NAME, type ContentBlock, type SolMessage, type ToolUseBlock } from "../../sol/_components/types";
 import { Markdown } from "./Markdown";
+import { SolGlyph } from "./SolGlyph";
 import { MessageTools } from "./MessageTools";
 import { AnswerRecap, Step, StepList } from "./Steps";
 
@@ -10,15 +11,11 @@ const isText = (b: ContentBlock): b is { type: "text"; text: string } => (b as {
 const isTool = (b: ContentBlock): b is ToolUseBlock => (b as { type?: string }).type === "tool_use";
 const isMedia = (b: ContentBlock): b is { type: "image" | "document"; source?: { url?: string }; url?: string; filename?: string; description?: string } => ["image", "document"].includes((b as { type?: string }).type ?? "");
 
-/** SOL's mark: a small sun (sol = sun), a ring around a bright centre. Deliberately not a sparkle. */
+/** SOL's mark: the sun glyph in a lime square. */
 function SolMark({ size }: { size?: number }) {
-  const s = size ?? 18;
   return (
     <span className="sol3-mark" aria-hidden>
-      <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
-        <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2.4" />
-        <circle cx="12" cy="12" r="3.6" fill="currentColor" />
-      </svg>
+      <SolGlyph size={size ?? 18} />
     </span>
   );
 }

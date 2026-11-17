@@ -5,7 +5,7 @@
 import type { Experience } from "./nav";
 import type { SiteKindLabel } from "./sites";
 
-export type HubTabId = "app" | "pages" | "products" | "orders" | "blog" | "course" | "brand" | "address" | "visits" | "settings";
+export type HubTabId = "app" | "pages" | "products" | "orders" | "blog" | "course" | "brand" | "address" | "visits" | "settings" | "advanced";
 
 export type HubFeatures = {
   store: boolean;
@@ -34,6 +34,7 @@ const TAB_LABELS: Record<HubTabId, string> = {
   address: "Web address",
   visits: "Visits",
   settings: "Settings",
+  advanced: "Advanced",
 };
 
 export const HUB_TAB_IDS = Object.keys(TAB_LABELS) as HubTabId[];
@@ -42,13 +43,14 @@ export function parseHubTab(value: unknown): HubTabId | null {
   return typeof value === "string" && (HUB_TAB_IDS as string[]).includes(value) ? (value as HubTabId) : null;
 }
 
-/** Tabs only for what the site uses; beginners see Visits on Home instead, pros see everything. */
+/** Tabs only for what the site uses; beginners see Visits on Home instead, pros see everything (plus Advanced). */
 export function hubTabs(features: HubFeatures, experience: Experience = "beginner"): HubTab[] {
   if (features.deployed) {
     // Only what works for hosted code: its own App tab, a web address, visits for pros, and settings.
     const own: HubTabId[] = ["app", "address"];
     if (experience !== "beginner") own.push("visits");
     own.push("settings");
+    if (experience === "pro") own.push("advanced");
     return own.map((id) => ({ id, label: TAB_LABELS[id], tour: `hub-tab-${id}` }));
   }
   const ids: HubTabId[] = ["pages"];
@@ -58,6 +60,8 @@ export function hubTabs(features: HubFeatures, experience: Experience = "beginne
   ids.push("brand", "address");
   if (experience !== "beginner") ids.push("visits");
   ids.push("settings");
+  // Everything a pro used to find on the old per-site page, right here (lib/dashboardV3/hubAdvanced.ts).
+  if (experience === "pro") ids.push("advanced");
   return ids.map((id) => ({ id, label: TAB_LABELS[id], tour: `hub-tab-${id}` }));
 }
 

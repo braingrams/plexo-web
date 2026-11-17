@@ -332,12 +332,12 @@ export function PlanSection(props: PlanSectionProps) {
           ) : (
             <ul className="plx-list" style={{ paddingBottom: 8 }}>
               {activity.slice(0, 5).map((a) => (
-                <li key={a.id} className="plx-row" style={{ minHeight: 60, padding: "12px 28px" }}>
-                  <div className="plx-row__main">
-                    <span className="plx-row__title">{a.description || ACTIVITY_LABELS[a.type] || "Credits"}</span>
-                    <span className="plx-row__sub">{when(a.createdAt)}</span>
+                <li key={a.id} className="plx-sprow" style={{ minHeight: 60, padding: "12px 28px" }}>
+                  <div className="plx-sprow__main">
+                    <span className="plx-sprow__title">{a.description || ACTIVITY_LABELS[a.type] || "Credits"}</span>
+                    <span className="plx-sprow__sub">{when(a.createdAt)}</span>
                   </div>
-                  <span className="plx-row__price" style={{ color: a.amount >= 0 ? "var(--plx-deep)" : undefined }}>{a.amount >= 0 ? "+" : ""}{a.amount.toLocaleString("en-US")}</span>
+                  <span className="plx-sprow__price" style={{ color: a.amount >= 0 ? "var(--plx-deep)" : undefined }}>{a.amount >= 0 ? "+" : ""}{a.amount.toLocaleString("en-US")}</span>
                 </li>
               ))}
             </ul>

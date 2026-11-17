@@ -69,3 +69,24 @@ export async function applySiteLook(input: { organizationId: string; userId: str
   }
   return out;
 }
+
+/**
+ * Puts one logo into the site's shared header (the only place a V2 site keeps its logo), live at once, like the header's other
+ * brand changes. Used when the linked Strata brand's logo changes. `placed` is false for sites with no V2 header (classic,
+ * uploaded and app sites): their logo is still read from the brand wherever it is used.
+ */
+export async function applySiteLogo(input: { organizationId: string; siteId: string; logoUrl: string }): Promise<{ placed: boolean }> {
+  const rootId = await findRootTemplateId(input.siteId, null);
+  const { data: layout } = await SiteLayout.get({ templateId: rootId }).go();
+  const id = layout?.headerTemplateId;
+  if (!id) return { placed: false };
+  const { data: frag } = await Template.get({ id }).go();
+  if (!frag || frag.organizationId !== input.organizationId || formatLabel(frag) !== "v2") return { placed: false };
+  const design = await currentDesign(frag);
+  const section = describeDesign(design.pages, design.designSystem as never).pages[0]?.sections.find((s: { kind?: string }) => s.kind === "header");
+  if (!section) return { placed: false };
+  const res = await saveEdit(frag, [{ op: "updateSection", sectionId: (section as { id: string }).id, content: { logo: input.logoUrl } }], { live: true });
+  if (!res.saved) return { placed: false };
+  await onTemplateSaved(id);
+  return { placed: true };
+}

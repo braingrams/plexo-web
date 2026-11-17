@@ -68,4 +68,28 @@ What it checks (must = blocks "done", should = costs score):
 
 Enforced in code: running the gate, attaching the verdict to the tool result, refusing to finish with open must-fix items (bounded). By instruction only: the creative bar (distinctive layouts per industry, typography, whitespace, social-proof structure, restrained motion, following a rich brief's structure exactly), the plain-words summary and 2-3 next improvements, and not mentioning scores to the owner.
 
-Known gaps: the form success state can't be seen in compiled markup, so it isn't checked. The kit's own default muted text colour (`--color-text-muted`, #A8A29E) is 2.5:1 on white, so kit pages that use it fail the contrast check until SOL darkens that text or the SDK's default is fixed (a follow-up for the SDK). The visual review (desktop and phone screenshots described back to the model) is not built: the existing screenshot service (`lib/projects/screenshot.ts`, `lambda/browser`) needs a public address, and a draft page has none, so it only works after publishing. Follow-up: a `page_screenshot` tool for published pages, called once after publish and shown to the model for self-critique.
+Known gaps: the form success state can't be seen in compiled markup, so it isn't checked. The kit's own default muted text colour (`--color-text-muted`, #A8A29E) is 2.5:1 on white, so kit pages that use it fail the contrast check until SOL darkens that text or the SDK's default is fixed (a follow-up for the SDK). The visual review is built (below), but nothing in it has run against a live model or the real browser Lambda.
+
+## No premature "done" (held final answer)
+
+`lib/ai/solFinalHold.ts` (pure) + the loop in `lib/ai/solAgent.ts`. Once a build or edit tool (`GATE_TOOLS`: site_create, page_create_from_template, page_edit, create_site_from_template) has run in a turn, every model round's text is buffered server-side instead of streamed. At the end of the round:
+
+- the round called a tool: the buffered text was narration and goes out unchanged (it is released the moment the tool call starts being written, so progress text stays live);
+- it is a final answer and the gate still has must-fix items open (and rounds remain): the text is thrown away. It is never streamed and never saved, and the history the model sees gets a neutral "(Checking my work.)" in its place, then the fix round runs;
+- the gate passed: the text is released unchanged (or held one more step for the visual review, below) and saved once;
+- rounds exhausted with something still open: the model's cheerful draft is dropped and `leftoverMessage` (solQualityRun.ts) is streamed and saved instead, naming what is left in plain words.
+
+Turns where no build or edit ran stream exactly as before (no delay). Persistence only happens in one place (`finish` in continueLoop), so the saved conversation contains only the released final text. No client "retract" event is needed because superseded text never leaves the server.
+
+So the UI never looks frozen while text is held, the loop emits calm progress lines through `onStep` (rendered by the chat handler as ordinary steps, not recorded as tool calls): "Checking the page", "Polishing a few details", "Looking it over on desktop and phone" (new look: `friendlyStep` in `app/dashboard/_v3/sol/logic.ts`; classic: `LOOP_STEPS` in `ToolCallCard.tsx`).
+
+## Visual review (screenshots of the page SOL built, drafts included)
+
+1. `lib/draftPreviewToken.ts`: HMAC-SHA256 over site id, page, screenshot flag and expiry (5 minutes), constant-time compare. The key is derived from `AUTH_SECRET` (already loaded from SSM on the web and SOL functions) with its own purpose label, so no new secret.
+2. `GET /api/v1/templates/[id]/draft-preview` accepts `?sig=&exp=` (plus `page=` and `shot=1`). A valid token opens that one page's draft HTML with no sign-in, served in the same sandbox, `no-store`, and without the preview bar when `shot=1`. A bad, expired or other-page token is a plain 403 page; without a token the old sign-in and workspace rules apply unchanged.
+3. `lib/projects/draftScreenshot.ts` `screenshotDraftPage({ templateId, pageId?, device, userId })` mints the URL (address from `PLEXO_SELF_URL` or `NEXT_PUBLIC_APP_URL`, must be https) and calls the existing `screenshotPage` for desktop (1440x900: top of the page and a full-page capture) and phone (390x844, new `phone` entry in `VIEWPORTS`).
+4. `lib/ai/solVisualReview.ts` and the loop: after the gate has passed, once per turn, only for the first page touched, only when the model takes images (`modelSupportsImages`, `lib/ai/modelRegistry.ts`) and `SOL_VISUAL_REVIEW` is not `off`. The model's answer so far is kept aside, the screenshots go to it as image content with the critique instruction, with a 45 s hard timeout. Reply `LOOKS_GOOD` (never shown): the held answer is released. Otherwise it may fix with one more `page_edit`; the gate runs again after that fix and the final answer after it is the one shown. Any error, timeout, or unknown page just skips the step. At most one review round.
+
+Needs: no CDK change (SolChatFn already has the screenshot function, `NEXT_PUBLIC_APP_URL` and the SSM secrets). The browser Lambda (`lambda/browser`) must be redeployed once so it knows the `phone` viewport (until then the phone capture errors and the review is skipped). `SOL_VISUAL_REVIEW=off` is the kill switch.
+
+Not verified without live services: the Lambda actually reaching the public draft URL (CDN or origin-verification rules for `/api/v1/templates/*/draft-preview?sig=`), how well a real model critiques the images and whether it obeys `LOOKS_GOOD`, image size limits for very long full-page captures, and real latency. Everything else is covered by tests with fixtures (`tests/solFinalAnswerHold.test.ts`, `tests/solVisualReview.test.ts`, `tests/draftPreviewToken.test.ts`). A `page_screenshot` tool was not added.

@@ -85,7 +85,7 @@ export function AppGitHub({ siteId, git, onChanged, onBuildStarted }: { siteId: 
         <div className="plx-form">
           <div className="plx-inlinemsg"><GitBranch size={18} aria-hidden style={{ flex: "none", marginTop: 2 }} /><span>Connected to <b>{linked.repo}</b> on <b>{linked.branch}</b>. {linked.publishOnPush ? "Every change there goes online on its own." : "Every change there is built, and you put it online."}</span></div>
           {linked.status === "ERROR" && linked.statusMessage ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{linked.statusMessage}</div> : null}
-          <div className="plx-actionrow" style={{ borderTop: 0, paddingTop: 0, marginTop: 0 }}>
+          <div className="plx-hactionrow" style={{ borderTop: 0, paddingTop: 0, marginTop: 0 }}>
             <ButtonLink href={`https://github.com/${linked.repo}`} target="_blank" rel="noreferrer" variant="secondary">Open code on GitHub</ButtonLink>
             <Button variant="ghost" loading={busy} onClick={disconnect}>Disconnect</Button>
           </div>

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { slugify } from "@/lib/slugUtils";
 import { contentSnippet } from "@/lib/customContent/embed";
 import { CONTENT_PRESETS, type ContentPresetId } from "@/lib/customContent/presets-meta";
-import { PageContainer } from "../../../_components/PageContainer";
+import { PageContainer, useEmbeddedScreen } from "../../../_components/PageContainer";
 import { SiteBackLink } from "../../../_components/EditorTheme";
 import { Card } from "../../../_components/Card";
 
@@ -92,6 +92,7 @@ export function ContentTypesClient({
   templateName: string;
   initialContentTypes: ContentTypeSummary[];
 }) {
+  const embedded = useEmbeddedScreen();
   const [contentTypes, setContentTypes] = useState(initialContentTypes);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -245,17 +246,19 @@ export function ContentTypesClient({
 
   return (
     <PageContainer>
+      {!embedded && (
       <SiteBackLink
-        siteId={templateId}
-        style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "var(--ed-t-500)", textDecoration: "none", marginBottom: "1.5rem" }}
-      >
-        <IconArrowLeft /> {templateName}
-      </SiteBackLink>
+          siteId={templateId}
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "var(--ed-t-500)", textDecoration: "none", marginBottom: "1.5rem" }}
+        >
+          <IconArrowLeft /> {templateName}
+        </SiteBackLink>
+      )}
 
       <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ed-accent-text)", marginBottom: "0.35rem" }}>
+        {!embedded && <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ed-accent-text)", marginBottom: "0.35rem" }}>
           {templateName}
-        </p>
+        </p>}
         <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.8rem", fontWeight: 800, color: "var(--ed-text)", letterSpacing: "-0.02em" }}>
           Content Types
         </h1>

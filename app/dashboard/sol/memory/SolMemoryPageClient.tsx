@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { Brain, Plus, Trash2 } from "lucide-react";
 
+import { SolMemoryV3 } from "../../_v3/sol/SolMemoryV3";
+import { useSolV3 } from "../../_v3/sol/SolV3Context";
 import { SolSubpageHeader } from "../_components/SolSubpageHeader";
 import type { SolMemoryItem, SolMemoryCategory, SolMemorySource } from "./page";
 
@@ -42,7 +44,7 @@ function StatChip({ label, value }: { label: string; value: number }) {
   );
 }
 
-export function SolMemoryPageClient({ initialMemories }: { initialMemories: SolMemoryItem[] }) {
+export function ClassicSolMemory({ initialMemories }: { initialMemories: SolMemoryItem[] }) {
   const [memories, setMemories] = useState<SolMemoryItem[]>(initialMemories);
   const [error, setError] = useState<string | null>(null);
   const [newText, setNewText] = useState("");
@@ -285,4 +287,10 @@ export function SolMemoryPageClient({ initialMemories }: { initialMemories: SolM
       </div>
     </div>
   );
+}
+
+/** New dashboard: the new look (inside SolV3Shell). Old dashboard: the page above, untouched. */
+export function SolMemoryPageClient({ initialMemories }: { initialMemories: SolMemoryItem[] }) {
+  const v3 = useSolV3();
+  return v3 ? <SolMemoryV3 initialMemories={initialMemories} /> : <ClassicSolMemory initialMemories={initialMemories} />;
 }

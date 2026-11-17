@@ -195,6 +195,9 @@ function buildCallbacks(emit: (frame: StreamFrame) => void) {
       lastPreparingAt.set(progress.id, now);
       emit({ type: "tool_call_preparing", id: progress.id, name: progress.name, label: humanizeToolName(progress.name), characters: progress.characters });
     },
+    // The loop's own calm progress lines ("Checking the page…"): shown as steps, never recorded as tool calls.
+    onStep: (step: { id: string; name: string; phase: "start" | "done" }) =>
+      emit(step.phase === "start" ? { type: "tool_call_start", id: step.id, name: step.name, label: humanizeToolName(step.name), args: {} } : { type: "tool_call_result", id: step.id, name: "", status: "success" }),
     onToolCallStart: (call: { id: string; name: string; args: unknown }) =>
       emit({ type: "tool_call_start", id: call.id, name: call.name, label: humanizeToolName(call.name), args: call.args }),
     onToolCallAwaitingConfirmation: async (call: { id: string; name: string; args: unknown; messageId: string }) => {

@@ -3,6 +3,9 @@ import { SITE_PAGE_TYPES } from "@charisol/plexo-sdk/v2/compile";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { saveSiteLook } from "@/lib/sites/saveLook";
 import { createSite, SiteBuildError } from "@/lib/sites/siteBuilder";
+import { applyBriefDefaults, mergeBrand } from "@/lib/brand/brandModel";
+import { loadProfileBrand } from "@/lib/brand/resolveSiteBrand";
+import { applyNewSiteBrandChoice } from "@/lib/brand/siteBrand";
 import { findPageCandidates, howToChange, pickPage, rankPages } from "@/lib/sites/findPage";
 import { listSiteTemplates } from "@/lib/sites/siteTemplates";
 import { MarketplaceUseError, useMarketplaceTemplate } from "@/lib/marketplaceUse";
@@ -31,10 +34,12 @@ export const SITE_MCP_TOOLS = [
       "A store page turns selling on with Plexo's own payments (no keys needed) and sets up the shop, checkout, order confirmation, order tracking and product pages, and adds the products you pass. A blog page turns the blog on at /blog with listing and article pages in the site's design, and publishes the posts you pass. Everything is built in the visual editor (editable afterwards with page_describe / page_edit) and nothing is published: call page_publish on the home page (siteId) with a domain when the owner is ready. " +
       "Write real copy for every page in pages[].content (keyed by section kind, e.g. {hero:{headline,text,cta}, features:{items:[...]}}, or \"hero#2\" for a page's second hero) — anything you leave out keeps sample wording. " +
       sectionContentHelp +
-      " Unknown fields are skipped and reported in warnings — pass them on to the owner only if they matter.",
+      " Unknown fields are skipped and reported in warnings — pass them on to the owner only if they matter. " +
+      "BRAND: a brief with no colours, fonts or logo gets the owner's saved brand (their account's), so don't ask them for these. For a new site the owner can instead use one of their Strata projects: pass strataProjectId (from list_strata_projects) and the new site is linked to it right after it is built, so it uses that brand and follows it from the start.",
     inputSchema: {
       type: "object",
       properties: {
+        strataProjectId: { type: "string", description: "Optional. One of the owner's Strata projects (list_strata_projects). The new site is linked to it, using its colours, fonts and logo, and stays in sync." },
         brief: {
           type: "object",
           description: "Who the site is for. name is required; the more you fill in, the more tailored the result.",
@@ -197,14 +202,26 @@ export async function handleSiteTool(toolName: string, args: any, resolved: Reso
   try {
     switch (toolName) {
       case "site_create": {
-        const result = await createSite(resolved, args ?? {}, {
+        // Missing colours, fonts and logo come from the owner's saved brand (the lowest rung of the precedence rule); a caller's own values always win.
+        const input: Record<string, any> = { ...(args ?? {}) };
+        let defaulted: string[] = [];
+        if (input.brief && typeof input.brief === "object" && !Array.isArray(input.brief)) {
+          const applied = applyBriefDefaults(input.brief, mergeBrand({ profile: await loadProfileBrand(resolved.userId) }));
+          input.brief = applied.brief;
+          defaulted = applied.filled;
+        }
+        const result = await createSite(resolved, input, {
           createPage: (pageArgs, opts) => createV2Page(resolved, pageArgs, opts),
           commerceTool: (name, toolArgs) => handleCommerceTool(name, toolArgs, resolved),
           blogTool: (name, toolArgs) => handleBlogTool(name, toolArgs, resolved),
         });
+        const strataProjectId = typeof args?.strataProjectId === "string" ? args.strataProjectId.trim() : "";
+        const brand = strataProjectId ? await applyNewSiteBrandChoice({ siteId: result.siteId, userId: resolved.userId, organizationId: resolved.organizationId, choice: { projectId: strataProjectId } }) : undefined;
         return {
           success: true,
           ...result,
+          ...(brand ? { strataBrand: brand.ok ? { linked: true, project: brand.project } : { linked: false, note: brand.message } } : {}),
+          ...(defaulted.length ? { brandDefaults: `Filled from the owner's saved brand: ${defaulted.join(", ")}.` } : {}),
           pages: result.pages.map((p) => ({ ...p, editableUrl: editableUrlFor(p.templateId) })),
           editableUrl: editableUrlFor(result.siteId),
           publishedUrl: null,

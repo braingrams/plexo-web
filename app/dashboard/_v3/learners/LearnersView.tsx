@@ -45,7 +45,7 @@ function RowMenu({ row, total, onOpen, onResend, onApprove, onRemove, onRestore 
     <div className="plx-tbl__act" ref={ref} onClick={(e) => e.stopPropagation()}>
       <Button variant="ghost" iconOnly aria-label={`Actions for ${displayName(row)}`} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((o) => !o)}><MoreHorizontal size={20} aria-hidden /></Button>
       {open ? (
-        <div className="plx-menu" role="menu">
+        <div className="plx-menu plx-lmenu" role="menu">
           <button type="button" role="menuitem" onClick={act(onOpen)}><Users size={18} aria-hidden /> See their progress</button>
           {state === "waiting" ? <button type="button" role="menuitem" onClick={act(onApprove)}><UserCheck size={18} aria-hidden /> Let them in</button> : null}
           {state !== "removed" ? <button type="button" role="menuitem" onClick={act(onResend)}><Mail size={18} aria-hidden /> Send access link again</button> : null}
@@ -173,14 +173,14 @@ export function LearnersView({ courses, current, lessons, learners: initial, exp
             ))}
           </div>
 
-          <div className="plx-tools">
-            <div className="plx-search">
+          <div className="plx-ltools">
+            <div className="plx-lsearch">
               <Search size={18} aria-hidden />
               <Input hideLabel label="Search learners" placeholder="Search by name or email" value={query} onChange={(e) => setQuery(e.target.value)} />
             </div>
             <div className="plx-filters" role="radiogroup" aria-label="Show">
               {filters.map((f) => (
-                <button key={f.id} type="button" className="plx-chip" role="radio" aria-checked={filter === f.id} onClick={() => setFilter(f.id)}>{f.label}</button>
+                <button key={f.id} type="button" className="plx-lchip" role="radio" aria-checked={filter === f.id} onClick={() => setFilter(f.id)}>{f.label}</button>
               ))}
             </div>
             <Button variant="secondary" leftIcon={<Download size={18} aria-hidden />} onClick={() => download(`${current.name.replace(/[^\w]+/g, "-").toLowerCase()}-learners.csv`, learnersCsv(filterLearners(rows, { query, filter, total }), total))}>Download list</Button>

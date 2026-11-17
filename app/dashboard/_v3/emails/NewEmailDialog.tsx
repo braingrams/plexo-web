@@ -165,7 +165,7 @@ export function NewEmailDialog({ open, onClose, usage, designs, preview, start =
           ) : null}
           {mode === "design" ? (
             <>
-              <div className="plx-search" style={{ maxWidth: "none" }}>
+              <div className="plx-emsearch" style={{ maxWidth: "none" }}>
                 <Search size={18} aria-hidden />
                 <Input hideLabel label="Search designs" placeholder="Search email designs" value={q} onChange={(e) => setQ(e.target.value)} />
               </div>

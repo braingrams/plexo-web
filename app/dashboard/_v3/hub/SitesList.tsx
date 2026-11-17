@@ -4,7 +4,8 @@ import "./hub.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { NEW_SITE_PATH } from "@/lib/dashboardV3/newSite";
-import { ExternalLink, Plus, Eye } from "lucide-react";
+import { Plus, Eye } from "lucide-react";
+import { OpenSiteButton, PreviewButton } from "../home/SiteButtons";
 import { useState } from "react";
 import { Badge, Button, Card, EmptyState, SegmentedControl, StatusPill } from "../ui";
 import { SITE_FILTERS, filterSites, sitesListHref, type SiteFilter } from "@/lib/dashboardV3/siteFilter";
@@ -59,11 +60,10 @@ export function SitesList({ sites, experience, onCreate, initialFilter = "all" }
               <span className="plx-small" style={{ overflowWrap: "anywhere" }}>{s.address ?? "Not online yet"}</span>
               <div className="plx-sitecard__foot">
                 <span className="plx-small" style={{ display: "inline-flex", gap: 6, alignItems: "center" }}><Eye size={16} aria-hidden /> {s.visits7d} visit{s.visits7d === 1 ? "" : "s"} this week</span>
-                {s.address ? (
-                  <a href={`https://${s.address}`} target="_blank" rel="noreferrer" className="plx-btn plx-btn--ghost plx-btn--sm" style={{ position: "relative", zIndex: 1 }} aria-label={`Visit ${s.name}`}>
-                    Visit <ExternalLink size={14} aria-hidden />
-                  </a>
-                ) : null}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", position: "relative", zIndex: 1 }}>
+                <PreviewButton site={s} />
+                <OpenSiteButton site={s} />
               </div>
             </Card>
           ))}

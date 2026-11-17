@@ -23,6 +23,7 @@ const STORE_STATS: SiteStats = {
   ],
   activityTitle: "Latest orders",
   activityEmpty: "No orders yet.",
+  visitsByDay: [120, 164, 98, 210, 245, 188, 259],
   activity: [
     { id: "1", who: "Kemi Adeyemi", amount: "₦17,000", when: new Date(Date.now() - 12 * 60000).toISOString(), paid: true },
     { id: "2", who: "Tunde Bakare", amount: "₦8,500", when: new Date(Date.now() - 3 * 3600000).toISOString(), paid: false },

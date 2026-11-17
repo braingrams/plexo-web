@@ -79,15 +79,15 @@ export function AppVariables({ siteId, onRebuild }: { siteId: string; onRebuild:
       {vars.length + secrets.length === 0 && !add ? <p className="plx-body">Nothing added yet. Most apps don&apos;t need anything here.</p> : null}
       <ul className="plx-list">
         {vars.map((v) => (
-          <li key={`v:${v.scope}:${v.name}`} className="plx-row plx-envrow">
-            <span className="plx-row__main"><span className="plx-row__title plx-mono">{v.name}</span><span className="plx-row__sub">{v.value} · {scopeLabel(v.scope)}</span></span>
-            <span className="plx-row__end">{v.buildTime || isPublicName(v.name) ? <Badge tone="info">Visitors can read it</Badge> : null}<Button variant="ghost" size="sm" iconOnly aria-label={`Remove ${v.name}`} onClick={() => remove("variable", v.name, v.scope)}><Trash2 size={18} aria-hidden /></Button></span>
+          <li key={`v:${v.scope}:${v.name}`} className="plx-hrow plx-envrow">
+            <span className="plx-hrow__main"><span className="plx-hrow__title plx-mono">{v.name}</span><span className="plx-hrow__sub">{v.value} · {scopeLabel(v.scope)}</span></span>
+            <span className="plx-hrow__end">{v.buildTime || isPublicName(v.name) ? <Badge tone="info">Visitors can read it</Badge> : null}<Button variant="ghost" size="sm" iconOnly aria-label={`Remove ${v.name}`} onClick={() => remove("variable", v.name, v.scope)}><Trash2 size={18} aria-hidden /></Button></span>
           </li>
         ))}
         {secrets.map((s) => (
-          <li key={`s:${s.scope}:${s.name}`} className="plx-row plx-envrow">
-            <span className="plx-row__main"><span className="plx-row__title plx-mono">{s.name}</span><span className="plx-row__sub">Password{s.hint ? ` ending ${s.hint}` : ""} · {scopeLabel(s.scope)}</span></span>
-            <span className="plx-row__end"><Button variant="ghost" size="sm" iconOnly aria-label={`Remove ${s.name}`} onClick={() => remove("secret", s.name, s.scope)}><Trash2 size={18} aria-hidden /></Button></span>
+          <li key={`s:${s.scope}:${s.name}`} className="plx-hrow plx-envrow">
+            <span className="plx-hrow__main"><span className="plx-hrow__title plx-mono">{s.name}</span><span className="plx-hrow__sub">Password{s.hint ? ` ending ${s.hint}` : ""} · {scopeLabel(s.scope)}</span></span>
+            <span className="plx-hrow__end"><Button variant="ghost" size="sm" iconOnly aria-label={`Remove ${s.name}`} onClick={() => remove("secret", s.name, s.scope)}><Trash2 size={18} aria-hidden /></Button></span>
           </li>
         ))}
       </ul>

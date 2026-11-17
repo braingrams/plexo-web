@@ -4,9 +4,11 @@ import "./onboarding.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check, ImagePlus, Palette } from "lucide-react";
-import { Button, Input, Stepper, useToast } from "@/app/dashboard/_v3/ui";
+import { Button, Input, Stepper } from "@/app/dashboard/_v3/ui";
 import { PlexoLogo } from "@/app/dashboard/_v3/brand/PlexoLogo";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
+import { StrataBrandPicker } from "@/app/dashboard/_v3/brand/StrataBrandPicker";
+import { NO_SELECTION, selectionToChoice, type PickerSelection } from "@/lib/dashboardV3/strataPicker";
 import { dominantColors } from "@/lib/onboarding/logoColors";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
 import {
@@ -62,7 +64,6 @@ function Choice({ title, text, selected, onSelect }: { title: string; text: stri
 
 export function Wizard({ userId, initialProfile, hasSites, mock = false }: { userId: string; initialProfile?: SolBuildProfile; hasSites: boolean; mock?: boolean }) {
   const router = useRouter();
-  const toast = useToast();
   const storeKey = `plexo-onboarding-v3:${userId}`;
   const [draft, setDraft] = useState<OnboardingDraft>(() => draftFromBuildProfile(initialProfile));
   const [step, setStep] = useState<number>(() => resumeStep(draftFromBuildProfile(initialProfile)));
@@ -72,7 +73,14 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
   const [done, setDone] = useState<Done | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [paying, setPaying] = useState(false);
-  const [strata, setStrata] = useState<"idle" | "connecting" | "connected">("idle");
+  // The look step's optional "use my Strata brand": sent with the site request, which links it once the site exists.
+  const [brandPick, setBrandPick] = useState<PickerSelection>(NO_SELECTION);
+  const [strataOpen, setStrataOpen] = useState(false);
+  const [strataOn, setStrataOn] = useState(true);
+  useEffect(() => {
+    if (mock) return;
+    createStrataAdapter().available().then(setStrataOn, () => setStrataOn(false));
+  }, [mock]);
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoPreview, setLogoPreview] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
@@ -139,22 +147,11 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
     }
   };
 
-  const connectStrata = async () => {
-    setStrata("connecting");
-    try {
-      await createStrataAdapter().connect();
-      setStrata("connected");
-    } catch (e) {
-      setStrata("idle");
-      toast.show({ tone: "danger", title: "Strata wasn't connected", description: e instanceof Error ? e.message : "Please try again in a moment." });
-    }
-  };
-
   /** Makes the site from a real marketplace design. A just-paid design can take a moment to be recorded, so we ask again briefly. */
   const startFromMarketDesign = useCallback(async (d: PickerDesign, tries = 1): Promise<void> => {
     if (mock) { setDone({ siteName: draft.name, kind: "site" }); return; }
     for (let i = 0; i < tries; i++) {
-      const r = await fetch("/api/onboarding/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile, marketDesignId: d.id }) });
+      const r = await fetch("/api/onboarding/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile, marketDesignId: d.id, brand: selectionToChoice(brandPick) }) });
       const data = await r.json().catch(() => ({}));
       if (r.ok && data.site) {
         try { localStorage.removeItem(storeKey); } catch { /* fine */ }
@@ -183,7 +180,7 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
     setError("");
     const designId = draft.designId || designs.designs[0]?.id || "";
     if (mock) { setDone({ siteName: draft.name, kind: skipSite ? "personalised" : "site" }); setBusy(false); return; }
-    const r = await post<{ site: { name: string } | null }>("/api/onboarding/complete", { profile, designId, skipSite });
+    const r = await post<{ site: { name: string } | null }>("/api/onboarding/complete", { profile, designId, skipSite, brand: skipSite ? undefined : selectionToChoice(brandPick) });
     setBusy(false);
     if (!r.ok) { setError(r.error); return; }
     try { localStorage.removeItem(storeKey); } catch { /* fine */ }
@@ -321,9 +318,31 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
               {FEELS.map((f) => <button key={f.id} type="button" role="radio" aria-checked={draft.feel === f.id} className="ob-chip" onClick={() => set("feel", f.id)}>{f.label}</button>)}
             </div>
           </div>
-          <p className="ob-sub" style={{ fontSize: 15 }}>
-            {strata === "connected" ? "Strata is connected. Your site will follow the brand you publish there." : <>Already keep your brand in Strata? <button type="button" className="ob-linkbtn" onClick={connectStrata} disabled={strata === "connecting"}>{strata === "connecting" ? "Connecting…" : "Connect Strata"}</button> and your site will follow every change you publish there.</>}
-          </p>
+          {strataOn ? (
+            <div className="ob-group">
+              {brandPick.kind === "project" || brandPick.kind === "create" || strataOpen ? null : (
+                <p className="ob-sub" style={{ fontSize: 15 }}>Already keep your brand in Strata? <button type="button" className="ob-linkbtn" onClick={() => setStrataOpen(true)}>Use my Strata brand</button> and your site will follow every change you publish there.</p>
+              )}
+              {strataOpen || brandPick.kind === "project" || brandPick.kind === "create" ? (
+                <>
+                  <span className="ob-label">Your Strata brand</span>
+                  <StrataBrandPicker
+                    mode="draft"
+                    compact
+                    value={brandPick}
+                    canCreate={!!draft.color}
+                    createHint="Choose your main colour above first, then Plexo can create your brand in Strata."
+                    onAvailable={setStrataOn}
+                    onChange={(v, picked) => {
+                      setBrandPick(v);
+                      if (picked?.colors.length) setDraft((d) => ({ ...d, suggested: picked.colors, color: picked.colors[0] }));
+                    }}
+                  />
+                  <button type="button" className="ob-linkbtn" onClick={() => { setBrandPick(NO_SELECTION); setStrataOpen(false); }}>Skip Strata for now</button>
+                </>
+              ) : null}
+            </div>
+          ) : null}
           {error ? <p className="ob-error" role="alert">{error}</p> : null}
           {actions(<Button size="lg" onClick={next}>{makesSite ? "Show me designs" : "Continue"}</Button>)}
         </div>

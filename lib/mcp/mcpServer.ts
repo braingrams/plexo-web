@@ -19,6 +19,7 @@ import { revalidateBlogPost } from "@/lib/blog/revalidateDynamo";
 export { dispatchMcpTool, PLEXO_MCP_TOOLS, type ResolvedUser } from "./dispatchMcpTool";
 
 import { dispatchMcpTool, PLEXO_MCP_TOOLS } from "./dispatchMcpTool";
+import { MCP_SERVER_INSTRUCTIONS } from "./brandNote";
 
 export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise<NextResponse> {
   const jsonrpc = body?.jsonrpc || "2.0";
@@ -64,6 +65,8 @@ export async function handleMcpJsonRpc(request: NextRequest, body: any): Promise
           name: "Plexo MCP Server",
           version: "1.0.0",
         },
+        // How an AI client should treat the owner's brand (read first, used by default, never asked for again).
+        instructions: MCP_SERVER_INSTRUCTIONS,
       },
     });
   }

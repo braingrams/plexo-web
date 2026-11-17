@@ -9,7 +9,7 @@ describe("hub tabs per kind", () => {
   });
   it("a server app swaps Pages for App and drops tabs that cannot work for it", () => {
     const f = { ...NO_FEATURES, deployed: "server" as const };
-    expect(ids(f, "pro")).toEqual(["app", "address", "visits", "settings"]);
+    expect(ids(f, "pro")).toEqual(["app", "address", "visits", "settings", "advanced"]);
     expect(ids(f, "beginner")).toEqual(["app", "address", "settings"]);
     for (const dropped of ["pages", "products", "orders", "blog", "course", "brand"]) expect(ids(f, "pro")).not.toContain(dropped);
   });

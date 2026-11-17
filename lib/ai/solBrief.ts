@@ -23,6 +23,10 @@ export type KnownBrand = {
   logoUrl?: string;
   /** "I don't have a logo": a wordmark is made from the name. */
   noLogo?: boolean;
+  /** Font families of the site's linked brand (heading first), when it has one. */
+  fonts?: string[];
+  /** The Strata project this site's brand is linked to (lib/brand/brandModel.ts): its colours and fonts are the owner's, always. */
+  strataProject?: string;
 };
 
 export type BriefAttachment = { type?: string; filename?: string; url?: string; /** Main colours read from a logo image (lib/onboarding/logoColors.ts dominantColors). */ colors?: string[] };
@@ -67,6 +71,8 @@ export type Brief = {
   colors: Field<string[]>;
   logo: Field<LogoState>;
   fonts: Field<string>;
+  /** The site's brand is linked to this Strata project: pages get it from the hosted brand sheet. */
+  strataProject?: string;
   sections: Field<string[]>;
   language: Field<string>;
   content: BriefContent;
@@ -361,6 +367,8 @@ export function parseBrief(input: BriefInput): Brief {
   if (site.logoUrl) brief.logo = known<LogoState>("uploaded", "site");
   else if (site.noLogo) brief.logo = known<LogoState>("none", "site");
   else if (account.logoUrl) brief.logo = known<LogoState>("uploaded", "account");
+  if (site.fonts?.length) brief.fonts = known(site.fonts.slice(0, 2).join(" + "), "site");
+  if (site.strataProject) brief.strataProject = site.strataProject;
 
   // --- what the owner wrote now (the message overrides stored defaults)
   const name = extractName(current) ?? extractName(all);

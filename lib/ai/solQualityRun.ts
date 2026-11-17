@@ -70,6 +70,13 @@ export function unfinishedNote(state: GateState): string | null {
   return `Not finished: the quality check still has must-fix items open. Don't tell the owner it's done yet. Fix them with page_edit now (the page is checked again after each edit):\n${lines.join("\n")}`;
 }
 
+/** The final message when the automatic checks ran out of rounds with must-fix items still open: plain words, no scores. */
+export function leftoverMessage(state: GateState): string {
+  const lines = [...state.open.values()].flatMap(({ name, report }) => report.findings.filter((f) => f.severity === "must").slice(0, 3).map((f) => `- ${name}: ${f.message}`));
+  const list = lines.slice(0, 5).join("\n");
+  return `I've built it, but a few things still aren't right and I ran out of tries this time:\n${list}\n\nSay "fix those" and I'll carry on from here. Everything else is saved.`;
+}
+
 /** Real loader: the stored page (working copy first), its kind and the site's real paths. Lazy imports keep this file cheap to test. */
 export function pageLoaderFor(resolved: { organizationId: string; userId: string }): PageLoader {
   return async (templateId) => {

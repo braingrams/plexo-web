@@ -6,6 +6,7 @@ import { Badge, Button, ButtonLink, Card, CardHeader, Modal, useToast } from "..
 import { uploadSsrZip, queueSsrBuild } from "@/lib/projects/clientSsrUpload";
 import { useBuildLog } from "@/app/dashboard/templates/[id]/detail/useBuildLog";
 import { alwaysOnView, appStatusView, type AlwaysOn } from "@/lib/dashboardV3/hubApp";
+import { advancedHref } from "@/lib/dashboardV3/hubAdvanced";
 import { TabBar } from "./HubFrame";
 import { AppGitHub, type GitState } from "./AppGitHub";
 import { AppVariables } from "./AppVariables";
@@ -15,8 +16,11 @@ export type AppInfo = { kind: "server" | "static"; isLive: boolean; framework: s
 
 const POLL_MS = 3000;
 
+/** The Advanced area shows one part of this tab at a time. */
+export type AppPart = "deploy" | "variables" | "github";
+
 /** Hosted apps: whether it's running, how to update it, GitHub, always-on and its settings. Server apps only get the parts that work for them. */
-export function AppTab({ siteId, siteName, info }: { siteId: string; siteName: string; info: AppInfo }) {
+export function AppTab({ siteId, siteName, info, only, experience }: { siteId: string; siteName: string; info: AppInfo; only?: AppPart; experience?: string }) {
   const { show } = useToast();
   const server = info.kind === "server";
   const [git, setGit] = useState<GitState | null>(null);
@@ -111,7 +115,8 @@ export function AppTab({ siteId, siteName, info }: { siteId: string; siteName: s
 
   return (
     <>
-      <TabBar
+      {!only ? (
+        <TabBar
         title="Your app"
         sub={server ? "Code you wrote, running on Plexo." : "Your app's files, online."}
         action={
@@ -121,6 +126,16 @@ export function AppTab({ siteId, siteName, info }: { siteId: string; siteName: s
           </div>
         }
       />
+      ) : only === "deploy" ? (
+        <div className="plx-hub__actions">
+          <Button leftIcon={<Upload size={18} aria-hidden />} onClick={() => { setError(null); setUploadOpen(true); }}>Upload a new version</Button>
+        </div>
+      ) : null}
+      {only === "variables" ? (
+        server ? <AppVariables siteId={siteId} onRebuild={rebuild} /> : null
+      ) : only === "github" ? (
+        server ? <AppGitHub siteId={siteId} git={git} onChanged={refreshGit} onBuildStarted={(id) => { setBuildId(id); setShowLog(true); }} /> : null
+      ) : (
       <div className="plx-hub__split" data-tour="hub-app">
         <div className="plx-hub__col">
           <Card data-tour="hub-app-status">
@@ -134,7 +149,7 @@ export function AppTab({ siteId, siteName, info }: { siteId: string; siteName: s
             </div>
             {gateError ? <div className="plx-inlinemsg plx-inlinemsg--warn" style={{ marginTop: 14 }}>{gateError}</div> : null}
             {server ? (
-              <div className="plx-actionrow">
+              <div className="plx-hactionrow">
                 <Button variant="secondary" leftIcon={<RefreshCw size={16} aria-hidden />} loading={busy === "rebuild"} disabled={building} onClick={rebuild}>Rebuild</Button>
                 <Button variant="ghost" leftIcon={<ScrollText size={16} aria-hidden />} onClick={() => setShowLog((v) => !v)} aria-expanded={showLog}>{showLog ? "Hide build log" : "Show build log"}</Button>
               </div>
@@ -146,11 +161,11 @@ export function AppTab({ siteId, siteName, info }: { siteId: string; siteName: s
               </div>
             ) : null}
           </Card>
-          {server ? <AppVariables siteId={siteId} onRebuild={rebuild} /> : null}
+          {server && !only ? <AppVariables siteId={siteId} onRebuild={rebuild} /> : null}
         </div>
         {server ? (
           <div className="plx-hub__col">
-            <AppGitHub siteId={siteId} git={git} onChanged={refreshGit} onBuildStarted={(id) => { setBuildId(id); setShowLog(true); }} />
+            {!only ? <AppGitHub siteId={siteId} git={git} onChanged={refreshGit} onBuildStarted={(id) => { setBuildId(id); setShowLog(true); }} /> : null}
             <Card data-tour="hub-app-always">
               <CardHeader title="Always on" description="Make sure your app is ready the moment someone visits." />
               <p className="plx-body" role="status">{ao.text}</p>
@@ -160,6 +175,7 @@ export function AppTab({ siteId, siteName, info }: { siteId: string; siteName: s
           </div>
         ) : null}
       </div>
+      )}
 
       <Modal
         open={uploadOpen}
@@ -172,7 +188,7 @@ export function AppTab({ siteId, siteName, info }: { siteId: string; siteName: s
         <div className="plx-form">
           <input ref={fileRef} type="file" accept=".zip,application/zip" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           <div className="plx-pt__file"><Button variant="secondary" leftIcon={<Upload size={18} aria-hidden />} onClick={() => fileRef.current?.click()}>{file ? "Choose another file" : "Choose a .zip file"}</Button><span className="plx-small">{file ? file.name : "No file chosen yet"}</span></div>
-          {!server && file && file.size > 4_000_000 ? <div className="plx-inlinemsg plx-inlinemsg--warn">That file is big. Use the full uploader instead: <a href={`/dashboard/templates/${siteId}/detail?classic=1`}>open it here</a>, then come back with the Back button.</div> : null}
+          {!server && file && file.size > 4_000_000 ? <div className="plx-inlinemsg plx-inlinemsg--warn">That file is big. Use the full uploader instead: <a href={experience === "pro" ? advancedHref(siteId, "deploy") : `/dashboard/templates/${siteId}/detail?classic=1`}>open it here</a>, then come back with the Back button.</div> : null}
           <label className="plx-toggle" style={{ alignItems: "flex-start" }}><span className="plx-small">I agree to the <a href="/legal/acceptable-use" target="_blank" rel="noreferrer">rules for what&apos;s allowed</a>. My app runs on Plexo&apos;s servers exactly as I wrote it.</span><input type="checkbox" className="plx-switch" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} aria-label="I agree to the rules" /></label>
           {progress ? <p className="plx-small" role="status">{progress}</p> : null}
           {error ? <p className="plx-field__error" role="alert">{error}</p> : null}

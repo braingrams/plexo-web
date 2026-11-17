@@ -137,9 +137,9 @@ export function AddPageModal({ open, onClose, siteName, rootId, pages, isApp, si
                 ))}
               </div>
               {start === "design" ? (
-                <div className="plx-chips" role="radiogroup" aria-label="Choose a design">
+                <div className="plx-hchips" role="radiogroup" aria-label="Choose a design">
                   {designs.map((d) => (
-                    <button key={d.id} type="button" role="radio" aria-checked={design === d.id} className="plx-chip" onClick={() => setDesign(d.id)} title={d.description}>
+                    <button key={d.id} type="button" role="radio" aria-checked={design === d.id} className="plx-hchip" onClick={() => setDesign(d.id)} title={d.description}>
                       {d.name}
                     </button>
                   ))}

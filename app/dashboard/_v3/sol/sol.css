@@ -8,26 +8,33 @@
 
 .sol3 {
   --sol3-top: 73px;
-  --sol3-list-w: 308px;
   flex: 0 0 auto; min-height: 0; min-width: 0;
   height: calc(100dvh - var(--sol3-top));
-  display: grid; grid-template-columns: var(--sol3-list-w) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
   background: var(--plx-bg); color: var(--plx-text);
   position: relative; overflow: hidden;
 }
-.sol3[data-list="closed"] { grid-template-columns: 0 minmax(0, 1fr); }
 .sol3--plain { display: block; overflow: auto; }
 
 /* ── Conversations panel ─────────────────────────────── */
-.sol3-list { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--plx-surface); border-right: 1px solid var(--plx-border); overflow: hidden; }
-.sol3[data-list="closed"] .sol3-list { visibility: hidden; border-right: none; }
-.sol3-list__head { display: flex; flex-direction: column; gap: 12px; padding: 18px 16px 12px; }
-.sol3-list__title { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; margin: 0; }
+.sol3-list { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0; overflow: hidden; }
+.sol3-list__head { display: flex; flex-direction: column; gap: 10px; padding: 12px 0 10px; }
+/* In the dashboard's left column the list sits on the sidebar itself, edge to edge. */
+.plx-sidebar[data-mode="sol"] { padding-bottom: 0; gap: 0; }
+.plx-sidebar[data-mode="sol"] .plx-sidebar__brand { margin-bottom: 16px; }
+.plx-sidebar[data-mode="sol"][data-view="menu"] { padding-bottom: 16px; gap: 4px; }
+.plx-sidebar[data-mode="sol"] .sol3-list { margin: 0 -16px; }
+.plx-sidebar[data-mode="sol"] .sol3-list__head { padding: 12px 16px 10px; }
+.plx-sidebar[data-mode="sol"] .sol3-list__scroll { padding: 2px 10px 12px; }
+.plx-sidebar[data-mode="sol"] .sol3-list__foot { padding: 8px 10px calc(10px + env(safe-area-inset-bottom)); margin-top: auto; background: var(--plx-surface); }
+.plx-sbswitch { display: flex; width: 100%; border-radius: 14px; margin-bottom: 4px; }
+.plx-sbswitch .plx-seg__opt { flex: 1; justify-content: center; min-height: 44px; border-radius: 11px; font-size: 14px; }
+.plx-sidebar[data-mode="sol"][data-view="menu"] .plx-sbswitch { margin-bottom: 12px; }
 .sol3-search { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 12px; border-radius: 12px; background: var(--plx-elevated); border: 1px solid transparent; color: var(--plx-muted); }
 .sol3-search:focus-within { border-color: var(--plx-focus); background: var(--plx-surface); }
 .sol3-search input { font: inherit; font-size: 14px; flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--plx-text); }
 .sol3-search input::placeholder { color: var(--plx-faint); }
-.sol3-list__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.sol3-list__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 0 12px; display: flex; flex-direction: column; gap: 2px; }
 .sol3-group { margin: 14px 8px 4px; font-size: 12px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: var(--plx-faint); }
 .sol3-group:first-child { margin-top: 6px; }
 .sol3-row { position: relative; display: flex; align-items: center; gap: 4px; border-radius: 12px; min-height: 44px; }
@@ -56,13 +63,13 @@
 .sol3-skel { height: 44px; margin: 4px 6px; border-radius: 12px; background: var(--plx-elevated); animation: sol3-pulse 1.4s ease-in-out infinite; }
 @keyframes sol3-pulse { 50% { opacity: 0.5; } }
 
-/* phones: the list slides over the chat */
-.sol3-scrim { display: none; }
-@media (max-width: 860px) {
-  .sol3, .sol3[data-list="closed"] { grid-template-columns: minmax(0, 1fr); }
-  .sol3-list, .sol3[data-list="closed"] .sol3-list { visibility: visible; position: absolute; z-index: 50; inset: 0 auto 0 0; width: min(340px, 88vw); transform: translateX(-102%); transition: transform .22s cubic-bezier(.2, .8, .2, 1), box-shadow .22s ease; box-shadow: none; border-right: 1px solid var(--plx-border); }
-  .sol3[data-sheet="open"] .sol3-list { transform: none; box-shadow: var(--plx-shadow-overlay); }
+/* phones and tablets: the dashboard's left column is hidden, so the list slides over the chat as a sheet */
+.sol3-sheet, .sol3-scrim { display: none; }
+@media (max-width: 1023px) {
+  .sol3-sheet { display: flex; flex-direction: column; position: absolute; z-index: 50; inset: 0 auto 0 0; width: min(340px, 88vw); padding: 14px 12px 0; background: var(--plx-surface); border-right: 1px solid var(--plx-border); transform: translateX(-102%); visibility: hidden; transition: transform .22s cubic-bezier(.2, .8, .2, 1), box-shadow .22s ease, visibility 0s .22s; }
+  .sol3[data-sheet="open"] .sol3-sheet { transform: none; visibility: visible; box-shadow: var(--plx-shadow-overlay); transition: transform .22s cubic-bezier(.2, .8, .2, 1), box-shadow .22s ease; }
   .sol3[data-sheet="open"] .sol3-scrim { display: block; position: absolute; z-index: 49; inset: 0; background: var(--plx-overlay); animation: plx-fade .16s ease; }
+  .sol3-sheet .sol3-list__foot { margin: 0 -12px; padding: 8px 12px calc(10px + env(safe-area-inset-bottom)); }
 }
 
 /* ── Chat column ─────────────────────────────────────── */
@@ -264,18 +271,15 @@
 .sol3-empty h1 { margin: 0; font-size: clamp(28px, 4vw, 40px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
 .sol3-empty p { margin: 0; font-size: 17px; color: var(--plx-muted); max-width: 520px; line-height: 1.5; }
 .sol3-empty__composer { width: 100%; max-width: 720px; display: flex; flex-direction: column; gap: 10px; }
-.sol3-sugg { width: 100%; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
-.sol3-sg { font: inherit; display: flex; flex-direction: column; gap: 4px; padding: 16px; min-height: 104px; justify-content: space-between; border-radius: 18px; background: var(--plx-surface); border: 1px solid var(--plx-border); color: var(--plx-text); text-align: left; cursor: pointer; transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
-.sol3-sg:hover { border-color: var(--plx-border-strong); box-shadow: var(--plx-shadow-raised); transform: translateY(-1px); }
-.sol3-sg b { font-size: 15px; line-height: 1.3; font-weight: 800; letter-spacing: -0.01em; }
-.sol3-sg__ico { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center; background: var(--plx-tint); color: var(--plx-deep); margin-bottom: 6px; }
-@media (max-width: 1100px) { .sol3-sugg { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) {
-  .sol3-sugg { grid-template-columns: 1fr; gap: 8px; }
-  .sol3-sg { min-height: 56px; flex-direction: row; align-items: center; gap: 12px; padding: 8px 14px; }
-  .sol3-sg__ico { margin: 0; }
-  .sol3-sg b { flex: 1; }
-}
+/* Quick starts: one tidy row of pills under the composer, same width as it, wrapping gracefully. */
+.sol3-sugg { width: 100%; max-width: 720px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: -8px; }
+.sol3-sg { font: inherit; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 18px 0 10px; text-align: left; border-radius: 999px; background: var(--plx-surface); border: 1px solid var(--plx-border); color: var(--plx-text); cursor: pointer; transition: border-color .15s ease, background .15s ease, box-shadow .15s ease; }
+.sol3-sg:hover { border-color: var(--plx-border-strong); background: var(--plx-tint); }
+.sol3-sg:focus-visible { outline: 2px solid var(--plx-focus); outline-offset: 2px; }
+.sol3-sg b { font-size: 15px; line-height: 1.25; font-weight: 700; }
+.sol3-sg__ico { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--plx-tint); color: var(--plx-deep); flex-shrink: 0; transition: background .15s ease; }
+.sol3-sg:hover .sol3-sg__ico { background: var(--plx-surface); }
+@media (max-width: 520px) { .sol3-sugg { grid-template-columns: minmax(0, 1fr); gap: 8px; margin-top: 0; } .sol3-sg { min-height: 48px; } }
 
 /* ── Split with the page SOL just built ──────────────── */
 .sol3-split { flex: 1; min-height: 0; display: flex; }
@@ -310,7 +314,7 @@
 @media (prefers-reduced-motion: reduce) {
   .sol3-scroll { scroll-behavior: auto; }
   .sol3-typing i, .sol3-skel, .sol3-caret { animation: none; }
-  .sol3-list { transition: none; }
+  .sol3-sheet { transition: none; }
 }
 
 /* ── Shared conversation + SOL's own subpages ────────── */
@@ -328,8 +332,40 @@
 .sol3-share__cta span { font-size: 14.5px; color: var(--plx-muted); }
 .sol3-share__empty { min-height: 100dvh; display: grid; place-items: center; text-align: center; padding: 24px; background: var(--plx-bg); color: var(--plx-text); }
 
-/* With the page beside the chat, the conversations panel steps aside on mid-size screens so both get room. */
-@media (min-width: 861px) and (max-width: 1700px) {
-  .sol3:has(.sol3-split__canvas) { grid-template-columns: 0 minmax(0, 1fr); }
-  .sol3:has(.sol3-split__canvas) .sol3-list { visibility: hidden; border-right: none; }
-}
+/* The header's chats button only exists where the left column doesn't (phones, tablets). */
+.sol3-head__panel { display: none; }
+@media (max-width: 1023px) { .sol3-head__panel { display: inline-grid; } }
+
+/* ── Splash: SOL is opening ─────────────────────────── */
+.sol3-splash { --sol3-top: 73px; height: calc(100dvh - var(--sol3-top)); display: grid; place-items: center; background: var(--plx-bg); }
+@media (max-width: 1023px) { .sol3-splash { --sol3-top: calc(64px + env(safe-area-inset-top)); height: calc(100dvh - var(--sol3-top) - 68px - env(safe-area-inset-bottom)); } }
+.sol3-splash__mark { width: 76px; height: 76px; border-radius: 24px; display: grid; place-items: center; background: var(--plx-brand); color: var(--plx-on-brand); box-shadow: var(--plx-shadow-raised); opacity: 0; animation: sol3-splash-in .35s ease .15s forwards, sol3-splash-pulse 1.8s ease-in-out .5s infinite; }
+@keyframes sol3-splash-in { to { opacity: 1; } }
+@keyframes sol3-splash-pulse { 50% { transform: scale(1.07); } }
+@media (prefers-reduced-motion: reduce) { .sol3-splash__mark { animation: none; opacity: 1; } }
+
+/* ── SOL settings + memory pages ─────────────────────── */
+.sol3-sub { flex: 1; min-height: 0; overflow-y: auto; padding: 32px; }
+@media (max-width: 640px) { .sol3-sub { padding: 20px 16px; } }
+.sol3-sub__actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.sol3-saved { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 14px; border-radius: 999px; background: var(--plx-success-subtle); color: var(--plx-success); font-size: 14px; font-weight: 800; }
+.sol3-memadd { display: flex; gap: 12px; align-items: flex-start; }
+.sol3-memadd__field { flex: 1; min-width: 0; }
+@media (max-width: 600px) { .sol3-memadd { flex-direction: column; align-items: stretch; } }
+.sol3-mems { list-style: none; margin: 0; padding: 0; }
+.sol3-mem { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 20px 14px 28px; border-top: 1px solid var(--plx-border); min-height: 64px; }
+.sol3-mem[data-busy] { opacity: .5; }
+.sol3-mem__text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; font-size: 16px; line-height: 1.5; overflow-wrap: anywhere; }
+.sol3-mem__acts { display: flex; gap: 2px; flex-shrink: 0; }
+.sol3-mem__edit { flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0; }
+@media (max-width: 600px) { .sol3-mem { padding: 14px 8px 14px 20px; } }
+.sol3-wa { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
+.sol3-wa__ok { font-size: 15px; font-weight: 800; color: var(--plx-success); }
+.sol3-wa__note { font-size: 13px; color: var(--plx-muted); line-height: 1.5; }
+.sol3-wa__note a { color: var(--plx-link); }
+.sol3-wa__err { margin: 0; font-size: 14px; color: var(--plx-danger); }
+.sol3-wa__pair { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.sol3-wa__pair p { margin: 0; max-width: 460px; font-size: 14px; line-height: 1.55; color: var(--plx-muted); }
+.sol3-wa__pair b { color: var(--plx-text); }
+.sol3-wa__qr { width: 132px; height: 132px; border-radius: 12px; background: white; padding: 6px; flex-shrink: 0; }
+.sol3-sub .plx-sp__side { top: 0; max-height: none; }

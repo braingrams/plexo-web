@@ -342,6 +342,30 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 .plx-page__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 28px; align-items: start; }
 @media (max-width: 1100px) { .plx-page__grid { grid-template-columns: 1fr; } }
 
+/* Live Home: left = activity + visits, right = a slim rail. Both columns stay filled; one column below 1000px. */
+.plx-home__body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 360px); gap: 24px; align-items: stretch; }
+.plx-home__main, .plx-home__rail { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.plx-home__main > :last-child { flex: 1; }
+@media (max-width: 1000px) { .plx-home__body { grid-template-columns: 1fr; } }
+@media (min-width: 640px) and (max-width: 1000px) { .plx-home__rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; } }
+
+.plx-actions { list-style: none; margin: 0; padding: 4px 8px 8px; display: flex; flex-direction: column; }
+.plx-action { display: flex; align-items: center; gap: 14px; min-height: 56px; padding: 8px 12px; border-radius: 12px; color: var(--plx-text); text-decoration: none; }
+.plx-action:hover { background: var(--plx-secondary-hover); }
+.plx-action__icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex-shrink: 0; background: var(--plx-tint); color: var(--plx-deep); }
+.plx-action__text { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.plx-action__title { font-weight: 700; font-size: 15px; }
+.plx-action__sub { font-size: 13px; color: var(--plx-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.plx-action__go { color: var(--plx-muted); flex-shrink: 0; }
+
+.plx-trend { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; height: 180px; margin-top: 16px; align-items: end; }
+.plx-trend__col { display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; min-width: 0; }
+.plx-trend__n { font-size: 12px; font-weight: 700; color: var(--plx-muted); }
+.plx-trend__plot { flex: 1; width: 100%; min-height: 0; display: flex; align-items: flex-end; justify-content: center; }
+.plx-trend__bar { display: block; width: 100%; max-width: 44px; border-radius: 8px 8px 4px 4px; background: color-mix(in srgb, var(--plx-brand) 38%, var(--plx-surface)); min-height: 4px; }
+.plx-trend__bar[data-today="true"] { background: var(--plx-brand); }
+.plx-trend__day { font-size: 12px; color: var(--plx-muted); }
+
 
 /* ── Promo strip (admin-controlled "new thing" banner; lib/promos) ───────────
    One slim row under the top bar. Yields to any notice above it, so only one banner shows. */

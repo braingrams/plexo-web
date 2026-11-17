@@ -1,16 +1,25 @@
+import { SolSplash } from "../_v3/sol/SolSplash";
+
 /**
- * Overrides app/dashboard/loading.tsx's generic PageSkeleton for this entire subtree
- * (/dashboard/sol, /dashboard/sol/[id], /dashboard/sol/settings, /dashboard/sol/memory).
- * Next.js shows the nearest loading.tsx up the tree while the destination route's async
- * Server Components (auth, org resolution, DynamoDB reads) are still resolving — i.e.
- * BEFORE SolShell/SolEntranceOverlay even exist yet, so the parent dashboard's skeleton
- * was flashing first and the entrance animation only started after. Rendering nothing
- * here (just SOL's own background color, so there's no flash of a mismatched background
- * either) means that gap is just a blank dark screen instead of a competing skeleton UI —
- * the entrance overlay itself is the only "something is loading" moment SOL ever shows.
- * Any real skeleton state (the conversation list, a settings section) belongs inside those
- * components themselves, rendered once the actual SOL view has mounted, not here.
+ * Shown while any /dashboard/sol route (chat, settings, memory) is still loading — before its
+ * components exist, so there is nothing else to show.
+ * - New dashboard (inside the Plexo shell, where the brand tokens exist): the SOL splash — lime icon on the
+ *   page's own light or dark background, filling the content area, sidebar and top bar staying put.
+ * - Classic dashboard (no shell, no tokens): its own dark surface, as before.
  */
 export default function SolLoading() {
-  return <div style={{ position: "fixed", inset: 0, background: "#060409" }} />;
+  return (
+    <>
+      <style>{`
+        .sol-load-classic { position: fixed; inset: 0; background: #060409; }
+        .sol-load-v3 { display: none; }
+        [data-plexo-v3] .sol-load-classic { display: none; }
+        [data-plexo-v3] .sol-load-v3 { display: block; }
+      `}</style>
+      <div className="sol-load-classic" />
+      <div className="sol-load-v3">
+        <SolSplash />
+      </div>
+    </>
+  );
 }

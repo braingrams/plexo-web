@@ -118,12 +118,12 @@ export function EmailsLibrary({ initial, limit, planName, canUpgrade = true, des
       </div>
 
       <div className="plx-em__bar">
-        <div className="plx-meter" data-state={usage.atLimit ? "full" : usage.nearLimit ? "near" : "ok"}>
-          <div className="plx-meter__top"><b>{usage.label}</b><span>{planName} plan</span></div>
-          <div className="plx-meter__track" role="progressbar" aria-label="Emails used" aria-valuemin={0} aria-valuemax={usage.limit} aria-valuenow={usage.used} aria-valuetext={usage.label}><div className="plx-meter__fill" style={{ width: `${usage.percent}%` }} /></div>
+        <div className="plx-emmeter" data-state={usage.atLimit ? "full" : usage.nearLimit ? "near" : "ok"}>
+          <div className="plx-emmeter__top"><b>{usage.label}</b><span>{planName} plan</span></div>
+          <div className="plx-emmeter__track" role="progressbar" aria-label="Emails used" aria-valuemin={0} aria-valuemax={usage.limit} aria-valuenow={usage.used} aria-valuetext={usage.label}><div className="plx-emmeter__fill" style={{ width: `${usage.percent}%` }} /></div>
         </div>
         {emails.length > 0 ? (
-          <div className="plx-search" style={{ flex: "1 1 240px" }}>
+          <div className="plx-emsearch" style={{ flex: "1 1 240px" }}>
             <Search size={18} aria-hidden />
             <Input hideLabel label="Search emails" placeholder="Search your emails" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>

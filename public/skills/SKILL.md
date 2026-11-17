@@ -107,7 +107,15 @@ A Plexo landing page contains a `body` with global styling tokens and an array o
 
 ---
 
+## Brand first (read this before choosing any colours)
+A site can have a brand: a linked **Strata** project (Charisol's design-system tool) that stays in sync automatically, or the colours and logo saved on the site. Precedence: linked Strata project, then the site's saved brand, then the account's onboarding brand.
+- Before you create or change anything for a site, call `get_site_brand` (MCP) and use what it returns (colours with roles, fonts, radius, logo) instead of the example colours below, even when the user never mentions their brand. Never ask for colours, fonts or a logo while a brand exists. Say once: "I'll use your <brand> brand."
+- Read it again on every task: a change published in Strata shows up in the next call.
+- `site_create` and the visual-editor tools default to the site's brand when you pass no colours or fonts. For a new site, `list_strata_projects` then `link_site_brand` (or `strataProjectId` on `site_create`) uses one of the owner's Strata brands; `create_strata_project_from_brand` keeps a site's current brand in Strata.
+- REST equivalents: `GET/POST/PATCH/DELETE /api/v1/sites/{id}/brand`, `GET /api/v1/strata/projects`.
+
 ## Best Practices
+- **Brand overrides the defaults.** The colours listed here are only for a site that has no brand at all.
 - **Design Tokens**: Use vibrant, dark-mode sleek aesthetics (backgrounds: `#0b0f19`, `#111827`, accent: `#8b5cf6`, text: `#ffffff`, secondary text: `#94a3b8`).
 - **Structure**: Always divide into Hero -> Key Benefits / Features Grid -> Testimonial/Social Proof -> Pricing -> CTA Form -> Footer.
 - **Publishing**: When user prompts to publish, call `publishLandingPage` tool with `domain: "<slug>"`.

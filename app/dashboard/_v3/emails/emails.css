@@ -4,14 +4,14 @@
 .plx-em__note { display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px; border-radius: 16px; background: var(--plx-info-subtle); color: var(--plx-text); font-size: 15px; line-height: 1.5; }
 .plx-em__note svg { flex: none; margin-top: 2px; color: var(--plx-info); }
 
-.plx-meter { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; border-radius: var(--plx-radius-card); background: var(--plx-surface); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-card); min-width: 0; flex: 1 1 320px; max-width: 520px; }
-.plx-meter__top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
-.plx-meter__top b { font-size: 16px; font-weight: 800; }
-.plx-meter__top span { font-size: 13px; color: var(--plx-muted); }
-.plx-meter__track { height: 10px; border-radius: 999px; background: var(--plx-elevated); overflow: hidden; }
-.plx-meter__fill { height: 100%; border-radius: 999px; background: var(--plx-brand); }
-.plx-meter[data-state="near"] .plx-meter__fill { background: var(--plx-warning); }
-.plx-meter[data-state="full"] .plx-meter__fill { background: var(--plx-danger); }
+.plx-emmeter { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; border-radius: var(--plx-radius-card); background: var(--plx-surface); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-card); min-width: 0; flex: 1 1 320px; max-width: 520px; }
+.plx-emmeter__top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.plx-emmeter__top b { font-size: 16px; font-weight: 800; }
+.plx-emmeter__top span { font-size: 13px; color: var(--plx-muted); }
+.plx-emmeter__track { height: 10px; border-radius: 999px; background: var(--plx-elevated); overflow: hidden; }
+.plx-emmeter__fill { height: 100%; border-radius: 999px; background: var(--plx-brand); }
+.plx-emmeter[data-state="near"] .plx-emmeter__fill { background: var(--plx-warning); }
+.plx-emmeter[data-state="full"] .plx-emmeter__fill { background: var(--plx-danger); }
 .plx-em__bar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
 .plx-nudge { display: flex; align-items: center; gap: 16px; justify-content: space-between; flex-wrap: wrap; padding: 16px 20px; border-radius: var(--plx-radius-card); background: var(--plx-warning-subtle); border: 1px solid var(--plx-border); }
 .plx-nudge p { margin: 0; font-size: 15px; line-height: 1.45; flex: 1 1 260px; }
@@ -55,8 +55,8 @@
 .plx-em__first { display: flex; flex-direction: column; gap: 18px; padding: 28px; border-radius: var(--plx-radius-card-lg); background: var(--plx-surface); border: 1px solid var(--plx-border); }
 .plx-em__first h2 { margin: 0; }
 /* The search box is shared with other pages; repeated here so the emails page never depends on them being loaded. */
-.plx-search { position: relative; flex: 1 1 260px; min-width: 0; }
-.plx-search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--plx-faint); pointer-events: none; z-index: 1; }
-.plx-search .plx-input { padding-left: 42px; }
+.plx-emsearch { position: relative; flex: 1 1 260px; min-width: 0; }
+.plx-emsearch svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--plx-faint); pointer-events: none; z-index: 1; }
+.plx-emsearch .plx-input { padding-left: 42px; }
 .plx-pick__t > :last-child { align-self: flex-start; margin-top: 4px; }
-.plx-newem .plx-search { flex: none; max-width: none; }
+.plx-newem .plx-emsearch { flex: none; max-width: none; }

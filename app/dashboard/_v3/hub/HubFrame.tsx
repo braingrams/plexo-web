@@ -4,6 +4,7 @@ import "./hub.css";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, Pencil, Upload } from "lucide-react";
 import { Badge, ButtonLink, HelpMedia, StatusPill, TabLinks } from "../ui";
+import { OpenSiteButton, PreviewButton } from "../home/SiteButtons";
 import { hubTabHref, type HubTab, type HubTabId } from "@/lib/dashboardV3/hubTabs";
 import type { Experience } from "@/lib/dashboardV3/nav";
 import type { HubSite } from "@/lib/dashboardV3/hubData";
@@ -21,6 +22,7 @@ const HELP: Record<HubTabId, string> = {
   address: "How to choose your web address",
   visits: "How to read your visits",
   settings: "How to change your site's settings",
+  advanced: "How to use the advanced settings",
 };
 
 export function builderLabel(site: Pick<HubFrameSite, "sourceType" | "designFormat"> & { deployed?: "server" | "static" | null }): string {
@@ -62,11 +64,8 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
           </div>
         </div>
         <div className="plx-hub__actions" data-tour="hub-actions">
-          {site.address ? (
-            <ButtonLink href={`https://${site.address}`} target="_blank" rel="noreferrer" variant="secondary" rightIcon={<ExternalLink size={16} aria-hidden />}>
-              Visit site
-            </ButtonLink>
-          ) : null}
+          <PreviewButton site={site} />
+          <OpenSiteButton site={site} />
           {site.deployed ? (
             <ButtonLink href={hubTabHref(site.id, "app")} leftIcon={<Upload size={16} aria-hidden />}>
               Update app

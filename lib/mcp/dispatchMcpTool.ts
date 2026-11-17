@@ -27,6 +27,8 @@ import { CONTENT_MCP_TOOLS, CONTENT_TOOL_NAMES, handleContentTool } from "./cont
 import { APP_MCP_TOOLS, APP_TOOL_NAMES, handleAppTool } from "./appTools";
 import { PAGE_MCP_TOOLS, PAGE_TOOL_NAMES, handlePageTool } from "./pageTools";
 import { SITE_MCP_TOOLS, SITE_TOOL_NAMES, handleSiteTool } from "./siteTools";
+import { BRAND_MCP_TOOLS, BRAND_TOOL_NAMES, handleBrandTool } from "./brandTools";
+import { withBrandNote } from "./brandNote";
 import { PageToolError, convertLegacyDesign, createV2Page, editableUrlFor, publishPage, summarizeSections } from "./v2Pages";
 import { deprecationNotice, isDeprecatedTool, markDeprecated, v2TargetMessage } from "./deprecation";
 import { coerceToolArgs } from "./coerceArgs";
@@ -385,7 +387,9 @@ Uses the SAME fully-hydrated layout schema as publish_landing_page — designJso
     name: "get_strata_tokens",
     title: "Get Strata Design Tokens",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    description: `Checks whether the account has a Strata design-system project connected and, if so, fetches its design tokens (colors, typography, spacing, etc).
+    description: `Fetches the raw design tokens (colors, typography, spacing, etc) of a PUBLIC Strata project by id. For a site's brand prefer get_site_brand (it already resolves the linked Strata project, the site's saved brand and the account's, with roles and the logo); pass siteId here to get that same resolved brand alongside the raw tokens.
+
+Checks whether the account has a Strata design-system project connected and, if so, fetches its design tokens (colors, typography, spacing, etc).
 
 Call this BEFORE publish_landing_page or create_email_template whenever the user wants their brand/Strata colors and styles used. Call with no arguments first to check the currently connected project. If the result has "connected": false, ask the user for their Strata project id (found in their Strata project's snapshot/share URL) and call this tool again with that projectId — it connects the account to that project (remembered for future calls) and fetches its tokens in the same call.
 
@@ -397,6 +401,7 @@ Map the returned tokens into designJson style fields: color-type tokens into bac
           type: "string",
           description: "Optional. The user's Strata project id to connect (or switch to). Omit to check/use the previously connected project, if any.",
         },
+        siteId: { type: "string", description: "Optional. A site id: the result then also carries siteBrand, the brand that site really uses (linked Strata project > the site's saved brand > the account's)." },
       },
     },
   },
@@ -779,7 +784,8 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   ...APP_MCP_TOOLS,
   ...PAGE_MCP_TOOLS,
   ...SITE_MCP_TOOLS,
-].map(markDeprecated);
+  ...BRAND_MCP_TOOLS,
+].map(markDeprecated).map(withBrandNote);
 
 /**
  * With TEMPLATES_V2_NEW on, the classic create/publish tools build a V2 page too, so even an
@@ -1718,6 +1724,8 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
 
     case "get_strata_tokens": {
       const incomingProjectId = typeof args.projectId === "string" ? args.projectId : undefined;
+      // The same resolver the dashboard and SOL use, so this tool never disagrees with them.
+      const siteBrand = typeof args.siteId === "string" && args.siteId.trim() ? await handleBrandTool("get_site_brand", { siteId: args.siteId }, resolved).catch((e: Error) => ({ error: e.message })) : undefined;
       const projectId = await resolveStrataProjectId(resolved.userId, incomingProjectId);
 
       if (!projectId) {
@@ -1726,15 +1734,16 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
           projectId: null,
           tokens: [],
           message: "No Strata project connected yet. Pass a projectId to connect (find it in your Strata project's snapshot/share URL).",
+          ...(siteBrand ? { siteBrand } : {}),
         };
         break;
       }
 
       const result = await fetchStrataTokens(projectId);
       if ("error" in result) {
-        toolResult = { connected: false, projectId, tokens: [], error: result.error };
+        toolResult = { connected: false, projectId, tokens: [], error: result.error, ...(siteBrand ? { siteBrand } : {}) };
       } else {
-        toolResult = { connected: true, projectId, tokenCount: result.tokens.length, tokens: result.tokens };
+        toolResult = { connected: true, projectId, tokenCount: result.tokens.length, tokens: result.tokens, ...(siteBrand ? { siteBrand } : {}) };
       }
       break;
     }
@@ -1780,6 +1789,10 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       }
       if (SITE_TOOL_NAMES.has(toolName)) {
         toolResult = await handleSiteTool(toolName, args, resolved);
+        break;
+      }
+      if (BRAND_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleBrandTool(toolName, args, resolved);
         break;
       }
       throw new Error(`Unknown tool: ${toolName}`);

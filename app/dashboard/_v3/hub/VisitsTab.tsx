@@ -11,10 +11,10 @@ export function VisitsTab({ visits }: { visits: HubVisits }) {
   return (
     <>
       <TabBar title="Your visits" sub="How many times people looked at your site over the last two weeks." />
-      <div className="plx-stats" data-tour="hub-visits">
-        <Card className="plx-stat"><b>{visits.total}</b><span>visits in 14 days</span></Card>
-        <Card className="plx-stat"><b>{last7}</b><span>visits this week</span></Card>
-        <Card className="plx-stat"><b>{best.views}</b><span>{best.views ? `on your busiest day (${best.label})` : "on your busiest day"}</span></Card>
+      <div className="plx-hstats" data-tour="hub-visits">
+        <Card className="plx-hstat"><b>{visits.total}</b><span>visits in 14 days</span></Card>
+        <Card className="plx-hstat"><b>{last7}</b><span>visits this week</span></Card>
+        <Card className="plx-hstat"><b>{best.views}</b><span>{best.views ? `on your busiest day (${best.label})` : "on your busiest day"}</span></Card>
       </div>
       <Card>
         <CardHeader title="Day by day" />

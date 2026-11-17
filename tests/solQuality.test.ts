@@ -47,7 +47,11 @@ describe("a bland page fails with specific findings", () => {
   });
   it("names the real problems", () => {
     const found = new Set(report.findings.map((f) => f.id));
-    for (const id of ["kit-sample-copy", "image-slot-empty", "contrast", "seo-description", "link-anchor", "empty-section"]) expect(found.has(id)).toBe(true);
+    for (const id of ["kit-sample-copy", "image-slot-empty", "seo-description", "link-anchor", "empty-section"]) expect(found.has(id)).toBe(true);
+  });
+  it("the kit's own muted text no longer fails contrast (SDK 2.0.28 and later)", () => {
+    // Before the SDK darkened its default muted text (2.5:1), every kit page failed this check.
+    expect(report.findings.some((f) => f.id === "contrast")).toBe(false);
   });
   it("every finding says what is wrong and how to fix it", () => {
     for (const f of report.findings) {

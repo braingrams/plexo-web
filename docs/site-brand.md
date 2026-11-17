@@ -1,5 +1,7 @@
 # Site brand from Strata (live)
 
+> How the brand is resolved and used everywhere (precedence rule, SOL, MCP, the picker): see [STRATA_BRAND.md](./STRATA_BRAND.md).
+
 A site links to ONE Strata project (site settings → **Brand**). Plexo writes the brand as a hosted stylesheet and every page of
 the site links to it, so when someone **publishes** in Strata the live site changes within a minute or two, with no rebuild.
 Autosaves in Strata never reach a live site.
@@ -25,8 +27,15 @@ Autosaves in Strata never reach a live site.
 | Raw HTML upload, WordPress migration | When "Use my brand on this site" is on: the site's own main colours/fonts (matched on import or "Apply my brand") are served as `var(--token, <original>)` in its pages and CSS files, plus the link. Off = the original files, byte for byte. |
 | React app | `<link>` in the served `index.html`. Canvas pages use the variables; hand-written code can too. |
 | Deployed static site | `<link>` added to HTML files only, at a stable address (no `?v=`) because that HTML is cached for an hour; the sheet's own 5-minute cache carries the change. |
-| Deployed server app (SSR) | Nothing is rewritten (responses are streamed). Opt in by adding the link to your layout: `<link rel="stylesheet" href="/__plexo/brand/<siteId>.css">` |
+| Deployed server app (SSR) | Opt-in. With "Add my brand to my app" on (Brand tab; on automatically for server apps linked after this shipped, off for every app linked before), Plexo adds the `<link>` to the full HTML pages it serves, at a stable address. Never to JSON, fragments, redirects, pages over 2 MB, pages that already link the sheet, pages with `<meta name="plexo-brand" content="off">` or their own meta CSP; any failure serves the app's page untouched. Global kill switch: `BRAND_SERVER_INJECT=off`. Or add the link to your layout yourself: `<link rel="stylesheet" href="/__plexo/brand/<siteId>.css">` |
 | Classic editor pages | Unchanged (they don't use brand variables). |
+
+### Server apps: how the link gets in
+
+The serve layer (`lib/pub/serveDeployedSsr.ts`) already reads an app's whole response before relaying it (length and encoding headers are dropped
+and rebuilt), so `lib/brand/ssrInject.ts` adds one string insert to full HTML pages: no streaming transform is needed. The flag is
+`SiteBrand.injectServerApp` (absent = off). It is separate from "Use my brand on this site" on purpose: existing linked apps already
+have that on and must not change. Only the owner's switch, or linking a server app from now on, sets it.
 
 ## Using the brand in your own code
 
