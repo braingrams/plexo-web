@@ -15,9 +15,10 @@ import {
 } from "@/lib/onboarding/flow";
 import { ContinueLaterButton } from "./ContinueLater";
 import { ScaledFrame } from "./ScaledFrame";
+import { DesignPicker, type PickerDesign } from "@/app/dashboard/_v3/designs/DesignPicker";
 
 type Design = { id: string; name: string; description: string; html?: string };
-type Done = { siteName: string | null; kind: "site" | "personalised" | "app" };
+type Done = { siteName: string | null; kind: "site" | "personalised" | "app"; siteId?: string };
 
 async function post<T>(url: string, body: unknown): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   try {
@@ -70,7 +71,7 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
   const [error, setError] = useState("");
   const [done, setDone] = useState<Done | null>(null);
   const [showAll, setShowAll] = useState(false);
-  const [more, setMore] = useState<Design[]>([]);
+  const [paying, setPaying] = useState(false);
   const [strata, setStrata] = useState<"idle" | "connecting" | "connected">("idle");
   const [logoBusy, setLogoBusy] = useState(false);
   const [logoPreview, setLogoPreview] = useState("");
@@ -149,12 +150,33 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
     }
   };
 
-  const loadMore = async () => {
-    setShowAll(true);
-    if (more.length || !designs.others.length) return;
-    const r = await post<{ designs: Design[] }>("/api/onboarding/designs", { profile: designProfile, ids: designs.others.map((d) => d.id) });
-    if (r.ok) setMore(r.data.designs);
-  };
+  /** Makes the site from a real marketplace design. A just-paid design can take a moment to be recorded, so we ask again briefly. */
+  const startFromMarketDesign = useCallback(async (d: PickerDesign, tries = 1): Promise<void> => {
+    if (mock) { setDone({ siteName: draft.name, kind: "site" }); return; }
+    for (let i = 0; i < tries; i++) {
+      const r = await fetch("/api/onboarding/complete", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile, marketDesignId: d.id }) });
+      const data = await r.json().catch(() => ({}));
+      if (r.ok && data.site) {
+        try { localStorage.removeItem(storeKey); } catch { /* fine */ }
+        setDone({ siteName: data.site.name, kind: "site", siteId: data.site.id });
+        router.push(`/dashboard/sites/${data.site.id}`);
+        return;
+      }
+      if (data?.needsPurchase && i < tries - 1) { await new Promise((res) => setTimeout(res, 2000)); continue; }
+      throw new Error(typeof data?.error === "string" ? data.error : "We couldn't make your site just now. Nothing was lost: please try again in a moment.");
+    }
+  }, [mock, draft.name, profile, storeKey, router]);
+
+  // Coming back from paying for a design in the card window: finish making the site from it.
+  const resumed = useRef(false);
+  useEffect(() => {
+    if (!ready || mock || resumed.current || typeof window === "undefined") return;
+    const paid = new URLSearchParams(window.location.search).get("paidDesign");
+    if (!paid) return;
+    resumed.current = true;
+    setPaying(true);
+    startFromMarketDesign({ id: paid } as PickerDesign, 8).catch((e) => { setPaying(false); setShowAll(true); setError(e instanceof Error ? e.message : "We couldn't make your site just now. Please try again."); });
+  }, [ready, mock, startFromMarketDesign]);
 
   const finish = async (skipSite: boolean) => {
     setBusy(true);
@@ -168,8 +190,18 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
     setDone({ siteName: r.data.site?.name ?? null, kind: r.data.site ? "site" : draft.goal === "app" ? "app" : "personalised" });
   };
 
+  const searchNew = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("new") === "1";
   const personalising = hasSites;
   const name = draft.name.trim();
+
+  if (paying && !done) {
+    return (
+      <div className="ob-page">
+        <header className="ob-header"><PlexoLogo height={26} /><span /><span /></header>
+        <main className="ob-main"><div className="ob-done"><h1 className="ob-title">Making your site…</h1><p className="ob-lead">Thank you. We are confirming your payment and building your site from the design you chose. This takes a few seconds.</p></div></main>
+      </div>
+    );
+  }
 
   if (done) {
     return (
@@ -190,7 +222,7 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
                   ? "Next, tell Sol what your app should do and it builds it with you, sign-in included."
                   : "Your dashboard now shows what matters for what you're making."}
             </p>
-            <Button size="lg" rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => router.push(done.kind === "app" ? "/dashboard/sol" : "/dashboard")}>
+            <Button size="lg" rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => router.push(done.kind === "app" ? "/dashboard/sol" : done.siteId ? `/dashboard/sites/${done.siteId}` : "/dashboard")}>
               {done.kind === "app" ? "Talk to Sol" : "Go to my dashboard"}
             </Button>
           </div>
@@ -330,23 +362,20 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
             </button>
           ))}
         </div>
-        {designs.others.length ? (
-          showAll ? (
-            <div className="ob-designs" role="radiogroup" aria-label="More designs">
-              {(more.length ? more : designs.others).map((d) => (
-                <button key={d.id} type="button" role="radio" aria-checked={draft.designId === d.id} className="ob-design" onClick={() => set("designId", d.id)}>
-                  <ScaledFrame html={(d as Design).html ?? null} title={`${d.name} design`} aspect="4 / 3" />
-                  <span className="ob-design__meta">
-                    <span><span className="ob-design__name">{d.name}</span><span className="ob-design__text" style={{ display: "block" }}>{d.description}</span></span>
-                    <span className="ob-design__pick">{draft.designId === d.id ? "Chosen" : "Pick"}</span>
-                  </span>
-                </button>
-              ))}
+        {showAll ? (
+          <section className="ob-market" aria-labelledby="ob-market-title">
+            <div>
+              <h2 className="ob-subtitle" id="ob-market-title">More designs to start from</h2>
+              <p className="ob-lead">Made by designers on Plexo, ordered by how well they suit what you are making. Free ones cost nothing; paid ones are a one-time price. They come as their maker designed them, and your logo and colours are added to your Brand page.</p>
             </div>
-          ) : (
-            <Button variant="ghost" onClick={loadMore} style={{ alignSelf: "flex-start" }}>See all designs ({designs.total})</Button>
-          )
-        ) : null}
+            <DesignPicker goal={designProfile.goal} profile={designProfile} mock={mock} busy={busy} returnTo={searchNew ? "/welcome/setup?new=1" : "/welcome/setup"} onUse={(d) => startFromMarketDesign(d)} />
+          </section>
+        ) : (
+          <div className="ob-more">
+            <Button variant="secondary" onClick={() => { setShowAll(true); setTimeout(() => document.getElementById("ob-market-title")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }}>See all designs</Button>
+            <span className="ob-sub">Browse real designs from the Plexo marketplace, free and paid.</span>
+          </div>
+        )}
         <p className="ob-note">You can change anything later: the words, pictures, colours and the design itself.</p>
         {error ? <p className="ob-error" role="alert">{error}</p> : null}
         <div className="ob-actions">

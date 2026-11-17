@@ -327,13 +327,13 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 .plx-main-col { min-width: 0; display: flex; flex-direction: column; }
 .plx-topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 32px; background: color-mix(in srgb, var(--plx-bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--plx-border); }
 .plx-topbar__right { display: flex; align-items: center; gap: 10px; }
-.plx-search { font: inherit; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 14px; border-radius: 12px; background: var(--plx-surface); border: 1px solid var(--plx-border); color: var(--plx-muted); font-size: 14px; width: min(440px, 100%); cursor: text; text-align: left; transition: border-color .15s ease; }
-.plx-search:hover { border-color: var(--plx-border-strong); }
-.plx-search kbd { margin-left: auto; font-size: 12px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--plx-border); color: var(--plx-faint); }
-.plx-search input { font: inherit; flex: 1; min-width: 0; background: none; border: none; color: var(--plx-text); font-size: 15px; }
+.plx-topsearch { font: inherit; display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 14px; border-radius: 12px; background: var(--plx-surface); border: 1px solid var(--plx-border); color: var(--plx-muted); font-size: 14px; width: min(440px, 100%); cursor: text; text-align: left; transition: border-color .15s ease; }
+.plx-topsearch:hover { border-color: var(--plx-border-strong); }
+.plx-topsearch kbd { margin-left: auto; font-size: 12px; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--plx-border); color: var(--plx-faint); }
+.plx-topsearch input { font: inherit; flex: 1; min-width: 0; background: none; border: none; color: var(--plx-text); font-size: 15px; }
 /* One ring on the pill, never a box inside the box. */
-[data-plexo-v3] .plx-search input:focus-visible, [data-plexo-v3] .plx-search input:focus { outline: none; box-shadow: none; }
-.plx-search:focus-within { outline: 2px solid var(--plx-focus); outline-offset: 2px; border-color: var(--plx-focus); }
+[data-plexo-v3] .plx-topsearch input:focus-visible, [data-plexo-v3] .plx-topsearch input:focus { outline: none; box-shadow: none; }
+.plx-topsearch:focus-within { outline: 2px solid var(--plx-focus); outline-offset: 2px; border-color: var(--plx-focus); }
 .plx-iconbtn { font: inherit; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; background: none; border: 1px solid transparent; color: var(--plx-text); cursor: pointer; }
 .plx-iconbtn:hover { background: var(--plx-ghost-hover); }
 .plx-account-btn { font: inherit; background: none; border: none; padding: 2px; border-radius: 50%; cursor: pointer; display: grid; place-items: center; min-width: 44px; min-height: 44px; }
@@ -341,6 +341,34 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 .plx-page { display: flex; flex-direction: column; gap: 28px; }
 .plx-page__grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 28px; align-items: start; }
 @media (max-width: 1100px) { .plx-page__grid { grid-template-columns: 1fr; } }
+
+
+/* ── Promo strip (admin-controlled "new thing" banner; lib/promos) ───────────
+   One slim row under the top bar. Yields to any notice above it, so only one banner shows. */
+.plx-promo { min-width: 0; --plx-p-bg: var(--plx-tint); --plx-p-fg: var(--plx-text); --plx-p-btn-bg: var(--plx-brand); --plx-p-btn-fg: var(--plx-on-brand); --plx-p-icon-bg: var(--plx-surface); --plx-p-icon-fg: var(--plx-deep); position: relative; isolation: isolate; overflow: hidden; display: flex; align-items: center; gap: 12px; min-height: 52px; margin: 0 0 16px; padding: 4px 4px 4px 12px; border-radius: var(--plx-radius-card); border: 1px solid var(--plx-border); background: var(--plx-p-bg); color: var(--plx-p-fg); }
+.plx-notice ~ .plx-promo, .plx-notices ~ .plx-promo { display: none; }
+.plx-promo--dark { --plx-p-bg: var(--plx-strong); --plx-p-fg: var(--plx-on-strong); --plx-p-btn-bg: var(--plx-on-strong); --plx-p-btn-fg: var(--plx-strong); --plx-p-icon-bg: color-mix(in srgb, var(--plx-on-strong) 14%, transparent); --plx-p-icon-fg: var(--plx-on-strong); border-color: transparent; }
+.plx-promo--brand { --plx-p-bg: var(--plx-brand); --plx-p-fg: var(--plx-on-brand); --plx-p-btn-bg: var(--plx-on-brand); --plx-p-btn-fg: var(--plx-brand); --plx-p-icon-bg: color-mix(in srgb, var(--plx-on-brand) 16%, transparent); --plx-p-icon-fg: var(--plx-on-brand); border-color: transparent; }
+.plx-promo--image::before { content: ""; position: absolute; inset: 0; z-index: -2; background: var(--plx-promo-img) center / cover no-repeat; }
+.plx-promo--image::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(90deg, color-mix(in srgb, var(--plx-p-bg) 94%, transparent) 0%, color-mix(in srgb, var(--plx-p-bg) 88%, transparent) 55%, color-mix(in srgb, var(--plx-p-bg) 68%, transparent) 100%); }
+.plx-promo__icon { width: 32px; height: 32px; flex-shrink: 0; display: grid; place-items: center; border-radius: 10px; background: var(--plx-p-icon-bg); color: var(--plx-p-icon-fg); }
+.plx-promo__text { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 4px 12px; }
+.plx-promo__tag { flex-shrink: 0; align-self: center; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 800; line-height: 1.4; white-space: nowrap; background: var(--plx-p-icon-bg); color: var(--plx-p-icon-fg); border: 1px solid color-mix(in srgb, var(--plx-p-fg) 18%, transparent); }
+.plx-promo__title { font-size: 14px; font-weight: 800; line-height: 1.3; white-space: nowrap; flex-shrink: 0; max-width: 60%; overflow: hidden; text-overflow: ellipsis; }
+.plx-promo__line { font-size: 13px; line-height: 1.35; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: color-mix(in srgb, var(--plx-p-fg) 80%, transparent); }
+.plx-promo .plx-promo__btn { --plx-btn-h: 36px; flex-shrink: 0; font-size: 13px; padding: 0 14px; background: var(--plx-p-btn-bg); color: var(--plx-p-btn-fg); }
+.plx-promo .plx-promo__btn:hover { background: var(--plx-p-btn-bg); filter: brightness(1.08); }
+.plx-promo__close { font: inherit; flex-shrink: 0; width: 44px; height: 44px; display: grid; place-items: center; border: none; background: none; border-radius: 12px; color: color-mix(in srgb, var(--plx-p-fg) 70%, transparent); cursor: pointer; }
+.plx-promo__close:hover { background: color-mix(in srgb, var(--plx-p-fg) 10%, transparent); color: var(--plx-p-fg); }
+@media (max-width: 640px) {
+  .plx-promo { gap: 8px; padding-left: 10px; }
+  .plx-promo__icon { display: none; }
+  .plx-promo__text { flex-direction: column; align-items: flex-start; gap: 0; }
+  .plx-promo__tag { align-self: flex-start; padding: 0 6px; font-size: 10px; margin-bottom: 1px; }
+  .plx-promo__title { max-width: 100%; font-size: 13px; flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .plx-promo__line { font-size: 12px; max-width: 100%; }
+  .plx-promo .plx-promo__btn { padding: 0 12px; }
+}
 
 /* Site switcher */
 .plx-siteswitch { margin: 0 0 14px; }
@@ -467,3 +495,34 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 
 .plx-mobile-flex { display: none !important; }
 @media (max-width: 1023px) { .plx-mobile-flex { display: flex !important; } }
+
+/* "Watch how": a walk-through written for the topic */
+.plx-guide { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 8px 24px; padding: 20px; align-items: start; }
+.plx-guide__intro { grid-column: 1 / -1; margin: 0; font-weight: 700; font-size: 15px; }
+.plx-guide__stage { position: relative; min-height: 150px; padding: 14px; border-radius: 14px; background: var(--plx-elevated); border: 1px solid var(--plx-border); display: flex; flex-direction: column; gap: 14px; overflow: hidden; animation: plx-guide-in .35s ease both; }
+.plx-guide__where { align-self: flex-start; padding: 3px 10px; border-radius: 999px; background: var(--plx-surface); border: 1px solid var(--plx-border); color: var(--plx-muted); font-size: 12px; font-weight: 800; }
+.plx-guide__mock { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; margin: auto 0; width: 100%; }
+.plx-guide__ghost { height: 8px; width: 60%; border-radius: 4px; background: var(--plx-border); }
+.plx-guide__btn { padding: 11px 20px; border-radius: 12px; background: var(--plx-brand); color: var(--plx-on-brand); font-weight: 800; font-size: 14px; box-shadow: var(--plx-shadow-card); animation: plx-guide-press 3.4s ease .5s both; }
+.plx-guide__lab { font-size: 12.5px; font-weight: 800; color: var(--plx-text); }
+.plx-guide__input { width: 100%; height: 38px; border-radius: 10px; background: var(--plx-surface); border: 2px solid var(--plx-focus); display: flex; align-items: center; padding: 0 12px; }
+.plx-guide__input i { display: block; height: 8px; border-radius: 4px; background: var(--plx-text); opacity: .55; animation: plx-guide-type 3.4s steps(14) .5s both; }
+.plx-guide__tabs { flex-direction: row; gap: 6px; border-bottom: 1px solid var(--plx-border); }
+.plx-guide__tab { padding: 8px 14px; border-radius: 10px 10px 0 0; font-size: 13px; font-weight: 800; color: var(--plx-faint); }
+.plx-guide__tab--on { color: var(--plx-text); box-shadow: inset 0 -3px 0 var(--plx-brand); animation: plx-guide-press 3.4s ease .5s both; }
+.plx-guide__choices { display: flex; gap: 8px; width: 100%; }
+.plx-guide__choices span { flex: 1; height: 38px; border-radius: 10px; background: var(--plx-surface); border: 1px solid var(--plx-border); }
+.plx-guide__choices .plx-guide__choice--on { border: 2px solid var(--plx-focus); background: var(--plx-tint); animation: plx-guide-press 3.4s ease .5s both; }
+.plx-guide__cursor { position: absolute; width: 22px; height: 22px; color: var(--plx-text); filter: drop-shadow(0 2px 3px var(--plx-overlay)); animation: plx-guide-cursor 3.4s ease both; }
+.plx-guide__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.plx-guide__step { font: inherit; text-align: left; width: 100%; display: flex; gap: 12px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; border: 1px solid transparent; background: transparent; color: var(--plx-muted); cursor: pointer; font-size: 14px; line-height: 1.4; min-height: 44px; }
+.plx-guide__step span { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--plx-elevated); color: var(--plx-muted); font-size: 12px; font-weight: 800; }
+.plx-guide__step[aria-current="step"] { color: var(--plx-text); background: var(--plx-tint); border-color: var(--plx-border); font-weight: 700; }
+.plx-guide__step[aria-current="step"] span { background: var(--plx-brand); color: var(--plx-on-brand); }
+.plx-guide__pause { grid-column: 1 / -1; justify-self: start; }
+@keyframes plx-guide-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes plx-guide-type { 0%, 15% { width: 0; } 55%, 100% { width: 55%; } }
+@keyframes plx-guide-press { 0%, 52% { transform: scale(1); } 56% { transform: scale(.95); } 62%, 100% { transform: scale(1); } }
+@keyframes plx-guide-cursor { 0% { left: 78%; top: 80%; } 40%, 100% { left: 30%; top: 58%; } }
+@media (max-width: 640px) { .plx-guide { grid-template-columns: minmax(0, 1fr); padding: 14px; } }
+@media (prefers-reduced-motion: reduce) { .plx-guide__stage, .plx-guide__btn, .plx-guide__input i, .plx-guide__tab--on, .plx-guide__choices .plx-guide__choice--on, .plx-guide__cursor { animation: none; } .plx-guide__cursor { left: 30%; top: 58%; } .plx-guide__input i { width: 55%; } }

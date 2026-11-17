@@ -43,6 +43,7 @@ export default async function HomePreview({ searchParams }: { searchParams: Prom
     hasSite: true,
     hasLogo: step > 1,
     hasColors: step > 1,
+    logoSkipped: step > 1,
     productCount: step > 2 ? 3 : 0,
     paymentsReady: step > 3,
     hasAddress: step > 4 || state === "live",
@@ -63,7 +64,7 @@ export default async function HomePreview({ searchParams }: { searchParams: Prom
     all: rows,
     brand: BRAND,
     baseDomain: "plexopages.com",
-    newSiteHref: "/welcome/setup?new=1",
+    newSiteHref: "/dashboard/sites/new",
     demo: true,
   };
   return (

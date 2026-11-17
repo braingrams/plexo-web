@@ -72,3 +72,9 @@
 .plx-dzledger > div:first-child { border-top: 0; }
 .plx-dzledger small { display: block; color: var(--plx-muted); font-size: 13px; }
 .plx-dzsection { display: flex; flex-direction: column; gap: 14px; }
+
+/* DesignPicker (onboarding "See all designs" and other create-a-site flows). */
+.plx-dzpick { display: flex; flex-direction: column; gap: 20px; }
+.plx-dzpick__acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.plx-dzpick .plx-dzcard__body { flex-wrap: wrap; }
+.plx-dzchip[aria-pressed="true"] { background: var(--plx-brand); color: var(--plx-on-brand); border-color: var(--plx-brand); }

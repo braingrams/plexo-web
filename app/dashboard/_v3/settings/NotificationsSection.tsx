@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Check } from "lucide-react";
+import { Check, Mail } from "lucide-react";
 import { Input, useToast } from "../ui";
 import { isDirty } from "@/lib/dashboardV3/settingsSaveBar";
 import { errMsg, hubApi } from "../hub/hubApi";
-import { AsideCard, Notice, Panel, SaveBar, SettingsPageShell, ToggleRow } from "./bits";
+import { AsideCard, AsideStats, Notice, Panel, SaveBar, SettingsPageShell, ToggleRow } from "./bits";
 
 type Key = "payments" | "formSubmissions" | "blogComments" | "commentMentions";
 export type NotificationPrefs = Record<Key, boolean> & { notificationEmail: string | null };
@@ -67,6 +67,11 @@ export function NotificationsSection({ initial, accountEmail, mock = false }: { 
       purpose="Choose which emails Plexo sends you about your sites."
       bar={<SaveBar dirty={dirty} saving={busy === "email"} valid={!bad} onSave={saveEmail} onDiscard={() => { setEmail(prefs.notificationEmail ?? ""); setError(null); }} />}
       aside={
+        <>
+        <AsideCard title="Where emails go" icon={Mail}>
+          <AsideStats items={[{ label: `of ${ROWS.length} kinds of email are on`, value: ROWS.filter((r) => prefs[r.key]).length, tone: "ok" }]} />
+          <p>They arrive at <b>{prefs.notificationEmail || accountEmail}</b>.</p>
+        </AsideCard>
         <AsideCard title="Good to know">
           <ul>
             <li><Check size={16} aria-hidden /> <span>Switches save the moment you tap them.</span></li>
@@ -74,6 +79,7 @@ export function NotificationsSection({ initial, accountEmail, mock = false }: { 
             <li><Check size={16} aria-hidden /> <span>Emails go to {prefs.notificationEmail || accountEmail}.</span></li>
           </ul>
         </AsideCard>
+        </>
       }
     >
       {error ? <Notice tone="bad">{error}</Notice> : null}

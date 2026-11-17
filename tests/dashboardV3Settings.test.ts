@@ -120,3 +120,55 @@ describe("connect tools", () => {
     expect(JSON.parse(editorConfig("https://x.com", "k")).mcpServers.plexo.env.PLEXO_API_KEY).toBe("k");
   });
 });
+
+import { addressCounts, addressStatus, filterAddresses, groupBySite, NO_FILTERS, relinkDomainValue, switchPlan } from "@/lib/dashboardV3/domainsView";
+import type { AddressRow } from "@/lib/dashboardV3/domainsData";
+
+const addr = (o: Partial<AddressRow> & { id: string; domain: string }): AddressRow => ({ type: "SUBDOMAIN", siteId: "s1", siteName: "KayCare", online: true, pausedByPlan: false, bought: false, ...o });
+const ROWS = [
+  addr({ id: "1", domain: "kaycare.plexopages.com" }),
+  addr({ id: "2", domain: "www.kaycare.com", type: "CUSTOM", online: false }),
+  addr({ id: "3", domain: "aria.plexopages.com", siteId: "s2", siteName: "Aria", pausedByPlan: true }),
+  addr({ id: "4", domain: "aria.com", type: "CUSTOM", siteId: "s2", siteName: "Aria", bought: true }),
+];
+
+describe("domains list", () => {
+  it("names each address's status", () => {
+    expect(ROWS.map(addressStatus)).toEqual(["online", "setting-up", "attention", "online"]);
+    expect(addressCounts(ROWS)).toMatchObject({ total: 4, online: 2, "setting-up": 1, attention: 1, own: 2, free: 2 });
+  });
+  it("searches by address or site, and narrows by site, kind and status", () => {
+    expect(filterAddresses(ROWS, { ...NO_FILTERS, q: "WWW.kaycare" }).map((r) => r.id)).toEqual(["1", "2"]);
+    expect(filterAddresses(ROWS, { ...NO_FILTERS, q: "aria" }).map((r) => r.id)).toEqual(["3", "4"]);
+    expect(filterAddresses(ROWS, { ...NO_FILTERS, kind: "own" }).map((r) => r.id)).toEqual(["2", "4"]);
+    expect(filterAddresses(ROWS, { ...NO_FILTERS, siteId: "s2", kind: "free" }).map((r) => r.id)).toEqual(["3"]);
+    expect(filterAddresses(ROWS, { ...NO_FILTERS, status: "attention" }).map((r) => r.id)).toEqual(["3"]);
+  });
+  it("groups by site, needs-a-look first, own addresses first inside", () => {
+    const g = groupBySite(ROWS);
+    expect(g.map((x) => x.siteName)).toEqual(["Aria", "KayCare"]);
+    expect(g[1].rows.map((r) => r.id)).toEqual(["2", "1"]);
+  });
+});
+
+describe("moving an address to another site", () => {
+  const aria = { id: "s2", name: "Aria" };
+  it("says what changes, and that the old site keeps its free address", () => {
+    const p = switchPlan(ROWS[1], aria, ROWS);
+    expect(p.blocked).toBeNull();
+    expect(p.lines[0]).toBe("www.kaycare.com will show Aria instead of KayCare.");
+    expect(p.lines[1]).toBe("KayCare keeps its free address.");
+  });
+  it("warns when the old site would be left with no address", () => {
+    expect(switchPlan(ROWS[0], aria, [ROWS[0]]).lines[1]).toBe("KayCare will have no web address until you add one.");
+  });
+  it("refuses a no-op, no target, and bought addresses", () => {
+    expect(switchPlan(ROWS[0], { id: "s1", name: "KayCare" }, ROWS).blocked).toMatch(/already shows/);
+    expect(switchPlan(ROWS[0], undefined, ROWS).blocked).toBeTruthy();
+    expect(switchPlan(ROWS[3], { id: "s1", name: "KayCare" }, ROWS).blocked).toMatch(/bought through Plexo/);
+  });
+  it("sends a free address as its first part only", () => {
+    expect(relinkDomainValue(ROWS[0])).toBe("kaycare");
+    expect(relinkDomainValue(ROWS[1])).toBe("www.kaycare.com");
+  });
+});

@@ -42,7 +42,7 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       content = <CourseTab siteId={id} experience={ctx.experience} />;
       break;
     case "brand":
-      content = <BrandTab siteId={id} siteName={site.name} brand={ctx.brand as HubBrand} experience={ctx.experience} sourceType={site.sourceType} />;
+      content = <BrandTab siteId={id} siteName={site.name} brand={site.brand ?? null} defaults={ctx.brand as HubBrand} experience={ctx.experience} sourceType={site.sourceType} />;
       break;
     case "address":
       content = <AddressTab siteId={id} siteName={site.name} experience={ctx.experience} />;

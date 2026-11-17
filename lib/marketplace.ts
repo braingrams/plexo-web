@@ -152,3 +152,22 @@ export async function listMarketplaceTemplates(
     pageSize: PAGE_SIZE,
   };
 }
+
+/** Every published web page design (never emails), with its picture, for the onboarding design picker. Ranked and paged by the caller. */
+export async function listPublishedPageDesigns(): Promise<MarketplaceListItem[]> {
+  const published = await scanPublishedTemplates();
+  const counts = new Map<string, number>();
+  const pages = published.filter((t) => t.kind === "LANDING_PAGE");
+  await Promise.all(pages.map(async (t) => { counts.set(t.id, await purchaseCountFor(t.id)); }));
+  return pages.map((t) => ({
+    id: t.id,
+    name: t.name,
+    kind: t.kind,
+    category: t.marketplaceCategory ?? null,
+    description: t.marketplaceDescription ?? null,
+    priceCents: t.priceCents ?? 0,
+    publishedAt: t.marketplacePublishedAt ?? null,
+    purchaseCount: counts.get(t.id) ?? 0,
+    compiledHtml: t.compiledHtml,
+  }));
+}

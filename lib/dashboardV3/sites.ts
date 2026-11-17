@@ -3,6 +3,8 @@
  * one site at a time with a switcher; intermediate/pro see them all together — SPEC "After
  * You're live"). Pure.
  */
+import type { SiteBrand } from "./brandLook";
+
 export type SiteKindLabel = "Website" | "Online store" | "Blog" | "Course" | "App with sign-in" | "Server app" | "Uploaded app" | "Uploaded page" | "Link page";
 
 export type SiteSummary = {
@@ -13,6 +15,8 @@ export type SiteSummary = {
   /** Where visitors see it, when it's live (e.g. "amaskitchen.plexopages.com"). */
   address?: string | null;
   updatedAt?: string | null;
+  /** This site's own logo and colours (not the account default). */
+  brand?: SiteBrand;
   /** The WordPress address this site was moved from, when it came from there. */
   movedFrom?: string;
 };

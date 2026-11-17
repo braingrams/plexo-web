@@ -31,12 +31,12 @@ export async function useMarketplaceTemplate(
   opts: { name?: string } = {},
 ): Promise<{ id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; designFormat: string }> {
   const { data: listing } = await Template.get({ id }).go();
-  if (!listing || listing.marketplaceStatus !== "PUBLISHED") throw new MarketplaceUseError("Template not found.", 404);
+  if (!listing || listing.marketplaceStatus !== "PUBLISHED") throw new MarketplaceUseError("We could not find that design. It may have been taken down.", 404);
 
   const isFree = !listing.priceCents || listing.priceCents === 0;
   if (!isFree) {
     const { data: purchase } = await TemplatePurchase.get({ userId: resolved.userId, templateId: id }).go();
-    if (!purchase) throw new MarketplaceUseError("Purchase this template before using it.", 403);
+    if (!purchase) throw new MarketplaceUseError("Buy this design first, then you can use it.", 403);
   }
 
   const features = getTierFeatures(resolved.subscriptionPlan);

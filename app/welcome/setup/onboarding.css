@@ -104,3 +104,8 @@
 .ob-site__name { font-size: 16px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ob-site__check { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--plx-brand); color: var(--plx-on-brand); }
 @media (max-width: 620px) { .ob-sites { grid-template-columns: minmax(0, 1fr); } }
+
+/* "See all designs": the marketplace picker under the three tailored designs. */
+.ob-more { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.ob-market { display: flex; flex-direction: column; gap: 20px; padding-top: 12px; border-top: 1px solid var(--plx-border); scroll-margin-top: 24px; }
+.ob-subtitle { margin: 0 0 8px; font-size: clamp(22px, 2.4vw, 28px); font-weight: 800; letter-spacing: -0.01em; }

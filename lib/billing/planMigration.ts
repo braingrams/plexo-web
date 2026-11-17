@@ -145,7 +145,14 @@ async function scheduleStripeMove(
   }
   const group = stripeGroupFor(deps.book, country);
   const renewsAt = new Date(periodEnd * 1000).toISOString();
-  const price = `${formatMoney(planPrice(group, plan, interval), group.currency)}/${interval === "yearly" ? "year" : "month"}`;
+  const amount = planPrice(group, plan, interval);
+  if (amount === null) {
+    // Yearly was switched off for this plan: no yearly price to move them to — left as they are.
+    deps.log(`  ${user.email}: ${PLAN_LABELS[plan]} isn't offered ${interval} any more — left on their current price, check by hand`);
+    r.scheduleSkipped++;
+    return null;
+  }
+  const price = `${formatMoney(amount, group.currency)}/${interval === "yearly" ? "year" : "month"}`;
 
   const existingScheduleId = typeof sub.schedule === "string" ? sub.schedule : sub.schedule?.id;
   if (existingScheduleId) {

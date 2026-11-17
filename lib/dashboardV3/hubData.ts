@@ -14,6 +14,7 @@ import { readBuildProfile, userExperience } from "./profile";
 import type { Experience } from "./nav";
 import { hubKindLabel, pagePath, type HubFeatures } from "./hubTabs";
 import type { SiteKindLabel } from "./sites";
+import { readSiteBrand, type SiteBrand } from "./brandLook";
 
 export type HubContext = { userId: string; organizationId: string; experience: Experience; plan: PlanId; brand: Record<string, unknown> | null };
 
@@ -60,6 +61,8 @@ export type HubSite = {
   app: { kind: "server" | "static"; isLive: boolean; framework: string | null } | null;
   /** Where "Edit design" goes. */
   editHref: string;
+  /** This site's own logo and colours (not the account default). */
+  brand?: SiteBrand;
 };
 
 const asSource = (s: unknown): HubSite["sourceType"] => (s === "RAW_UPLOAD" || s === "REACT_PROJECT" ? s : "BUILDER");
@@ -103,6 +106,7 @@ export async function loadHubSite(organizationId: string, id: string): Promise<H
     deployed: features.deployed ?? null,
     app: deployed ? { kind: deployed.type === "SSR" ? "server" : "static", isLive: deployed.type === "SSR" ? Boolean(deployed.functionUrl) : Boolean(deployed.s3Prefix), framework: deployed.framework ?? null } : null,
     editHref: editHrefFor(id, sourceType),
+    brand: readSiteBrand(t.brand),
   };
 }
 

@@ -1,20 +1,24 @@
 "use client";
 
 import { FileText } from "lucide-react";
-import { SolIcon } from "../../sol/_components/SolIcon";
 import { ASK_USER_QUESTION_TOOL_NAME, type ContentBlock, type SolMessage, type ToolUseBlock } from "../../sol/_components/types";
 import { Markdown } from "./Markdown";
 import { MessageTools } from "./MessageTools";
-import { AnswerRecap, Step } from "./Steps";
+import { AnswerRecap, Step, StepList } from "./Steps";
 
 const isText = (b: ContentBlock): b is { type: "text"; text: string } => (b as { type?: string }).type === "text" && typeof (b as { text?: unknown }).text === "string";
 const isTool = (b: ContentBlock): b is ToolUseBlock => (b as { type?: string }).type === "tool_use";
 const isMedia = (b: ContentBlock): b is { type: "image" | "document"; source?: { url?: string }; url?: string; filename?: string; description?: string } => ["image", "document"].includes((b as { type?: string }).type ?? "");
 
+/** SOL's mark: a small sun (sol = sun), a ring around a bright centre. Deliberately not a sparkle. */
 function SolMark({ size }: { size?: number }) {
+  const s = size ?? 18;
   return (
     <span className="sol3-mark" aria-hidden>
-      <SolIcon size={size ?? 18} />
+      <svg width={s} height={s} viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="2.4" />
+        <circle cx="12" cy="12" r="3.6" fill="currentColor" />
+      </svg>
     </span>
   );
 }
@@ -52,9 +56,9 @@ export function Message({ message, conversationId, onConfirmToolCall, confirmBus
 
   // Consecutive steps sit together as one quiet list.
   const rows: React.ReactNode[] = [];
-  let run: React.ReactNode[] = [];
+  let run: ToolUseBlock[] = [];
   const flush = () => {
-    if (run.length) rows.push(<div className="sol3-steps" key={`steps-${rows.length}`}>{run}</div>);
+    if (run.length) rows.push(<StepList key={`steps-${rows.length}`} blocks={run} />);
     run = [];
   };
   message.content.forEach((block, i) => {
@@ -74,7 +78,7 @@ export function Message({ message, conversationId, onConfirmToolCall, confirmBus
       if (awaiting) {
         flush();
         rows.push(<Step key={block.id || i} block={block} onConfirm={onConfirmToolCall} confirmBusy={confirmBusy} resolvingConfirmation={resolvingConfirmation} />);
-      } else run.push(<Step key={block.id || i} block={block} />);
+      } else run.push(block);
     } else if (isMedia(block)) {
       flush();
       rows.push(<Attachment key={i} kind={block.type} url={block.source?.url ?? block.url} filename={block.filename} description={block.description} />);

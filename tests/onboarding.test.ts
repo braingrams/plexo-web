@@ -108,6 +108,21 @@ describe("saving and creating", () => {
     await expect(completeOnboarding({ profile, designId: "home-shop" }, deps as never)).rejects.toThrow("Your plan allows 1 site.");
     expect(saves.some((s) => "onboardingVersion" in s)).toBe(false);
   });
+  it("builds from a real marketplace design instead of the recipe, named after the business", async () => {
+    const { saves, deps } = make();
+    const createFromMarketDesign = vi.fn(async (_id: string, _name: string) => ({ siteId: "m1", name: "Ama" }));
+    const r = await completeOnboarding({ profile, marketDesignId: "tpl-9" }, { ...deps, createFromMarketDesign } as never);
+    expect(createFromMarketDesign).toHaveBeenCalledWith("tpl-9", "Ama");
+    expect(deps.createSite).not.toHaveBeenCalled();
+    expect(r.site).toEqual({ id: "m1", name: "Ama", goal: "store" });
+    expect(saves.at(-1)).toMatchObject({ onboardingVersion: 3 });
+  });
+  it("does not finish onboarding when a paid design is not bought yet", async () => {
+    const { saves, deps } = make();
+    const createFromMarketDesign = vi.fn(async () => { throw new Error("Buy this design first, then you can use it."); });
+    await expect(completeOnboarding({ profile, marketDesignId: "tpl-9" }, { ...deps, createFromMarketDesign } as never)).rejects.toThrow("Buy this design first");
+    expect(saves.some((s) => "onboardingVersion" in s)).toBe(false);
+  });
   it("skipping (existing owners) and apps only personalise", async () => {
     for (const input of [{ profile, skipSite: true }, { profile: { ...profile, goal: "app" } }]) {
       const { saves, deps } = make();

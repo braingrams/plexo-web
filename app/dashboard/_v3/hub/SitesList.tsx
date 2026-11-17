@@ -2,6 +2,8 @@
 
 import "./hub.css";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { NEW_SITE_PATH } from "@/lib/dashboardV3/newSite";
 import { ExternalLink, Plus, Eye } from "lucide-react";
 import { useState } from "react";
 import { Badge, Button, Card, EmptyState, SegmentedControl, StatusPill } from "../ui";
@@ -17,7 +19,8 @@ export function SitesList({ sites, experience, onCreate, initialFilter = "all" }
     try { window.history.replaceState(null, "", sitesListHref(f)); } catch { /* the filter still works without the address change */ }
   };
   const ctx = useOptionalNewSite();
-  const create = onCreate ?? ctx?.openNewSite ?? (() => {});
+  const router = useRouter();
+  const create = onCreate ?? ctx?.openNewSite ?? (() => router.push(NEW_SITE_PATH));
   const add = <Button leftIcon={<Plus size={18} aria-hidden />} onClick={create} data-tour="sites-create">Create another website</Button>;
   return (
     <div className="plx-page plx-hub" data-tour="sites-main">

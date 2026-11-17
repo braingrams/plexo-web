@@ -65,6 +65,20 @@ export const User = new Entity(
       // price). Shown on the billing page; cleared once the renewal goes through.
       scheduledPlan: { type: ["STARTER", "PRO", "ENTERPRISE"] as const },
       scheduledPlanAt: { type: "string" },
+      // Price changes for people who already subscribe (lib/billing/priceChanges.ts, priceMove.ts).
+      // What each renewal charges now, in minor units (kept up to date by the provider webhooks and
+      // the move job); the last change already applied (effective date#version); when we moved them;
+      // and, for Paystack, the old subscription still to be switched off after a move.
+      subscriptionAmountMinor: { type: "number" },
+      priceChangeKey: { type: "string" },
+      priceMovedAt: { type: "string" },
+      // After a move, before the renewal that charges it: the new amount (minor units) and that renewal's date.
+      nextAmountMinor: { type: "number" },
+      nextAmountAt: { type: "string" },
+      paystackRetireCode: { type: "string" },
+      paystackRetireToken: { type: "string" },
+      // The change whose heads-up email this person already got (one email per change).
+      priceNoticeKey: { type: "string" },
       allowanceBalance: { type: "number", default: 0 },
       topupBalance: { type: "number", default: 0 },
       allowanceResetAt: { type: "string", default: () => new Date().toISOString() },
@@ -210,6 +224,9 @@ export const User = new Entity(
       // The product walkthrough (app/dashboard/_v3/tour): whether they've been asked, which tour
       // and where they are in it, so it resumes across pages and devices. lib/dashboardV3/tour.ts.
       tourState: { type: "any" },
+      // Promo banners (lib/promos) this person closed: { [promoId]: versionTheyClosed }. A promo
+      // the admin edits gets a new version, so an updated message is shown again.
+      dismissedPromos: { type: "any" },
     },
     indexes: {
       primary: {
@@ -690,6 +707,99 @@ export const PriceBookAudit = new Entity(
       primary: {
         pk: { field: "pk", composite: [], template: "PRICEBOOKAUDIT" },
         sk: { field: "sk", composite: ["changedAt", "id"], template: "AUDIT#${changedAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Promo banners: the slim "new thing" strip at the top of the dashboard (lib/promos, app/dashboard/_v3/promo).
+// plexo-admin writes these (editing never touches `clicks`, which the dashboard bumps), the dashboard
+// reads them through a ~60s cache. All rows live under one partition so a read is a single small query.
+// Missing rows = no banner. `version` bumps whenever the wording/link/image changes, so people who
+// closed the old message see the updated one.
+export const Promo = new Entity(
+  {
+    model: { entity: "promo", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      version: { type: "number", required: true },
+      enabled: { type: "boolean", required: true },
+      priority: { type: "number", required: true },
+      feature: { type: "string", required: true },
+      // "all" (default) or "developers" (shown only to developers, closed for good). lib/promos.
+      audience: { type: ["all", "developers"] as const, default: "all" },
+      headline: { type: "string", required: true },
+      body: { type: "string" },
+      buttonLabel: { type: "string", required: true },
+      href: { type: "string", required: true },
+      imageUrl: { type: "string" },
+      tone: { type: ["light", "dark", "brand"] as const, required: true },
+      startsAt: { type: "string" },
+      endsAt: { type: "string" },
+      clicks: { type: "number", default: 0 },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      updatedBy: { type: "string" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "PROMOS" },
+        sk: { field: "sk", composite: ["id"], template: "PROMO#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Who changed a promo, when, and what. Written by plexo-admin with every promo save. Newest first.
+export const PromoAudit = new Entity(
+  {
+    model: { entity: "promoAudit", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      promoId: { type: "string", required: true },
+      changedAt: { type: "string", required: true },
+      changedById: { type: "string", required: true },
+      changedByEmail: { type: "string" },
+      summary: { type: "string" },
+      before: { type: "any" },
+      after: { type: "any" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "PROMOAUDIT" },
+        sk: { field: "sk", composite: ["changedAt", "id"], template: "AUDIT#${changedAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// One row per price-book save that changed an amount: the old and new price per plan, interval
+// and price list, and when people who already subscribe move to it (see lib/billing/priceChanges.ts).
+// Written by plexo-admin in the same transaction as the PriceBookRecord save; plexo-web's move job
+// sets startedAt on the first move. Admin may change effectiveFrom or cancel only while startedAt is unset.
+export const PriceChange = new Entity(
+  {
+    model: { entity: "priceChange", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      version: { type: "number", required: true },
+      createdAt: { type: "string", required: true },
+      createdByEmail: { type: "string" },
+      existingSubscribers: { type: "any", required: true },
+      effectiveFrom: { type: "string", required: true },
+      status: { type: ["scheduled", "cancelled"] as const, default: "scheduled" },
+      startedAt: { type: "string" },
+      cancelledAt: { type: "string" },
+      entries: { type: "any", required: true },
+      moveRemovedYearlyToMonthly: { type: "boolean" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "PRICECHANGE" },
+        sk: { field: "sk", composite: ["createdAt", "id"], template: "CHANGE#${createdAt}#${id}" },
       },
     },
   },

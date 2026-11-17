@@ -81,6 +81,34 @@ export function Step({ block, onConfirm, confirmBusy, resolvingConfirmation }: {
   );
 }
 
+/**
+ * A run of steps as one quiet list. While SOL is working every step shows; once they are all done
+ * (three or more) they fold into one line ("Finished 4 steps") that opens on a tap.
+ */
+export function StepList({ blocks }: { blocks: ToolUseBlock[] }) {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const settled = blocks.length >= 3 && blocks.every((b) => b.status === "success");
+  const expanded = open ?? !settled;
+  const steps = (
+    <div className="sol3-steps">
+      {blocks.map((b, i) => (
+        <Step key={b.id || i} block={b} />
+      ))}
+    </div>
+  );
+  if (!settled) return steps;
+  return (
+    <div className="sol3-steps-group" data-open={expanded}>
+      <button type="button" className="sol3-steps-group__btn" aria-expanded={expanded} onClick={() => setOpen(!expanded)}>
+        <span className="sol3-step__ico" aria-hidden><Check size={18} strokeWidth={2.6} /></span>
+        <span className="sol3-step__text">Finished {blocks.length} steps</span>
+        <ChevronDown size={16} className="sol3-step__chev" aria-hidden />
+      </button>
+      {expanded ? steps : null}
+    </div>
+  );
+}
+
 function Detail({ block }: { block: ToolUseBlock }) {
   return (
     <div className="sol3-step__detail">

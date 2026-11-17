@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { MousePointer2, Pause, Play, PlayCircle, X } from "lucide-react";
+import { guideFor, type GuideStep } from "@/lib/dashboardV3/helpGuides";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
 
@@ -46,15 +47,85 @@ export function HelpMediaPlayer({ src, title, poster }: { src?: string | null; t
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt={title} />
       ) : (
-        <div className="plx-demo" role="img" aria-label={`${title} (a short animation)`}>
-          <span className="plx-demo__bar" />
-          <span className="plx-demo__field" />
-          <span className="plx-demo__field plx-demo__field--b" />
-          <span className="plx-demo__btn" />
-          <span className="plx-demo__done">Done</span>
-          <MousePointer2 className="plx-demo__cursor" fill="currentColor" aria-hidden />
-        </div>
+        <GuidePlayer title={title} />
       )}
+    </div>
+  );
+}
+
+/** What the pointer shows for one step: the exact button, box, tab or choice, on the screen it lives on. */
+function Mock({ step }: { step: GuideStep }) {
+  switch (step.kind) {
+    case "field":
+      return (
+        <div className="plx-guide__mock">
+          <span className="plx-guide__lab">{step.target}</span>
+          <span className="plx-guide__input"><i /></span>
+        </div>
+      );
+    case "tab":
+      return (
+        <div className="plx-guide__mock plx-guide__tabs">
+          <span className="plx-guide__tab">&nbsp;</span>
+          <span className="plx-guide__tab plx-guide__tab--on">{step.target}</span>
+          <span className="plx-guide__tab">&nbsp;</span>
+        </div>
+      );
+    case "choice":
+      return (
+        <div className="plx-guide__mock">
+          <span className="plx-guide__lab">{step.target}</span>
+          <span className="plx-guide__choices"><span>&nbsp;</span><span className="plx-guide__choice--on">&nbsp;</span></span>
+        </div>
+      );
+    default:
+      return (
+        <div className="plx-guide__mock">
+          <span className="plx-guide__ghost" />
+          <span className="plx-guide__btn">{step.target}</span>
+        </div>
+      );
+  }
+}
+
+/** A short, animated, step-by-step walk-through written for this exact topic (see lib/dashboardV3/helpGuides.ts). */
+function GuidePlayer({ title }: { title: string }) {
+  const guide = guideFor(title);
+  const [i, setI] = useState(0);
+  const [paused, setPaused] = useState(false);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) setPaused(true);
+  }, []);
+  const count = guide.steps.length;
+  useEffect(() => {
+    if (paused || count < 2) return;
+    const t = setInterval(() => setI((n) => (n + 1) % count), 3400);
+    return () => clearInterval(t);
+  }, [paused, count]);
+  const step = guide.steps[Math.min(i, count - 1)];
+  return (
+    <div className="plx-guide">
+      <p className="plx-guide__intro">{guide.intro}</p>
+      <div className="plx-guide__stage" key={i} aria-hidden>
+        <span className="plx-guide__where">{step.where}</span>
+        <Mock step={step} />
+        <MousePointer2 className="plx-guide__cursor" fill="currentColor" aria-hidden />
+      </div>
+      <ol className="plx-guide__steps">
+        {guide.steps.map((st, n) => (
+          <li key={st.text}>
+            <button type="button" className="plx-guide__step" aria-current={n === i ? "step" : undefined} onClick={() => { setI(n); setPaused(true); }}>
+              <span>{n + 1}</span>
+              {st.text}
+            </button>
+          </li>
+        ))}
+      </ol>
+      {count > 1 ? (
+        <Button variant="link" size="sm" className="plx-guide__pause" onClick={() => setPaused((v) => !v)} leftIcon={paused ? <Play size={14} aria-hidden /> : <Pause size={14} aria-hidden />}>
+          {paused ? "Play steps" : "Pause"}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -79,7 +150,7 @@ export function HelpMedia({ src, title, caption, label = "Watch how", defaultOpe
       {open ? (
         <div id={id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <HelpMediaPlayer src={src} title={title} />
-          {caption ? <span className="plx-helpmedia__caption">{caption}</span> : null}
+          {caption && src ? <span className="plx-helpmedia__caption">{caption}</span> : null}
         </div>
       ) : null}
     </div>

@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Check, KeyRound, Trash2 } from "lucide-react";
+import { Check, Code2, KeyRound, Trash2, Wrench } from "lucide-react";
 import { Badge, Button, ButtonLink, Textarea } from "../ui";
 import { usageMeter } from "@/lib/dashboardV3/settingsUsage";
 import { errMsg, hubApi } from "../hub/hubApi";
+import { DEVELOPER_EDITOR_CARD } from "@/lib/promos/promos";
 import { SDK_V2_INSTALL, SDK_V2_EMBED } from "@/lib/sdk/v2-snippets";
 import { AsideCard, CopyBox, Notice, Panel, SettingsPageShell, ToggleRow, UsageMeter } from "./bits";
 
@@ -88,10 +89,17 @@ export function DevelopersSection({ keys: k0, maxKeys, canPublishViaApi, publish
       action={<Button loading={busy === "create"} disabled={keys.length >= maxKeys} leftIcon={<KeyRound size={16} aria-hidden />} onClick={create}>New API key</Button>}
       aside={
         <>
-          <AsideCard title="Your keys">
+          {/* Always here, even if the dashboard strip was closed or never switched on. */}
+          <AsideCard title={DEVELOPER_EDITOR_CARD.title} icon={Code2}>
+            <p>{DEVELOPER_EDITOR_CARD.body}</p>
+            <Button variant="secondary" size="sm" onClick={() => document.querySelector('[data-tour="dev-sdk"]')?.scrollIntoView({ behavior: "smooth", block: "start" })}>
+              {DEVELOPER_EDITOR_CARD.button}
+            </Button>
+          </AsideCard>
+          <AsideCard title="Your keys" icon={KeyRound}>
             <UsageMeter label="API keys" meter={meter} hint={meter.tone === "full" ? "You've used them all. Revoke one to make another." : "Each key can be revoked on its own."} />
           </AsideCard>
-          <AsideCard title="More tools">
+          <AsideCard title="More tools" icon={Wrench}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
               <ButtonLink href="/dashboard/settings/ai" variant="link">AI for your sites and apps</ButtonLink>
               <ButtonLink href="/dashboard/settings/github" variant="link">Connect your code account</ButtonLink>

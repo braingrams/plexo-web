@@ -8,7 +8,7 @@ import "./auth-kit.css";
 
 type Props = {
   children: ReactNode;
-  /** "split": form on the left, brand panel on the right (wide screens). "center": one centred column, for in-between steps. */
+  /** "split": brand panel on the left, form on the right (wide screens). "center": one centred column, for in-between steps. */
   layout?: "split" | "center";
   /** A slightly wider column (for cards). */
   wide?: boolean;
@@ -24,6 +24,7 @@ export function AuthShell({ children, layout = "split", wide = false, xl = false
       <link rel="stylesheet" href="/api/brand/auth-css" precedence="default" />
       <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       <main className={layout === "split" ? "ax-split" : undefined}>
+        {layout === "split" ? <BrandPanel /> : null}
         <div className="ax-col">
           <ThemeToggle />
           <div className="ax-col-header">
@@ -39,7 +40,6 @@ export function AuthShell({ children, layout = "split", wide = false, xl = false
             <div className={`ax-col-inner${wide ? " ax-wide" : ""}${xl ? " ax-xl" : ""}`}>{children}</div>
           </div>
         </div>
-        {layout === "split" ? <BrandPanel /> : null}
       </main>
     </div>
   );

@@ -4,6 +4,7 @@
  * WordPress site that moved in, a React app, or a funnel/course. Layout fragments, blog and
  * store layouts, lesson designs, emails, marketplace listings and sub-pages are never sites.
  */
+import { readSiteBrand } from "./brandLook";
 import { siteKindOf, type SiteSummary } from "./sites";
 
 export type TemplateRow = {
@@ -20,6 +21,7 @@ export type TemplateRow = {
   sourceType?: string | null;
   migratedFrom?: string | null;
   updatedAt?: string | null;
+  brand?: unknown;
 };
 
 export type DomainRow = { templateId: string; domain: string; type?: string | null; active?: boolean | null; organizationId?: string | null };
@@ -52,6 +54,7 @@ export function summarizeSites(templates: TemplateRow[], domains: DomainRow[], o
       status: live.has(t.id) ? ("live" as const) : ("draft" as const),
       address: live.get(t.id) ?? null,
       updatedAt: t.updatedAt ?? null,
+      ...(readSiteBrand(t.brand) ? { brand: readSiteBrand(t.brand) } : {}),
       ...(t.migratedFrom ? { movedFrom: t.migratedFrom } : {}),
     }))
     .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));

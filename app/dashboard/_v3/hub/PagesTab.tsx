@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileText, ListOrdered, Plus } from "lucide-react";
 import { Badge, Card, Modal } from "../ui";
 import { pageNote } from "@/lib/dashboardV3/hubTabs";
@@ -13,20 +13,41 @@ import { Button } from "../ui";
 import { ManagePagesCard, ManagePagesList } from "./ManagePages";
 import { managePagesMode } from "@/lib/dashboardV3/hubView";
 
-function Thumb({ page }: { page: HubPage }) {
-  const [state, setState] = useState<"loading" | "ok" | "broken">("loading");
+const THUMB_W = 1280;
+
+/**
+ * A real picture of the page: its own working copy shown small and inert (not clickable, no scripts). The tidy sketch sits
+ * underneath and only shows when the page is still empty. Pictures load as the card scrolls into view.
+ */
+function Thumb({ page, siteId }: { page: HubPage; siteId: string }) {
+  const box = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.22);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const fit = () => setScale(el.clientWidth / THUMB_W);
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  let h = 0;
+  for (const c of page.id) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const layout = page.isRoot ? 0 : (h % 3) + 1;
+  const src = `/api/v1/templates/${siteId}/draft-preview?thumb=1${page.isRoot ? "" : `&page=${page.id}`}`;
   return (
-    <div className="plx-pagecard__thumb" aria-hidden>
-      {state !== "ok" ? (
-        <div className="plx-pagecard__ph">
-          <i />
-          <i />
-          <i style={{ width: "80%" }} />
-          <i style={{ width: "65%" }} />
+    <div className="plx-pagecard__thumb" ref={box} aria-hidden>
+      <div className={`plx-sketch plx-sketch--${layout}`}>
+        <div className="plx-sketch__bar"><i /><i /><i /></div>
+        <div className="plx-sketch__body">
+          <b className="plx-sketch__hero" />
+          <i className="plx-sketch__line" />
+          <i className="plx-sketch__line plx-sketch__line--s" />
+          <div className="plx-sketch__cells"><u /><u /><u /></div>
         </div>
-      ) : null}
-      {state !== "broken" ? (
-        <img src={`/api/v1/templates/${page.id}/snapshot`} alt="" onLoad={() => setState("ok")} onError={() => setState("broken")} style={{ position: "absolute", inset: 0, opacity: state === "ok" ? 1 : 0 }} />
+      </div>
+      {page.sourceType !== "REACT_PROJECT" ? (
+        <iframe className="plx-pagecard__shot" src={src} title="" tabIndex={-1} loading="lazy" referrerPolicy="no-referrer" style={{ width: THUMB_W, height: Math.round((THUMB_W * 10) / 16), transform: `scale(${scale})` }} />
       ) : null}
     </div>
   );
@@ -60,7 +81,7 @@ export function PagesTab({ site, pages, experience }: { site: Pick<HubSite, "id"
           const note = pageNote({ slug: p.slug, isRoot: p.isRoot, isPublished: p.isPublished, archivedByPlan: p.archivedByPlan, storeOn: site.features.store, ownCode: p.sourceType === "RAW_UPLOAD" });
           return (
             <Card key={p.id} as="article" interactive padding="none" className="plx-pagecard" style={{ position: "relative" }}>
-              <Thumb page={p} />
+              <Thumb page={p} siteId={site.id} />
               <div className="plx-pagecard__body">
                 <h3 className="plx-pagecard__name">
                   <Link href={editHrefFor(p.id, p.sourceType)} style={{ color: "inherit", textDecoration: "none" }}>

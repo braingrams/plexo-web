@@ -85,7 +85,7 @@ export function ShareDialog({ conversationId, onClose }: { conversationId: strin
             </Button>
           </div>
           <p className="plx-small" role="status">
-            {copied ? "Link copied. Paste it anywhere to share." : `Shows messages up to ${status.upTo ? new Date(status.upTo).toLocaleString() : "when you shared it"}.`}
+            {copied ? "Link copied. Paste it anywhere to share." : `Shows messages up to ${status.upTo ? new Date(status.upTo).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "when you shared it"}.`}
           </p>
         </div>
       ) : null}

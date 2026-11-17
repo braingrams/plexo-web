@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Download, Globe, Send, ShieldCheck } from "lucide-react";
 import { Badge, Button, ButtonLink, Input, Select, useToast } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
-import { AsideCard, Notice, Panel, SettingsPageShell } from "./bits";
+import { AsideCard, AsideStats, Notice, Panel, SettingsPageShell } from "./bits";
 
 export type MoveSite = { id: string; name: string };
 export type Incoming = { id: string; siteName: string; fromName: string; createdAt: string; expiresAt: string };
@@ -84,6 +84,14 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
       title="Move a site"
       purpose="Give one of your sites to someone else, or bring a site in from somewhere else."
       aside={
+        <>
+        <AsideCard title="Right now" icon={Send}>
+          <AsideStats items={[
+            { label: "Your sites", value: sites.length },
+            { label: "Waiting for you", value: incoming.length, tone: incoming.length ? "warn" : undefined },
+            { label: "Sent by you", value: sent.length },
+          ]} />
+        </AsideCard>
         <AsideCard title="What happens if…">
           <ul>
             <li><ShieldCheck size={16} aria-hidden /> <span><b>I give a site away?</b> Nothing moves until they accept, and you can cancel until then.</span></li>
@@ -91,6 +99,7 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
             <li><ShieldCheck size={16} aria-hidden /> <span><b>I bring a site in?</b> Your old site stays where it is until you switch your address over.</span></li>
           </ul>
         </AsideCard>
+        </>
       }
     >
       {error ? <Notice tone="bad">{error}</Notice> : null}

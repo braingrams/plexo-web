@@ -112,19 +112,19 @@ describe("theme preference", () => {
 describe("nav by experience and goal", () => {
   const labels = (input: Parameters<typeof buildV3Nav>[0]) => buildV3Nav(input).map((n) => n.label);
 
-  it("beginners see only Home, their site, Ask SOL and Settings", () => {
-    expect(labels({ experience: "beginner", goal: "business-site", siteCount: 1 })).toEqual(["Home", "My site", "Ask SOL", "Settings"]);
-    expect(labels({ experience: "beginner", goal: "blog", siteCount: 2 })).toEqual(["Home", "My sites", "Ask SOL", "Settings"]);
-    expect(labels({})).toEqual(["Home", "My site", "Ask SOL", "Settings"]);
+  it("beginners see a short menu: Home, their site, Ask SOL, Emails and Settings", () => {
+    expect(labels({ experience: "beginner", goal: "business-site", siteCount: 1 })).toEqual(["Home", "My site", "Ask SOL", "Emails", "Settings"]);
+    expect(labels({ experience: "beginner", goal: "blog", siteCount: 2 })).toEqual(["Home", "My sites", "Ask SOL", "Emails", "Settings"]);
+    expect(labels({})).toEqual(["Home", "My site", "Ask SOL", "Emails", "Settings"]);
   });
 
   it("adds Orders when they sell and Learners for a course", () => {
-    expect(labels({ experience: "beginner", goal: "store" })).toEqual(["Home", "My site", "Orders", "Ask SOL", "Settings"]);
-    expect(labels({ experience: "beginner", goal: "course" })).toEqual(["Home", "My site", "Learners", "Ask SOL", "Settings"]);
+    expect(labels({ experience: "beginner", goal: "store" })).toEqual(["Home", "My site", "Orders", "Ask SOL", "Emails", "Settings"]);
+    expect(labels({ experience: "beginner", goal: "course" })).toEqual(["Home", "My site", "Learners", "Ask SOL", "Emails", "Settings"]);
     expect(labels({ experience: "beginner", goal: "blog", sells: true })).toContain("Orders");
   });
 
-  it("intermediate adds Emails and Domains; pro adds Developers", () => {
+  it("intermediate adds Domains; pro adds Developers", () => {
     expect(labels({ experience: "intermediate", goal: "business-site" })).toEqual(["Home", "Sites & apps", "Ask SOL", "Emails", "Domains", "Settings"]);
     expect(labels({ experience: "pro", goal: "store" })).toEqual(["Home", "Sites & apps", "Orders", "Ask SOL", "Emails", "Domains", "Developers", "Settings"]);
   });
@@ -182,5 +182,39 @@ describe("sites", () => {
     expect(siteKindOf({ sourceType: "REACT_PROJECT" })).toBe("App with sign-in");
     expect(siteKindOf({ isLmsFunnel: true })).toBe("Course");
     expect(siteKindOf({})).toBe("Website");
+  });
+});
+
+describe("starting an email", () => {
+  it("gives every experience level an Emails menu item", () => {
+    for (const experience of ["beginner", "intermediate", "pro"] as const) {
+      expect(buildV3Nav({ experience }).some((n) => n.id === "emails" && n.href === "/dashboard/emails")).toBe(true);
+    }
+  });
+  it("sends SOL a ready-typed request and Back to the right emails list", async () => {
+    const { solEmailHref, emailsListHref, NEW_EMAIL_HREF } = await import("@/lib/dashboardV3/emails");
+    expect(solEmailHref()).toMatch(/^\/dashboard\/sol\?new=1&draft=Write%20an%20email/);
+    expect(emailsListHref(true)).toBe("/dashboard/emails");
+    expect(emailsListHref(false)).toBe("/dashboard/templates?filter=EMAIL");
+    expect(NEW_EMAIL_HREF).toBe("/dashboard/emails?new=1");
+  });
+});
+
+describe("classic dashboard: finding emails", () => {
+  it("opens the list on emails from ?filter=EMAIL, and ignores nonsense", async () => {
+    const { parseTemplatesFilter } = await import("@/lib/templatesFilter");
+    expect(parseTemplatesFilter("EMAIL")).toBe("EMAIL");
+    expect(parseTemplatesFilter("email")).toBe("EMAIL");
+    expect(parseTemplatesFilter(["FUNNEL"])).toBe("FUNNEL");
+    expect(parseTemplatesFilter("junk")).toBe("ALL");
+    expect(parseTemplatesFilter(null)).toBe("ALL");
+  });
+  it("has an Emails item in the classic menu that lights up on the templates list", async () => {
+    const { NAV_ITEMS, isNavItemActive } = await import("@/app/dashboard/nav-items");
+    const emails = NAV_ITEMS.find((n) => n.label === "Emails")!;
+    expect(emails.href).toBe("/dashboard/templates?filter=EMAIL");
+    expect(isNavItemActive(emails, "/dashboard/templates")).toBe(true);
+    expect(isNavItemActive(emails, "/dashboard/pages")).toBe(false);
+    expect(isNavItemActive(NAV_ITEMS[0], "/dashboard/pages")).toBe(false);
   });
 });

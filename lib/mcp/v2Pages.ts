@@ -76,7 +76,7 @@ export async function loadOwnedRow(resolved: ResolvedUser, id: unknown): Promise
 }
 
 /** Every page of the site this row belongs to (root first), as full rows. */
-async function loadSiteRows(resolved: ResolvedUser, rootId: string): Promise<Row[]> {
+export async function loadSiteRows(resolved: { organizationId: string }, rootId: string): Promise<Row[]> {
   const { data: root } = await Template.get({ id: rootId }).go();
   if (!root || root.organizationId !== resolved.organizationId) return [];
   const rows: Row[] = [root];
@@ -90,7 +90,7 @@ async function loadSiteRows(resolved: ResolvedUser, rootId: string): Promise<Row
   return rows;
 }
 
-function formatLabel(row: Row): "v2" | "classic" | "raw-html" {
+export function formatLabel(row: Row): "v2" | "classic" | "raw-html" {
   if (row.sourceType === "RAW_UPLOAD") return "raw-html";
   return designFormatOf(row) === "v2" ? "v2" : "classic";
 }

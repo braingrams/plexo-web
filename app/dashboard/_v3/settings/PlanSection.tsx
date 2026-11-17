@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
-import { ArrowRight, Check, CreditCard, Download, Mail } from "lucide-react";
+import { ArrowRight, Check, CreditCard, Download, HelpCircle, Mail } from "lucide-react";
 import { getStripePromise } from "@/lib/stripeClientPromise";
 import { startTrial } from "../../_components/trial";
 import { usePricing } from "../../_components/usePricing";
@@ -16,7 +16,7 @@ import { planMonthlyCredits } from "@/lib/credits/value";
 import { creditMeter, usageMeter } from "@/lib/dashboardV3/settingsUsage";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { ACTIVITY_LABELS, cancelExplanation, creditView, planName, planStatusLine, planView, plansAbove, priceSourceFrom, type PlanId, type PlanState, type PriceSource } from "@/lib/dashboardV3/billingView";
-import { AsideCard, DangerCard, Notice, Panel, SettingsPageShell, UsageMeter } from "./bits";
+import { AsideCard, AsideStats, DangerCard, Notice, Panel, SettingsPageShell, UsageMeter } from "./bits";
 
 export type ReceiptRow = {
   id: string;
@@ -199,14 +199,20 @@ export function PlanSection(props: PlanSectionProps) {
       purpose="What you have, what you're using, and what you've paid."
       aside={
         <>
-          <AsideCard title={`What ${current.name} includes`}>
+          <AsideCard title={`Your ${current.name} plan`} icon={CreditCard}>
+            <AsideStats items={[
+              { label: siteMeter.limit ? "Sites live" : "Sites", value: siteMeter.limit ? `${siteMeter.used} of ${siteMeter.limit}` : siteMeter.used, tone: siteMeter.tone === "ok" ? undefined : "warn" },
+              { label: "AI credits left", value: allowanceBalance.toLocaleString("en-US"), tone: creditsMeter.tone === "full" ? "bad" : creditsMeter.tone === "near" ? "warn" : "ok" },
+            ]} />
+          </AsideCard>
+          <AsideCard title={`What ${current.name} includes`} icon={Check}>
             <ul>
               {current.included.map((line) => (
                 <li key={line}><Check size={16} aria-hidden /> <span>{line}</span></li>
               ))}
             </ul>
           </AsideCard>
-          <AsideCard title="What happens if…">
+          <AsideCard title="What happens if…" icon={HelpCircle}>
             <ul>
               <li><ArrowRight size={16} aria-hidden /> <span><b>I upgrade?</b> The new plan starts straight away, and only the difference is charged.</span></li>
               <li><ArrowRight size={16} aria-hidden /> <span><b>I run out of AI credits?</b> Top up any time. Credits you buy never expire.</span></li>

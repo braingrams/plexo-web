@@ -1,16 +1,18 @@
+import { NEW_SITE_PATH } from "@/lib/dashboardV3/newSite";
 import { cookies } from "next/headers";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
 import { loadV3Sites } from "@/lib/dashboardV3/loadShell";
 import { loadSiteFacts, loadSiteStats } from "@/lib/dashboardV3/homeData";
 import { readBuildProfile, userExperience } from "@/lib/dashboardV3/profile";
 import { CURRENT_SITE_COOKIE, pickCurrentSite } from "@/lib/dashboardV3/sites";
+import { displayBrand, type SiteBrand } from "@/lib/dashboardV3/brandLook";
 import { computeTasks, taskVariantFor } from "@/lib/dashboardV3/tasks";
 import { CURRENT_ONBOARDING_VERSION } from "@/lib/dashboardV3/flag";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { HomeView } from "./HomeView";
 import type { HomeProps, HomeSiteRow } from "./homeTypes";
 
-export const NEW_SITE_HREF = "/welcome/setup?new=1";
+export const NEW_SITE_HREF = NEW_SITE_PATH;
 
 type HomeUser = { name?: string | null; experience?: string | null; buildProfile?: unknown; onboardingDeferredAt?: string | null; onboardingVersion?: number | null };
 
@@ -24,7 +26,11 @@ export async function V3Home({ user, organizationId, userId }: { user: HomeUser;
     return [] as Awaited<ReturnType<typeof loadV3Sites>>;
   });
   const current = pickCurrentSite(sites, (await cookies()).get(CURRENT_SITE_COOKIE)?.value);
-  const brand = { name: profile?.brand?.name, color: profile?.brand?.colors?.[0], logoUrl: profile?.brand?.logoUrl };
+  const brandOf = (s: { brand?: SiteBrand }) => {
+    const b = displayBrand(s.brand, profile?.brand);
+    return { name: profile?.brand?.name, color: b.colors?.[0], logoUrl: b.logoUrl };
+  };
+  const brand = current ? brandOf(current) : brandOf({});
   // Someone with sites who hasn't done the short "tune Plexo to you" setup gets a card for it (never "set up your first site").
   const tuneHref = sites.length > 0 && (user.onboardingVersion ?? 0) < CURRENT_ONBOARDING_VERSION ? "/welcome/setup" : undefined;
   const base: Omit<HomeProps, "mode" | "site" | "all"> = { firstName, experience, brand, baseDomain: getPagesDomain(), newSiteHref: NEW_SITE_HREF, tuneHref };

@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { ClassicSwitchItems } from "./_versions/SwitchMenuItems";
-import { NAV_ITEMS } from "./nav-items";
+import { NAV_ITEMS, isNavItemActive } from "./nav-items";
 import { Avatar } from "./_components/Avatar";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { NotificationBell, OrgSwitcher } from "./_components/TeamHeaderControls";
@@ -201,7 +201,7 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
 
         <nav className="dash-pill-nav" style={{ overflowX: "auto" }} aria-label="Dashboard navigation">
           {NAV_ITEMS.map((item) => {
-            const isActive = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+            const isActive = isNavItemActive(item, pathname);
             return (
               <Link
                 key={item.href}
@@ -256,7 +256,7 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
               }}
             >
               {NAV_ITEMS.map((item) => {
-                const isActive = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+                const isActive = isNavItemActive(item, pathname);
                 return (
                   <Link
                     key={item.href}

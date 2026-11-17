@@ -15,8 +15,9 @@ describe("SOL's prompt: plan-first and creative", () => {
   const prompt = buildSolSystemPrompt([]);
 
   it("asks one compact round of questions for something new, then plans, then builds", () => {
-    expect(prompt).toMatch(/ONE compact ask_user_question round/);
-    expect(prompt).toMatch(/Plan, briefly/);
+    expect(prompt).toMatch(/ONE ask_user_question card/);
+    expect(prompt).toMatch(/This request/);
+    expect(prompt).toMatch(/Plan, briefly \(the creative direction\)/);
     expect(prompt).toMatch(/Then build it straight away/);
     expect(prompt).toMatch(/Never ask for things you can default/);
   });

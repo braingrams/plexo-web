@@ -2,7 +2,7 @@
 
 import { Check, ChevronDown } from "lucide-react";
 import { CONNECT_TOOLS, editorConfig, mcpUrl, type ConnectToolId } from "@/lib/dashboardV3/connectTools";
-import { AsideCard, CopyBox, Panel, SettingsPageShell } from "./bits";
+import { CopyBox, Panel, SettingsPageShell } from "./bits";
 
 const MARK: Record<ConnectToolId, string> = { claude: "C", chatgpt: "G", cursor: "›" };
 
@@ -13,17 +13,15 @@ export function ConnectSection({ baseUrl, apiKeyHint }: { baseUrl: string; apiKe
     <SettingsPageShell
       title="AI tools"
       purpose="Already use Claude or ChatGPT? Connect them to Plexo and ask for changes in your own words."
-      aside={
-        <AsideCard title="How it works">
-          <ul>
-            <li><Check size={16} aria-hidden /> <span>You copy one link and paste it into your AI tool, once.</span></li>
-            <li><Check size={16} aria-hidden /> <span>You sign in to Plexo, so the tool can only touch your sites.</span></li>
-            <li><Check size={16} aria-hidden /> <span>Then just ask, like &ldquo;make me a pricing page&rdquo;.</span></li>
-          </ul>
-        </AsideCard>
-      }
     >
-      <div className="plx-sp__main" data-tour="connect-cards">
+      <Panel tone="tint" title="How it works">
+        <ol className="plx-howsteps">
+          <li><b>1</b><span>Copy one link and paste it into your AI tool, once.</span></li>
+          <li><b>2</b><span>Sign in to Plexo, so the tool can only touch your sites.</span></li>
+          <li><b>3</b><span>Then just ask, like &ldquo;make me a pricing page&rdquo;.</span></li>
+        </ol>
+      </Panel>
+      <div className="plx-tools" data-tour="connect-cards">
         {CONNECT_TOOLS.map((t) => (
           <Panel key={t.id} className="plx-tool">
             <div className="plx-tool__head">

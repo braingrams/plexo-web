@@ -1,0 +1,18 @@
+[
+  { "id": "simple-landing", "industry": "none", "text": "build me a landing page" },
+  { "id": "simple-website", "industry": "none", "text": "I need a website for my business" },
+  { "id": "simple-bakery", "industry": "bakery", "text": "Make me a website for my bakery" },
+  { "id": "simple-store", "industry": "fashion", "text": "I want an online store to sell my clothes" },
+  { "id": "simple-portfolio", "industry": "photographer", "text": "create a portfolio site" },
+  { "id": "medium-coach", "industry": "education", "text": "Build a landing page for my career coaching programme. I help recent graduates in Lagos land their first job. People should book a free call." },
+  { "id": "medium-gym", "industry": "fitness", "text": "Create a website for Iron Haven Gym. We're a no-nonsense strength gym. Bold and dark please." },
+  { "id": "medium-law", "industry": "law firm", "text": "I need a site for my law firm, Okafor & Partners. We handle immigration and family law. Elegant and trustworthy." },
+  { "id": "medium-saas", "industry": "software", "text": "Landing page for a SaaS that helps freelancers send invoices and get paid faster. Brand colours are navy and #22C55E. People should sign up for the free trial." },
+  { "id": "medium-nologo", "industry": "salon & beauty", "text": "Website for Glow Studio, a nail salon in Nairobi. We don't have a logo yet. Soft and warm. Clients should book appointments." },
+  { "id": "medium-charity", "industry": "charity", "text": "Build a landing page for Hope Kitchen, a charity feeding families in Accra. People should donate." },
+  { "id": "fr-boulangerie", "industry": "bakery", "text": "Je veux un site web pour ma boulangerie, Le Petit Pain, à Lyon. Nous faisons des croissants et du pain au levain. Ambiance chaleureuse." },
+  { "id": "es-clinic", "industry": "health & wellness", "text": "Necesito una página para mi clínica dental, Sonrisa Clara. Queremos que los pacientes reserven una cita. Colores azul y blanco." },
+  { "id": "edit-existing", "industry": "none", "text": "Change the buttons on my homepage to green", "alreadyBuilt": true },
+  { "id": "skip-just-build", "industry": "none", "text": "Build me a landing page for a dog walking business. Just build it, surprise me." },
+  { "id": "rich-brief", "industry": "bakery", "text": "Build a landing page for Crumb & Co., a small-batch bakery in Accra, Ghana (https://instagram.com/crumbandco). We sell sourdough loaves, custom celebration cakes and weekend pastry boxes, and we deliver across Accra. Our customers are busy young professionals and families who want something special for birthdays and weekends. Brand: warm, friendly, a little playful. Colours: terracotta #C2410C, cream #FFF8F1 and a deep brown #3B2314. We have no logo, please make a simple wordmark from the name. Fonts: Fraunces for headlines and Inter for body text.\n\nSections: hero, how ordering works (pick, pay, we deliver), best-sellers with prices (Sourdough loaf GHS 45, Celebration cake from GHS 320, Weekend pastry box GHS 120), why us, testimonials, FAQ (how early to order, delivery areas, allergies), a custom cake order form, and a footer.\n\nHeadline: \"Fresh from our oven to your Saturday.\" Main action: Order a cake for this weekend. Contact: hello@crumbandco.com, +233 24 123 4567. Opening hours Tue to Sun, 7am to 6pm. Use my own product photos (I'll attach them). No stock photos. Mobile first and accessible." }
+]

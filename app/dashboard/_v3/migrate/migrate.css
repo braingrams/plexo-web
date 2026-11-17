@@ -146,3 +146,6 @@
 .plx-note--info svg { color: var(--plx-info); }
 .plx-note--good { background: var(--plx-success-subtle); }
 .plx-note--good svg { color: var(--plx-success); }
+
+.plx-fact > .plx-badge, .plx-fact > span[class*="plx-badge"] { flex: none; margin-left: auto; }
+@media (max-width: 560px) { .plx-fact { flex-wrap: wrap; } .plx-fact > .plx-badge { margin-left: 0; } }

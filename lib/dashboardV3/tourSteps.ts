@@ -84,7 +84,7 @@ export const TOUR_STEPS: TourStep[] = [
     anchor: "main-nav",
     route: "*",
     title: "Your menu",
-    body: "Your site, your orders and your settings are always one tap away here.",
+    body: "Your site, your emails, your orders and your settings are always one tap away here.",
     tours: ["short", "detailed"],
     order: 30,
   },

@@ -1,6 +1,7 @@
 import { loadV3ShellData } from "@/lib/dashboardV3/loadShell";
 import type { PlanId } from "@/lib/plan/plans";
 import type { OrgBranding } from "../dashboard-shell";
+import { readBuildProfile } from "@/lib/dashboardV3/profile";
 import { LayoutModeProvider } from "../layout-mode-context";
 import { NewSiteProvider } from "../_components/NewSiteModal";
 import { VersionProvider, type VersionUiData } from "../_versions/VersionUi";
@@ -26,7 +27,15 @@ export async function V3DashboardLayout({ user, organizationId, orgBranding, pla
     <V3Root themePreference={data.themePreference} brandColor={orgBranding?.color}>
       <LayoutModeProvider initialMode="CLASSIC">
         <VersionProvider data={versions}>
-        <NewSiteProvider plan={plan}>
+        <NewSiteProvider
+          plan={plan}
+          v3={{
+            plan,
+            brand: readBuildProfile(user.buildProfile)?.brand ?? null,
+            siteNames: data.sites.map((s) => s.name),
+            liveSiteNames: data.sites.filter((s) => s.status === "live").map((s) => s.name),
+          }}
+        >
           <V3Shell
             user={{ name: user.name, email: user.email, image: user.image }}
             experience={data.experience}

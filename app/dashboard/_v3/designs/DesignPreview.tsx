@@ -7,7 +7,7 @@ import { Button, ButtonLink, Modal, SegmentedControl } from "../ui";
 type Device = "desktop" | "tablet" | "phone";
 
 /** A full-size look at a design, on a computer, tablet or phone, without leaving the list. */
-export function DesignPreview({ designId, onClose }: { designId: string | null; onClose: () => void }) {
+export function DesignPreview({ designId, onClose, onUse, useLabel = "Use this design" }: { designId: string | null; onClose: () => void; /** Instead of opening the marketplace page, this runs when they choose "Use this design" (the onboarding picker). */ onUse?: (designId: string) => void; useLabel?: string }) {
   const [state, setState] = useState<{ html: string; name: string; email: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [device, setDevice] = useState<Device>("desktop");
@@ -46,7 +46,7 @@ export function DesignPreview({ designId, onClose }: { designId: string | null; 
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
-          {designId ? <ButtonLink href={`/dashboard/marketplace/${designId}`}>Use this design</ButtonLink> : null}
+          {designId ? (onUse ? <Button onClick={() => { onClose(); onUse(designId); }}>{useLabel}</Button> : <ButtonLink href={`/dashboard/marketplace/${designId}`}>Use this design</ButtonLink>) : null}
         </>
       }
     >

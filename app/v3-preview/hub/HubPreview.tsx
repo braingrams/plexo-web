@@ -110,7 +110,7 @@ export function HubPreview() {
   else if (tab === "blog") content = <BlogTab siteId="s1" experience={exp} />;
   else if (tab === "course") content = <CourseTab siteId="s1" />;
   else if (tab === "app" && site.app) content = <AppTab siteId="s1" siteName={site.name} info={site.app} />;
-  else if (tab === "brand") content = <BrandTab siteId="s1" siteName={site.name} experience={exp} brand={{ colors: ["#b8f34a", "#517a12", "#f5ac05"] }} />;
+  else if (tab === "brand") content = <BrandTab siteId="s1" siteName={site.name} experience={exp} brand={{ colors: ["#B8F34A", "#517A12"], noLogo: true }} />;
   else if (tab === "address") content = <AddressTab siteId="s1" siteName={site.name} experience={exp} />;
   else if (tab === "visits") content = <VisitsTab visits={{ total: 412, days: Array.from({ length: 14 }, (_, i) => ({ label: `Nov ${i + 3}`, views: [12, 30, 22, 41, 18, 9, 33, 52, 38, 27, 45, 61, 19, 5][i] })) }} />;
   else if (tab === "settings") content = <SettingsTab site={site} features={features} experience={exp} />;

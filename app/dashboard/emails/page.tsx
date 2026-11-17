@@ -8,8 +8,9 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Emails" };
 
 /** Email designs only (v3 dashboard). The old Templates page sends people here when v3 is on. */
-export default async function EmailsPage() {
+export default async function EmailsPage({ searchParams }: { searchParams: Promise<{ new?: string }> }) {
+  const { new: openNew } = await searchParams;
   const ctx = await requireHubContext("/dashboard/emails");
   const emails = await loadEmails(ctx.organizationId);
-  return <EmailsLibrary initial={emails} limit={emailLimitFor(ctx.plan)} planName={PLAN_LABELS[ctx.plan] ?? "Free"} />;
+  return <EmailsLibrary initial={emails} limit={emailLimitFor(ctx.plan)} planName={PLAN_LABELS[ctx.plan] ?? "Free"} openNew={openNew === "1"} />;
 }

@@ -577,6 +577,12 @@ export class PublishedSitesStack extends cdk.Stack {
     // the instant they do (lib/plan/lifecycle.ts).
     scheduledRoute("PlanLifecycle", "/api/internal/plan-lifecycle", events.Schedule.rate(cdk.Duration.hours(1)));
 
+    // Price changes for people who already subscribe: moves each subscriber whose renewal is within
+    // the next few days to the new price (lib/billing/priceMove.ts). ?apply=1 makes it live — without
+    // it the route is a dry run. Every 3 hours: the safe window is days wide, the last safe moment is
+    // hours before a charge. Idempotent; the Stripe/Paystack pre-renewal webhooks do the same per person.
+    scheduledRoute("PriceMoves", "/api/internal/price-moves?apply=1", events.Schedule.rate(cdk.Duration.hours(3)));
+
     new cdk.CfnOutput(this, "ConnectionGroupRoutingEndpoint", { value: connectionGroup.attrRoutingEndpoint });
     new cdk.CfnOutput(this, "PrimaryDistributionId", { value: primaryDistribution.attrId, exportName: `${this.stackName}-PrimaryDistributionId` });
     new cdk.CfnOutput(this, "ConnectionGroupId", { value: connectionGroup.attrId, exportName: `${this.stackName}-ConnectionGroupId` });

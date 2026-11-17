@@ -11,6 +11,7 @@
 import { SolOutOfCredits } from "../../_components/sol/SolTopUp";
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { emailsListHref } from "@/lib/dashboardV3/emails";
 import { useEditorBackHref, useEditorColors, useEditorV3 } from "../../_components/EditorTheme";
 import {
   PlexoBuilder,
@@ -762,6 +763,8 @@ export function TemplateEditorClient({
   const [pendingPin, setPendingPin] = useState<PendingPin | null>(null);
 
   const isEmail = templateKind === "EMAIL";
+  // An email has no site page to go back to: Back returns to the emails list.
+  const exitHref = isEmail ? emailsListHref(v3) : backToSiteHref;
   // Viewer/Commenter roles get a read-only canvas (enforced for real server-side by
   // every mutating route's requirePermission check — this is UX support only, see
   // plexo-sdk's readOnly prop docs).
@@ -1198,7 +1201,7 @@ export function TemplateEditorClient({
             kind={templateKind}
             headerRight={headerRightNode}
             onPublish={handlePublish}
-            onBack={() => router.push(backToSiteHref)}
+            onBack={() => router.push(exitHref)}
             onSaved={() => {
               setSaveError(null);
               setHasUnpublishedChanges(true);
@@ -1251,12 +1254,12 @@ export function TemplateEditorClient({
             <EditorHeaderLeft
               isEmail={isEmail}
               templateName={templateName}
-              backLabel={v3 ? "My site" : "Details"}
+              backLabel={isEmail ? "Emails" : v3 ? "My site" : "Details"}
               onBack={() => {
                 // The Detail page is server-rendered fresh on every navigation, so a
                 // just-saved edit is never stale there the way the old flat Templates
                 // list needed a forced refresh to avoid.
-                router.push(backToSiteHref);
+                router.push(exitHref);
               }}
             />
           }

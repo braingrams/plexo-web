@@ -1,26 +1,16 @@
-import { Globe } from "lucide-react";
+import { Testimonials } from "./Testimonials";
 
-/** The right-hand panel on wide screens: one calm line and a quiet miniature of a finished site. */
+/** The left panel on wide screens: the Plexo mark, one promise, and what owners say. Dark green in light and dark. */
 export function BrandPanel() {
   return (
-    <aside className="ax-aside" aria-hidden="true">
-      <h2 className="ax-aside-title">Your website, made simple.</h2>
-
-      <div className="ax-stage">
-        <div className="ax-site">
-          <div className="ax-site-bar">
-            <span className="ax-dot" /><span className="ax-dot" /><span className="ax-dot" />
-            <span className="ax-url"><Globe size={13} />yourbusiness.com<span className="ax-live">Live</span></span>
-          </div>
-          <div className="ax-site-hero">
-            <span className="ax-line ax-line-h" style={{ width: "58%" }} />
-            <span className="ax-line" style={{ width: "86%" }} />
-            <span className="ax-line" style={{ width: "62%" }} />
-            <span className="ax-site-cta" />
-          </div>
-          <div className="ax-site-grid"><span className="ax-thumb" /><span className="ax-thumb" /><span className="ax-thumb" /></div>
-        </div>
+    <aside className="ax-aside" aria-label="About Plexo">
+      <div className="ax-aside-art" aria-hidden="true" />
+      <div className="ax-aside-top">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img className="ax-aside-logo" src="/api/brand/logo/wordmark-on-dark" alt="Plexo" width={132} height={34} />
+        <h2 className="ax-aside-title">Everything you need to put your business online, without the hassle</h2>
       </div>
+      <Testimonials />
     </aside>
   );
 }

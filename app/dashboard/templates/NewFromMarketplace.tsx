@@ -32,8 +32,11 @@ type MarketplaceItem = {
 export function NewFromMarketplace({
   onClose,
   onCreated,
+  kind,
 }: {
   onClose: () => void;
+  /** Only offer designs of this kind (the New email dialog passes "EMAIL"). */
+  kind?: "EMAIL" | "LANDING_PAGE";
   /** Called instead of the default redirect once a free template has been cloned into the
    * caller's account — lets callers outside the Templates page (e.g. the Blog page's "start
    * from a template" flow) chain their own follow-up step before navigating. */
@@ -50,11 +53,11 @@ export function NewFromMarketplace({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const params = new URLSearchParams({ sort: "popular", ...(q.trim() ? { q: q.trim() } : {}) });
+    const params = new URLSearchParams({ sort: "popular", ...(kind ? { kind } : {}), ...(q.trim() ? { q: q.trim() } : {}) });
     fetch(`/api/v1/marketplace/templates?${params.toString()}`)
       .then((r) => r.json())
       .then((data) => {
-        if (!cancelled) setItems(data.templates ?? []);
+        if (!cancelled) setItems(((data.templates ?? []) as MarketplaceItem[]).filter((t) => !kind || t.kind === kind));
       })
       .catch(() => {
         if (!cancelled) setItems([]);
@@ -65,7 +68,7 @@ export function NewFromMarketplace({
     return () => {
       cancelled = true;
     };
-  }, [q]);
+  }, [q, kind]);
 
   async function handleSelect(item: MarketplaceItem) {
     setError(null);
@@ -98,7 +101,7 @@ export function NewFromMarketplace({
         type="text"
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search marketplace templates…"
+        placeholder={kind === "EMAIL" ? "Search email designs…" : "Search marketplace templates…"}
         style={{
           width: "100%",
           background: "rgba(255,255,255,0.04)",
@@ -185,7 +188,7 @@ export function NewFromMarketplace({
         })}
         {!loading && items.length === 0 && (
           <p style={{ textAlign: "center", color: "rgba(240,242,255,0.4)", fontSize: "0.85rem", padding: "1.5rem 0" }}>
-            No templates found.
+            {kind === "EMAIL" ? "No email designs found." : "No templates found."}
           </p>
         )}
       </div>

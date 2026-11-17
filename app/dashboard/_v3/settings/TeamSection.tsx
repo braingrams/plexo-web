@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Mail, Send, UserMinus } from "lucide-react";
+import { Check, Mail, Send, ShieldCheck, UserMinus, Users } from "lucide-react";
 import { Avatar, Badge, Button, ButtonLink, Input, Select, useToast } from "../ui";
 import { usageMeter } from "@/lib/dashboardV3/settingsUsage";
 import { errMsg, hubApi } from "../hub/hubApi";
@@ -63,11 +63,11 @@ export function TeamSection({ currentUserId, currentRole, organizationName, memb
       purpose={`The people who help with ${organizationName}, and what each of them can do.`}
       aside={
         <>
-          <AsideCard title="Seats">
+          <AsideCard title="Seats" icon={Users}>
             <UsageMeter label="Teammates" meter={seats} unit={{ one: "teammate", many: "teammates" }} hint={seatLimit === 0 ? "Inviting people comes with the Starter plan." : seats.tone === "full" ? "All seats are used. Upgrade to add more people." : `${total} ${total === 1 ? "person" : "people"} in all, counting you.`} />
             {seatLimit === 0 || seats.tone === "full" ? <ButtonLink href="/dashboard/settings/plan" variant="secondary">See plans</ButtonLink> : null}
           </AsideCard>
-          <AsideCard title="What can each role do?">
+          <AsideCard title="What can each role do?" icon={ShieldCheck}>
             <ul>
               {TEAM_ROLES.map((r) => (
                 <li key={r.value}><Check size={16} aria-hidden /> <span><b>{r.label}.</b> {r.body}</span></li>

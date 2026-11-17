@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Plus, Search } from "lucide-react";
+import { NEW_SITE_PATH } from "@/lib/dashboardV3/newSite";
 import { CURRENT_SITE_COOKIE, type SiteSummary } from "@/lib/dashboardV3/sites";
 import { switchGroups, type SwitchRow } from "@/lib/dashboardV3/siteSwitch";
 import { useOptionalNewSite } from "../../_components/NewSiteModal";
@@ -15,7 +16,7 @@ export type SiteSwitcherProps = {
   currentSiteId?: string | null;
   /** Called after a pick (default: remember it and refresh, so every page shows that site). */
   onSelect?: (id: string) => void;
-  /** Default: the new-site wizard (or /dashboard/new). */
+  /** Default: the new-site wizard (or the page). */
   onCreate?: () => void;
 };
 
@@ -35,7 +36,7 @@ export function SiteSwitcher({ sites, currentSiteId, onSelect, onCreate }: SiteS
     setOpen(false);
     if (onCreate) onCreate();
     else if (newSite) newSite.openNewSite();
-    else router.push("/dashboard/new");
+    else router.push(NEW_SITE_PATH);
   };
   const select = (id: string) => {
     setOpen(false);
@@ -65,7 +66,7 @@ export function SiteSwitcher({ sites, currentSiteId, onSelect, onCreate }: SiteS
   return (
     <div className="plx-siteswitch" data-tour="site-switcher">
       <button ref={button} type="button" className="plx-siteswitch__btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)} aria-label={`${current.name}. Switch site`}>
-        <Avatar name={current.name} size={34} square />
+        <Avatar name={current.name} size={34} square src={current.brand?.logoUrl} color={current.brand?.colors?.[0]} />
         <span className="plx-siteswitch__text">
           <span className="plx-siteswitch__name" title={current.name}>{current.name}</span>
           <span className="plx-siteswitch__hint">Switch site</span>
@@ -84,7 +85,7 @@ function Row({ row, id, selected, active, onPick, onHover }: { row: SwitchRow; i
   return (
     <li role="presentation">
       <button type="button" role="option" id={id} aria-selected={selected} data-active={active} tabIndex={-1} className="plx-sitepick__row" title={`${site.name} · ${site.kind} · ${detail}`} onClick={onPick} onMouseMove={onHover}>
-        <Avatar name={site.name} size={36} square />
+        <Avatar name={site.name} size={36} square src={site.brand?.logoUrl} color={site.brand?.colors?.[0]} />
         <span className="plx-sitepick__text">
           <span className="plx-sitepick__name">{site.name}</span>
           <span className="plx-sitepick__meta">

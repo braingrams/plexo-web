@@ -28,6 +28,7 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
   const near = planParam === "near";
   const bigTeam = params.get("team") === "5";
   const pending = params.get("domain") === "pending";
+  const manyDomains = params.get("domain") === "many";
   const manyKeys = params.get("keys") === "many";
   return (
     <SettingsFrame current={section} experience={experience} base="/v3-preview/settings">
@@ -75,7 +76,7 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
           mock
           sites={sites}
           canUseOwn
-          addresses={[
+          addresses={manyDomains ? manyAddresses() : [
             { id: "d1", domain: "amaskitchen.plexopages.com", type: "SUBDOMAIN", siteId: "s1", siteName: "Ama's Kitchen", online: true, pausedByPlan: false, bought: false },
             { id: "d2", domain: "learn.amaskitchen.com", type: "CUSTOM", siteId: "s2", siteName: "Cooking with Ama", online: true, pausedByPlan: false, bought: false },
             { id: "d3", domain: "www.amaskitchen.com", type: "CUSTOM", siteId: "s1", siteName: "Ama's Kitchen", online: pending ? false : false, pausedByPlan: false, bought: false },
@@ -98,4 +99,23 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
       ) : null}
     </SettingsFrame>
   );
+}
+
+/** 23 addresses across the three sites, so the list tools (search, filters, grouping) can be seen. */
+function manyAddresses() {
+  const names = ["Ama's Kitchen", "Cooking with Ama", "Kitchen notes"];
+  return Array.from({ length: 23 }, (_, i) => {
+    const site = i % 3;
+    const own = i % 4 === 0;
+    return {
+      id: `m${i}`,
+      domain: own ? `${["www", "learn", "shop", "blog"][i % 4]}.amaskitchen${i}.com` : `amas-${i}.plexopages.com`,
+      type: (own ? "CUSTOM" : "SUBDOMAIN") as "CUSTOM" | "SUBDOMAIN",
+      siteId: `s${site + 1}`,
+      siteName: names[site],
+      online: !(own && i % 8 === 0) && i !== 7,
+      pausedByPlan: i === 7,
+      bought: i === 12,
+    };
+  });
 }

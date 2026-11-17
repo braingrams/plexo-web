@@ -8,7 +8,7 @@
 // mid-plan; a new country takes effect once the plan ends. Which group a country belongs to,
 // and its prices, come from the price book (lib/billing/priceBook.ts).
 
-import { currencyChoices, effectiveCountry, pricingView, resolvePriceRegion, type PriceBook, type PriceGroup, type PricingView } from "./pricing";
+import { effectiveCountry, pricingView, resolvePriceRegion, type PriceBook, type PriceGroup, type PricingView } from "./pricing";
 
 export type BillingRegionUser = {
   country?: string | null;
@@ -42,7 +42,9 @@ function regionInput(user: BillingRegionUser | null | undefined, headers: Header
     userCountry: keepsPaidCountry ? null : user?.country,
     headerCountry: countryFromHeaders(headers),
     billingCountry: user?.billingCountry,
-    billingCurrency: legacyUsd ? "USD" : user?.billingCurrency,
+    // Prices are always in the owner's country currency. A saved "USD" only counts while a subscription is running in it
+    // (it fixes the currency); once that ends, people are back on their own country's price list.
+    billingCurrency: legacyUsd ? "USD" : hasRunningSubscription(user) ? user?.billingCurrency : undefined,
   };
 }
 
@@ -53,7 +55,7 @@ export function billingRegionFor(book: PriceBook, user: BillingRegionUser | null
 /** Everything a pricing screen needs, for this account on this request. */
 export function pricingViewFor(book: PriceBook, user: BillingRegionUser | null | undefined, headers: Headers): PricingView {
   const input = regionInput(user, headers);
-  return pricingView(resolvePriceRegion(book, input), { choices: currencyChoices(book, input), locked: hasRunningSubscription(user), country: effectiveCountry(input) });
+  return pricingView(resolvePriceRegion(book, input), { choices: null, locked: hasRunningSubscription(user), country: effectiveCountry(input) });
 }
 
 /** The fields to save on the account the first time it checks out (null once saved). */

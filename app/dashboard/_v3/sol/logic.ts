@@ -63,12 +63,10 @@ export function greetingFor(hour: number): string {
 }
 
 export const SUGGESTIONS = [
-  { id: "site", title: "Make a website", hint: "Tell me about your business and I'll build the pages.", prompt: "Help me make a website for my business. Ask me what you need to know first." },
-  { id: "shop", title: "Add a shop", hint: "Sell products and take payments.", prompt: "I want to add an online shop to my site so I can sell my products. Walk me through it." },
-  { id: "blog", title: "Write a blog post", hint: "A first draft in your voice, ready to edit.", prompt: "Write a blog post for my site. Ask me what it should be about." },
-  { id: "improve", title: "Improve my site", hint: "Better words, clearer pages, a nicer look.", prompt: "Look at my site and tell me the three things that would improve it most. Then offer to do them." },
-  { id: "app", title: "Build an app", hint: "Sign-in, saved information, the lot.", prompt: "I want to build an app where people can sign in. Ask me what it should do." },
-  { id: "help", title: "Ask anything", hint: "Not sure where to start? Just ask.", prompt: "I'm new here. What can you help me with?" },
+  { id: "site", title: "Build me a website", prompt: "Help me make a website for my business. Ask me what you need to know first." },
+  { id: "about", title: "Write my about page", prompt: "Write the About page for my site. Ask me a few questions about my story first." },
+  { id: "shop", title: "Set up my shop", prompt: "I want to add an online shop to my site so I can sell my products. Walk me through it." },
+  { id: "change", title: "Change something on my site", prompt: "I want to change something on my site. Ask me what it is." },
 ] as const;
 
 // ── Steps in plain words ───────────────────────────────────────────────────────────────

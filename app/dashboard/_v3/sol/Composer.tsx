@@ -111,9 +111,6 @@ export function SolComposer(props: ComposerProps & { autoFocus?: boolean }) {
           )}
         </div>
       </div>
-      <p className="sol3-hint">
-        <kbd>Enter</kbd> to send · <kbd>Shift</kbd> + <kbd>Enter</kbd> for a new line
-      </p>
     </div>
   );
 }

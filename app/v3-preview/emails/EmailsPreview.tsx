@@ -15,12 +15,12 @@ const ALL: EmailCard[] = [
   { id: "e5", name: "Abandoned cart nudge", updatedAt: day(30), createdAt: day(40), html: mail("#fff0f0", "#c92a2a", "You left something behind", "Your basket is still waiting. Finish up in two minutes.") },
 ];
 const DESIGNS = [
-  { id: "d1", name: "Warm welcome", category: "Welcome", priceCents: 0 },
-  { id: "d2", name: "Clean receipt", category: "Receipts", priceCents: 0 },
-  { id: "d3", name: "Bold newsletter", category: "Newsletter", priceCents: 0 },
-  { id: "d4", name: "Product launch", category: "Announcements", priceCents: 1200 },
-  { id: "d5", name: "Event invite", category: "Events", priceCents: 0 },
-  { id: "d6", name: "Thank-you note", category: "Thank you", priceCents: 0 },
+  { id: "d1", name: "Warm welcome", category: "Welcome", priceCents: 0, html: ALL[0].html },
+  { id: "d2", name: "Clean receipt", category: "Receipts", priceCents: 0, html: ALL[1].html },
+  { id: "d3", name: "Bold newsletter", category: "Newsletter", priceCents: 0, html: ALL[2].html },
+  { id: "d4", name: "Product launch", category: "Announcements", priceCents: 1200, html: ALL[3].html },
+  { id: "d5", name: "Event invite", category: "Events", priceCents: 0, html: ALL[4].html },
+  { id: "d6", name: "Thank-you note", category: "Thank you", priceCents: 0, html: ALL[0].html },
 ];
 
 export function EmailsPreview() {
@@ -29,5 +29,5 @@ export function EmailsPreview() {
   const dialog = q.get("dialog");
   const free = state === "limit";
   const initial = state === "empty" ? [] : free ? ALL.slice(0, 1) : ALL.slice(0, 3);
-  return <EmailsLibrary key={`${state}-${dialog}`} initial={initial} limit={free ? 1 : 5} planName={free ? "Free" : "Starter"} designs={DESIGNS} preview openNew={!!dialog} />;
+  return <EmailsLibrary key={`${state}-${dialog}`} initial={initial} limit={free ? 1 : 5} planName={free ? "Free" : "Starter"} designs={DESIGNS} preview openNew={!!dialog} startWith={dialog === "blank" ? "blank" : dialog === "design" ? "design" : "choose"} />;
 }

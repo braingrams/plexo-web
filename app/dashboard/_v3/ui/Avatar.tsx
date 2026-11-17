@@ -13,9 +13,9 @@ function toneOf(name: string): number {
 }
 
 /** A person's (or a site's) picture, or their initials on a brand colour. */
-export function Avatar({ name, src, size = 40, square, className }: { name: string; src?: string | null; size?: number; square?: boolean; className?: string }) {
+export function Avatar({ name, src, size = 40, square, className, color }: { name: string; src?: string | null; size?: number; square?: boolean; className?: string; color?: string }) {
   return (
-    <span className={cx("plx-avatar", square && "plx-avatar--square", className)} data-tone={toneOf(name)} style={{ width: size, height: size, fontSize: Math.round(size * 0.4) }} aria-hidden={src ? undefined : true}>
+    <span className={cx("plx-avatar", square && "plx-avatar--square", className)} data-tone={toneOf(name)} style={{ width: size, height: size, fontSize: Math.round(size * 0.4), ...(color && !src ? { background: color, color: "white" } : {}) }} aria-hidden={src ? undefined : true}>
       {src ? <img src={src} alt={name} /> : initialsOf(name)}
     </span>
   );

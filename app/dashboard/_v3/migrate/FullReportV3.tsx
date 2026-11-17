@@ -7,7 +7,7 @@ import type { Report } from "@/app/dashboard/migrate/wordpress/wizard/types";
 
 const mb = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
-const PLUGIN_WORDS = { NEEDS_ATTENTION: "Needs a look", NATIVE: "Plexo does this for you", PRESERVED: "Comes across as it is", NOT_NEEDED: "Not needed" } as const;
+const PLUGIN_WORDS = { NEEDS_ATTENTION: "Check after the move", NATIVE: "Plexo does this for you", PRESERVED: "Comes across as it is", NOT_NEEDED: "Not needed" } as const;
 
 /** Every page and post, and what happened to each add-on, for anyone who wants the detail. */
 export function FullReportV3({ report: r, templateId }: { report: Report; templateId: string }) {

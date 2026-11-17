@@ -1,6 +1,7 @@
 import { SITE_PAGE_TYPES } from "@charisol/plexo-sdk/v2/compile";
 
 import type { resolveUser } from "@/lib/auth/resolveUser";
+import { saveSiteLook } from "@/lib/sites/saveLook";
 import { createSite, SiteBuildError } from "@/lib/sites/siteBuilder";
 import { findPageCandidates, howToChange, pickPage, rankPages } from "@/lib/sites/findPage";
 import { listSiteTemplates } from "@/lib/sites/siteTemplates";
@@ -138,6 +139,23 @@ export const SITE_MCP_TOOLS = [
       required: ["query"],
     },
   },
+  {
+    name: "site_save_look",
+    title: "Save a Site's Logo and Colours",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      "Saves the owner's logo and colours as THIS site's brand (the same as the Brand tab's \"Colours and logo\" card) and applies them to the site's pages, so every page stays consistent and Home's \"logo and colours\" step ticks. Only call it after the owner agreed to save them. Pass colours as hex (main colour first, optionally a second), and either logoUrl (a public address, e.g. from use_attached_image) or noLogo true when they have no logo (a wordmark is made from the name). Returns a plain sentence saying what was applied.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        siteId: { type: "string", description: "The site's home page id." },
+        colors: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 6, description: "Hex colours, main first, e.g. [\"#C2410C\", \"#F59E0B\"]." },
+        logoUrl: { type: "string", description: "A public https address of their logo." },
+        noLogo: { type: "boolean", description: "True when they have no logo." },
+      },
+      required: ["siteId", "colors"],
+    },
+  },
 ];
 
 export const SITE_TOOL_NAMES = new Set(SITE_MCP_TOOLS.map((t) => t.name));
@@ -194,6 +212,13 @@ export async function handleSiteTool(toolName: string, args: any, resolved: Reso
           next:
             "Built, not published. Tell the owner what you made (pages, the look) in a few lines. To put it live: page_publish with templateId = siteId and a domain (offer suggestedDomains with ask_user_question), then page_publish each other page. To refine a page: page_describe then page_edit.",
         };
+      }
+      case "site_save_look": {
+        const siteId = typeof args?.siteId === "string" ? args.siteId.trim() : "";
+        if (!siteId) throw new Error("Say which site to save the logo and colours for.");
+        const result = await saveSiteLook(resolved, siteId, { colors: args?.colors, logoUrl: args?.logoUrl, logoSkipped: args?.noLogo === true });
+        if (result.status !== 200) throw new Error(String((result.body as { error?: string }).error ?? "We couldn't save your logo and colours."));
+        return { success: true, ...result.body };
       }
       case "list_site_templates":
         return await listSiteTemplates(resolved.userId, args ?? {});

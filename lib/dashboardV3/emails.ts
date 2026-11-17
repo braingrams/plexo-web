@@ -55,3 +55,19 @@ export function editedLabel(iso: string, now: Date = new Date()): string {
   if (days < 14) return `Edited ${days} days ago`;
   return `Edited ${new Date(iso).toLocaleDateString("en", { day: "numeric", month: "short" })}`;
 }
+
+/** What SOL starts from when someone taps "Ask SOL to write it for me". They finish the sentence. */
+export const SOL_EMAIL_DRAFT = "Write an email for me. It is for ";
+
+/** The SOL chat with the email request already typed in, so nobody starts from an empty box. */
+export function solEmailHref(): string {
+  return `/dashboard/sol?new=1&draft=${encodeURIComponent(SOL_EMAIL_DRAFT)}`;
+}
+
+/** Where "Back" goes from an email's editor: the emails list, in whichever dashboard the person uses. */
+export function emailsListHref(v3: boolean): string {
+  return v3 ? "/dashboard/emails" : "/dashboard/templates?filter=EMAIL";
+}
+
+/** Home's quick action opens the Emails page with the "New email" choices already showing. */
+export const NEW_EMAIL_HREF = "/dashboard/emails?new=1";

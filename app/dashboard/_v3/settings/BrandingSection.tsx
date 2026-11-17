@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, ImagePlus } from "lucide-react";
+import { Check, Eye, ImagePlus } from "lucide-react";
 import { Button, ButtonLink, Input, useToast } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { BRAND } from "@/lib/theme";
@@ -77,7 +77,7 @@ export function BrandingSection({ organizationId, canManage, planAllowsWhiteLabe
       bar={<SaveBar dirty={dirty && !locked} saving={busy === "save"} valid={!!v.name.trim()} onSave={save} onDiscard={() => { setV(saved); setError(null); }} />}
       aside={
         <>
-          <AsideCard title="Preview">
+          <AsideCard title="Preview" icon={Eye}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, padding: 16, borderRadius: 14, background: "var(--plx-surface)", border: "1px solid var(--plx-border)" }}>
               {showLogo ? <img src={v.logo} alt="" style={{ width: 40, height: 40, objectFit: "contain", borderRadius: 8 }} /> : <span className="plx-tile" style={{ background: v.color, color: "var(--plx-on-brand)" }}><Check size={18} aria-hidden /></span>}
               {showName ? <b style={{ fontSize: 17 }}>{v.name || "Your name"}</b> : null}

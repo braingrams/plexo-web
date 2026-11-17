@@ -35,6 +35,8 @@ type Props = {
   cancelAtPeriodEnd?: boolean;
   /** A plan move booked for the next renewal (the 2026 plan change), with its price. */
   scheduled?: { plan: PlanId; at: string | null; priceLabel: string | null } | null;
+  /** "Your price changes to X on <date>." when an admin price change reaches this subscriber's next renewal. */
+  priceNotice?: string | null;
   allowanceBalance: number;
   topupBalance: number;
   allowanceResetAt: string;
@@ -93,7 +95,7 @@ function daysUntil(iso: string): number {
   return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
 }
 
-export function BillingSection({ plan, paying = plan !== "FREE", planNote = null, trialAvailable = false, provider = null, interval = null, cancelAtPeriodEnd = false, scheduled = null, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
+export function BillingSection({ plan, paying = plan !== "FREE", planNote = null, trialAvailable = false, provider = null, interval = null, cancelAtPeriodEnd = false, scheduled = null, priceNotice = null, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -398,6 +400,16 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
               }}
             >
               {`From your next renewal${scheduled.at ? ` on ${formatDate(scheduled.at)}` : ""} you'll be on ${PLAN_LABELS[scheduled.plan]}${scheduled.priceLabel ? ` at ${scheduled.priceLabel}` : ""}. It includes everything you have today — nothing for you to do.`}
+            </p>
+          )}
+          {priceNotice && (
+            <p
+              style={{
+                fontSize: "0.82rem", lineHeight: 1.5, marginBottom: "0.75rem", padding: "0.6rem 0.9rem", borderRadius: 10,
+                color: "var(--plx-text, rgba(240,242,255,0.75))", background: "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 7%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)",
+              }}
+            >
+              {`${priceNotice} Nothing for you to do. Until then you keep paying what you pay now.`}
             </p>
           )}
           <PlanPicker

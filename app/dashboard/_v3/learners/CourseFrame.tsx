@@ -1,10 +1,12 @@
 "use client";
 
 import "./learners.css";
+import { useState } from "react";
 import Link from "next/link";
 import { ExternalLink, Plus } from "lucide-react";
 import { Badge, ButtonLink, TabLinks } from "../ui";
 import type { Experience } from "@/lib/dashboardV3/nav";
+import { NewCourseDialog } from "./NewCourseDialog";
 
 export type CourseLite = { id: string; name: string; address: string | null; live: boolean; learners: number; lessons: number };
 export type CourseTabId = "learners" | "lessons" | "settings";
@@ -17,6 +19,7 @@ export function courseHref(id: string, tab: CourseTabId): string {
 export function CourseFrame({ courses, current, tab, experience, base = "/dashboard/learners", children }: { courses: CourseLite[]; current: CourseLite; tab: CourseTabId; experience: Experience; base?: string; children: React.ReactNode }) {
   const hrefFor = (id: string, t: CourseTabId) => (base === "/dashboard/learners" ? courseHref(id, t) : `${base}?course=${id}&tab=${t}`);
   const jargon = experience === "pro";
+  const [creating, setCreating] = useState(false);
   return (
     <div className="plx-page plx-lrn" data-tour="learners-main">
       <header className="plx-lrn__head">
@@ -43,9 +46,10 @@ export function CourseFrame({ courses, current, tab, experience, base = "/dashbo
             <span>{c.live ? <Badge tone="success" dot>Open to sign-ups</Badge> : <Badge>Not open yet</Badge>}</span>
           </Link>
         ))}
-        <Link href="/dashboard/new" className="plx-course plx-course--add">
+        <button type="button" className="plx-course plx-course--add" onClick={() => setCreating(true)}>
           <Plus size={18} aria-hidden /> New course
-        </Link>
+        </button>
+        <NewCourseDialog open={creating} onClose={() => setCreating(false)} />
       </nav>
 
       <TabLinks

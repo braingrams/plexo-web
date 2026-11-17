@@ -14,6 +14,7 @@ import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, p
 import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
 import { getDashboardVersionState } from "@/lib/dashboardVersions/state";
 import { VersionProvider } from "./_versions/VersionUi";
+import { ServerPromo } from "./_v3/promo/ServerPromo";
 import { V3DashboardLayout } from "./_v3/V3DashboardLayout";
 
 export default async function DashboardLayout({
@@ -72,6 +73,8 @@ export default async function DashboardLayout({
       >
         <MigrationBanner />
         {planBanner ? <PlanBanner state={planBanner} /> : null}
+        {/* Admin "what's new" strip: yields to the plan notice (and, in CSS, to the migration one). */}
+        <ServerPromo user={dbUser} yieldTo={!!planBanner} />
         {children}
         <AppLiveDialog />
       </V3DashboardLayout>

@@ -23,6 +23,7 @@ import {
 } from "./solAgent";
 import { ASK_USER_QUESTION_TOOL_NAME } from "./solToolSchema";
 import { loadBuildProfile } from "./solBuildContext";
+import { withCurrentSite } from "./solSiteContext";
 import { maybeExtractMemoryFact } from "./memoryExtraction";
 import { maybeGenerateConversationTitle } from "./titleGeneration";
 import { recordSolUsageEvent, type SolToolCallRecord } from "@/lib/solAnalytics";
@@ -562,7 +563,7 @@ export async function prepareMessagesTurn(
   }
 
   const { memoryEnabled, facts: memoryFacts, preferences } = await loadMemoryContext(resolved.userId);
-  const buildProfile = await loadBuildProfile(resolved.userId);
+  const buildProfile = await withCurrentSite(await loadBuildProfile(resolved.userId), resolved.organizationId);
   const turnStartedAt = new Date().toISOString();
   // Started here, immediately, NOT inside `run` below — this needs to begin running in
   // parallel with the main turn as early as possible, using only `text` (the user's own
@@ -710,7 +711,7 @@ export async function prepareConfirmTurn(
   const modelTier = tierFor(routing.route, routing.plan, ((conversation.modelTier as ModelTier) ?? "BASIC") as ConcreteTier) as ModelTier;
   await ensureCreditPeriod(resolved.userId);
   const { memoryEnabled, facts: memoryFacts, preferences } = await loadMemoryContext(resolved.userId);
-  const buildProfile = await loadBuildProfile(resolved.userId);
+  const buildProfile = await withCurrentSite(await loadBuildProfile(resolved.userId), resolved.organizationId);
   const userTextForMemory = findPrecedingUserText(messages, pendingMessage.createdAt);
   const turnStartedAt = new Date().toISOString();
   // Almost always a no-op by the time a resume happens — the first turn's own

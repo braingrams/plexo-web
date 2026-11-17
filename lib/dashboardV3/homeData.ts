@@ -9,6 +9,7 @@ import { BlogPost, LmsEnrollment, LmsPage } from "@/lib/db/contentEntities";
 import { CommerceOrder, CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
 import { FormSubmission, PageView } from "@/lib/db/opsEntities";
 import { formatMoney } from "@/lib/commerce/formatMoney";
+import { readSiteBrand } from "./brandLook";
 import { EMPTY_FACTS, taskVariantFor, type SiteFacts, type TaskVariant } from "./tasks";
 import type { SiteSummary } from "./sites";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
@@ -31,13 +32,14 @@ export type SiteHomeData = { variant: TaskVariant; facts: SiteFacts; commerceEna
 export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile | undefined): Promise<SiteHomeData> {
   const id = site.id;
   const [tpl, settings, products, posts, lessons, funnel] = await Promise.all([
-    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId"] })).data, null),
+    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "brand"] })).data, null),
     safe("store settings", async () => (await CommerceSettings.get({ templateId: id }).go()).data, null),
     safe("products", async () => (await CommerceProduct.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
     safe("posts", async () => (await BlogPost.query.primary({ templateId: id }).go({ limit: 1, attributes: ["slug"] })).data, []),
     safe("lessons", async () => (await LmsPage.query.primary({ templateId: id }).go({ pages: "all", attributes: ["id", "kind"] })).data, []),
     safe("course", async () => (await import("@/lib/db/contentEntities").then((m) => m.LmsFunnel.get({ templateId: id }).go())).data, null),
   ]);
+  const own = readSiteBrand(tpl?.brand);
   const commerceEnabled = !!settings?.enabled;
   const variant = taskVariantFor({ kind: site.kind, sells: commerceEnabled }, profile?.goal);
   const created = tpl?.createdAt ? Date.parse(tpl.createdAt) : NaN;
@@ -49,8 +51,10 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
   const facts: SiteFacts = {
     ...EMPTY_FACTS,
     hasSite: true,
-    hasLogo: !!profile?.brand?.logoUrl,
-    hasColors: !!profile?.brand?.colors?.length,
+    // This site's OWN brand only (a different site's logo never ticks this one).
+    hasLogo: !!own?.logoUrl,
+    logoSkipped: own?.noLogo === true,
+    hasColors: !!own?.colors?.length,
     edited,
     productCount: products.length,
     paymentsReady: cardsReady || bankReady,

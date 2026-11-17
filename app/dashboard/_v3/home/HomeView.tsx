@@ -7,7 +7,7 @@ import { Button, ButtonLink, Card, HelpVideoLink } from "../ui";
 import { GuidedChecklist } from "./GuidedChecklist";
 import { ActivityCard, CreateAnotherCard, StatGrid } from "./LiveDashboard";
 import { AllSites } from "./AllSites";
-import { AskSolCard, CopyLinkButton, SitePreviewCard, siteHref } from "./SideCards";
+import { AskSolCard, CopyLinkButton, MakeEmailCard, SitePreviewCard, siteHref } from "./SideCards";
 import { SkippedHome } from "./SkippedHome";
 
 function greeting(): string {
@@ -115,6 +115,7 @@ export function HomeView(props: HomeProps) {
             </div>
           ) : null}
           <AskSolCard prompt={SOL_IDEAS[progress.variant]} />
+          <MakeEmailCard />
           <CreateAnotherCard href={newSiteHref} />
         </aside>
       </div>

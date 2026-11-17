@@ -26,7 +26,7 @@ type ShellUser = {
   tourState?: unknown;
 };
 
-const SITE_ATTRIBUTES = ["id", "name", "kind", "parentId", "marketplaceStatus", "isBlogLayout", "isSiteLayoutFragment", "isCommerceLayout", "isLmsPageDesign", "isLmsFunnel", "sourceType", "migratedFrom", "updatedAt"] as const;
+const SITE_ATTRIBUTES = ["id", "name", "kind", "parentId", "marketplaceStatus", "isBlogLayout", "isSiteLayoutFragment", "isCommerceLayout", "isLmsPageDesign", "isLmsFunnel", "sourceType", "migratedFrom", "updatedAt", "brand"] as const;
 
 /**
  * Every site in the workspace (builder pages, uploaded pages, moved WordPress sites, apps,

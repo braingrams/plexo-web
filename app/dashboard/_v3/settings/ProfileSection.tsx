@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, Check, KeyRound, PlayCircle, RotateCcw } from "lucide-react";
+import { Camera, Check, KeyRound, LayoutDashboard, LifeBuoy, PlayCircle, RotateCcw } from "lucide-react";
 import { Avatar, Button, ButtonLink, Input, useToast } from "../ui";
 import { ThemeSwitch } from "../theme/ThemeContext";
 import { useOptionalTour } from "../tour/TourProvider";
@@ -109,13 +109,13 @@ export function ProfileSection({ name: initialName, email, image: initialImage, 
       bar={<SaveBar dirty={dirty} saving={busy === "name"} valid={!!name.trim()} onSave={saveName} onDiscard={() => { setName(saved); setError(null); }} />}
       aside={
         <>
-          <AsideCard title="Need a hand?">
+          <AsideCard title="Need a hand?" icon={LifeBuoy}>
             <p>You can walk around Plexo again, or answer the setup questions to change your goal and style. Nothing you&apos;ve made is touched.</p>
             <Button variant="secondary" leftIcon={<PlayCircle size={18} aria-hidden />} disabled={!tour} onClick={() => tour?.openOffer()}>Show me around</Button>
             <ButtonLink href="/welcome/setup?again=1" variant="secondary" leftIcon={<RotateCcw size={18} aria-hidden />}>Personalise again</ButtonLink>
           </AsideCard>
           {versions.targets.length > 0 ? (
-            <AsideCard title="Your dashboard">
+            <AsideCard title="Your dashboard" icon={LayoutDashboard}>
               <p>Change how Plexo looks. Everything you&apos;ve made stays exactly as it is.</p>
               {versions.targets.map((t) => (
                 <Button key={t.id} variant="secondary" onClick={() => versions.request(t.id)}>{switchLabel(t)}</Button>

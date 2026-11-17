@@ -12,6 +12,8 @@ export type SiteFacts = {
   /** A site exists (so "pick a design" is done). */
   hasSite: boolean;
   hasLogo: boolean;
+  /** They said they don't have a logo (one is made from the name), so the step doesn't wait for one. */
+  logoSkipped: boolean;
   hasColors: boolean;
   /** The owner has edited the site since it was made (words, contact details, links...). */
   edited: boolean;
@@ -33,6 +35,7 @@ export type SiteFacts = {
 export const EMPTY_FACTS: SiteFacts = {
   hasSite: false,
   hasLogo: false,
+  logoSkipped: false,
   hasColors: false,
   edited: false,
   productCount: 0,
@@ -53,7 +56,7 @@ export type TaskKind = "auto" | "product" | "pay" | "address" | "live" | "link";
 export type TaskDef = { id: TaskId; title: string; description: string; kind: TaskKind; help: string; done: (f: SiteFacts) => boolean };
 
 const design: TaskDef = { id: "design", title: "Pick a design", description: "You chose one that fits you. You can change it any time.", kind: "auto", help: "Choosing a design", done: (f) => f.hasSite };
-const brand: TaskDef = { id: "brand", title: "Add your logo and colours", description: "So your site looks like you.", kind: "link", help: "Adding your logo and colours", done: (f) => f.hasLogo && f.hasColors };
+const brand: TaskDef = { id: "brand", title: "Add your logo and colours", description: "So your site looks like you.", kind: "link", help: "Adding your logo and colours", done: (f) => f.hasColors && (f.hasLogo || f.logoSkipped) };
 const address: TaskDef = { id: "address", title: "Choose your web address", description: "The link people type or tap to find you.", kind: "address", help: "Choosing your web address", done: (f) => f.hasAddress };
 const live: TaskDef = { id: "live", title: "Put your site online", description: "One tap and anyone can visit. You can keep editing after.", kind: "live", help: "Putting your site online", done: (f) => f.hasAddress && f.published };
 

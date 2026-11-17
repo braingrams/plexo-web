@@ -38,6 +38,8 @@ export type CompleteDeps = {
   saveUser: (patch: { buildProfile: SolBuildProfile; experience?: string; onboardingVersion?: number }) => Promise<void>;
   /** Runs site_create; returns what it made. */
   createSite: (args: Record<string, unknown>) => Promise<{ siteId: string; name: string; warnings?: string[] }>;
+  /** Makes the site from a real marketplace design (free or already bought), named after the business. */
+  createFromMarketDesign?: (designId: string, name: string) => Promise<{ siteId: string; name: string }>;
 };
 
 export type CompleteResult = { site: { id: string; name: string; goal: SolBuildGoal } | null; warnings: string[] };
@@ -46,7 +48,7 @@ export type CompleteResult = { site: { id: string; name: string; goal: SolBuildG
  * Saves buildProfile + experience, builds the site (unless they skipped, or chose an app), then
  * marks onboarding finished. The finish flag is written last, so a failed build lets them retry.
  */
-export async function completeOnboarding(input: { profile: unknown; designId?: string; skipSite?: boolean }, deps: CompleteDeps): Promise<CompleteResult> {
+export async function completeOnboarding(input: { profile: unknown; designId?: string; marketDesignId?: string; skipSite?: boolean }, deps: CompleteDeps): Promise<CompleteResult> {
   const parsed = sanitizeBuildProfile(input.profile);
   if (!parsed.ok) throw new OnboardingError(parsed.error);
   const profile = parsed.value;
@@ -60,11 +62,16 @@ export async function completeOnboarding(input: { profile: unknown; designId?: s
   let site: CompleteResult["site"] = null;
   let warnings: string[] = [];
   if (wantsSite) {
-    const args = siteCreateArgs(profile, input.designId ?? "");
-    if (!args) throw new OnboardingError("Pick what you'd like to make first.");
-    const made = await deps.createSite(args);
-    site = { id: made.siteId, name: made.name, goal: profile.goal! };
-    warnings = made.warnings ?? [];
+    if (input.marketDesignId && deps.createFromMarketDesign) {
+      const made = await deps.createFromMarketDesign(input.marketDesignId, profile.brand.name!);
+      site = { id: made.siteId, name: made.name, goal: profile.goal! };
+    } else {
+      const args = siteCreateArgs(profile, input.designId ?? "");
+      if (!args) throw new OnboardingError("Pick what you'd like to make first.");
+      const made = await deps.createSite(args);
+      site = { id: made.siteId, name: made.name, goal: profile.goal! };
+      warnings = made.warnings ?? [];
+    }
   }
   await deps.saveUser({ buildProfile: profile, onboardingVersion: CURRENT_ONBOARDING_VERSION });
   return { site, warnings };

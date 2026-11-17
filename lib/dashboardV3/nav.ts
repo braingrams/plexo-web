@@ -1,7 +1,7 @@
 /**
  * The v3 dashboard's main menu, built from who the person is (docs/redesign/SPEC.md
- * "Information architecture"): beginners see only what their goal needs, intermediate adds
- * Emails and Domains, pro adds Developers. Pure — icons are named here and drawn by the shell.
+ * "Information architecture"): beginners see only what their goal needs (plus Emails), intermediate adds
+ * Domains, pro adds Developers. Pure — icons are named here and drawn by the shell.
  */
 export type Experience = "beginner" | "intermediate" | "pro";
 export type BuildGoal = "store" | "business-site" | "blog" | "course" | "link-in-bio" | "landing" | "app" | "explore";
@@ -47,8 +47,9 @@ export function buildV3Nav(input: NavInput): V3NavItem[] {
   if (sells) items.push({ id: "orders", label: "Orders", href: "/dashboard/commerce", icon: "orders", primary: true });
   if (teaches) items.push({ id: "learners", label: "Learners", href: "/dashboard/learners", icon: "learners", primary: !sells });
   items.push({ id: "sol", label: "Ask SOL", href: "/dashboard/sol", icon: "sol", primary: true });
+  // Emails is for everyone: a beginner who can't find it can't make an email. On a phone it sits in "More".
+  items.push({ id: "emails", label: "Emails", href: "/dashboard/emails", icon: "emails", primary: false });
   if (!beginner) {
-    items.push({ id: "emails", label: "Emails", href: "/dashboard/emails", icon: "emails", primary: false });
     items.push({ id: "domains", label: "Domains", href: "/dashboard/settings/domains", icon: "domains", primary: false });
   }
   if (experience === "pro") items.push({ id: "developers", label: "Developers", href: "/dashboard/settings/developers", icon: "developers", primary: false });

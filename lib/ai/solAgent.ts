@@ -18,6 +18,7 @@ import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
 import { trimOldToolWork } from "@/lib/ai/solHistoryTrim";
 import { solBuildProfilePrompt, type SolBuildProfile } from "@/lib/ai/solBuildContext";
+import { QUALITY_BAR, SAVE_BRAND_GUIDE, briefFromConversation, discoveryPrompt } from "@/lib/ai/solDiscovery";
 import { createAttachmentResolver, publishAttachedImage, PRIVATE_ATTACHMENT_PATH } from "@/lib/ai/solAttachments";
 
 /** A tool call SOL runs itself (see solToolSchema.ts) or a Plexo MCP tool. */
@@ -299,6 +300,8 @@ export interface SolPromptOptions {
   preferences?: SolPromptPreferences;
   /** What the owner is building, from onboarding (lib/ai/solBuildContext.ts). */
   profile?: SolBuildProfile;
+  /** This request's intake and creative direction (lib/ai/solDiscovery.ts discoveryPrompt); "" for changes to existing work. */
+  discovery?: string;
 }
 
 const TONE_GUIDE: Record<NonNullable<SolPromptPreferences["tonePreset"]>, string> = {
@@ -359,8 +362,8 @@ The owners you work with are usually not technical. Never put technical words in
 
 When someone wants a NEW site, store, blog, funnel or app:
 
-1. **Understand (one round of questions, at most).** If the request — together with what you already know (their saved memory and onboarding answers below) — doesn't tell you what you need to make it theirs, ask ONE compact ask_user_question round before building. Ask only what you can't sensibly decide yourself and that changes the result, usually: the business's name; what they do or sell and who for; which pages they want (offer sensible options); the style or feel (offer 3–4 distinct directions, e.g. "Warm & friendly", "Bold & modern", "Elegant & minimal"); and their colours or logo if they have them (attaching a logo works too). Up to 4 questions, each with short options. Skip anything already answered, and skip the round entirely when they've told you enough, said "just build it"/"surprise me", or are changing something that already exists. Never ask for things you can default: page names, addresses, menu labels, image choices, section order.
-2. **Plan, briefly.** In a few lines, say what you'll make: the pages (and how they connect), the style direction (feel, colour idea, fonts) and, when it isn't obvious, how you'll build it. Then build it straight away in the same turn — don't wait for approval unless they asked to see the plan first or it's a big, costly build they might not expect.
+1. **Understand (the intake).** The "This request" section at the end of this prompt tells you what you already know and whether to ask. When it gives you questions, ask exactly those in ONE ask_user_question card first; when it says not to, don't. Never ask for anything listed as known, never ask a second round, and when they say "just build it" or "surprise me", decide for them and state your assumptions in one line. Never ask for things you can default: page names, addresses, menu labels, image choices, section order. Changing something that already exists needs no intake.
+2. **Plan, briefly (the creative direction).** In a few lines, say what you'll make: the pages (and how they connect), the style direction (feel, colour idea, fonts) and, when it isn't obvious, how you'll build it. Then build it straight away in the same turn — don't wait for approval unless they asked to see the plan first or it's a big, costly build they might not expect.
 3. **Build it properly.** A real website is several connected pages, not one landing page: when they want a site, store or blog, build the whole thing with site_create in one call (see below), with real copy written for their business on every page. For one-page requests (a single landing page, a waitlist, a link-in-bio) build just that page.
 4. **Show it and offer next steps.** Say what you made in a few lines, link to it, and offer two or three specific next steps (publish it on an address, add products or posts, change the look). Don't publish until they're ready.
 
@@ -383,6 +386,10 @@ If one request mixes things (a marketing site plus a members' area), say how you
 - **Blogs** use blog_layout_describe and blog_layout_edit for their post and listing designs, and create_blog_post for posts (write real, useful posts for their audience).
 - **Selling one product from a page** (a course, ebook, download or product): call sell_product_on_page — never a hand-made payment link or a paste-your-own-link button. One call creates the product from name + price (pass deliveryUrl, the link buyers get after paying, if you know it), turns selling on with Plexo's own payments (no keys), switches the page's existing payment links (Flutterwave, Paystack, Selar…) to Plexo's checkout, or adds a buy card. If the owner hasn't said where buyers get the product after paying, ask once for that link — nothing else. Pass on any warnings in plain words; for a React app, make the edit it describes with the app tools, then publish the app.
 - Choose the brand to suit the business (site_create does it from the brief; on a single page use a setBrand command) rather than leaving the default.
+
+${QUALITY_BAR}
+
+${SAVE_BRAND_GUIDE}
 - Email templates are separate and still use create_email_template / update_template. The older classic page tools (create_landing_page, create_landing_page_subpage …) are only for pages that already exist in the classic editor.
 
 How to write good section commands (the visual editor's own guidance — with page_edit, page_create_from_template and the app_design tools pass the commands as the tool's array rather than a fenced block; pageId can be left out for the page you're editing):
@@ -392,7 +399,7 @@ ${SOL_SYSTEM_PROMPT}
 
 Whenever a question has concrete, enumerable answers, use the ask_user_question tool instead of writing a bulleted list of choices — every time, including second and third rounds. The interface already adds a "type your own answer" option to every question, so never invent an "Other"/"something else" option, and never end a plain-text question with "Something else?". Reserve plain-text questions for genuinely open-ended things ("what should the headline say?").
 
-Bundle questions into ONE ask_user_question call only when they're independent of each other's answers. When a later question depends on an earlier answer (a physical-products store needs different follow-ups than a course), ask the first one, wait, then ask the next informed by it.
+Bundle questions into ONE ask_user_question call only when they're independent of each other's answers. (The intake card for a new build is independent by design: ask its questions together.) When a later question depends on an earlier answer (a physical-products store needs different follow-ups than a course), ask the first one, wait, then ask the next informed by it.
 
 Don't guess at things that change what you'd build when you can't infer them — ask (once, compactly). Don't ask about things you can sensibly decide — decide, and mention the choice in a word so they can change it.
 
@@ -423,7 +430,7 @@ How to build an app well:
 - Pages in src/plexo-canvas/ were designed visually in the editor's Design tab (<name>.canvas.json is the design; <Name>Page.tsx is generated from it). To change one, do NOT edit the generated .tsx: call app_design_describe to see its sections, then app_design_edit with section commands (add, update, move, duplicate or remove a section, change the brand, add or rename a page — and addPage with a templateId gives a complete, filled-in page). Each command is checked and saved on its own, so read the results and fix any that failed. That keeps the page editable in the Design tab afterwards. If a page was edited in code (app_design_edit says so), tell the owner and either edit the .tsx with app_edit_file or ask before replacing their code edits. For something a section can't express, you may edit the .tsx — say so, because the Design tab will then ask the owner before replacing your edit. Never edit src/plexo-canvas/routes.tsx or design-system.json, and keep the designRoutes line in src/App.tsx. Run app_build after design edits.
 - Design commands for app pages follow the same guidance as "How to write good section commands" above — with app_design_edit pass the commands as the tool's commands array rather than a fenced block, and use pageId = the page's slug.
 - When a message includes a selected element (a file and line from the editor's Select & Edit), change exactly that element. When it includes an error from the app ("Fix with AI"), find the cause in the code — read the file it points to — fix it, rebuild and verify.
-- Finish with a short summary: what you built, the preview link, how to try it (e.g. "sign up with any email"), and two or three good next steps. Don't publish unless they ask — app_publish asks for their confirmation first.${appContext ? `\n\n## The app you're working on\n\n${appContext}` : ""}${profileBlock ? `\n\n${profileBlock}` : ""}${preferencesBlock ? `\n\n${preferencesBlock}` : ""}${memoryBlock}`;
+- Finish with a short summary: what you built, the preview link, how to try it (e.g. "sign up with any email"), and two or three good next steps. Don't publish unless they ask — app_publish asks for their confirmation first.${appContext ? `\n\n## The app you're working on\n\n${appContext}` : ""}${profileBlock ? `\n\n${profileBlock}` : ""}${options.discovery ? `\n\n${options.discovery}` : ""}${preferencesBlock ? `\n\n${preferencesBlock}` : ""}${memoryBlock}`;
 }
 
 interface LoopContext {
@@ -479,7 +486,8 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   const tools: BedrockToolDef[] = getAllSolTools();
   const model = resolveModel(ctx.provider, ctx.modelTier);
   const generateWithTools = TOOL_CAPABLE_PROVIDERS[ctx.provider];
-  const systemPrompt = buildSolSystemPrompt(ctx.memoryFacts, ctx.appContext, { preferences: ctx.preferences, profile: ctx.buildProfile });
+  const intake = ctx.boundAppId ? undefined : briefFromConversation(ctx.history, ctx.buildProfile);
+  const systemPrompt = buildSolSystemPrompt(ctx.memoryFacts, ctx.appContext, { preferences: ctx.preferences, profile: ctx.buildProfile, discovery: intake ? discoveryPrompt(intake.brief, intake.plan) : undefined });
 
   // Stored attachment blocks point at private uploads; the model needs their bytes inline.
   const resolveAttachments = createAttachmentResolver(ctx.resolvedUser.userId);

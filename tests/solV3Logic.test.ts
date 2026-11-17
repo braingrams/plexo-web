@@ -65,3 +65,16 @@ describe("steps in plain words", () => {
     expect(friendlyStep("mystery_thing", "done")).toBe("Mystery thing");
   });
 });
+
+describe("the starting points on a new chat", () => {
+  it("are four short, plain-words choices a site owner would say out loud", async () => {
+    const { SUGGESTIONS } = await import("@/app/dashboard/_v3/sol/logic");
+    expect(SUGGESTIONS).toHaveLength(4);
+    expect(new Set(SUGGESTIONS.map((s) => s.id)).size).toBe(4);
+    for (const s of SUGGESTIONS) {
+      expect(s.title.split(" ").length).toBeLessThanOrEqual(5);
+      expect(s.prompt.length).toBeGreaterThan(20);
+      expect(`${s.title} ${s.prompt}`).not.toMatch(/\b(template|deploy|DNS|SDK|API|HTML|React|token|JSON)\b/i);
+    }
+  });
+});

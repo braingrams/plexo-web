@@ -2,25 +2,59 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { BookOpen, CalendarClock, Mail, MessagesSquare, Newspaper, ShoppingBag } from "lucide-react";
-import { Button, ButtonLink, Card, Modal, useToast } from "../ui";
+import { ArrowRight, Check, Clock, MessagesSquare } from "lucide-react";
+import { Button, ButtonLink, Modal, useToast } from "../ui";
 import { addOnsFor, hubTabHref, type AddOnId, type HubFeatures } from "@/lib/dashboardV3/hubTabs";
 import { errMsg, hubApi } from "./hubApi";
 
-const ICON: Record<AddOnId, React.ReactNode> = {
-  store: <ShoppingBag size={22} aria-hidden />,
-  blog: <Newspaper size={22} aria-hidden />,
-  course: <BookOpen size={22} aria-hidden />,
-  bookings: <CalendarClock size={22} aria-hidden />,
-  newsletter: <Mail size={22} aria-hidden />,
-};
+/** A little picture of what each add-on gives you, drawn with tokens so it follows the theme. */
+function Art({ id }: { id: AddOnId }) {
+  switch (id) {
+    case "store":
+      return (
+        <span className="plx-art plx-art--store" aria-hidden>
+          {[0, 1, 2].map((n) => (
+            <span key={n} className="plx-art__prod"><i /><b /><u /></span>
+          ))}
+        </span>
+      );
+    case "blog":
+      return (
+        <span className="plx-art plx-art--blog" aria-hidden>
+          <span className="plx-art__post"><i /><b /><u /><u /></span>
+          <span className="plx-art__post plx-art__post--2"><i /><b /><u /></span>
+        </span>
+      );
+    case "course":
+      return (
+        <span className="plx-art plx-art--course" aria-hidden>
+          <span className="plx-art__video"><span /></span>
+          <span className="plx-art__lessons"><b /><b /><b /></span>
+        </span>
+      );
+    case "bookings":
+      return (
+        <span className="plx-art plx-art--bookings" aria-hidden>
+          <span className="plx-art__cal">{Array.from({ length: 21 }, (_, n) => <i key={n} className={n === 9 ? "on" : n === 16 ? "dot" : ""} />)}</span>
+          <span className="plx-art__slot"><Clock size={12} />10:30</span>
+        </span>
+      );
+    default:
+      return (
+        <span className="plx-art plx-art--news" aria-hidden>
+          <span className="plx-art__form"><i /><b>Join</b></span>
+          <span className="plx-art__note"><u /><u /></span>
+        </span>
+      );
+  }
+}
 
 const WHAT: Record<AddOnId, { title: string; lead: string; items: string[]; go: string }> = {
   store: { title: "Start selling", lead: "We'll set up everything a shop needs. You don't have to design anything.", items: ["A shop page that shows your products", "A basket and checkout", "A thank-you page and order tracking"], go: "Turn on my shop" },
   bookings: { title: "Take bookings", lead: "People pick a service and pay for it. We set up the shop part for you.", items: ["A shop page for your services", "Checkout and payment", "You add your first service next"], go: "Turn on bookings" },
   blog: { title: "Add a blog", lead: "A place for your news and stories, ready to fill.", items: ["A blog page on your site", "A page for each post", "You write your first post next"], go: "Add my blog" },
   course: { title: "Add a course", lead: "People sign up and learn from your lessons.", items: ["Your home page becomes the sign-up page (your other pages stay as they are)", "A first lesson to start from", "You add the rest next"], go: "Make it a course" },
-  newsletter: { title: "Add an email sign-up", lead: "SOL adds a sign-up form where you want it, and you can ask for changes.", items: [], go: "Ask SOL to add it" },
+  newsletter: { title: "Add an email sign-up", lead: "SOL adds a sign-up form where you want it, and you can ask for changes.", items: ["A sign-up form placed on your page", "Ask SOL to move it or change how it looks"], go: "Ask SOL to add it" },
 };
 
 /** The "Add more to your site" cards. Each turns a feature on as a short guided task and lands where the next step is. */
@@ -69,18 +103,19 @@ export function AddMoreCards({ siteId, siteName, features }: { siteId: string; s
         <h2 id="addmore" className="plx-h2">Add more to your site</h2>
         <p className="plx-hub__sub">Turn these on whenever you need them. Each one takes about a minute.</p>
       </div>
-      <div className="plx-hub__grid">
+      <div className="plx-aogrid">
         {cards.map((c) => (
-          <Card key={c.id} className="plx-addon">
-            <span className="plx-addon__ic">{ICON[c.id]}</span>
-            <div>
-              <h3 className="plx-h3">{c.title}</h3>
-              <p>{c.body}</p>
-            </div>
-            <Button variant="secondary" onClick={() => { setError(null); setWhich(c.id); }}>
-              {c.action}
-            </Button>
-          </Card>
+          <button key={c.id} type="button" className={`plx-ao plx-ao--${c.id}`} onClick={() => { setError(null); setWhich(c.id); }}>
+            <span className="plx-ao__art"><Art id={c.id} /></span>
+            <span className="plx-ao__txt">
+              <b>{c.title}</b>
+              <span>{c.body}</span>
+            </span>
+            <span className="plx-ao__foot">
+              <span className="plx-ao__time"><Clock size={13} aria-hidden /> About a minute</span>
+              <span className="plx-ao__go">{c.action}<ArrowRight size={16} aria-hidden /></span>
+            </span>
+          </button>
         ))}
       </div>
       <Modal
@@ -100,12 +135,17 @@ export function AddMoreCards({ siteId, siteName, features }: { siteId: string; s
           )
         }
       >
-        {what && what.items.length ? (
-          <ul style={{ margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 8 }}>
-            {what.items.map((i) => (
-              <li key={i} className="plx-body" style={{ color: "var(--plx-text)" }}>{i}</li>
-            ))}
-          </ul>
+        {which && what ? (
+          <div className={`plx-aomodal plx-ao--${which}`}>
+            <div className="plx-aomodal__art"><Art id={which} /></div>
+            <p className="plx-aomodal__h">What you get</p>
+            <ul className="plx-aomodal__list">
+              {what.items.map((i) => (
+                <li key={i}><span aria-hidden><Check size={14} strokeWidth={3} /></span>{i}</li>
+              ))}
+            </ul>
+            <p className="plx-aomodal__note"><Clock size={14} aria-hidden /> Takes about a minute. You stay in control of everything it adds.</p>
+          </div>
         ) : null}
         {error ? <p className="plx-field__error" role="alert" style={{ marginTop: 16 }}>{error}</p> : null}
       </Modal>

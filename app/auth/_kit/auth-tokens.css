@@ -156,3 +156,14 @@
   --logo-on-dark-display: block;
   color-scheme: dark;
 }
+
+/* Brand panel: always the deep green, in light and dark (this wins over the per-theme blocks above). */
+.ax-root.ax-root.ax-root {
+  --aside-bg: #0B3B2D;
+  --aside-text: #FFFFFF;
+  --aside-text-muted: rgba(255, 255, 255, 0.78);
+  --aside-ctl-bg: #FFFFFF;
+  --aside-ctl-text: #0B3B2D;
+  --aside-chip-bg: #F5AC05;
+  --aside-chip-text: #121212;
+}

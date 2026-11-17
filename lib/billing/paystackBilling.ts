@@ -212,7 +212,7 @@ async function reconcileOwnedFunnelSlots(userId: string): Promise<void> {
 export type ApplyResult = { applied: "plan" | "renewal" | "topup" | "none"; userId?: string; plan?: PaidPlanId };
 
 /** Deps that tests replace (lifecycle pulls in a lot). */
-export type ApplyDeps = { syncPlanLifecycle?: (userId: string) => Promise<unknown> };
+export type ApplyDeps = { syncPlanLifecycle?: (userId: string) => Promise<unknown>; reconcilePriceMove?: (userId: string) => Promise<unknown> };
 
 async function syncLifecycle(userId: string, deps: ApplyDeps): Promise<void> {
   const sync = deps.syncPlanLifecycle ?? (async (id: string) => (await import("@/lib/plan/lifecycle")).syncPlanLifecycle(id));
@@ -295,13 +295,15 @@ export async function applyPaystackTransaction(tx: PaystackTransaction, deps: Ap
       subscriptionPeriodEnd: laterEnd,
       subscriptionCancelAtPeriodEnd: false,
       ...(isFirstPayment ? { subscriptionStartedAt: paidAt } : {}),
+      // What this charge was, so the next renewal's price is known; a booked price move is done once it renews.
+      subscriptionAmountMinor: tx.amount,
       ...(tx.customer?.customer_code ? { paystackCustomerCode: tx.customer.customer_code } : {}),
       billingCurrency: (tx.currency?.toUpperCase() as typeof region.currency) ?? region.currency,
       billingRegion: region.id,
       ...(user.billingRegionLockedAt ? {} : { billingRegionLockedAt: paidAt }),
       ...(card.cardLast4 ? { billingCardBrand: card.cardBrand ?? undefined, billingCardLast4: card.cardLast4 } : {}),
     })
-    .remove(["pendingPlan", "planAccessUntil", "planAccessSource", "planAccessReminderSentAt", "scheduledPlan", "scheduledPlanAt"])
+    .remove(["pendingPlan", "planAccessUntil", "planAccessSource", "planAccessReminderSentAt", "scheduledPlan", "scheduledPlanAt", "nextAmountMinor", "nextAmountAt"])
     .go();
 
   if (previousAllowance !== plan) {
@@ -414,6 +416,14 @@ export async function handlePaystackBillingEvent(
         await User.patch({ id: user.id }).set({ subscriptionStatus: "CANCELED", subscriptionCancelAtPeriodEnd: true }).go();
         await syncLifecycle(user.id, deps);
       }
+      return true;
+    }
+    // Paystack's "this subscription is about to be charged" invoice (a few days before). Move the
+    // subscriber to a changed price now if one is due — idempotent; the scheduled job is the backstop.
+    case "invoice.create": {
+      const user = await findUserByEmail(data.customer?.email);
+      if (!user || !data.subscription?.subscription_code) return !!user;
+      await (deps.reconcilePriceMove ?? (async (id: string) => (await import("./priceMoveLive")).reconcileOnePriceMove(id)))(user.id);
       return true;
     }
     case "invoice.payment_failed": {

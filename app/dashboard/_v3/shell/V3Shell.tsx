@@ -79,11 +79,11 @@ export type V3ShellProps = {
   children: React.ReactNode;
 };
 
-/** Full-screen surfaces (the page editor, SOL, an app's editor) bring their own chrome. */
+/** Full-screen surfaces (the page editor, an app's editor) bring their own chrome. SOL does not: it lives inside the shell like any other place. */
 function isChromeless(pathname: string): boolean {
   const editor = pathname.match(/^\/dashboard\/templates\/([^/]+)$/);
   if (editor && editor[1] !== "upload") return true;
-  return /^\/dashboard\/sol(\/.*)?$/.test(pathname) || /^\/dashboard\/apps\/[^/]+$/.test(pathname);
+  return /^\/dashboard\/apps\/[^/]+$/.test(pathname);
 }
 
 /**
@@ -166,7 +166,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
             <AccountMenu user={user} experience={experience} persist={persist} onExperienceChange={onExperienceChange} workspaces={workspaces} currentWorkspaceId={currentWorkspaceId} onWorkspaceSwitch={onWorkspaceSwitch} />
           </div>
         </header>
-        <main id="main" className="plx-content">
+        <main id="main" className={pathname.startsWith("/dashboard/sol") || pathname.startsWith("/v3-preview/sol") ? "plx-content plx-content--bleed" : "plx-content"}>
           {children}
         </main>
       </div>
@@ -265,7 +265,7 @@ function AskSolBox() {
   return (
     <form
       role="search"
-      className="plx-search plx-topbar__search"
+      className="plx-topsearch plx-topbar__search"
       data-tour="ask-sol"
       onSubmit={(e) => {
         e.preventDefault();

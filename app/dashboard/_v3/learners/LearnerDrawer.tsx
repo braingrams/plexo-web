@@ -79,7 +79,7 @@ export function LearnerDrawer({ courseId, row, lessons, onClose, onResend, onApp
           </div>
           <div className="plx-drawer__body">
             <ProgressBar value={row.completedPageCount} max={Math.max(1, total)} label={`${Math.min(row.completedPageCount, total)} of ${total} lessons finished (${progressPercent(row.completedPageCount, total)}%)`} />
-            <div className="plx-facts">
+            <div className="plx-lfacts">
               <div><b>{new Date(row.enrolledAt).toLocaleDateString("en", { day: "numeric", month: "short", year: "numeric" })}</b><span>Signed up</span></div>
               <div><b>{lastActiveLabel(row.lastActiveAt)}</b><span>Last active</span></div>
               <div><b>{row.paymentStatus === "PAID" ? "Paid" : row.paymentStatus === "REFUNDED" ? "Refunded" : "Free"}</b><span>How they joined</span></div>

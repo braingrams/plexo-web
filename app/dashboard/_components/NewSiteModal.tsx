@@ -3,6 +3,7 @@
 import type { PlanId } from "@/lib/plan/plans";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { NewSiteWizard } from "../new/NewSiteWizard";
+import { NewSiteFlow, type NewSiteContext } from "../_v3/newsite/NewSiteFlow";
 import "../_v3/legacy.css";
 
 type Plan = PlanId;
@@ -15,7 +16,7 @@ const NewSiteContext = createContext<NewSiteContextValue | null>(null);
  * calls useNewSite().openNewSite(), which opens the same wizard in a modal on the current page.
  * Nothing navigates away, so the user keeps their place.
  */
-export function NewSiteProvider({ plan, children }: { plan: Plan; children: React.ReactNode }) {
+export function NewSiteProvider({ plan, v3, children }: { plan: Plan; /** New dashboard: the new "Make a new website" flow replaces the old wizard. */ v3?: NewSiteContext; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const openNewSite = useCallback(() => setOpen(true), []);
   const close = useCallback(() => setOpen(false), []);
@@ -34,7 +35,8 @@ export function NewSiteProvider({ plan, children }: { plan: Plan; children: Reac
   return (
     <NewSiteContext.Provider value={value}>
       {children}
-      {open && (
+      {open && v3 ? <NewSiteFlow mode="dialog" context={v3} onClose={close} /> : null}
+      {open && !v3 && (
         <div
           role="dialog"
           className="plx-legacy"

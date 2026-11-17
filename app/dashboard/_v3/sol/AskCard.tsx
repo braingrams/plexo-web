@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Check, ChevronLeft, PencilLine } from "lucide-react";
 import type { AskUserAnswer, AskUserQuestionSpec, ToolUseBlock } from "../../sol/_components/types";
+import { SKIP_ANSWER } from "@/lib/ai/solBrief";
 import { Button } from "../ui/Button";
 
 function questionsOf(block: ToolUseBlock): AskUserQuestionSpec[] {
@@ -12,7 +13,9 @@ function questionsOf(block: ToolUseBlock): AskUserQuestionSpec[] {
 
 /**
  * SOL asking you something: one question at a time, with big tappable choices (and "Something
- * else" for your own words). Arrow keys + Enter work too; every question needs an answer.
+ * else" for your own words). Arrow keys + Enter work too. Every question needs an answer, or
+ * "Skip, you choose" (SOL decides that one). With several questions, "Just build it" skips the
+ * rest and lets SOL decide.
  */
 export function AskCard({ block, onSubmit, busy }: { block: ToolUseBlock; onSubmit: (answers: AskUserAnswer[]) => void; busy?: boolean }) {
   const questions = useMemo(() => questionsOf(block), [block]);
@@ -57,13 +60,27 @@ export function AskCard({ block, onSubmit, busy }: { block: ToolUseBlock; onSubm
     put(setPicked, new Set<string>());
     setFocus(rows - 1);
   }
-  const answerFor = (i: number) => custom[i].trim() || Array.from(picked[i]).join(", ");
+  const answerFor = (i: number) => custom[i].trim() || Array.from(picked[i]).join(", ") || SKIP_ANSWER;
 
   function next() {
     if (!hasAnswer || busy) return;
     if (last) return onSubmit(questions.map((qq, i) => ({ question: qq.question, answer: answerFor(i) })));
     setStep((s) => s + 1);
     setFocus(0);
+  }
+  // "Skip, you choose": this question is SOL's call; clears anything half-typed so the answer is unambiguous.
+  function skip() {
+    if (busy) return;
+    put(setPicked, new Set<string>());
+    put<string>(setCustom, "");
+    if (last) return onSubmit(questions.map((qq, i) => ({ question: qq.question, answer: i === step ? SKIP_ANSWER : answerFor(i) })));
+    setStep((s) => s + 1);
+    setFocus(0);
+  }
+  // "Just build it": keep what was answered so far, SOL decides the rest.
+  function justBuild() {
+    if (busy) return;
+    onSubmit(questions.map((qq, i) => ({ question: qq.question, answer: i < step || (i === step && hasAnswer) ? answerFor(i) : SKIP_ANSWER })));
   }
   function back() {
     if (step === 0) return;
@@ -90,10 +107,13 @@ export function AskCard({ block, onSubmit, busy }: { block: ToolUseBlock; onSubm
       <div className="sol3-ask__top">
         <span className="sol3-ask__eyebrow">{q.header || "A quick question"}</span>
         {questions.length > 1 ? (
-          <span className="sol3-ask__dots" aria-label={`Question ${step + 1} of ${questions.length}`}>
-            {questions.map((_, i) => (
-              <i key={i} data-on={i <= step} />
-            ))}
+          <span className="sol3-ask__progress">
+            <span className="sol3-ask__count">Question {step + 1} of {questions.length}</span>
+            <span className="sol3-ask__dots" aria-hidden>
+              {questions.map((_, i) => (
+                <i key={i} data-on={i <= step} />
+              ))}
+            </span>
           </span>
         ) : null}
       </div>
@@ -118,11 +138,21 @@ export function AskCard({ block, onSubmit, busy }: { block: ToolUseBlock; onSubm
       </div>
       {customOpen[step] ? <textarea autoFocus aria-label="Your own answer" placeholder="Type your answer…" value={custom[step]} onChange={(e) => put<string>(setCustom, e.target.value)} disabled={busy} /> : null}
       <div className="sol3-ask__foot">
-        {step > 0 ? (
-          <Button variant="ghost" leftIcon={<ChevronLeft size={18} aria-hidden />} onClick={back} disabled={busy}>
-            Back
+        <span className="sol3-ask__aside">
+          {step > 0 ? (
+            <Button variant="ghost" leftIcon={<ChevronLeft size={18} aria-hidden />} onClick={back} disabled={busy}>
+              Back
+            </Button>
+          ) : null}
+          <Button variant="ghost" onClick={skip} disabled={busy}>
+            Skip, you choose
           </Button>
-        ) : <span />}
+          {questions.length > 1 && !last ? (
+            <Button variant="ghost" onClick={justBuild} disabled={busy}>
+              Just build it
+            </Button>
+          ) : null}
+        </span>
         <Button disabled={!hasAnswer} loading={busy} rightIcon={last ? undefined : <ArrowRight size={18} aria-hidden />} onClick={next}>
           {last ? "Send my answers" : "Next"}
         </Button>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ArrowRight, MessageCircle } from "lucide-react";
+import { taskLink } from "@/lib/dashboardV3/taskLinks";
 import type { TaskId, TaskProgress, TaskView } from "@/lib/dashboardV3/tasks";
 import type { SiteSummary } from "@/lib/dashboardV3/sites";
 import { ButtonLink, Checklist, HelpMedia, TaskCard } from "../ui";
@@ -25,17 +26,22 @@ export function GuidedChecklist({ site, progress, commerceEnabled, baseDomain, d
         return <AddressForm {...common} siteName={site.name} baseDomain={baseDomain} />;
       case "live":
         return <LiveForm {...common} onLive={onLive} />;
-      case "link":
+      case "link": {
+        const go = taskLink(t.id, site.id, site.name);
+        if (!go) return null;
         return (
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <ButtonLink href={`/dashboard/sites/${site.id}`} size="lg" rightIcon={<ArrowRight size={18} aria-hidden />}>
-              Open my site
+            <ButtonLink href={go.href} size="lg" rightIcon={<ArrowRight size={18} aria-hidden />}>
+              {go.label}
             </ButtonLink>
-            <ButtonLink href="/dashboard/sol" variant="secondary" size="lg" leftIcon={<MessageCircle size={18} aria-hidden />}>
-              Ask SOL to do it
-            </ButtonLink>
+            {go.href !== go.solHref ? (
+              <ButtonLink href={go.solHref} variant="secondary" size="lg" leftIcon={<MessageCircle size={18} aria-hidden />}>
+                Ask SOL to do it
+              </ButtonLink>
+            ) : null}
           </div>
         );
+      }
       default:
         return null;
     }

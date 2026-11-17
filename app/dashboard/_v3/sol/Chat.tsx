@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AppWindow, Check, Gauge, Globe, MessageCircleQuestion, PanelLeft, PenLine, Pencil, ShoppingBag, Share2, X } from "lucide-react";
+import { Check, FileText, Globe, PanelLeft, Pencil, ShoppingBag, Share2, X } from "lucide-react";
 import type { ActiveArtifact } from "../../sol/_components/ArtifactCanvas";
 import { useSolSidebar } from "../../sol/_components/SolSidebarContext";
 import type { AskUserAnswer, ContentBlock, ConversationSummary, CreditInfo, SolMessage, ToolUseBlock } from "../../sol/_components/types";
@@ -18,7 +18,7 @@ import { Messages } from "./Messages";
 import { ShareDialog } from "./ShareDialog";
 import { useSolV3 } from "./SolV3Context";
 
-const SUGGESTION_ICONS: Record<string, React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>> = { site: Globe, shop: ShoppingBag, blog: PenLine, improve: Gauge, app: AppWindow, help: MessageCircleQuestion };
+const SUGGESTION_ICONS: Record<string, React.ComponentType<{ size?: number; "aria-hidden"?: boolean }>> = { site: Globe, about: FileText, shop: ShoppingBag, change: Pencil };
 
 export type SolChatFrameProps = {
   userName: string | null;
@@ -65,8 +65,8 @@ export function CreditsPill({ refreshKey }: { refreshKey?: number }) {
   if (credits === null) return null;
   return (
     <Link href="/dashboard/settings/subscription" className="sol3-credits" data-low={credits < 50} title="Your AI credits. Tap to add more.">
-      <b>{credits.toLocaleString()}</b> credits
-      <span className="sol3-credits__top">· Add more</span>
+      <b>{credits.toLocaleString()}</b> <span className="sol3-credits__word">credits</span>
+      {credits < 50 ? <span className="sol3-credits__top">· Add more</span> : null}
     </Link>
   );
 }
@@ -142,7 +142,7 @@ function Header({ conversation, onRename, refreshKey, titleJustGenerated, onTitl
               {shown || "New chat"}
               {titleJustGenerated && typed < full.length ? <span className="sol3-caret" /> : null}
             </span>
-            {conversation ? <Pencil size={15} aria-hidden /> : null}
+            {conversation ? <Pencil size={15} aria-hidden className="sol3-title-pen" /> : null}
           </button>
         )}
       </div>
@@ -187,7 +187,7 @@ function Empty({ userName, composer, props }: { userName: string | null; compose
             {hour === null ? "Hello" : greetingFor(hour)}
             {first ? `, ${first}` : ""}
           </h1>
-          <p>I&apos;m SOL. Tell me what you want to make and I&apos;ll do it with you, step by step.</p>
+          <p>What would you like to make today?</p>
         </div>
         <div className="sol3-empty__composer">
           <SiteChip />
@@ -199,9 +199,8 @@ function Empty({ userName, composer, props }: { userName: string | null; compose
             const Icon = SUGGESTION_ICONS[s.id] ?? Globe;
             return (
               <button key={s.id} type="button" role="listitem" className="sol3-sg" onClick={() => props.onSuggestion(s.prompt)}>
-                <span className="sol3-sg__ico"><Icon size={19} aria-hidden /></span>
+                <span className="sol3-sg__ico"><Icon size={20} aria-hidden /></span>
                 <b>{s.title}</b>
-                <span>{s.hint}</span>
               </button>
             );
           })}

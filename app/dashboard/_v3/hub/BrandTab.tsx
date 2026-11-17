@@ -6,6 +6,8 @@ import { Button, ButtonLink, Card, CardHeader, Input, Modal, Select, Skeleton, T
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import { brandHeadline, type BrandState, type StrataProject } from "@/app/dashboard/templates/[id]/detail/SiteBrandPanel";
 import { brandLook, type BrandLook } from "@/lib/dashboardV3/hubBrand";
+import { LookCard } from "./LookCard";
+import type { SiteBrand } from "@/lib/dashboardV3/brandLook";
 import { TabBar } from "./HubFrame";
 import { errMsg, hubApi } from "./hubApi";
 
@@ -229,7 +231,7 @@ function StrataBrand({ siteId, isRaw }: { siteId: string; isRaw: boolean }) {
 }
 
 /** Colours and logo, plus the little things that make a site look like yours in a browser tab and when shared. */
-export function BrandTab({ siteId, siteName, brand, sourceType = "BUILDER" }: { siteId: string; siteName: string; brand: HubBrand; experience?: string; sourceType?: string }) {
+export function BrandTab({ siteId, siteName, brand, defaults = null, sourceType = "BUILDER" }: { siteId: string; siteName: string; brand: SiteBrand | null; defaults?: HubBrand; experience?: string; sourceType?: string }) {
   const { show } = useToast();
   const [meta, setMeta] = useState<Meta | null>(null);
   const [busy, setBusy] = useState(false);
@@ -267,28 +269,13 @@ export function BrandTab({ siteId, siteName, brand, sourceType = "BUILDER" }: { 
     }
   }
 
-  const colors = brand?.colors?.length ? brand.colors : brand?.primaryColor ? [brand.primaryColor] : [];
-  const sol = (t: string) => `/dashboard/sol?new=1&draft=${encodeURIComponent(t)}`;
   return (
     <>
       <TabBar title="Your look" sub="Colours, logo and the little details that make it yours." />
       <div className="plx-hub__split" data-tour="hub-brand">
         <div className="plx-hub__col">
           <StrataBrand siteId={siteId} isRaw={sourceType === "RAW_UPLOAD"} />
-          <Card>
-            <CardHeader title="Colours and logo" description="Picked when you set up. SOL can change them across your whole site." />
-            {brand?.logoUrl ? <img src={brand.logoUrl} alt={`${brand.name ?? siteName} logo`} style={{ height: 56, maxWidth: "100%", objectFit: "contain", marginBottom: 16 }} /> : null}
-            {colors.length ? (
-              <div className="plx-swatches" style={{ marginBottom: 16 }}>
-                {colors.map((c) => (
-                  <span key={c} className="plx-swatch"><i style={{ background: c }} />{c}</span>
-                ))}
-              </div>
-            ) : (
-              <p className="plx-body" style={{ marginBottom: 16 }}>No colours chosen yet. Tell SOL the feel you want and it will pick them for you.</p>
-            )}
-            <ButtonLink href={sol(`Change the colours and logo on my site "${siteName}". `)} variant="secondary" leftIcon={<MessagesSquare size={18} aria-hidden />}>Change my colours with SOL</ButtonLink>
-          </Card>
+          <LookCard siteId={siteId} siteName={siteName} own={brand} defaults={defaults} sourceType={sourceType} />
         </div>
         <Card>
           <CardHeader title="Browser tab and sharing" description="What people see in their browser tab and when your link is shared." />

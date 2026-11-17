@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, Eye, MessageCircle, Pencil } from "lucide-react";
+import { Check, Copy, Eye, Mail, MessageCircle, Pencil } from "lucide-react";
+import { NEW_EMAIL_HREF, solEmailHref } from "@/lib/dashboardV3/emails";
 import type { SiteSummary } from "@/lib/dashboardV3/sites";
 import { Button, ButtonLink, Card, StatusPill } from "../ui";
 import type { HomeBrand } from "./homeTypes";
@@ -45,7 +46,8 @@ export function SitePreviewCard({ site, brand }: { site: SiteSummary; brand: Hom
         <ButtonLink href={`/dashboard/sites/${site.id}`} variant="strong" leftIcon={<Pencil size={16} aria-hidden />} style={{ flex: "1 1 130px" }}>
           Edit site
         </ButtonLink>
-        <ButtonLink href={href ?? `/dashboard/sites/${site.id}`} {...(href ? { target: "_blank", rel: "noopener noreferrer" } : {})} variant="secondary" leftIcon={<Eye size={16} aria-hidden />} style={{ flex: "1 1 130px" }}>
+        {/* Online: the real site. Not online yet: a private preview of what you have so far, never the editor again. */}
+        <ButtonLink href={href ?? `/api/v1/templates/${site.id}/draft-preview`} target="_blank" rel="noopener noreferrer" variant="secondary" leftIcon={<Eye size={16} aria-hidden />} style={{ flex: "1 1 130px" }}>
           Preview
         </ButtonLink>
       </div>
@@ -85,5 +87,19 @@ export function CopyLinkButton({ address, variant = "secondary" }: { address?: s
     >
       {copied ? "Link copied" : "Copy link"}
     </Button>
+  );
+}
+
+/** A quick way to make an email without opening the menu: a welcome note, a receipt, a newsletter. */
+export function MakeEmailCard() {
+  return (
+    <Card data-tour="home-make-email" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <span className="plx-h3">Make an email</span>
+      <span className="plx-body">A welcome note, a receipt or a newsletter. Start blank, from a design, or let SOL write it.</span>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <ButtonLink href={NEW_EMAIL_HREF} variant="secondary" leftIcon={<Mail size={18} aria-hidden />}>Make an email</ButtonLink>
+        <ButtonLink href={solEmailHref()} variant="ghost" leftIcon={<MessageCircle size={18} aria-hidden />}>Ask SOL to write it</ButtonLink>
+      </div>
+    </Card>
   );
 }

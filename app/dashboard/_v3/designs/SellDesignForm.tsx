@@ -47,7 +47,7 @@ export function SellDesignForm({ options, autoPublish, fee, keep }: { options: S
       <EmptyState
         title="You have nothing to sell yet"
         body="Make a page or an email first. Then come back here to share it with others."
-        action={<ButtonLink href="/dashboard/new">Make a page</ButtonLink>}
+        action={<ButtonLink href="/dashboard/sites/new">Make a page</ButtonLink>}
       />
     );
   }

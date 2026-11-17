@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { ClassicSwitchItems } from "./_versions/SwitchMenuItems";
-import { NAV_ITEMS } from "./nav-items";
+import { NAV_ITEMS, isNavItemActive, type NavItem } from "./nav-items";
 import { LayoutSwitchBanner } from "./_components/LayoutSwitchBanner";
 import { OrgSwitcher, NotificationBell } from "./_components/TeamHeaderControls";
 import { FeedbackButton } from "./_components/FeedbackButton";
@@ -216,10 +216,20 @@ function IconChevronDown() {
   );
 }
 
+function IconEmail() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 7l9 6 9-6" />
+    </svg>
+  );
+}
+
 const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard": <IconOverview />,
   "/dashboard/apps": <IconApps />,
   "/dashboard/templates": <IconTemplates />,
+  "/dashboard/templates?filter=EMAIL": <IconEmail />,
   "/dashboard/pages": <IconPages />,
   "/dashboard/blog": <IconBlog />,
   "/dashboard/commerce": <IconCommerce />,
@@ -233,8 +243,8 @@ const NAV_ICONS: Record<string, React.ReactNode> = {
   "/dashboard/profile": <IconProfile />,
 };
 
-function NavLink({ item, pathname, collapsed }: { item: { href: string; label: string; badge?: string }; pathname: string; collapsed: boolean }) {
-  const isActive = item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href);
+function NavLink({ item, pathname, collapsed }: { item: NavItem; pathname: string; collapsed: boolean }) {
+  const isActive = isNavItemActive(item, pathname);
   return (
     <li>
       <Link

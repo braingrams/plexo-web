@@ -135,7 +135,7 @@ export function StartScreen(props: {
 // ── 2. Look it over ────────────────────────────────────────────────────────────
 
 const OUTCOME_WORDS: Record<Plugin["outcome"], { label: string; tone: "warning" | "success" | "brand" | "neutral" }> = {
-  NEEDS_ATTENTION: { label: "Needs a look", tone: "warning" },
+  NEEDS_ATTENTION: { label: "Check after the move", tone: "warning" },
   NATIVE: { label: "Plexo does this for you", tone: "success" },
   PRESERVED: { label: "Comes across as it is", tone: "brand" },
   NOT_NEEDED: { label: "Not needed", tone: "neutral" },

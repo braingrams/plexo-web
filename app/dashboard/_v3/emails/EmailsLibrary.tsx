@@ -5,9 +5,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Clipboard, Copy, Info, Mail, Pencil, Plus, Search, Trash2 } from "lucide-react";
-import { Button, ButtonLink, EmptyState, Input, Modal, useToast } from "../ui";
+import { Button, ButtonLink, Input, Modal, useToast } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
-import { NewEmailDialog, type ReadyMadeEmail } from "./NewEmailDialog";
+import { EmailChoices, NewEmailDialog, type EmailStart, type ReadyMadeEmail } from "./NewEmailDialog";
 import { editedLabel, emailUsage, filterEmails } from "@/lib/dashboardV3/emails";
 import type { EmailCard } from "@/lib/dashboardV3/emailsData";
 
@@ -33,7 +33,7 @@ function Thumb({ html, name }: { html: string; name: string }) {
   );
 }
 
-export function EmailsLibrary({ initial, limit, planName, canUpgrade = true, designs, preview, openNew }: {
+export function EmailsLibrary({ initial, limit, planName, canUpgrade = true, designs, preview, openNew, startWith }: {
   initial: EmailCard[];
   limit: number;
   planName: string;
@@ -41,6 +41,8 @@ export function EmailsLibrary({ initial, limit, planName, canUpgrade = true, des
   designs?: ReadyMadeEmail[];
   preview?: boolean;
   openNew?: boolean;
+  /** Which step the dialog opens on (preview and links only). */
+  startWith?: EmailStart;
 }) {
   const router = useRouter();
   const toast = useToast();
@@ -48,13 +50,18 @@ export function EmailsLibrary({ initial, limit, planName, canUpgrade = true, des
   useEffect(() => setEmails(initial), [initial]);
   const [q, setQ] = useState("");
   const [dialog, setDialog] = useState(!!openNew);
+  const [start, setStart] = useState<EmailStart>(startWith ?? "choose");
+  const openDialog = (s: EmailStart = "choose") => {
+    setStart(s);
+    setDialog(true);
+  };
   const [deleting, setDeleting] = useState<EmailCard | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const usage = emailUsage(emails.length, limit);
   const shown = useMemo(() => filterEmails(emails, q), [emails, q]);
 
   async function duplicate(e: EmailCard) {
-    if (usage.atLimit) return setDialog(true);
+    if (usage.atLimit) return openDialog();
     setBusy(e.id);
     try {
       if (preview) return toast.show({ title: "Copy made", tone: "success" });
@@ -93,7 +100,7 @@ export function EmailsLibrary({ initial, limit, planName, canUpgrade = true, des
     }
   }
 
-  const add = <Button leftIcon={<Plus size={18} aria-hidden />} onClick={() => setDialog(true)} data-tour="emails-new">New email</Button>;
+  const add = <Button leftIcon={<Plus size={18} aria-hidden />} onClick={() => openDialog()} data-tour="emails-new">New email</Button>;
 
   return (
     <div className="plx-page plx-em" data-tour="emails-main">
@@ -131,7 +138,13 @@ export function EmailsLibrary({ initial, limit, planName, canUpgrade = true, des
       ) : null}
 
       {emails.length === 0 ? (
-        <EmptyState title="No emails yet" body="Make a welcome email, a receipt or a newsletter. Start blank or from a ready-made design." illustration={<Mail size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} action={add} />
+        <section className="plx-em__first" aria-labelledby="em-first">
+          <div>
+            <h2 id="em-first" className="plx-h2">Make your first email</h2>
+            <p className="plx-body" style={{ margin: "6px 0 0", color: "var(--plx-muted)" }}>A welcome email, a receipt or a newsletter. How would you like to start?</p>
+          </div>
+          <EmailChoices onBlank={() => openDialog("blank")} onDesign={() => openDialog("design")} />
+        </section>
       ) : shown.length === 0 ? (
         <p className="plx-small">No emails match “{q}”.</p>
       ) : (
@@ -156,7 +169,7 @@ export function EmailsLibrary({ initial, limit, planName, canUpgrade = true, des
       )}
       {emails.length > 0 ? <p className="plx-small">To use one: open it, or tap the clipboard to copy it, then paste it into your email tool.</p> : null}
 
-      <NewEmailDialog open={dialog} onClose={() => setDialog(false)} usage={usage} designs={designs} preview={preview} />
+      <NewEmailDialog start={start} open={dialog} onClose={() => setDialog(false)} usage={usage} designs={designs} preview={preview} />
       <Modal open={!!deleting} onClose={() => setDeleting(null)} title={deleting ? `Delete “${deleting.name}”?` : ""} description="This can't be undone. Emails you already sent from your email tool aren't affected." footer={<><Button variant="secondary" onClick={() => setDeleting(null)}>Keep it</Button><Button variant="danger" loading={!!busy} onClick={remove}>Delete email</Button></>} />
     </div>
   );
