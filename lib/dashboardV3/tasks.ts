@@ -30,7 +30,17 @@ export type SiteFacts = {
   published: boolean;
   /** The app's sign-in is switched on. */
   signInOn: boolean;
+  /** An uploaded page: it came with its own look, so there is no logo or colour step to do here. */
+  ownDesign: boolean;
 };
+
+/**
+ * Has this been put online at least once? A site records that as its active version; an app (built and run on Plexo) records it as its
+ * live build. Reading only the first made a published app on its own domain keep asking to "Put your app online".
+ */
+export function isPublished(t: { activeVersionId?: string | null; liveBuildId?: string | null } | null | undefined): boolean {
+  return !!(t?.activeVersionId || t?.liveBuildId);
+}
 
 export const EMPTY_FACTS: SiteFacts = {
   hasSite: false,
@@ -46,6 +56,7 @@ export const EMPTY_FACTS: SiteFacts = {
   hasAddress: false,
   published: false,
   signInOn: false,
+  ownDesign: false,
 };
 
 export type TaskId = "design" | "brand" | "product" | "pay" | "words" | "contact" | "post" | "lesson" | "price" | "links" | "describe" | "signin" | "address" | "live";
@@ -56,7 +67,7 @@ export type TaskKind = "auto" | "product" | "pay" | "address" | "live" | "link";
 export type TaskDef = { id: TaskId; title: string; description: string; kind: TaskKind; help: string; done: (f: SiteFacts) => boolean };
 
 const design: TaskDef = { id: "design", title: "Pick a design", description: "You chose one that fits you. You can change it any time.", kind: "auto", help: "Choosing a design", done: (f) => f.hasSite };
-const brand: TaskDef = { id: "brand", title: "Add your logo and colours", description: "So your site looks like you.", kind: "link", help: "Adding your logo and colours", done: (f) => f.hasColors && (f.hasLogo || f.logoSkipped) };
+const brand: TaskDef = { id: "brand", title: "Add your logo and colours", description: "So your site looks like you.", kind: "link", help: "Adding your logo and colours", done: (f) => (f.hasColors && (f.hasLogo || f.logoSkipped)) || f.ownDesign || (f.hasAddress && f.published) };
 const address: TaskDef = { id: "address", title: "Choose your web address", description: "The link people type or tap to find you.", kind: "address", help: "Choosing your web address", done: (f) => f.hasAddress };
 const live: TaskDef = { id: "live", title: "Put your site online", description: "One tap and anyone can visit. You can keep editing after.", kind: "live", help: "Putting your site online", done: (f) => f.hasAddress && f.published };
 

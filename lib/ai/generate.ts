@@ -40,6 +40,8 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   import_products: 8000,
   // A few sentences plus the section and element commands — rebuilding a hand-designed section writes a whole element tree. It sets the credit hold.
   page_assist: 16000,
+  // A JSON list of the pieces in one picture (up to ~250 elements).
+  image_to_design: 12000,
 };
 
 /** Ceiling for the one-time adaptive retry when a response comes back truncated (see

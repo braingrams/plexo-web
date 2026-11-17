@@ -20,7 +20,10 @@ export type AiActionMode =
   | "import_products"
   // SOL inside the visual editor: one streamed answer (a few sentences plus section changes the
   // editor applies as they arrive) — lib/ai/pageAssist.ts.
-  | "page_assist";
+  | "page_assist"
+  // The SDK file editor rebuilding a picture (or a scanned PDF page) as editable text, boxes and photos —
+  // app/api/v1/ai/image-to-design. One picture in, one JSON description out.
+  | "image_to_design";
 
 // `anthropic_claude` = direct Anthropic API (BYOK / Host-Managed AI modes, via
 // lib/ai/providers/anthropic.ts). `bedrock_claude` = Amazon Bedrock (Plexo's own

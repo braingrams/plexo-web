@@ -12,7 +12,7 @@ import { formatMoney } from "@/lib/commerce/formatMoney";
 import { bucketVisitsByDay } from "./visitsTrend";
 import { readSiteBrand } from "./brandLook";
 import { resolveSiteBrand } from "@/lib/brand/resolveSiteBrand";
-import { EMPTY_FACTS, taskVariantFor, type SiteFacts, type TaskVariant } from "./tasks";
+import { EMPTY_FACTS, isPublished, taskVariantFor, type SiteFacts, type TaskVariant } from "./tasks";
 import type { SiteSummary } from "./sites";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
 
@@ -34,7 +34,7 @@ export type SiteHomeData = { variant: TaskVariant; facts: SiteFacts; commerceEna
 export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile | undefined): Promise<SiteHomeData> {
   const id = site.id;
   const [tpl, settings, products, posts, lessons, funnel] = await Promise.all([
-    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "brand"] })).data, null),
+    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "liveBuildId", "sourceType", "brand"] })).data, null),
     safe("store settings", async () => (await CommerceSettings.get({ templateId: id }).go()).data, null),
     safe("products", async () => (await CommerceProduct.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
     safe("posts", async () => (await BlogPost.query.primary({ templateId: id }).go({ limit: 1, attributes: ["slug"] })).data, []),
@@ -51,6 +51,7 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
   const edited = Number.isFinite(created) && Number.isFinite(updated) && updated - created > EDITED_AFTER_MS;
   const cardsReady = !!settings?.paystackLivePublicKey && !!settings?.paystackLiveSecretKeyEncrypted;
   const bankReady = !!settings?.bankTransferEnabled && !!settings?.bankTransferAccountNumber;
+  const ownDesign = tpl?.sourceType === "RAW_UPLOAD";
   const facts: SiteFacts = {
     ...EMPTY_FACTS,
     hasSite: true,
@@ -65,7 +66,9 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
     lessonCount,
     priceSet: funnel?.signupMode === "PAID" || lessonCount > 0,
     hasAddress: !!site.address,
-    published: !!tpl?.activeVersionId,
+    // An uploaded page is served as it was uploaded, so being on its address is what "online" means for it.
+    ownDesign,
+    published: isPublished(tpl) || (ownDesign && !!site.address),
     signInOn: edited,
   };
   return { variant, facts, commerceEnabled };

@@ -45,7 +45,7 @@ export async function generate({
       content: [
         ...(attachments && attachments.length > 0
           ? attachments.map((attachment) => ({
-              type: "document",
+              type: attachment.mediaType.startsWith("image/") ? "image" : "document",
               data: attachment.data,
               mime_type: attachment.mediaType,
             }))
