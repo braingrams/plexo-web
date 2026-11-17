@@ -60,7 +60,12 @@ export function AppSection({ section, appId }: { section: AdvancedSectionId; app
 
   switch (section) {
     case "appsettings":
-      return <Stage><div style={{ position: "absolute", inset: 0 }}><SettingsPane appId={appId} summary={summary} onRenamed={(name) => setSummary((s) => (s ? { ...s, name } : s))} /></div></Stage>;
+    case "appseo":
+    case "appsignin":
+    case "appfiles": {
+      const only = section === "appsettings" ? "general" : section === "appseo" ? "seo" : section === "appsignin" ? "signin" : "files";
+      return <Stage><div style={{ position: "absolute", inset: 0 }}><SettingsPane only={only} appId={appId} summary={summary} onRenamed={(name) => setSummary((s) => (s ? { ...s, name } : s))} /></div></Stage>;
+    }
     case "appcode":
       return (
         <div className="plx-adv__stack">

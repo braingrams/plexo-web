@@ -18,7 +18,7 @@ export type AdvancedSectionId =
   // websites + hosted apps
   | "deploy" | "variables" | "github"
   // app builder
-  | "appsettings" | "appcode" | "data" | "functions" | "secrets" | "users" | "history" | "publish" | "appgithub"
+  | "appsettings" | "appseo" | "appsignin" | "appfiles" | "appcode" | "data" | "functions" | "secrets" | "users" | "history" | "publish" | "appgithub"
   // everyone
   | "danger";
 
@@ -38,7 +38,10 @@ const ALL: Record<AdvancedSectionId, AdvancedSection> = {
   github: { id: "github", label: "GitHub", help: "Keep your code in GitHub and update your app when you push." },
   versions: { id: "versions", label: "Versions", help: "Every saved version of a page, and going back to one." },
   copy: { id: "copy", label: "Copy, move or bring in", help: "Make a copy of this site, give it to another account, or bring in pages from another site." },
-  appsettings: { id: "appsettings", label: "App settings", help: "Name, search and sharing, how people sign in, and uploaded files." },
+  appsettings: { id: "appsettings", label: "App name and address", help: "Your app's name and where people find it." },
+  appseo: { id: "appseo", label: "Search and sharing", help: "How your app shows up on Google and when someone shares a link to it." },
+  appsignin: { id: "appsignin", label: "Sign-in", help: "How people create accounts and log in to your app." },
+  appfiles: { id: "appfiles", label: "Files", help: "Files people upload to your app, and who can see them." },
   appcode: { id: "appcode", label: "Code", help: "Every file in your app. Edit it here and the preview updates." },
   data: { id: "data", label: "Data", help: "The tables behind your app: look, edit and run queries." },
   functions: { id: "functions", label: "Server code and logs", help: "Code that runs on the server, and what it printed." },
@@ -73,7 +76,7 @@ export type AdvancedInput = {
 export function advancedSections(i: AdvancedInput): AdvancedSection[] {
   if (i.experience !== "pro") return [];
   const pick = (ids: AdvancedSectionId[]) => ids.map((id) => ALL[id]);
-  if (i.kind === "app") return pick(["appsettings", "appcode", "data", "functions", "secrets", "users", "history", "publish", "appgithub", "danger"]);
+  if (i.kind === "app") return pick(["appsettings", "appseo", "appsignin", "appfiles", "appcode", "data", "functions", "secrets", "users", "history", "publish", "appgithub", "danger"]);
   if (i.kind === "hosted") {
     const ids: AdvancedSectionId[] = ["deploy"];
     if (i.server) {

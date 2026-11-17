@@ -599,3 +599,7 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 .plx-rail__btn:hover { background: var(--plx-tint); }
 .plx-rail__btn--l { left: 4px; }
 .plx-rail__btn--r { right: 4px; }
+
+/* Tailwind's base makes every <svg> block-level, so an icon written after text (a link icon after a web address, "Visit ↗") dropped onto its own
+   line. Icons are inline in the new dashboard; components that need a block icon already say so with their own rule. */
+:where([data-plexo-v3]) svg.lucide { display: inline-block; vertical-align: -0.15em; }

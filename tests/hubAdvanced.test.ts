@@ -27,7 +27,7 @@ describe("Advanced area: sections per kind", () => {
   });
   it("an app-builder app gets its own set and none of the website ones", () => {
     const got = ids({ kind: "app", experience: "pro" });
-    expect(got).toEqual(["appsettings", "appcode", "data", "functions", "secrets", "users", "history", "publish", "appgithub", "danger"]);
+    expect(got).toEqual(["appsettings", "appseo", "appsignin", "appfiles", "appcode", "data", "functions", "secrets", "users", "history", "publish", "appgithub", "danger"]);
     for (const site of ["seo", "forms", "redirects", "layout", "lists"]) expect(got).not.toContain(site);
   });
   it("a hosted server app gets deploy, variables and GitHub; a static one only deploy", () => {

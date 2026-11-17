@@ -63,8 +63,8 @@ function AppBanner({ summary }: { summary: AppSummary | null }) {
         </div>
         <div style={{ fontSize: "0.82rem", color: C.muted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {address ? (
-            <a href={`https://${address}`} target="_blank" rel="noreferrer" style={{ color: "var(--ed-lavender)", textDecoration: "none" }}>
-              {address} <ExternalLink size={11} aria-hidden style={{ verticalAlign: "-1px" }} />
+            <a href={`https://${address}`} target="_blank" rel="noreferrer" style={{ color: "var(--ed-lavender)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {address}<ExternalLink size={11} aria-hidden style={{ flex: "none" }} />
             </a>
           ) : (
             "Publish your app to give it a web address."
@@ -92,10 +92,16 @@ function SettingsSkeleton() {
   );
 }
 
-export function SettingsPane({ appId, summary, onRenamed }: { appId: string; summary: AppSummary | null; onRenamed?: (name: string) => void }) {
+/**
+ * `only`: show just ONE settings section (General / Search & sharing / Sign-in / Files) with no app header, no section tabs and no
+ * Delete (the new dashboard's Advanced area lists these as its own sections and keeps Delete in its own place at the end).
+ * Without it the pane is the original all-in-one screen used by the app editor.
+ */
+export function SettingsPane({ appId, summary, onRenamed, only }: { appId: string; summary: AppSummary | null; onRenamed?: (name: string) => void; only?: Exclude<SectionId, "delete"> }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [section, setSection] = useState<SectionId>("general");
+  const [pickedSection, setSection] = useState<SectionId>("general");
+  const section: SectionId = only ?? pickedSection;
 
   const load = useCallback(
     async (signal?: { cancelled: boolean }) => {
@@ -126,8 +132,8 @@ export function SettingsPane({ appId, summary, onRenamed }: { appId: string; sum
   return (
     <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: "1.4rem 1.8rem 2.5rem" }}>
       <StateStyles />
-      <AppBanner summary={summary} />
-      <nav aria-label="App settings" className="dash-pill-nav" style={{ margin: "1.3rem 0 0.6rem", overflowX: "auto" }}>
+      {only ? null : <AppBanner summary={summary} />}
+      {only ? null : <nav aria-label="App settings" className="dash-pill-nav" style={{ margin: "1.3rem 0 0.6rem", overflowX: "auto" }}>
         {SECTIONS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -141,8 +147,8 @@ export function SettingsPane({ appId, summary, onRenamed }: { appId: string; sum
             {label}
           </button>
         ))}
-      </nav>
-      <p style={{ margin: "0 0 1rem", fontSize: "0.8rem", color: C.muted }}>{current.hint}</p>
+      </nav>}
+      {only ? null : <p style={{ margin: "0 0 1rem", fontSize: "0.8rem", color: C.muted }}>{current.hint}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
           {section === "general" && (
             <>
