@@ -60,15 +60,15 @@ const primaryButton: CSSProperties = {
   cursor: "pointer",
   fontSize: "0.82rem",
   fontWeight: 700,
-  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-  color: "#fff",
+  background: "var(--plx-brand, linear-gradient(135deg,var(--brand),var(--brand-deep)))",
+  color: "var(--plx-text, #fff)",
   fontFamily: "inherit",
 };
 const secondaryButton: CSSProperties = {
   ...primaryButton,
   background: "transparent",
-  border: "1px solid rgba(255,255,255,0.12)",
-  color: "rgba(240,242,255,0.8)",
+  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
+  color: "var(--plx-text, rgba(240,242,255,0.8))",
 };
 
 export function priceLine(pricing: PricingView | null, plan: PlanId, interval: BillingInterval): { main: string; sub: string | null } {
@@ -86,7 +86,7 @@ export function CurrencySwitch({ pricing, onSwitch }: { pricing: PricingView | n
   if (!pricing?.currencyChoice) return null;
   const { payingInUsd, localCurrency } = pricing.currencyChoice;
   return (
-    <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.5)" }}>
+    <span style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.5))" }}>
       Prices in {currencyName(pricing.currency)} ·{" "}
       <button
         type="button"
@@ -99,11 +99,11 @@ export function CurrencySwitch({ pricing, onSwitch }: { pricing: PricingView | n
             setBusy(false);
           });
         }}
-        style={{ background: "none", border: "none", padding: 0, color: "var(--brand)", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", textDecoration: "underline" }}
+        style={{ background: "none", border: "none", padding: 0, color: "var(--plx-link, var(--brand))", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", textDecoration: "underline" }}
       >
         {busy ? "Switching…" : payingInUsd ? `Pay in ${currencyName(localCurrency)} instead` : "Pay in USD instead"}
       </button>
-      {error && <span style={{ color: "#f87171", marginLeft: 6 }}>{error}</span>}
+      {error && <span style={{ color: "var(--plx-danger, #f87171)", marginLeft: 6 }}>{error}</span>}
     </span>
   );
 }
@@ -152,7 +152,7 @@ export function PlanPicker({
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.6rem", marginBottom: "0.8rem" }}>
-        <div role="group" aria-label="Billing period" style={{ display: "inline-flex", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, overflow: "hidden" }}>
+        <div role="group" aria-label="Billing period" style={{ display: "inline-flex", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)", borderRadius: 9, overflow: "hidden" }}>
           {(["monthly", "yearly"] as const).map((i) => (
             <button
               key={i}
@@ -166,8 +166,8 @@ export function PlanPicker({
                 fontFamily: "inherit",
                 fontSize: "0.78rem",
                 fontWeight: 600,
-                background: interval === i ? "rgba(var(--brand-rgb),0.18)" : "transparent",
-                color: interval === i ? "#f0f2ff" : "rgba(240,242,255,0.55)",
+                background: interval === i ? "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 18%, transparent)" : "transparent",
+                color: interval === i ? "var(--plx-text, #f0f2ff)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 55%, transparent)",
               }}
             >
               {i === "monthly" ? "Monthly" : `Yearly · ${monthsFree} months free`}
@@ -192,30 +192,30 @@ export function PlanPicker({
                 gap: "0.6rem",
                 padding: "1rem",
                 borderRadius: 12,
-                background: plan === currentPlan ? "rgba(var(--brand-rgb),0.07)" : "rgba(255,255,255,0.02)",
-                border: `1px solid ${plan === currentPlan ? "rgba(var(--brand-rgb),0.35)" : "rgba(255,255,255,0.07)"}`,
+                background: plan === currentPlan ? "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 7%, transparent)" : "color-mix(in srgb, var(--plx-text, #fff) 2%, transparent)",
+                border: `1px solid ${plan === currentPlan ? "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 35%, transparent)" : "color-mix(in srgb, var(--plx-text, #fff) 7%, transparent)"}`,
               }}
             >
               <div>
-                <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>{PLAN_LABELS[plan]}</p>
-                <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)", minHeight: "2.1em" }}>{TAGLINES[plan]}</p>
+                <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>{PLAN_LABELS[plan]}</p>
+                <p style={{ fontSize: "0.72rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", minHeight: "2.1em" }}>{TAGLINES[plan]}</p>
               </div>
               <div>
-                <p style={{ fontSize: "1.15rem", fontWeight: 800, color: "#f0f2ff" }}>{price.main}</p>
-                {price.sub && <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.45)" }}>{price.sub}</p>}
+                <p style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--plx-text, #f0f2ff)" }}>{price.main}</p>
+                {price.sub && <p style={{ fontSize: "0.7rem", color: "var(--plx-muted, rgba(240,242,255,0.45))" }}>{price.sub}</p>}
               </div>
               <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.3rem", flex: 1 }}>
                 {planHighlights(plan).map((row) => (
                   <li key={row.label} style={{ display: "flex", justifyContent: "space-between", gap: "0.5rem", fontSize: "0.72rem" }}>
-                    <span style={{ color: "rgba(240,242,255,0.45)" }}>{row.label}</span>
-                    <span style={{ color: row.value === "—" ? "rgba(240,242,255,0.3)" : "rgba(240,242,255,0.85)", textAlign: "right" }}>{row.value}</span>
+                    <span style={{ color: "var(--plx-muted, rgba(240,242,255,0.45))" }}>{row.label}</span>
+                    <span style={{ color: row.value === "—" ? "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 30%, transparent)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 85%, transparent)", textAlign: "right" }}>{row.value}</span>
                   </li>
                 ))}
               </ul>
               {plan === "FREE" ? (
-                currentPlan === "FREE" ? <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.5)", textAlign: "center" }}>Your plan</p> : null
+                currentPlan === "FREE" ? <p style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.5))", textAlign: "center" }}>Your plan</p> : null
               ) : isCurrent ? (
-                <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "#34d399", textAlign: "center" }}>Your plan</p>
+                <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--plx-success, #34d399)", textAlign: "center" }}>Your plan</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                   {canTrial && (
@@ -241,7 +241,7 @@ export function PlanPicker({
         })}
       </div>
       {trialAvailable && currentPlan === "FREE" && (
-        <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)", marginTop: "0.6rem" }}>
+        <p style={{ fontSize: "0.72rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", marginTop: "0.6rem" }}>
           The free trial gives you Starter or Pro for 14 days, no card needed. Custom domains, taking real payments and your own branding switch on once you pay. The trial doesn&apos;t add AI credits.
         </p>
       )}

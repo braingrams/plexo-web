@@ -13,6 +13,9 @@ import { ArtifactCanvas, ArtifactCard, type ActiveArtifact } from "./ArtifactCan
 import { useSolStream } from "./useSolStream";
 import { useSolSidebar } from "./SolSidebarContext";
 import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
+import { SolChatFrame } from "../../_v3/sol/Chat";
+import { useSolV3 } from "../../_v3/sol/SolV3Context";
+import { withSiteContext, type SiteContext } from "../../_v3/sol/logic";
 import {
   ASK_USER_QUESTION_TOOL_NAME,
   SOL_LAST_CONVERSATION_COOKIE,
@@ -135,6 +138,7 @@ export function SolChatView({
   embedded,
   lockedModelTier: lockedModelTierProp,
   initialDraft,
+  initialSite,
 }: {
   conversation: ConversationSummary | null;
   initialMessages: SolMessage[];
@@ -144,7 +148,10 @@ export function SolChatView({
   lockedModelTier?: { tier: ModelTier; note: string } | null;
   /** Text to start the chat box with (e.g. handed over from another SOL feature) — not sent. */
   initialDraft?: string;
+  /** The site the owner chose in onboarding (new look only): shown as "Working on: …" above the chat box. */
+  initialSite?: SiteContext | null;
 }) {
+  const v3 = useSolV3();
   const lockedModelTier = lockedModelTierProp ?? embedded?.lockedModelTier;
   const { bumpRefresh, setActiveConversationIdOverride } = useSolSidebar();
   const [conversation, setConversation] = useState<ConversationSummary | null>(initialConversation);
@@ -174,6 +181,10 @@ export function SolChatView({
   const [showArtifactPanel, setShowArtifactPanel] = useState(false);
 
   const stream = useSolStream();
+  const setV3Site = v3?.setSite;
+  useEffect(() => {
+    if (initialSite) setV3Site?.(initialSite);
+  }, [initialSite, setV3Site]);
   const optimisticUserMessageIdRef = useRef<string | null>(null);
   const lastSentTextRef = useRef<string>("");
   // Tracks the conversation id whose CLIENT state (messages/stream) is already the more
@@ -445,7 +456,9 @@ export function SolChatView({
     // A host can pick the tier for this message (the app wizard's Standard / Advanced choice); a locked plan stays locked.
     const tier = lockedModelTier ? lockedModelTier.tier : (tierOverride ?? modelTier);
     if (tier !== modelTier) handleModelTierChange(tier);
-    const text = embedded?.transformOutgoing ? embedded.transformOutgoing(typed) : typed;
+    let text = embedded?.transformOutgoing ? embedded.transformOutgoing(typed) : typed;
+    // The first message of a chat tells SOL which site the owner is working on (the bubble still shows only what they typed).
+    if (v3 && !embedded && messages.length === 0) text = withSiteContext(text, v3.site);
     setInlineError(null);
     // "" (not undefined) actually empties the box: a message put back after running out of
     // credits and then resent from the top-up card otherwise stayed in it after sending.
@@ -583,6 +596,48 @@ export function SolChatView({
       />
     </>
   );
+
+  if (v3 && !embedded) {
+    return (
+      <SolChatFrame
+        userName={userName}
+        conversation={conversation}
+        messages={messages}
+        pendingBlocks={stream.outcome === "idle" ? null : stream.blocks}
+        streaming={streaming}
+        isEmpty={isEmpty}
+        composer={{
+          streaming,
+          disabled,
+          modelTier,
+          onModelTierChange: handleModelTierChange,
+          onSend: (text, attachments) => void handleSend(text, attachments),
+          onStop: handleStop,
+          initialText: composerRestoreText,
+          placeholder: undefined,
+          tierNote: lockedModelTier?.note,
+        }}
+        inlineError={inlineError}
+        overdraftBalance={stream.overdraft ? stream.overdraft.balance : null}
+        onConfirmToolCall={handleConfirmToolCall}
+        confirmBusy={streaming && pendingConfirmMessageId !== null}
+        pendingQuestion={pendingQuestionBlock}
+        onSubmitAnswers={handleSubmitAnswers}
+        activeArtifact={activeArtifact}
+        showArtifact={showArtifactPanel}
+        onOpenArtifact={() => setShowArtifactPanel(true)}
+        onCloseArtifact={() => setShowArtifactPanel(false)}
+        creditInfo={creditInfo}
+        onCloseCredit={handleCloseCreditModal}
+        returnTo={conversation ? `/dashboard/sol/${conversation.id}` : "/dashboard/sol"}
+        onRename={handleRename}
+        creditsRefreshKey={creditsRefreshKey}
+        titleJustGenerated={titleJustGenerated}
+        onTitleRevealDone={() => setTitleJustGenerated(false)}
+        onSuggestion={(prompt) => setComposerRestoreText(prompt)}
+      />
+    );
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", minWidth: 0 }}>

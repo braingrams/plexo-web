@@ -22,7 +22,7 @@ function pickMimeType(): string | null {
  * the two-step upload -> transcribe flow so the composer can be populated with the
  * transcript text for the user to review/edit — never auto-sent.
  */
-export function VoiceRecorderButton({ onTranscribed, disabled }: { onTranscribed: (text: string) => void; disabled?: boolean }) {
+export function VoiceRecorderButton({ onTranscribed, disabled, v3 }: { onTranscribed: (text: string) => void; disabled?: boolean; v3?: boolean }) {
   const [state, setState] = useState<RecorderState>("idle");
   const [level, setLevel] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -141,6 +141,23 @@ export function VoiceRecorderButton({ onTranscribed, disabled }: { onTranscribed
       return;
     }
     void startRecording();
+  }
+
+  if (v3) {
+    // The new look: a plain round icon button; the Plexo styles carry the colours.
+    return (
+      <button
+        type="button"
+        className="plx-iconbtn"
+        onClick={handleClick}
+        disabled={disabled || busy}
+        data-on={state === "recording" || state === "error" ? "true" : undefined}
+        aria-label={state === "recording" ? "Stop recording" : busy ? (state === "uploading" ? "Uploading your voice note" : "Turning your voice note into text") : "Speak instead of typing"}
+        title={errorMessage ?? undefined}
+      >
+        {busy ? <Loader2 size={18} className="plx-spin" aria-hidden /> : state === "recording" ? <Square size={15} fill="currentColor" aria-hidden /> : state === "error" ? <TriangleAlert size={18} aria-hidden /> : <Mic size={18} aria-hidden />}
+      </button>
+    );
   }
 
   return (

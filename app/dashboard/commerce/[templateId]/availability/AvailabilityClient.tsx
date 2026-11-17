@@ -20,8 +20,8 @@ function timeInputToMinutes(value: string): number {
 }
 
 const inputStyle: React.CSSProperties = {
-  background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.5rem 0.7rem", fontSize: "0.82rem",
+  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+  borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.5rem 0.7rem", fontSize: "0.82rem",
   outline: "none", fontFamily: "inherit",
 };
 
@@ -105,7 +105,7 @@ export function AvailabilityClient({ templateId, services }: { templateId: strin
 
   if (services.length === 0) {
     return (
-      <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "rgba(240,242,255,0.45)", fontSize: "0.85rem" }}>
+      <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", color: "var(--cmx-muted, rgba(240,242,255,0.45))", fontSize: "0.85rem" }}>
         No bookable services yet — add one under Products first (choose "Service / Booking").
       </div>
     );
@@ -113,31 +113,31 @@ export function AvailabilityClient({ templateId, services }: { templateId: strin
 
   return (
     <div>
-      <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginBottom: "1.25rem" }}>Weekly hours and one-off closures per service.</p>
+      <p style={{ fontSize: "0.85rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", marginBottom: "1.25rem" }}>Weekly hours and one-off closures per service.</p>
 
       <select value={productId} onChange={(e) => setProductId(e.target.value)} style={{ ...inputStyle, marginBottom: "1.5rem", width: "100%", maxWidth: 320 }}>
         {services.map((s) => (
-          <option key={s.id} value={s.id} style={{ background: "#0d0f1a" }}>{s.name}</option>
+          <option key={s.id} value={s.id} style={{ background: "var(--cmx-surface, #0d0f1a)" }}>{s.name}</option>
         ))}
       </select>
 
       {loading ? (
-        <p style={{ color: "rgba(240,242,255,0.4)", fontSize: "0.85rem" }}>Loading…</p>
+        <p style={{ color: "var(--cmx-muted, rgba(240,242,255,0.4))", fontSize: "0.85rem" }}>Loading…</p>
       ) : (
         <>
-          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem", marginBottom: "1.25rem" }}>
-            <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "1rem" }}>Weekly hours</h2>
+          <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem", marginBottom: "1.25rem" }}>
+            <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", marginBottom: "1rem" }}>Weekly hours</h2>
 
             {rules.length === 0 ? (
-              <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.4)", marginBottom: "1rem" }}>No open hours set yet — nothing is bookable until you add some below.</p>
+              <p style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", marginBottom: "1rem" }}>No open hours set yet — nothing is bookable until you add some below.</p>
             ) : (
               <div style={{ marginBottom: "1rem" }}>
                 {rules.map((rule) => (
-                  <div key={rule.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: "0.85rem", color: "#e2e4f5" }}>
+                  <div key={rule.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderTop: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)", fontSize: "0.85rem", color: "var(--cmx-text, #e2e4f5)" }}>
                     <span>
                       {DAY_NAMES[rule.dayOfWeek]} · {minutesToTimeInput(rule.startMinute)}–{minutesToTimeInput(rule.endMinute)} ({rule.timezone})
                     </span>
-                    <button type="button" onClick={() => void deleteRule(rule.id)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => void deleteRule(rule.id)} style={{ background: "none", border: "none", color: "var(--cmx-danger, #f87171)", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>
                       Remove
                     </button>
                   </div>
@@ -148,7 +148,7 @@ export function AvailabilityClient({ templateId, services }: { templateId: strin
             <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
               <select value={newDay} onChange={(e) => setNewDay(Number(e.target.value))} style={inputStyle}>
                 {DAY_NAMES.map((name, i) => (
-                  <option key={i} value={i} style={{ background: "#0d0f1a" }}>{name}</option>
+                  <option key={i} value={i} style={{ background: "var(--cmx-surface, #0d0f1a)" }}>{name}</option>
                 ))}
               </select>
               <input type="time" value={newStart} onChange={(e) => setNewStart(e.target.value)} style={inputStyle} />
@@ -156,24 +156,24 @@ export function AvailabilityClient({ templateId, services }: { templateId: strin
               <input type="text" value={newTimezone} onChange={(e) => setNewTimezone(e.target.value)} placeholder="Africa/Lagos" style={{ ...inputStyle, width: 140 }} />
               <button
                 type="button" onClick={() => void addRule()}
-                style={{ padding: "0.55rem 1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 700 }}
+                style={{ padding: "0.55rem 1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 700 }}
               >
                 + Add
               </button>
             </div>
           </div>
 
-          <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem" }}>
-            <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "1rem" }}>Closed dates</h2>
+          <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem" }}>
+            <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", marginBottom: "1rem" }}>Closed dates</h2>
 
             {exceptions.length === 0 ? (
-              <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.4)", marginBottom: "1rem" }}>No closures set.</p>
+              <p style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", marginBottom: "1rem" }}>No closures set.</p>
             ) : (
               <div style={{ marginBottom: "1rem" }}>
                 {exceptions.map((exception) => (
-                  <div key={exception.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderTop: "1px solid rgba(255,255,255,0.06)", fontSize: "0.85rem", color: "#e2e4f5" }}>
+                  <div key={exception.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderTop: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)", fontSize: "0.85rem", color: "var(--cmx-text, #e2e4f5)" }}>
                     <span>{new Date(exception.date).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric", timeZone: "UTC" })}</span>
-                    <button type="button" onClick={() => void deleteException(exception.id)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => void deleteException(exception.id)} style={{ background: "none", border: "none", color: "var(--cmx-danger, #f87171)", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>
                       Remove
                     </button>
                   </div>
@@ -185,7 +185,7 @@ export function AvailabilityClient({ templateId, services }: { templateId: strin
               <input type="date" value={newExceptionDate} onChange={(e) => setNewExceptionDate(e.target.value)} style={inputStyle} />
               <button
                 type="button" onClick={() => void addException()}
-                style={{ padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem" }}
+                style={{ padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", color: "var(--cmx-text, #f0f2ff)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem" }}
               >
                 Close this date
               </button>
@@ -194,7 +194,7 @@ export function AvailabilityClient({ templateId, services }: { templateId: strin
         </>
       )}
 
-      {error && <p style={{ fontSize: "0.82rem", color: "#f87171", marginTop: "1rem" }}>{error}</p>}
+      {error && <p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)", marginTop: "1rem" }}>{error}</p>}
     </div>
   );
 }

@@ -166,7 +166,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
           <strong>{status.secondaryLinks.length} link{status.secondaryLinks.length === 1 ? "" : "s"} on this page lead{status.secondaryLinks.length === 1 ? "s" : ""} to other pages</strong> ({shown}{more}).
           On the Free plan those pages aren&apos;t published, so visitors who click them land back on this homepage.
           {linksOpen && (
-            <span style={{ display: "block", marginTop: 6, color: "rgba(240,242,255,0.6)" }}>
+            <span style={{ display: "block", marginTop: 6, color: "var(--plx-muted, rgba(240,242,255,0.6))" }}>
               {status.secondaryLinks.map((l) => `${l.label} → ${l.href}`).join("  ·  ")}
             </span>
           )}
@@ -186,7 +186,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
     <div style={{ flexShrink: 0 }}>
       {notices}
       {message && (
-        <div role="status" style={{ padding: "0.45rem 1.1rem", fontSize: "0.78rem", color: "#c4b5fd", background: "rgba(var(--brand-rgb),0.08)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div role="status" style={{ padding: "0.45rem 1.1rem", fontSize: "0.78rem", color: "var(--plx-violet, #c4b5fd)", background: "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 8%, transparent)", borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" }}>
           {message}
         </div>
       )}
@@ -207,9 +207,9 @@ function Strip({ tone, children }: { tone: "info" | "warning"; children: React.R
         padding: "0.55rem 1.1rem",
         fontSize: "0.8rem",
         lineHeight: 1.5,
-        color: tone === "warning" ? "#fde68a" : "#ddd6fe",
-        background: tone === "warning" ? "rgba(245,183,74,0.08)" : "rgba(var(--brand-rgb),0.08)",
-        borderBottom: `1px solid ${tone === "warning" ? "rgba(245,183,74,0.22)" : "rgba(var(--brand-rgb),0.22)"}`,
+        color: tone === "warning" ? "var(--plx-warning, #fde68a)" : "#ddd6fe",
+        background: tone === "warning" ? "color-mix(in srgb, var(--plx-warning, rgb(245 183 74)) 8%, transparent)" : "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 8%, transparent)",
+        borderBottom: `1px solid ${tone === "warning" ? "color-mix(in srgb, var(--plx-warning, rgb(245 183 74)) 22%, transparent)" : "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 22%, transparent)"}`,
       }}
     >
       {children}
@@ -228,7 +228,7 @@ const primaryButton: React.CSSProperties = {
   fontWeight: 700,
   textDecoration: "none",
   background: "var(--brand)",
-  color: "#fff",
+  color: "var(--plx-text, #fff)",
   whiteSpace: "nowrap",
 };
 
@@ -239,7 +239,7 @@ const secondaryButton: React.CSSProperties = {
   borderRadius: 8,
   fontSize: "0.76rem",
   fontWeight: 700,
-  border: "1px solid rgba(255,255,255,0.18)",
+  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 18%, transparent)",
   background: "transparent",
   color: "inherit",
   cursor: "pointer",

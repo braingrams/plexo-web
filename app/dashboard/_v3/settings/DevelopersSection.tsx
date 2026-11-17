@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Trash2 } from "lucide-react";
-import { Badge, Button, Card, CardHeader, Textarea } from "../ui";
+import { Check, KeyRound, Trash2 } from "lucide-react";
+import { Badge, Button, ButtonLink, Textarea } from "../ui";
+import { usageMeter } from "@/lib/dashboardV3/settingsUsage";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { SDK_V2_INSTALL, SDK_V2_EMBED } from "@/lib/sdk/v2-snippets";
-import { CopyBox, Notice, SectionHead, ToggleRow } from "./bits";
+import { AsideCard, CopyBox, Notice, Panel, SettingsPageShell, ToggleRow, UsageMeter } from "./bits";
 
 export type DevKey = { id: string; name: string; maskedKey: string; createdAt: string };
 
@@ -79,56 +80,75 @@ export function DevelopersSection({ keys: k0, maxKeys, canPublishViaApi, publish
     }
   }
 
+  const meter = usageMeter(keys.length, maxKeys);
   return (
-    <>
-      <SectionHead title="Developers">API keys, the SDK, and tools for embedding Plexo in your own apps.</SectionHead>
+    <SettingsPageShell
+      title="Developers"
+      purpose="API keys, the SDK, and tools for putting Plexo inside your own apps."
+      action={<Button loading={busy === "create"} disabled={keys.length >= maxKeys} leftIcon={<KeyRound size={16} aria-hidden />} onClick={create}>New API key</Button>}
+      aside={
+        <>
+          <AsideCard title="Your keys">
+            <UsageMeter label="API keys" meter={meter} hint={meter.tone === "full" ? "You've used them all. Revoke one to make another." : "Each key can be revoked on its own."} />
+          </AsideCard>
+          <AsideCard title="More tools">
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+              <ButtonLink href="/dashboard/settings/ai" variant="link">AI for your sites and apps</ButtonLink>
+              <ButtonLink href="/dashboard/settings/github" variant="link">Connect your code account</ButtonLink>
+              <ButtonLink href="/dashboard/settings/email-log" variant="link">Emails we sent for you</ButtonLink>
+            </div>
+          </AsideCard>
+          <AsideCard title="Good to know">
+            <ul>
+              <li><Check size={16} aria-hidden /> <span>A new key is shown once. Copy it straight away.</span></li>
+              <li><Check size={16} aria-hidden /> <span>Revoking a key stops anything using it, immediately.</span></li>
+              <li><Check size={16} aria-hidden /> <span>Prefer not to code? The AI tools tab connects Claude and ChatGPT with a link.</span></li>
+            </ul>
+          </AsideCard>
+        </>
+      }
+    >
       {error ? <Notice tone="bad">{error}</Notice> : null}
 
-      <Card data-tour="dev-keys">
-        <CardHeader title="API keys" description={`Authenticate requests to the Plexo API. ${keys.length} of ${maxKeys} in use.`} action={<Button size="sm" loading={busy === "create"} disabled={keys.length >= maxKeys} leftIcon={<KeyRound size={16} aria-hidden />} onClick={create}>New key</Button>} />
+      <Panel title="API keys" description={`Authenticate requests to the Plexo API. ${keys.length} of ${maxKeys} in use.`} flush data-tour="dev-keys">
         {fresh ? (
-          <div className="plx-dev" style={{ marginBottom: 20 }}>
+          <div className="plx-dev" style={{ padding: "0 28px 24px" }}>
             <Notice tone="warn">Copy this key now. For your security it won&apos;t be shown again.</Notice>
             <CopyBox value={fresh} label="New API key" wrap />
-            <div><Button variant="ghost" size="sm" onClick={() => setFresh(null)}>I&apos;ve copied it</Button></div>
+            <div><Button variant="secondary" size="sm" onClick={() => setFresh(null)}>I&apos;ve copied it</Button></div>
           </div>
         ) : null}
         {keys.length === 0 ? (
-          <p className="plx-body" style={{ margin: 0 }}>No keys yet. Make one to use the API or the SDK.</p>
+          <p className="plx-body" style={{ padding: "0 28px 28px" }}>No keys yet. Make one to use the API or the SDK.</p>
         ) : (
-          <ul className="plx-list" style={{ margin: "0 -20px" }}>
-            {keys.map((key) => (
-              <li key={key.id} className="plx-row">
-                <div className="plx-row__main">
-                  <span className="plx-row__title" style={{ fontFamily: "var(--font-mono, ui-monospace, monospace)" }}>{key.maskedKey}</span>
-                  <span className="plx-row__sub">Created {day(key.createdAt)}</span>
-                </div>
-                <Button variant="ghost" size="sm" loading={busy === key.id} leftIcon={<Trash2 size={16} aria-hidden />} onClick={() => revoke(key.id)}>Revoke</Button>
-              </li>
-            ))}
-          </ul>
+          keys.map((key) => (
+            <div key={key.id} className="plx-keyrow">
+              <span className="plx-tile"><KeyRound size={18} aria-hidden /></span>
+              <div className="plx-person__main">
+                <code>{key.maskedKey}</code>
+                <span>Created {day(key.createdAt)}</span>
+              </div>
+              <Button variant="ghost" size="sm" loading={busy === key.id} leftIcon={<Trash2 size={16} aria-hidden />} onClick={() => revoke(key.id)}>Revoke</Button>
+            </div>
+          ))
         )}
-      </Card>
+      </Panel>
 
-      <div className="plx-set__grid">
-        <Card data-tour="dev-sdk">
-          <CardHeader title="SDK" description="Put the Plexo builder inside your own product." />
-          <div className="plx-dev">
-            <CopyBox value={SDK_V2_INSTALL} label="Install command" wrap />
-            <pre className="plx-code" style={{ maxHeight: 260 }}>{SDK_V2_EMBED}</pre>
-            {canPublishViaApi ? <ToggleRow title="Let my apps publish pages" description="Embedded builders publish under your account, with no per-domain limit." checked={publish} onChange={togglePublish} /> : <Badge tone="neutral">Publishing from embedded builders is on the Pro plan</Badge>}
-          </div>
-        </Card>
+      <Panel title="SDK" description="Put the Plexo builder inside your own product." data-tour="dev-sdk">
+        <div className="plx-dev">
+          <CopyBox value={SDK_V2_INSTALL} label="Install command" wrap />
+          <pre className="plx-code" style={{ maxHeight: 260 }}>{SDK_V2_EMBED}</pre>
+          {canPublishViaApi ? <ToggleRow title="Let my apps publish pages" description="Embedded builders publish under your account, with no per-domain limit." checked={publish} onChange={togglePublish} /> : <Badge tone="neutral">Publishing from embedded builders is on the Pro plan</Badge>}
+        </div>
+      </Panel>
 
-        <Card data-tour="dev-compile">
-          <CardHeader title="Compile MJML" description={canCompile ? "Turn MJML into responsive HTML." : "Available on paid plans."} />
-          <div className="plx-dev">
-            <Textarea label="MJML" className="plx-textarea-code" value={mjml} onChange={(e) => setMjml(e.target.value)} disabled={!canCompile} />
-            <div><Button variant="secondary" loading={busy === "compile"} disabled={!canCompile || !mjml.trim()} onClick={compile}>Compile</Button></div>
-            {html ? <pre className="plx-code plx-code--wrap" style={{ maxHeight: 220 }}>{html}</pre> : null}
-          </div>
-        </Card>
-      </div>
-    </>
+      <Panel title="Compile MJML" description={canCompile ? "Turn MJML into responsive HTML." : "Available on paid plans."} data-tour="dev-compile">
+        <div className="plx-dev">
+          <Textarea label="MJML" className="plx-textarea-code" value={mjml} onChange={(e) => setMjml(e.target.value)} disabled={!canCompile} />
+          <div><Button variant="secondary" loading={busy === "compile"} disabled={!canCompile || !mjml.trim()} onClick={compile}>Compile</Button></div>
+          {html ? <pre className="plx-code plx-code--wrap" style={{ maxHeight: 220 }}>{html}</pre> : null}
+        </div>
+      </Panel>
+    </SettingsPageShell>
   );
 }

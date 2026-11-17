@@ -68,7 +68,7 @@ export function UpgradeModal({
       style={{
         position: "fixed",
         inset: 0,
-        background: "rgba(5,6,12,0.7)",
+        background: "var(--plx-overlay, rgba(5,6,12,0.7))",
         backdropFilter: "blur(4px)",
         display: "grid",
         placeItems: "center",
@@ -81,8 +81,8 @@ export function UpgradeModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           width: "min(420px, 100%)",
-          background: "rgba(16,18,28,0.98)",
-          border: "1px solid rgba(255,255,255,0.09)",
+          background: "var(--plx-surface, rgba(16,18,28,0.98))",
+          border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 9%, transparent)",
           borderRadius: 18,
           padding: "1.5rem",
           boxShadow: "0 30px 80px -20px rgba(0,0,0,0.7)",
@@ -93,7 +93,7 @@ export function UpgradeModal({
             fontFamily: "var(--font-heading), sans-serif",
             fontSize: "1.05rem",
             fontWeight: 700,
-            color: "#f0f2ff",
+            color: "var(--plx-text, #f0f2ff)",
             marginBottom: "0.6rem",
           }}
         >
@@ -102,24 +102,24 @@ export function UpgradeModal({
         <p
           style={{
             fontSize: "0.85rem",
-            color: "rgba(240,242,255,0.6)",
+            color: "var(--plx-muted, rgba(240,242,255,0.6))",
             marginBottom: "1.25rem",
           }}
         >
           {message}
         </p>
         {priceText && (
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.75)", marginTop: "-0.6rem", marginBottom: "1rem" }}>
-            {planName} is {priceText}. <a href="/dashboard/settings/subscription" style={{ color: "var(--brand)" }}>Compare plans</a>
+          <p style={{ fontSize: "0.8rem", color: "var(--plx-text, rgba(240,242,255,0.75))", marginTop: "-0.6rem", marginBottom: "1rem" }}>
+            {planName} is {priceText}. <a href="/dashboard/settings/subscription" style={{ color: "var(--plx-link, var(--brand))" }}>Compare plans</a>
           </p>
         )}
         {canTrial && (
-          <p style={{ fontSize: "0.8rem", color: "#c4b5fd", marginTop: "-0.4rem", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.8rem", color: "var(--plx-violet, #c4b5fd)", marginTop: "-0.4rem", marginBottom: "1.25rem" }}>
             You can try {planName} free for {trial.trialDays} days first — no card needed.
           </p>
         )}
-        {done && <p style={{ fontSize: "0.8rem", color: "#4ade80", marginBottom: "1rem" }}>{done}</p>}
-        {trialError && <p style={{ fontSize: "0.8rem", color: "#f87171", marginBottom: "1rem" }}>{trialError}</p>}
+        {done && <p style={{ fontSize: "0.8rem", color: "var(--plx-success, #4ade80)", marginBottom: "1rem" }}>{done}</p>}
+        {trialError && <p style={{ fontSize: "0.8rem", color: "var(--plx-danger, #f87171)", marginBottom: "1rem" }}>{trialError}</p>}
         <div
           style={{
             display: "flex",
@@ -133,9 +133,9 @@ export function UpgradeModal({
             style={{
               padding: "0.65rem 1.1rem",
               borderRadius: 9,
-              border: "1px solid rgba(255,255,255,0.1)",
+              border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
               background: "transparent",
-              color: "rgba(240,242,255,0.65)",
+              color: "var(--plx-muted, rgba(240,242,255,0.65))",
               cursor: "pointer",
               fontFamily: "inherit",
               fontSize: "0.875rem",
@@ -152,9 +152,9 @@ export function UpgradeModal({
               style={{
                 padding: "0.65rem 1.1rem",
                 borderRadius: 9,
-                border: "1px solid rgba(255,255,255,0.14)",
+                border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 14%, transparent)",
                 background: "transparent",
-                color: "#f0f2ff",
+                color: "var(--plx-text, #f0f2ff)",
                 cursor: "pointer",
                 fontFamily: "inherit",
                 fontSize: "0.875rem",
@@ -173,8 +173,8 @@ export function UpgradeModal({
               borderRadius: 9,
               border: "none",
               background:
-                "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-              color: "#fff",
+                "var(--plx-brand, linear-gradient(135deg,var(--brand),var(--brand-deep)))",
+              color: "var(--plx-text, #fff)",
               cursor: redirecting ? "default" : "pointer",
               opacity: redirecting ? 0.7 : 1,
               fontFamily: "inherit",

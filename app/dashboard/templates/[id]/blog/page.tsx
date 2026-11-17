@@ -2,14 +2,19 @@ import { BlogSite, BlogPost, BlogAuthor } from "@/lib/db/contentEntities";
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
 import { effectiveStatus } from "@/lib/blog/queriesDynamo";
 import { getPublishedBlogPostQuotaStatus } from "@/lib/blog/publishQuota";
+import { redirectToHubIfV3 } from "@/lib/dashboardV3/hubRedirect";
 import { BlogListClient } from "./BlogListClient";
 
 export default async function BlogListPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const { id } = await params;
+  // New dashboard: the blog lives on the site's Blog tab.
+  await redirectToHubIfV3(id, "blog", (await searchParams)?.classic);
   const access = await requireBlogSiteAccess(
     id,
     `/dashboard/templates/${id}/blog`,

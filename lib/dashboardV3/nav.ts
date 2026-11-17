@@ -45,10 +45,10 @@ export function buildV3Nav(input: NavInput): V3NavItem[] {
     { id: "sites", label: sitesLabel, href: "/dashboard/sites", icon: "sites", primary: true },
   ];
   if (sells) items.push({ id: "orders", label: "Orders", href: "/dashboard/commerce", icon: "orders", primary: true });
-  if (teaches) items.push({ id: "learners", label: "Learners", href: "/dashboard/funnels", icon: "learners", primary: !sells });
+  if (teaches) items.push({ id: "learners", label: "Learners", href: "/dashboard/learners", icon: "learners", primary: !sells });
   items.push({ id: "sol", label: "Ask SOL", href: "/dashboard/sol", icon: "sol", primary: true });
   if (!beginner) {
-    items.push({ id: "emails", label: "Emails", href: "/dashboard/templates", icon: "emails", primary: false });
+    items.push({ id: "emails", label: "Emails", href: "/dashboard/emails", icon: "emails", primary: false });
     items.push({ id: "domains", label: "Domains", href: "/dashboard/settings/domains", icon: "domains", primary: false });
   }
   if (experience === "pro") items.push({ id: "developers", label: "Developers", href: "/dashboard/settings/developers", icon: "developers", primary: false });
@@ -58,6 +58,9 @@ export function buildV3Nav(input: NavInput): V3NavItem[] {
 
 /** The menu item a path belongs to (longest matching href wins; Home only on /dashboard itself). */
 export function activeNavId(items: V3NavItem[], pathname: string): NavIcon | null {
+  // Screens still under their old address (lesson writing, the email editor) belong to the same menu item.
+  if (pathname === "/dashboard/funnels" || pathname.startsWith("/dashboard/funnels/")) pathname = "/dashboard/learners";
+  else if (pathname === "/dashboard/templates") pathname = "/dashboard/emails";
   let best: V3NavItem | null = null;
   for (const item of items) {
     const match = item.href === "/dashboard" ? pathname === "/dashboard" : pathname === item.href || pathname.startsWith(`${item.href}/`);

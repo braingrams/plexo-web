@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
+import { useEditorBackHref, useEditorV3, useSitesListHref } from "../../_components/EditorTheme";
 import { useRouter } from "next/navigation";
 import CodeMirror, { EditorView } from "@uiw/react-codemirror";
 import { html } from "@codemirror/lang-html";
@@ -140,21 +141,25 @@ function groupFilesByType(files: FileEntry[]): { key: FileGroupKey; files: FileE
     .filter((group) => group.files.length > 0);
 }
 
-// Matches the app's dark shell (#0b0f19 background) instead of oneDark's default panel color,
+// Matches the app's dark shell (var(--ed-bg) background) instead of oneDark's default panel color,
 // so the editor doesn't look like a mismatched widget dropped into the page.
 const editorTheme = EditorView.theme(
   {
-    "&": { backgroundColor: "#0b0f19", height: "100%" },
+    "&": { backgroundColor: "var(--ed-bg)", height: "100%" },
     ".cm-content": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", fontSize: "0.85rem", padding: "1.25rem 1.25rem 1.25rem 0" },
-    ".cm-gutters": { backgroundColor: "#0b0f19", borderRight: "1px solid rgba(255,255,255,0.06)", color: "rgba(240,242,255,0.25)" },
-    ".cm-activeLineGutter": { backgroundColor: "rgba(255,255,255,0.04)" },
-    ".cm-activeLine": { backgroundColor: "rgba(255,255,255,0.03)" },
+    ".cm-gutters": { backgroundColor: "var(--ed-bg)", borderRight: "1px solid var(--ed-w-060)", color: "var(--ed-t-250)" },
+    ".cm-activeLineGutter": { backgroundColor: "var(--ed-w-040)" },
+    ".cm-activeLine": { backgroundColor: "var(--ed-w-030)" },
     "&.cm-focused": { outline: "none" },
   },
   { dark: true }
 );
 
 export function RawFileEditor({ templateId, siteId, templateName, templateKind, subscriptionPlan, useAi, aiProvider, aiTier, previewBaseHref }: Props) {
+  const v3 = useEditorV3();
+  const exitHref = useEditorBackHref(siteId ?? templateId);
+  const sitesHref = useSitesListHref();
+  const backHref = v3 ? exitHref : sitesHref;
   const router = useRouter();
   // Text Content is the friendlier, non-technical default for a freshly-opened raw page —
   // Code is a step down into the file tree for people who actually want to touch markup.
@@ -437,14 +442,14 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
   }, [toolbarCanSave, handleToolbarSave]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading) {
-    return <div style={{ padding: "3rem", color: "rgba(240,242,255,0.5)" }}>Loading files…</div>;
+    return <div style={{ padding: "3rem", color: "var(--ed-t-500)" }}>Loading files…</div>;
   }
   if (loadError) {
-    return <div style={{ padding: "3rem", color: "#f87171" }}>{loadError}</div>;
+    return <div style={{ padding: "3rem", color: "var(--ed-danger)" }}>{loadError}</div>;
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "#0b0f19", color: "#f0f2ff" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: "var(--ed-bg)", color: "var(--ed-text)" }}>
       <PagesPanel
         templateId={templateId}
         subscriptionPlan={subscriptionPlan}
@@ -454,16 +459,16 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
       {/* Toolbar */}
       <div className="raw-editor-toolbar" style={{
         display: "flex", alignItems: "center", justifyContent: "space-between",
-        padding: "0.85rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0,
+        padding: "0.85rem 1.25rem", borderBottom: "1px solid var(--ed-w-080)", flexShrink: 0,
       }}>
         <div className="raw-editor-toolbar-left" style={{ display: "flex", alignItems: "center", gap: "0.85rem" }}>
-          <Link href="/dashboard/templates" style={{ color: "rgba(240,242,255,0.4)", textDecoration: "none", fontSize: "0.8rem", display: "inline-flex", alignItems: "center", gap: "0.3rem", flexShrink: 0 }}>
-            <IconArrowLeft /> Templates
+          <Link href={backHref} style={{ color: "var(--ed-t-400)", textDecoration: "none", fontSize: "0.8rem", display: "inline-flex", alignItems: "center", gap: "0.3rem", flexShrink: 0 }}>
+            <IconArrowLeft /> {v3 ? "Back to site" : "Templates"}
           </Link>
           <span style={{ fontWeight: 700, fontSize: "0.95rem", whiteSpace: "nowrap" }}>{templateName}</span>
           <span style={{
             fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase",
-            color: "#818cf8", background: "rgba(99,102,241,0.1)", padding: "0.15rem 0.5rem", borderRadius: 5,
+            color: "var(--ed-lavender)", background: "color-mix(in srgb, var(--ed-violet) 10%, transparent)", padding: "0.15rem 0.5rem", borderRadius: 5,
             whiteSpace: "nowrap", flexShrink: 0,
           }}>
             Raw Upload
@@ -485,9 +490,9 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                   onClick={() => setActiveMode(tab.key)}
                   style={{
                     padding: "0.35rem 0.75rem", borderRadius: 7, fontSize: "0.78rem", fontWeight: 600,
-                    background: activeMode === tab.key ? "rgba(var(--brand-rgb),0.1)" : "none",
-                    border: activeMode === tab.key ? "1px solid rgba(var(--brand-rgb),0.3)" : "1px solid rgba(255,255,255,0.1)",
-                    color: disabled ? "rgba(240,242,255,0.25)" : activeMode === tab.key ? "#c4b5fd" : "rgba(240,242,255,0.6)",
+                    background: activeMode === tab.key ? "color-mix(in srgb, var(--brand) 10%, transparent)" : "none",
+                    border: activeMode === tab.key ? "1px solid color-mix(in srgb, var(--brand) 30%, transparent)" : "1px solid var(--ed-w-100)",
+                    color: disabled ? "var(--ed-t-250)" : activeMode === tab.key ? "var(--ed-lavender)" : "var(--ed-t-600)",
                     cursor: disabled ? "not-allowed" : "pointer",
                     whiteSpace: "nowrap", flexShrink: 0,
                   }}
@@ -499,8 +504,8 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
           </div>
         </div>
         <div className="raw-editor-toolbar-right" style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          {toolbarSaveError && <span style={{ color: "#f87171", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconWarning /> {toolbarSaveError}</span>}
-          {toolbarSavedFlash && <span style={{ color: "#34d399", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconCheck /> Saved</span>}
+          {toolbarSaveError && <span style={{ color: "var(--ed-danger)", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconWarning /> {toolbarSaveError}</span>}
+          {toolbarSavedFlash && <span style={{ color: "var(--ed-success)", fontSize: "0.78rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}><IconCheck /> Saved</span>}
           <input
             ref={replaceInputRef}
             type="file"
@@ -513,7 +518,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
             onClick={() => setEmbedModalOpen(true)}
             style={{
               padding: "0.45rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 600,
-              background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.8)",
+              background: "none", border: "1px solid var(--ed-w-120)", color: "var(--ed-t-800)",
               cursor: "pointer",
             }}
             title="Copy a snippet to add a shop grid, cart, checkout, or other commerce widget to your HTML"
@@ -525,7 +530,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
             onClick={() => replaceInputRef.current?.click()}
             style={{
               padding: "0.45rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 600,
-              background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.8)",
+              background: "none", border: "1px solid var(--ed-w-120)", color: "var(--ed-t-800)",
               cursor: "pointer",
             }}
             title="Replace every file on this site with a new .html/.zip upload"
@@ -538,7 +543,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
             style={{
               display: "inline-flex", alignItems: "center", gap: "0.4rem",
               padding: "0.45rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 600,
-              background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.8)",
+              background: "none", border: "1px solid var(--ed-w-120)", color: "var(--ed-t-800)",
               cursor: "pointer",
             }}
             title="Preview exactly as it will be served publicly (includes unsaved edits)"
@@ -552,8 +557,8 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
             className="btn-primary"
             style={{
               padding: "0.45rem 1.1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
-              background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-              border: "none", color: "#fff",
+              background: "var(--ed-cta)",
+              border: "none", color: "var(--ed-on-brand)",
               cursor: !toolbarCanSave ? "default" : "pointer",
               opacity: !toolbarCanSave ? 0.5 : 1,
             }}
@@ -567,9 +572,9 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
       {activeMode === "code" && (
       <div className="raw-editor-code-body" style={{ display: "flex", flex: 1, minHeight: 0 }}>
         {/* File list sidebar */}
-        <div className="raw-editor-sidebar" style={{ width: 220, borderRight: "1px solid rgba(255,255,255,0.08)", overflowY: "auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
+        <div className="raw-editor-sidebar" style={{ width: 220, borderRight: "1px solid var(--ed-w-080)", overflowY: "auto", flexShrink: 0, display: "flex", flexDirection: "column" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.6rem 0.9rem 0.4rem" }}>
-            <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "rgba(240,242,255,0.35)" }}>
+            <span style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--ed-t-350)" }}>
               Files
             </span>
             <button
@@ -578,8 +583,8 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
               title="Add a new file (e.g. style.css or script.js) to import from index.html"
               style={{
                 display: "inline-flex", alignItems: "center", gap: "0.3rem",
-                background: "none", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 6,
-                color: "rgba(240,242,255,0.6)", fontSize: "0.7rem", fontWeight: 600,
+                background: "none", border: "1px solid var(--ed-w-120)", borderRadius: 6,
+                color: "var(--ed-t-600)", fontSize: "0.7rem", fontWeight: 600,
                 padding: "0.15rem 0.45rem", cursor: "pointer",
               }}
             >
@@ -598,7 +603,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                     padding: "0.55rem 0.9rem 0.25rem",
                     background: "none", border: "none", cursor: "pointer", textAlign: "left",
                     fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-                    color: "rgba(240,242,255,0.3)",
+                    color: "var(--ed-t-300)",
                   }}
                 >
                   <span style={{
@@ -608,7 +613,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                     <IconChevronDown />
                   </span>
                   {FILE_GROUP_LABELS[group.key]}
-                  <span style={{ fontWeight: 500, color: "rgba(240,242,255,0.2)" }}>{group.files.length}</span>
+                  <span style={{ fontWeight: 500, color: "var(--ed-t-200)" }}>{group.files.length}</span>
                 </button>
                 {!isCollapsed && group.files.map((f) => (
                   <button
@@ -617,16 +622,16 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                     onClick={() => setActivePath(f.path)}
                     style={{
                       display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%",
-                      padding: "0.6rem 0.9rem", background: f.path === activePath ? "rgba(var(--brand-rgb),0.1)" : "none",
+                      padding: "0.6rem 0.9rem", background: f.path === activePath ? "color-mix(in srgb, var(--brand) 10%, transparent)" : "none",
                       border: "none", borderLeft: f.path === activePath ? "2px solid var(--brand)" : "2px solid transparent",
-                      color: f.path === activePath ? "#f0f2ff" : "rgba(240,242,255,0.6)",
+                      color: f.path === activePath ? "var(--ed-text)" : "var(--ed-t-600)",
                       fontSize: "0.8rem", textAlign: "left", cursor: "pointer", fontFamily: "monospace",
                     }}
                     title={`${f.path} — ${formatSize(f.size)}`}
                   >
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.path}</span>
                     {f.editable && isDirty(f.path) && (
-                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f59e0b", flexShrink: 0, marginLeft: "0.4rem" }} />
+                      <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--ed-amber)", flexShrink: 0, marginLeft: "0.4rem" }} />
                     )}
                   </button>
                 ))}
@@ -651,10 +656,10 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
               />
             </div>
           ) : (
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1rem", color: "rgba(240,242,255,0.5)" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "1rem", color: "var(--ed-t-500)" }}>
               {activeFile.contentType.startsWith("image/") && activeFile.url ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={activeFile.url} alt={activeFile.path} style={{ maxWidth: "60%", maxHeight: 320, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)" }} />
+                <img src={activeFile.url} alt={activeFile.path} style={{ maxWidth: "60%", maxHeight: 320, borderRadius: 8, border: "1px solid var(--ed-w-100)" }} />
               ) : null}
               <p style={{ fontSize: "0.85rem" }}>
                 {activeFile.path} — {formatSize(activeFile.size)} — binary file, not text-editable
@@ -702,11 +707,11 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
       {/* Preview modal */}
       {previewOpen && (
         <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 9999, display: "flex", flexDirection: "column" }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1.25rem", background: "#12101f", borderBottom: "1px solid rgba(255,255,255,0.1)" }}>
-            <span style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.7)" }}>
-              Previewing <strong style={{ fontFamily: "monospace", color: "#f0f2ff" }}>{previewRootPath}</strong> — reflects unsaved edits, exactly as it will render once published
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.75rem 1.25rem", background: "var(--ed-panel)", borderBottom: "1px solid var(--ed-w-100)" }}>
+            <span style={{ fontSize: "0.85rem", color: "var(--ed-t-700)" }}>
+              Previewing <strong style={{ fontFamily: "monospace", color: "var(--ed-text)" }}>{previewRootPath}</strong> — reflects unsaved edits, exactly as it will render once published
             </span>
-            <button type="button" onClick={handleClosePreview} style={{ background: "none", border: "none", color: "rgba(240,242,255,0.6)", cursor: "pointer" }}>
+            <button type="button" onClick={handleClosePreview} style={{ background: "none", border: "none", color: "var(--ed-t-600)", cursor: "pointer" }}>
               <IconClose />
             </button>
           </div>
@@ -734,25 +739,25 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
           />
           <div style={{
             position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-            width: "calc(100% - 2rem)", maxWidth: 440, background: "#16142c", border: "1px solid rgba(239,68,68,0.25)",
+            width: "calc(100% - 2rem)", maxWidth: 440, background: "var(--ed-panel-2)", border: "1px solid color-mix(in srgb, var(--ed-danger) 25%, transparent)",
             borderRadius: 16, padding: "clamp(1.25rem, 5vw, 2rem)", zIndex: 10001, display: "flex", flexDirection: "column", gap: "1.25rem",
             maxHeight: "calc(100vh - 2rem)", overflowY: "auto",
           }}>
             <div>
               <h3 style={{ fontSize: "1.1rem", fontWeight: 800, margin: 0 }}>Replace all files?</h3>
-              <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginTop: "0.6rem", lineHeight: 1.5 }}>
+              <p style={{ fontSize: "0.85rem", color: "var(--ed-t-600)", marginTop: "0.6rem", lineHeight: 1.5 }}>
                 This permanently deletes every current file in <strong>{templateName}</strong> and replaces
-                them with <code style={{ background: "rgba(239,68,68,0.1)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>{pendingReplaceFile.name}</code>.
+                them with <code style={{ background: "color-mix(in srgb, var(--ed-danger) 10%, transparent)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>{pendingReplaceFile.name}</code>.
                 Any domain already linked to this site stays linked — it'll just serve the new content. This cannot be undone.
               </p>
             </div>
-            {replaceError && <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconWarning /> {replaceError}</p>}
+            {replaceError && <p style={{ fontSize: "0.8rem", color: "var(--ed-danger)", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconWarning /> {replaceError}</p>}
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <button
                 type="button"
                 onClick={() => setPendingReplaceFile(null)}
                 disabled={replacing}
-                style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 600, background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(240,242,255,0.7)", cursor: "pointer" }}
+                style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 600, background: "none", border: "1px solid var(--ed-w-100)", color: "var(--ed-t-700)", cursor: "pointer" }}
               >
                 Cancel
               </button>
@@ -760,7 +765,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                 type="button"
                 onClick={() => void handleConfirmReplace()}
                 disabled={replacing}
-                style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 700, background: "linear-gradient(135deg, #ef4444, #b91c1c)", color: "#fff", border: "none", cursor: replacing ? "default" : "pointer", opacity: replacing ? 0.6 : 1 }}
+                style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 700, background: "var(--ed-danger-fill)", color: "var(--ed-on-danger)", border: "none", cursor: replacing ? "default" : "pointer", opacity: replacing ? 0.6 : 1 }}
               >
                 {replacing ? "Replacing…" : "Replace"}
               </button>
@@ -778,18 +783,18 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
           />
           <div style={{
             position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
-            width: "calc(100% - 2rem)", maxWidth: 420, background: "#16142c", border: "1px solid rgba(255,255,255,0.1)",
+            width: "calc(100% - 2rem)", maxWidth: 420, background: "var(--ed-panel-2)", border: "1px solid var(--ed-w-100)",
             borderRadius: 16, padding: "clamp(1.25rem, 5vw, 2rem)", zIndex: 10001, display: "flex", flexDirection: "column", gap: "1.1rem",
             maxHeight: "calc(100vh - 2rem)", overflowY: "auto",
           }}>
             <div>
               <h3 style={{ fontSize: "1.05rem", fontWeight: 800, margin: 0 }}>Add a file</h3>
-              <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.6)", marginTop: "0.5rem", lineHeight: 1.5 }}>
-                Upload an existing <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>.css</code>/<code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>.js</code> file,
+              <p style={{ fontSize: "0.82rem", color: "var(--ed-t-600)", marginTop: "0.5rem", lineHeight: 1.5 }}>
+                Upload an existing <code style={{ background: "var(--ed-w-060)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>.css</code>/<code style={{ background: "var(--ed-w-060)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>.js</code> file,
                 or just name a new blank one. Import it from{" "}
-                <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>index.html</code> with a{" "}
-                <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>&lt;link&gt;</code> or{" "}
-                <code style={{ background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>&lt;script&gt;</code> tag.
+                <code style={{ background: "var(--ed-w-060)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>index.html</code> with a{" "}
+                <code style={{ background: "var(--ed-w-060)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>&lt;link&gt;</code> or{" "}
+                <code style={{ background: "var(--ed-w-060)", padding: "0.1rem 0.3rem", borderRadius: 4 }}>&lt;script&gt;</code> tag.
               </p>
             </div>
 
@@ -803,7 +808,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
             {pickedUploadFile ? (
               <div style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.5rem",
-                padding: "0.55rem 0.75rem", borderRadius: 8, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
+                padding: "0.55rem 0.75rem", borderRadius: 8, background: "var(--ed-w-050)", border: "1px solid var(--ed-w-120)",
               }}>
                 <span style={{ fontSize: "0.8rem", fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {pickedUploadFile.name} — {formatSize(pickedUploadFile.size)}
@@ -812,7 +817,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                   type="button"
                   onClick={() => { setPickedUploadFile(null); setNewFileName(""); }}
                   disabled={addingFile}
-                  style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", cursor: "pointer", flexShrink: 0 }}
+                  style={{ background: "none", border: "none", color: "var(--ed-t-500)", cursor: "pointer", flexShrink: 0 }}
                   title="Remove picked file"
                 >
                   <IconClose />
@@ -825,7 +830,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                 disabled={addingFile}
                 style={{
                   padding: "0.55rem 0.75rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 600,
-                  background: "none", border: "1px dashed rgba(255,255,255,0.2)", color: "rgba(240,242,255,0.7)",
+                  background: "none", border: "1px dashed var(--ed-w-200)", color: "var(--ed-t-700)",
                   cursor: "pointer", textAlign: "left",
                 }}
               >
@@ -846,16 +851,16 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
               disabled={addingFile}
               style={{
                 width: "100%", padding: "0.55rem 0.75rem", borderRadius: 8, fontSize: "0.85rem", fontFamily: "monospace",
-                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", color: "#f0f2ff",
+                background: "var(--ed-w-050)", border: "1px solid var(--ed-w-120)", color: "var(--ed-text)",
               }}
             />
-            {addFileError && <p style={{ fontSize: "0.8rem", color: "#f87171", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconWarning /> {addFileError}</p>}
+            {addFileError && <p style={{ fontSize: "0.8rem", color: "var(--ed-danger)", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconWarning /> {addFileError}</p>}
             <div style={{ display: "flex", gap: "0.75rem" }}>
               <button
                 type="button"
                 onClick={() => setAddFileOpen(false)}
                 disabled={addingFile}
-                style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 600, background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "rgba(240,242,255,0.7)", cursor: "pointer" }}
+                style={{ flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 600, background: "none", border: "1px solid var(--ed-w-100)", color: "var(--ed-t-700)", cursor: "pointer" }}
               >
                 Cancel
               </button>
@@ -866,7 +871,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                 className="btn-primary"
                 style={{
                   flex: 1, padding: "0.6rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 700,
-                  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", border: "none",
+                  background: "var(--ed-cta)", color: "var(--ed-on-brand)", border: "none",
                   cursor: addingFile ? "default" : "pointer", opacity: addingFile ? 0.6 : 1,
                 }}
               >
@@ -908,7 +913,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
             width: 100% !important;
             max-height: 180px;
             border-right: none !important;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            border-bottom: 1px solid var(--ed-w-080);
           }
         }
         @media (max-width: 480px) {

@@ -129,7 +129,7 @@ export const TOUR_STEPS: TourStep[] = [
     anchor: "settings-nav",
     route: "/dashboard/settings",
     title: "Everything in Settings",
-    body: "Each part has its own page. Tap one in this list to open it.",
+    body: "Every part of Settings is one tab in this row. Tap one to open it.",
     tours: ["detailed"],
     order: 901,
   },

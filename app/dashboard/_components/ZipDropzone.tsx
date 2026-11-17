@@ -4,7 +4,7 @@ import { useRef, useState, type DragEvent } from "react";
 
 // "Click to upload, or drag and drop" for one file. Used by the site wizard and the server app panel.
 
-const hairline = "rgba(255,255,255,0.09)";
+const hairline = "color-mix(in srgb, var(--plx-text, #fff) 9%, transparent)";
 
 function IconUpload() {
   return (
@@ -59,7 +59,7 @@ export function ZipDropzone({
         opacity: disabled ? 0.6 : 1,
         borderRadius: 14,
         border: `1.5px dashed ${dragActive ? "var(--brand)" : file ? "var(--success)" : hairline}`,
-        background: dragActive ? "var(--brand-subtle)" : "rgba(255,255,255,0.02)",
+        background: dragActive ? "var(--brand-subtle)" : "color-mix(in srgb, var(--plx-text, #fff) 2%, transparent)",
         padding: "36px 20px",
         textAlign: "center",
         transition: "border-color 0.15s, background 0.15s",

@@ -4,7 +4,9 @@ import "../hub/hub.css";
 import "./settings.css";
 import { useState } from "react";
 import { Check, Copy } from "lucide-react";
-import { Button } from "../ui";
+import { Button, Card, cx } from "../ui";
+import { saveBarState } from "@/lib/dashboardV3/settingsSaveBar";
+import { meterText, type Meter as MeterData } from "@/lib/dashboardV3/settingsUsage";
 
 /** A value to copy, in a box with a Copy button (also used for the one-link AI cards). */
 export function CopyBox({ value, label, wrap }: { value: string; label: string; wrap?: boolean }) {
@@ -31,22 +33,136 @@ export function CopyBox({ value, label, wrap }: { value: string; label: string; 
 /** One setting you switch on or off, with a plain sentence under it. */
 export function ToggleRow({ title, description, checked, disabled, onChange }: { title: string; description?: string; checked: boolean; disabled?: boolean; onChange: (next: boolean) => void }) {
   return (
-    <label className="plx-toggle" style={{ cursor: disabled ? "default" : "pointer" }}>
-      <span style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-        <b style={{ fontSize: 15 }}>{title}</b>
-        {description ? <span className="plx-small">{description}</span> : null}
+    <label className="plx-switchrow" style={{ cursor: disabled ? "default" : "pointer" }}>
+      <span className="plx-switchrow__text">
+        <b>{title}</b>
+        {description ? <span>{description}</span> : null}
       </span>
       <input type="checkbox" className="plx-switch" checked={checked} disabled={disabled} onChange={(e) => onChange(e.target.checked)} />
     </label>
   );
 }
 
+/**
+ * THE page template every Settings page uses: one H1 with a one-line purpose, then the main
+ * column (the most important card first) beside an optional side card of help. Wide screens use
+ * the room; narrow ones stack.
+ */
+export function SettingsPageShell({ title, purpose, action, aside, bar, children }: { title: string; purpose: React.ReactNode; action?: React.ReactNode; aside?: React.ReactNode; bar?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <div className="plx-sp">
+      <header className="plx-sp__head">
+        <div className="plx-sp__headtext">
+          <h2 className="plx-h2 plx-sp__title">{title}</h2>
+          <p>{purpose}</p>
+        </div>
+        {action}
+      </header>
+      <div className={cx("plx-sp__cols", !aside && "plx-sp__cols--solo")}>
+        <div className="plx-sp__main">
+          {children}
+          {bar}
+        </div>
+        {aside ? <aside className="plx-sp__side" aria-label="Help">{aside}</aside> : null}
+      </div>
+    </div>
+  );
+}
+/** Kept so older callers keep compiling: a title and one line. */
 export function SectionHead({ title, children }: { title: string; children?: React.ReactNode }) {
   return (
-    <header className="plx-set__head">
-      <h1 className="plx-h1">{title}</h1>
-      {children ? <p>{children}</p> : null}
+    <header className="plx-sp__head">
+      <div className="plx-sp__headtext">
+        <h2 className="plx-h2">{title}</h2>
+        {children ? <p>{children}</p> : null}
+      </div>
     </header>
+  );
+}
+
+/** A titled card: H2, one quiet line, 28px padding. `flush` lets lists run edge to edge. */
+export function Panel({ title, description, action, flush, tone, children, ...rest }: { title?: React.ReactNode; description?: React.ReactNode; action?: React.ReactNode; flush?: boolean; tone?: "surface" | "tint" | "elevated" } & Omit<React.HTMLAttributes<HTMLElement>, "title">) {
+  return (
+    <Card as="section" padding="none" tone={tone} className={cx("plx-panel", flush && "plx-panel--flush")} {...rest}>
+      {title ? (
+        <div className="plx-panel__head">
+          <div>
+            <h3>{title}</h3>
+            {description ? <p>{description}</p> : null}
+          </div>
+          {action}
+        </div>
+      ) : null}
+      {children}
+    </Card>
+  );
+}
+
+/** The side card: context, "what happens if…", help. Quiet, never the main thing. */
+export function AsideCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card as="section" padding="none" className="plx-aside">
+      <h3>{title}</h3>
+      {children}
+    </Card>
+  );
+}
+
+/** Title and helper on the left, the control on the right. */
+export function SettingRow({ title, description, children }: { title: React.ReactNode; description?: React.ReactNode; children?: React.ReactNode }) {
+  return (
+    <div className="plx-srow">
+      <div className="plx-srow__text">
+        <b>{title}</b>
+        {description ? <span>{description}</span> : null}
+      </div>
+      {children ? <div className="plx-srow__end">{children}</div> : null}
+    </div>
+  );
+}
+
+/** The red-edged card at the very bottom of a page: only for things that can't be undone. */
+export function DangerCard({ title = "Danger zone", description, children }: { title?: string; description?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <Card as="section" padding="none" className="plx-danger" aria-label={title}>
+      <h3>{title}</h3>
+      {description ? <p>{description}</p> : null}
+      {children}
+    </Card>
+  );
+}
+
+/** A usage meter: label, "2 of 4", a bar (amber near the limit, red when full) and one plain hint. */
+export function UsageMeter({ label, meter, unit, hint }: { label: string; meter: MeterData; unit?: { one: string; many: string }; hint?: string }) {
+  const text = meterText(meter, unit);
+  return (
+    <div className="plx-meter" data-tone={meter.tone}>
+      <div className="plx-meter__top">
+        <b>{label}</b>
+        <span>{text}</span>
+      </div>
+      {meter.limit === null || meter.limit === 0 ? null : (
+        <div className="plx-meter__bar" role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={meter.limit} aria-valuenow={Math.min(meter.used, meter.limit)} aria-valuetext={text}>
+          <div className="plx-meter__fill" style={{ width: `${Math.max(meter.used > 0 ? 3 : 0, meter.pct)}%` }} />
+        </div>
+      )}
+      {hint ? <span className="plx-meter__hint">{hint}</span> : null}
+    </div>
+  );
+}
+
+/** "Save changes / Discard": appears only while something is changed, stays in view while you scroll. */
+export function SaveBar({ dirty, saving, valid, onSave, onDiscard, message = "You have changes that aren't saved yet." }: { dirty: boolean; saving?: boolean; valid?: boolean; onSave: () => void; onDiscard: () => void; message?: string }) {
+  const s = saveBarState({ dirty, saving, valid });
+  if (!s.visible) return null;
+  return (
+    <div className="plx-savebar" role="region" aria-label="Unsaved changes" aria-live="polite">
+      <span className="plx-savebar__text">{message}</span>
+      <div className="plx-savebar__actions">
+        <Button variant="ghost" disabled={!s.canDiscard} onClick={onDiscard}>Discard</Button>
+        <Button loading={saving} disabled={!s.canSave} onClick={onSave}>Save changes</Button>
+      </div>
+    </div>
   );
 }
 

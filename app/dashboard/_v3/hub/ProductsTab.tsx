@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, Package, Plus, SlidersHorizontal } from "lucide-react";
+import { FileSpreadsheet, ImagePlus, Package, Plus, Rocket, SlidersHorizontal } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Input, Modal, SegmentedControl, Select, Textarea, useToast } from "../ui";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import type { HubProduct } from "@/lib/dashboardV3/hubData";
@@ -11,6 +11,11 @@ import { errMsg, hubApi } from "./hubApi";
 import { BLANK_EXTRAS, DeliveryPanel, DiscountsPanel, ProductExtras, extrasFromProduct, extrasPayload, type Extras } from "./ProductTools";
 import { readProductsView, resolveProductsView, saveProductsView, type ProductsView } from "@/lib/dashboardV3/hubView";
 import type { Experience } from "@/lib/dashboardV3/nav";
+import { filterProducts, type StockFilter } from "@/lib/dashboardV3/productFilter";
+import { CsvImportDialog } from "@/app/dashboard/commerce/[templateId]/products/CsvImportDialog";
+import { AiImportDialog } from "@/app/dashboard/commerce/[templateId]/products/AiImportDialog";
+import { SellProductModal } from "@/app/dashboard/commerce/[templateId]/products/SellProductModal";
+import "@/app/dashboard/commerce/_components/cmx.css";
 
 type Form = { id?: string; name: string; price: string; kind: HubProduct["kind"]; description: string; stock: string; minutes: string; link: string; imageUrl: string; active: boolean; x: Extras };
 const BLANK: Form = { name: "", price: "", kind: "PHYSICAL", description: "", stock: "", minutes: "60", link: "", imageUrl: "", active: true, x: BLANK_EXTRAS };
@@ -27,6 +32,13 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
   const fileRef = useRef<HTMLInputElement>(null);
   const base = `/api/v1/commerce/${siteId}/products`;
   const [view, setView] = useState<ProductsView>(() => resolveProductsView(experience, null));
+  const [search, setSearch] = useState("");
+  const [stock, setStock] = useState<StockFilter>("all");
+  const [importing, setImporting] = useState<null | "csv" | "sol">(null);
+  const [sellTarget, setSellTarget] = useState<{ id: string; name: string } | null>(null);
+  const [picking, setPicking] = useState(false);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [hiding, setHiding] = useState(false);
   const [section, setSection] = useState<"products" | "discounts" | "delivery">("products");
   // The owner's own choice (kept on this device) beats the default for their experience.
   useEffect(() => setView(readProductsView(experience)), [experience]);
@@ -36,6 +48,22 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
     saveProductsView(v);
     if (v === "simple") setSection("products");
   };
+  const shown = filterProducts(products, search, stock);
+  async function hidePicked() {
+    setHiding(true);
+    try {
+      // The same call the old page used: "delete" on a product hides it from the shop and keeps its orders.
+      await Promise.all([...picked].map((id) => hubApi(`${base}/${id}`, { method: "DELETE" })));
+      show({ title: `${picked.size} product${picked.size === 1 ? "" : "s"} hidden`, description: "They are off your shop now. Open one to show it again.", tone: "success" });
+      setPicked(new Set());
+      setPicking(false);
+      router.refresh();
+    } catch (e) {
+      show({ title: "We couldn't hide them all", description: errMsg(e), tone: "danger" });
+    } finally {
+      setHiding(false);
+    }
+  }
   const categories = [...new Set(products.map((p) => p.category).filter((c): c is string => !!c))];
 
   async function open(p?: HubProduct) {
@@ -135,14 +163,46 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
         </Button>
         {!full ? <span className="plx-small">Sizes and colours, discounts, downloads, stock and delivery.</span> : null}
       </div>
+      {full && section === "products" ? (
+        <div className="plx-viewswitch">
+          <Button variant="secondary" size="sm" leftIcon={<FileSpreadsheet size={16} aria-hidden />} onClick={() => setImporting("csv")}>
+            Add many from a spreadsheet
+          </Button>
+          <Button variant="secondary" size="sm" leftIcon={<Plus size={16} aria-hidden />} onClick={() => setImporting("sol")}>
+            Let SOL read my list
+          </Button>
+          {products.length > 1 ? (
+            <Button variant={picking ? "primary" : "ghost"} size="sm" aria-pressed={picking} onClick={() => { setPicking((v) => !v); setPicked(new Set()); }}>
+              {picking ? "Done choosing" : "Hide several at once"}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
+      {products.length > 4 && (!full || section === "products") ? (
+        <div className="plx-viewswitch">
+          <Input label="Search your products" hideLabel type="search" fieldClassName="plx-search" placeholder="Search your products" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <SegmentedControl label="Show" value={stock} onChange={setStock} options={[{ value: "all", label: "All" }, { value: "in", label: "In stock" }, { value: "out", label: "Sold out" }]} />
+        </div>
+      ) : null}
+      {picking && full && section === "products" ? (
+        <div className="plx-inlinemsg">
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+            <span>{picked.size ? `${picked.size} chosen. Tap more to add them.` : "Tap the products you want to hide from your shop."}</span>
+            <Button size="sm" variant="danger" disabled={!picked.size} loading={hiding} onClick={hidePicked}>
+              Hide {picked.size || ""} from my shop
+            </Button>
+          </div>
+        </div>
+      ) : null}
       {full && section === "discounts" ? <DiscountsPanel siteId={siteId} currency={currency} /> : full && section === "delivery" ? <DeliveryPanel siteId={siteId} currency={currency} /> : products.length === 0 ? (
         <EmptyState title="Add your first product" body="A name, a price and a photo is all it takes. Your shop, basket and checkout are already set up for you." action={<Button leftIcon={<Plus size={18} aria-hidden />} onClick={() => open()}>Add a product</Button>} illustration={<Package size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />
       ) : (
         <Card padding="none" className="plx-listcard" data-tour="hub-products">
           <ul className="plx-list">
-            {products.map((p) => (
+            {shown.length === 0 ? <li className="plx-row"><span className="plx-small">Nothing matches that. Try another word or show all.</span></li> : null}
+            {shown.map((p) => (
               <li key={p.id} style={{ display: "contents" }}>
-                <button type="button" className="plx-row" onClick={() => open(p)}>
+                <button type="button" className="plx-row" aria-pressed={picking ? picked.has(p.id) : undefined} style={picking && picked.has(p.id) ? { background: "var(--plx-tint)" } : undefined} onClick={() => (picking ? setPicked((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; }) : open(p))}>
                   <span className="plx-row__thumb">{p.imageUrl ? <img src={p.imageUrl} alt="" /> : <Package size={22} aria-hidden />}</span>
                   <span className="plx-row__main">
                     <span className="plx-row__title">{p.name}</span>
@@ -173,6 +233,11 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
             {form?.id ? (
               <Button variant="ghost" onClick={remove} disabled={busy} style={{ marginRight: "auto", color: "var(--plx-danger)" }}>
                 Delete
+              </Button>
+            ) : null}
+            {form?.id ? (
+              <Button variant="secondary" leftIcon={<Rocket size={16} aria-hidden />} disabled={busy} onClick={() => { setSellTarget({ id: form.id as string, name: form.name }); setForm(null); }}>
+                Put it on my page
               </Button>
             ) : null}
             <Button variant="secondary" onClick={() => setForm(null)}>
@@ -217,6 +282,9 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
           </div>
         ) : null}
       </Modal>
+      {importing === "csv" ? <CsvImportDialog templateId={siteId} onClose={() => setImporting(null)} onImported={() => { setImporting(null); router.refresh(); }} /> : null}
+      {importing === "sol" ? <AiImportDialog templateId={siteId} onClose={() => setImporting(null)} onImported={() => { setImporting(null); router.refresh(); }} /> : null}
+      {sellTarget ? <SellProductModal siteId={siteId} product={sellTarget} onClose={() => setSellTarget(null)} /> : null}
     </>
   );
 }

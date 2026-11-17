@@ -216,11 +216,11 @@ function IconCheck() {
 const CSS = `
 [data-feedback-root]{
   --fb-action:var(--color-action-primary,var(--brand,#7c5cff));
-  --fb-surface:var(--color-bg-surface,var(--bg-1,#0d1324));
-  --fb-field:var(--color-bg-subtle,var(--bg-2,rgba(255,255,255,.05)));
-  --fb-text:var(--color-text-primary,var(--text-main,#f0f2ff));
+  --fb-surface:var(--color-bg-surface,var(--bg-1,var(--plx-surface, #0d1324)));
+  --fb-field:var(--color-bg-subtle,var(--bg-2,color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)));
+  --fb-text:var(--color-text-primary,var(--text-main,var(--plx-text, #f0f2ff)));
   --fb-muted:var(--color-text-secondary,var(--text-muted,#8b92b3));
-  --fb-border:var(--color-border-default,var(--surface-border,rgba(255,255,255,.1)));
+  --fb-border:var(--color-border-default,var(--surface-border,color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)));
   --fb-danger:var(--color-danger,#e5484d);
   font-family:var(--font-body,inherit);color:var(--fb-text);
 }
@@ -237,7 +237,7 @@ const CSS = `
 .fbn-link{background:none;border:0;padding:0;color:var(--fb-muted);font:inherit;font-size:.8rem;text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 .fbn-x{position:absolute;top:10px;right:10px;background:none;border:0;color:var(--fb-muted);cursor:pointer;padding:6px;border-radius:8px;display:grid;place-items:center}
 .fbn-x:hover{color:var(--fb-text)}
-.fbn-scrim{position:fixed;inset:0;z-index:120;background:rgba(3,7,18,.55);display:grid;place-items:center;padding:16px;animation:fbn-fade .2s ease}
+.fbn-scrim{position:fixed;inset:0;z-index:120;background:var(--plx-overlay, rgba(3,7,18,.55));display:grid;place-items:center;padding:16px;animation:fbn-fade .2s ease}
 .fbn-dialog{position:relative;width:min(480px,100%);max-height:calc(100dvh - 32px);overflow:auto;background:var(--fb-surface);border:1px solid var(--fb-border);border-radius:18px;padding:24px;box-shadow:0 24px 60px rgba(0,0,0,.4)}
 .fbn-h{margin:0 28px 14px 0;font-size:1.15rem;font-weight:800;font-family:var(--font-heading,inherit)}
 .fbn-label{display:block;font-size:.84rem;font-weight:600;margin-bottom:6px}

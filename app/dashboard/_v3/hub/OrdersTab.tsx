@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Inbox } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Modal, Skeleton, type BadgeTone } from "../ui";
+import { Badge, Button, Card, EmptyState, Input, Modal, Skeleton, type BadgeTone } from "../ui";
+import { OrderMore, type OrderExtras } from "./OrderTools";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { TabBar } from "./HubFrame";
 import { errMsg, hubApi } from "./hubApi";
@@ -19,7 +20,7 @@ type Order = {
   createdAt: string;
   paymentMethod?: string;
   items: { nameSnapshot: string; quantity: number; unitPriceMinor: number }[];
-};
+} & Omit<OrderExtras, "orderNumber" | "status" | "paymentMethod" | "amountMinor" | "currency" | "customerName">;
 
 const FILTERS = [
   { id: "", label: "All" },
@@ -57,6 +58,8 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState("");
+  const [q, setQ] = useState("");
   const pageSize = 20;
 
   const load = useCallback(async () => {
@@ -65,6 +68,7 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
     if (filter === "AWAITING") {
       p.set("status", "PENDING");
     } else if (filter) p.set("status", filter);
+    if (q.trim()) p.set("q", q.trim());
     try {
       const r = await hubApi<{ orders: Order[]; total: number }>(`/api/v1/commerce/${siteId}/orders?${p}`);
       setOrders(r.orders);
@@ -72,11 +76,20 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
     } catch (e) {
       setError(errMsg(e, "We couldn't load your orders."));
     }
-  }, [siteId, filter, page]);
+  }, [siteId, filter, page, q]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Search as they type, after a short pause.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setPage(1);
+      setQ(search);
+    }, 350);
+    return () => clearTimeout(id);
+  }, [search]);
 
   async function patch(o: Order, fulfillmentStatus: Order["fulfillmentStatus"]) {
     setBusy(true);
@@ -111,6 +124,7 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
   return (
     <>
       <TabBar title="Your orders" sub="Everything people have bought. Tap an order to see what to do next." />
+      <Input label="Search orders" hideLabel type="search" fieldClassName="plx-search" placeholder="Search by name, email or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
       <div className="plx-filters" role="group" aria-label="Show orders">
         {FILTERS.map((f) => (
           <button key={f.id} type="button" className="plx-chip" role="radio" aria-checked={filter === f.id} onClick={() => { setPage(1); setFilter(f.id); }}>
@@ -128,7 +142,7 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
           ))}
         </Card>
       ) : orders && orders.length === 0 ? (
-        <EmptyState title="No orders yet" body="When someone buys from your shop, the order shows up here and we email you. Share your site to get your first one." illustration={<Inbox size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />
+        q || filter ? <EmptyState title="No orders match" body="Try a different word, or show all your orders." illustration={<Inbox size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} /> : <EmptyState title="No orders yet" body="When someone buys from your shop, the order shows up here and we email you. Share your site to get your first one." illustration={<Inbox size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />
       ) : orders ? (
         <Card padding="none" className="plx-listcard" data-tour="hub-orders">
           <ul className="plx-list">
@@ -205,6 +219,20 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
                 </div>
               </div>
             ) : null}
+            <OrderMore
+              siteId={siteId}
+              order={open}
+              currency={currency}
+              onChange={(patch) => {
+                const next = { ...open, ...patch };
+                setOrders((list) => list?.map((x) => (x.id === open.id ? next : x)) ?? null);
+                setOpen(next);
+              }}
+              onDeleted={() => {
+                setOpen(null);
+                void load();
+              }}
+            />
           </div>
         ) : null}
       </Modal>

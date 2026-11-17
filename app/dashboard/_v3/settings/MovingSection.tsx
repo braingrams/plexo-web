@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Download, Send, ShieldCheck } from "lucide-react";
-import { Badge, Button, ButtonLink, Card, CardHeader, Input, Select, useToast } from "../ui";
+import { ArrowRight, Download, Globe, Send, ShieldCheck } from "lucide-react";
+import { Badge, Button, ButtonLink, Input, Select, useToast } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
-import { Notice, SectionHead } from "./bits";
+import { AsideCard, Notice, Panel, SettingsPageShell } from "./bits";
 
 export type MoveSite = { id: string; name: string };
 export type Incoming = { id: string; siteName: string; fromName: string; createdAt: string; expiresAt: string };
@@ -80,13 +80,23 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
   }
 
   return (
-    <>
-      <SectionHead title="Move a site">Give one of your sites to someone else, or bring a site in from somewhere else.</SectionHead>
+    <SettingsPageShell
+      title="Move a site"
+      purpose="Give one of your sites to someone else, or bring a site in from somewhere else."
+      aside={
+        <AsideCard title="What happens if…">
+          <ul>
+            <li><ShieldCheck size={16} aria-hidden /> <span><b>I give a site away?</b> Nothing moves until they accept, and you can cancel until then.</span></li>
+            <li><ShieldCheck size={16} aria-hidden /> <span><b>They say yes?</b> They own its pages, orders and web addresses. It leaves your account.</span></li>
+            <li><ShieldCheck size={16} aria-hidden /> <span><b>I bring a site in?</b> Your old site stays where it is until you switch your address over.</span></li>
+          </ul>
+        </AsideCard>
+      }
+    >
       {error ? <Notice tone="bad">{error}</Notice> : null}
 
       {incoming.length ? (
-        <Card tone="tint" data-tour="move-incoming">
-          <CardHeader title="Someone wants to give you a site" description="Have a look, then say yes or no." />
+        <Panel tone="tint" title="Someone wants to give you a site" description="Have a look, then say yes or no." data-tour="move-incoming">
           {incoming.map((t) => (
             <div key={t.id} className="plx-actionrow">
               <div>
@@ -96,77 +106,44 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
               <ButtonLink href={`/dashboard/transfers/${t.id}`} rightIcon={<ArrowRight size={18} aria-hidden />}>Take a look</ButtonLink>
             </div>
           ))}
-        </Card>
+        </Panel>
       ) : null}
 
-      <div className="plx-set__grid">
-        <Card data-tour="move-give">
-          <CardHeader title="Give a site to someone" description="They need a Plexo account, or they can make one. You stay in charge until they say yes." />
-          {!isOwner ? (
-            <Notice tone="warn">Only the owner of the account can give a site away.</Notice>
-          ) : sites.length === 0 ? (
-            <p className="plx-body" style={{ margin: 0 }}>You don&apos;t have a site to give yet.</p>
-          ) : (
-            <div className="plx-form">
-              <Select label="Which site?" value={siteId} onChange={(e) => { setSiteId(e.target.value); setPreview(null); }} options={sites.map((s) => ({ value: s.id, label: s.name }))} />
-              <Input label="Their email" type="email" inputMode="email" value={email} onChange={(e) => { setEmail(e.target.value); setPreview(null); }} placeholder="name@example.com" />
-              {!preview ? (
-                <div><Button variant="secondary" loading={busy === "check"} disabled={!email.trim()} onClick={check}>Continue</Button></div>
-              ) : (
-                <div className="plx-safe" role="group" aria-label="Before you send">
-                  <h3 className="plx-h3" style={{ margin: 0, display: "flex", gap: 8, alignItems: "center" }}><ShieldCheck size={20} aria-hidden /> Before you send {site?.name}</h3>
-                  {!preview.exists ? <Notice>They don&apos;t have a Plexo account yet. We&apos;ll email them an invitation to make one.</Notice> : null}
-                  {preview.warnings.map((w) => (
-                    <Notice key={w.title} tone="warn"><span><b>{w.title}.</b> {w.detail}</span></Notice>
-                  ))}
-                  {SAFETY.map((line, i) => (
-                    <label key={line}>
-                      <input type="checkbox" checked={ticks[i]} onChange={(e) => setTicks((p) => p.map((v, j) => (j === i ? e.target.checked : v)))} />
-                      <span>{line}</span>
-                    </label>
-                  ))}
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <Button loading={busy === "send"} disabled={!allTicked} leftIcon={<Send size={16} aria-hidden />} onClick={send}>Send to {email.trim()}</Button>
-                    <Button variant="ghost" onClick={() => setPreview(null)}>Go back</Button>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </Card>
-
-        <Card data-tour="move-import">
-          <CardHeader title="Bring a site in" description="Move a site you already have, without starting again." />
-          <div className="plx-form">
-            <div className="plx-actionrow" style={{ borderTop: 0, paddingTop: 0 }}>
+      <Panel title="Bring a site in" description="Move a site you already have, without starting again." data-tour="move-import">
+        <div className="plx-sform plx-sform--wide">
+          <div className="plx-way">
+            <span className="plx-tile"><Download size={20} aria-hidden /></span>
+            <div className="plx-actionrow" style={{ border: 0, padding: 0, flex: 1 }}>
               <div>
                 <b>From WordPress</b>
                 <span>We copy your pages, posts and pictures, and help you switch your address over safely.</span>
               </div>
-              <ButtonLink href="/dashboard/migrate/wordpress" variant="secondary" leftIcon={<Download size={18} aria-hidden />}>Start</ButtonLink>
+              <ButtonLink href="/dashboard/migrate/wordpress" variant="secondary">Start</ButtonLink>
             </div>
-            <div className="plx-actionrow">
-              <div>
-                <b>From another website builder</b>
-                <span>Wix, Squarespace, Webflow and others. Just paste your site&apos;s address.</span>
-              </div>
-            </div>
-            {sites.length ? (
-              <>
-                <Select label="Which Plexo site should it go into?" value={importInto} onChange={(e) => setImportInto(e.target.value)} options={sites.map((s) => ({ value: s.id, label: s.name }))} />
-                <div><ButtonLink href={`/dashboard/templates/${importInto}/site-import`} variant="secondary">Bring it in</ButtonLink></div>
-              </>
-            ) : (
-              <p className="plx-small" style={{ margin: 0 }}>Make a site first, then bring your pages into it.</p>
-            )}
-            {!canImport ? <Notice tone="warn">Bringing a site in is part of the Starter plan. <Link href="/dashboard/settings/plan" style={{ fontWeight: 700 }}>See plans</Link></Notice> : null}
           </div>
-        </Card>
-      </div>
+          <div className="plx-way">
+            <span className="plx-tile"><Globe size={20} aria-hidden /></span>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <b style={{ display: "block", fontSize: 15 }}>From another website builder</b>
+                <span className="plx-small">Wix, Squarespace, Webflow and others. Just paste your site&apos;s address.</span>
+              </div>
+              {sites.length ? (
+                <div className="plx-searchrow">
+                  <Select label="Which Plexo site should it go into?" value={importInto} onChange={(e) => setImportInto(e.target.value)} options={sites.map((s) => ({ value: s.id, label: s.name }))} />
+                  <ButtonLink href={`/dashboard/templates/${importInto}/site-import`} variant="secondary">Bring it in</ButtonLink>
+                </div>
+              ) : (
+                <p className="plx-small" style={{ margin: 0 }}>Make a site first, then bring your pages into it.</p>
+              )}
+            </div>
+          </div>
+          {!canImport ? <Notice tone="warn">Bringing a site in is part of the Starter plan. <Link href="/dashboard/settings/plan" style={{ fontWeight: 700 }}>See plans</Link></Notice> : null}
+        </div>
+      </Panel>
 
       {sent.length ? (
-        <Card>
-          <CardHeader title="Waiting for an answer" />
+        <Panel title="Waiting for an answer" description="Sites you've offered that haven't been accepted yet.">
           {sent.map((t) => (
             <div key={t.id} className="plx-actionrow">
               <div>
@@ -176,8 +153,42 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
               {isOwner ? <Button variant="ghost" loading={busy === t.id} onClick={() => cancel(t)}>Cancel</Button> : null}
             </div>
           ))}
-        </Card>
+        </Panel>
       ) : null}
-    </>
+
+      <Panel title="Give a site to someone" description="They need a Plexo account, or they can make one. You stay in charge until they say yes." data-tour="move-give">
+        {!isOwner ? (
+          <Notice tone="warn">Only the owner of the account can give a site away.</Notice>
+        ) : sites.length === 0 ? (
+          <p className="plx-body">You don&apos;t have a site to give yet.</p>
+        ) : (
+          <div className="plx-sform">
+            <Select label="Which site?" value={siteId} onChange={(e) => { setSiteId(e.target.value); setPreview(null); }} options={sites.map((s) => ({ value: s.id, label: s.name }))} />
+            <Input label="Their email" type="email" inputMode="email" value={email} onChange={(e) => { setEmail(e.target.value); setPreview(null); }} placeholder="name@example.com" help="We'll email them to ask. Nothing moves yet." />
+            {!preview ? (
+              <div><Button variant="secondary" loading={busy === "check"} disabled={!email.trim()} onClick={check}>Continue</Button></div>
+            ) : (
+              <div className="plx-safe" role="group" aria-label="Before you send">
+                <h3 className="plx-h3" style={{ margin: 0, display: "flex", gap: 8, alignItems: "center" }}><ShieldCheck size={20} aria-hidden /> Before you send {site?.name}</h3>
+                {!preview.exists ? <Notice>They don&apos;t have a Plexo account yet. We&apos;ll email them an invitation to make one.</Notice> : null}
+                {preview.warnings.map((w) => (
+                  <Notice key={w.title} tone="warn"><span><b>{w.title}.</b> {w.detail}</span></Notice>
+                ))}
+                {SAFETY.map((line, i) => (
+                  <label key={line}>
+                    <input type="checkbox" checked={ticks[i]} onChange={(e) => setTicks((p) => p.map((v, j) => (j === i ? e.target.checked : v)))} />
+                    <span>{line}</span>
+                  </label>
+                ))}
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <Button loading={busy === "send"} disabled={!allTicked} leftIcon={<Send size={16} aria-hidden />} onClick={send}>Send to {email.trim()}</Button>
+                  <Button variant="ghost" onClick={() => setPreview(null)}>Go back</Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </Panel>
+    </SettingsPageShell>
   );
 }

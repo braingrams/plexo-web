@@ -3,11 +3,19 @@
 import "./hub.css";
 import Link from "next/link";
 import { ExternalLink, Plus, Eye } from "lucide-react";
-import { Badge, Button, Card, EmptyState, StatusPill } from "../ui";
+import { useState } from "react";
+import { Badge, Button, Card, EmptyState, SegmentedControl, StatusPill } from "../ui";
+import { SITE_FILTERS, filterSites, sitesListHref, type SiteFilter } from "@/lib/dashboardV3/siteFilter";
 import { useOptionalNewSite } from "../../_components/NewSiteModal";
 import type { HubSiteCard } from "@/lib/dashboardV3/hubData";
 
-export function SitesList({ sites, experience, onCreate }: { sites: HubSiteCard[]; experience: string; onCreate?: () => void }) {
+export function SitesList({ sites, experience, onCreate, initialFilter = "all" }: { sites: HubSiteCard[]; experience: string; onCreate?: () => void; initialFilter?: SiteFilter }) {
+  const [filter, setFilter] = useState<SiteFilter>(initialFilter);
+  const shown = filterSites(sites, filter);
+  const pick = (f: SiteFilter) => {
+    setFilter(f);
+    try { window.history.replaceState(null, "", sitesListHref(f)); } catch { /* the filter still works without the address change */ }
+  };
   const ctx = useOptionalNewSite();
   const create = onCreate ?? ctx?.openNewSite ?? (() => {});
   const add = <Button leftIcon={<Plus size={18} aria-hidden />} onClick={create} data-tour="sites-create">Create another website</Button>;
@@ -20,11 +28,20 @@ export function SitesList({ sites, experience, onCreate }: { sites: HubSiteCard[
         </div>
         {sites.length ? add : null}
       </div>
+      {sites.length > 1 && sites.some((x) => x.app) ? (
+        <SegmentedControl label="Show" options={SITE_FILTERS} value={filter} onChange={pick} />
+      ) : null}
       {sites.length === 0 ? (
         <EmptyState title="Make your first website" body="Pick what you want to make and we'll set it up with you." action={<Button leftIcon={<Plus size={18} aria-hidden />} onClick={create}>Create a website</Button>} />
+      ) : shown.length === 0 ? (
+        <EmptyState
+          title={filter === "apps" ? "No apps yet" : "No websites yet"}
+          body={filter === "apps" ? "An app is a site where people sign in and have their own account. Make one and we'll build it with you." : "Make a website and we'll set it up with you."}
+          action={filter === "apps" ? <Button onClick={() => { window.location.href = "/dashboard/apps?create=1"; }} leftIcon={<Plus size={18} aria-hidden />}>Make an app</Button> : <Button leftIcon={<Plus size={18} aria-hidden />} onClick={create}>Create a website</Button>}
+        />
       ) : (
         <div className="plx-hub__grid plx-hub__grid--wide">
-          {sites.map((s) => (
+          {shown.map((s) => (
             <Card key={s.id} as="article" className="plx-sitecard" style={{ position: "relative" }} interactive>
               <div className="plx-sitecard__top">
                 <Badge tone="brand">{s.kind}</Badge>

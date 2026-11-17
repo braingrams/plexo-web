@@ -13,6 +13,8 @@ import { getTierFeatures } from "@/lib/subscription";
 import { User } from "@/lib/db/coreEntities";
 import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 
+import { currentUserOnNewDashboard } from "@/lib/dashboardV3/hubRedirect";
+import { V3BlogOverview } from "../_v3/blog/V3BlogOverview";
 import { BlogOverviewClient } from "./BlogOverviewClient";
 
 // Same reasoning as the Templates page: this route sits behind an always-visible nav link
@@ -110,6 +112,9 @@ export default async function BlogOverviewPage() {
     }
   });
 
+  if (await currentUserOnNewDashboard(session.user.id)) {
+    return <V3BlogOverview blogs={blogs} eligibleTemplates={eligibleTemplates} />;
+  }
   return (
     <BlogOverviewClient blogs={blogs} eligibleTemplates={eligibleTemplates} />
   );

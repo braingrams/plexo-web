@@ -3,6 +3,10 @@
 import { useEffect, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { Modal } from "../_v3/ui/Modal";
+import { ButtonLink } from "../_v3/ui/Button";
+import { useIsV3 } from "../_v3/theme/ThemeContext";
+import { toHubHref } from "@/lib/dashboardV3/legacyHref";
 
 // Shown once a server app is live. Any part of the dashboard can open it by calling announceAppLive, so it
 // stays on screen after the modal that started the build has closed. It's rendered into document.body, so no
@@ -10,6 +14,7 @@ import Link from "next/link";
 // Colours come from the theme variables (lib/theme.ts), so they follow Strata's settings.
 export function AppLiveDialog() {
   const [live, setLive] = useState<AppLiveDetail | null>(null);
+  const inV3 = useIsV3();
 
   useEffect(() => {
     const onLive = (event: Event) => setLive((event as CustomEvent<AppLiveDetail>).detail);
@@ -27,6 +32,28 @@ export function AppLiveDialog() {
   }, [live]);
 
   if (!live || typeof document === "undefined") return null;
+
+  if (inV3) {
+    return (
+      <Modal
+        open
+        onClose={() => setLive(null)}
+        title="Your app is live"
+        description="It is running at its own web address now. You can change it any time from your site's page."
+        width={480}
+        footer={
+          <>
+            <ButtonLink href={toHubHref(live.detailUrl)} variant="secondary" onClick={() => setLive(null)}>
+              Manage my app
+            </ButtonLink>
+            <ButtonLink href={live.liveUrl} target="_blank" rel="noopener noreferrer">
+              Open my app
+            </ButtonLink>
+          </>
+        }
+      />
+    );
+  }
 
   return createPortal(
     <div role="dialog" aria-modal="true" aria-labelledby="app-live-title" style={backdropStyle} onClick={() => setLive(null)}>
@@ -100,7 +127,7 @@ const buttonBase: CSSProperties = {
   cursor: "pointer",
 };
 
-const primaryButtonStyle: CSSProperties = { ...buttonBase, background: "var(--brand)", color: "#fff", border: "none" };
+const primaryButtonStyle: CSSProperties = { ...buttonBase, background: "var(--brand)", color: "var(--plx-on-brand, #fff)", border: "none" };
 
 const secondaryButtonStyle: CSSProperties = {
   ...buttonBase,

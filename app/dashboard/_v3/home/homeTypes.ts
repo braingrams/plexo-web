@@ -27,6 +27,8 @@ export type HomeProps = {
   baseDomain: string;
   /** Where "Create another website" goes. */
   newSiteHref: string;
+  /** Set for people who already have sites and haven't tuned Plexo yet: where the "Fine-tune with SOL" card goes. */
+  tuneHref?: string;
   /** Dev preview: do nothing to the server. */
   demo?: boolean;
 };

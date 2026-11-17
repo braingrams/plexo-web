@@ -46,8 +46,8 @@ function PagesNav() {
                   display: "flex", alignItems: "center", gap: "0.65rem",
                   padding: "0.55rem 0.7rem", borderRadius: 9,
                   fontSize: "0.84rem", fontWeight: isActive ? 600 : 500,
-                  color: isActive ? "#fff" : "rgba(240,242,255,0.55)",
-                  background: isActive ? "rgba(var(--brand-rgb),0.12)" : "transparent",
+                  color: isActive ? "#fff" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 55%, transparent)",
+                  background: isActive ? "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 12%, transparent)" : "transparent",
                   textDecoration: "none",
                   transition: "background 0.15s ease, color 0.15s ease",
                 }}

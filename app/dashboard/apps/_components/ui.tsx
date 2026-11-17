@@ -3,24 +3,23 @@
 import type { CSSProperties, ReactNode, ButtonHTMLAttributes, ComponentType } from "react";
 import { CloudOff, RefreshCw } from "lucide-react";
 
-import { BRAND } from "@/lib/theme";
 // The app editor's visual language — the same dark, translucent surfaces as SOL (see
 // app/dashboard/sol/_components), so the editor reads as one product with the chat beside it.
 
 export const C = {
-  bg: "#0b0f19",
-  panel: "rgba(255,255,255,0.025)",
-  panelSolid: "#11162a",
-  border: "rgba(255,255,255,0.07)",
-  borderStrong: "rgba(255,255,255,0.12)",
-  text: "#f0f2ff",
-  muted: "rgba(240,242,255,0.55)",
-  faint: "rgba(240,242,255,0.35)",
-  brand: BRAND.primary,
-  brandDeep: BRAND.deep,
-  danger: "#f87171",
-  warning: "#fbbf24",
-  success: "#34d399",
+  bg: "var(--ed-bg)",
+  panel: "var(--ed-w-025)",
+  panelSolid: "var(--ed-panel)",
+  border: "var(--ed-w-070)",
+  borderStrong: "var(--ed-w-120)",
+  text: "var(--ed-text)",
+  muted: "var(--ed-t-550)",
+  faint: "var(--ed-t-350)",
+  brand: "var(--ed-accent-text)",
+  brandDeep: "var(--brand-deep)",
+  danger: "var(--ed-danger)",
+  warning: "var(--ed-warning)",
+  success: "var(--ed-success)",
   mono: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
 };
 
@@ -46,10 +45,10 @@ export function Button({
     transition: "background 0.15s, border-color 0.15s",
   };
   const variants: Record<string, CSSProperties> = {
-    primary: { background: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`, color: "#fff" },
-    secondary: { background: "rgba(255,255,255,0.05)", borderColor: C.border, color: C.text },
+    primary: { background: "var(--ed-cta)", color: "var(--ed-on-brand)" },
+    secondary: { background: "var(--ed-w-050)", borderColor: C.border, color: C.text },
     ghost: { background: "transparent", color: C.muted },
-    danger: { background: "rgba(248,113,113,0.12)", borderColor: "rgba(248,113,113,0.25)", color: C.danger },
+    danger: { background: "color-mix(in srgb, var(--ed-danger) 12%, transparent)", borderColor: "color-mix(in srgb, var(--ed-danger) 25%, transparent)", color: C.danger },
   };
   return (
     <button type="button" {...rest} style={{ ...base, ...variants[variant], ...style }}>
@@ -71,7 +70,7 @@ export function Panel({ title, description, actions, children, style, icon, icon
       {icon ? (
         // With an icon: a tinted tile beside the heading, the content lined up under the words.
         <div style={{ display: "grid", gridTemplateColumns: "auto minmax(0, 1fr)", columnGap: 14 }}>
-          <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: `${iconColor}24`, color: iconColor, gridRow: "span 3" }}>{icon}</span>
+          <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: `color-mix(in srgb, ${iconColor} 14%, transparent)`, color: iconColor, gridRow: "span 3" }}>{icon}</span>
           <div>{heading}{blurb}</div>
           <div style={{ gridColumn: 2 }}>{children}</div>
         </div>
@@ -89,7 +88,7 @@ export function Panel({ title, description, actions, children, style, icon, icon
 export function Notice({ tone = "info", children }: { tone?: "info" | "danger" | "warning" | "success"; children: ReactNode }) {
   const colors = { info: C.brand, danger: C.danger, warning: C.warning, success: C.success }[tone];
   return (
-    <div style={{ padding: "0.6rem 0.8rem", borderRadius: 10, background: `${colors}14`, border: `1px solid ${colors}40`, color: tone === "info" ? C.text : colors, fontSize: "0.78rem", lineHeight: 1.5 }}>
+    <div style={{ padding: "0.6rem 0.8rem", borderRadius: 10, background: `color-mix(in srgb, ${colors} 8%, transparent)`, border: `1px solid color-mix(in srgb, ${colors} 25%, transparent)`, color: tone === "info" ? C.text : colors, fontSize: "0.78rem", lineHeight: 1.5 }}>
       {children}
     </div>
   );
@@ -105,7 +104,7 @@ export function EnvSwitch({ value, onChange }: { value: "dev" | "live"; onChange
           role="tab"
           aria-selected={value === env}
           onClick={() => onChange(env)}
-          style={{ padding: "0.32rem 0.7rem", fontSize: "0.74rem", fontWeight: 600, border: "none", cursor: "pointer", background: value === env ? "rgba(var(--brand-rgb), 0.25)" : "transparent", color: value === env ? C.text : C.muted }}
+          style={{ padding: "0.32rem 0.7rem", fontSize: "0.74rem", fontWeight: 600, border: "none", cursor: "pointer", background: value === env ? "color-mix(in srgb, var(--brand) 25%, transparent)" : "transparent", color: value === env ? C.text : C.muted }}
         >
           {env === "dev" ? "Preview" : "Live"}
         </button>
@@ -128,7 +127,7 @@ export const inputStyle: CSSProperties = {
   padding: "0.5rem 0.65rem",
   borderRadius: 9,
   border: `1px solid ${C.border}`,
-  background: "rgba(255,255,255,0.04)",
+  background: "var(--ed-w-040)",
   color: C.text,
   fontSize: "0.8rem",
   outline: "none",
@@ -170,10 +169,10 @@ export function GettingStarted({ icon, title, body, children }: { icon: ReactNod
         padding: "1.6rem",
         borderRadius: 16,
         border: `1px dashed ${C.borderStrong}`,
-        background: "radial-gradient(90% 120% at 100% 0%, rgba(var(--brand-rgb), 0.12), transparent 60%), rgba(255,255,255,0.015)",
+        background: "radial-gradient(90% 120% at 100% 0%, color-mix(in srgb, var(--brand) 12%, transparent), transparent 60%), var(--ed-w-015)",
       }}
     >
-      <span style={{ width: 46, height: 46, borderRadius: 13, display: "grid", placeItems: "center", background: "rgba(var(--brand-rgb), 0.16)", color: "#c4b5fd" }}>{icon}</span>
+      <span style={{ width: 46, height: 46, borderRadius: 13, display: "grid", placeItems: "center", background: "color-mix(in srgb, var(--brand) 16%, transparent)", color: "var(--ed-lavender)" }}>{icon}</span>
       <div style={{ minWidth: 0 }}>
         <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 700, color: C.text }}>{title}</h3>
         <p style={{ margin: "0.3rem 0 0", fontSize: "0.82rem", color: C.muted, lineHeight: 1.55, maxWidth: 720 }}>{body}</p>
@@ -210,15 +209,15 @@ export function SolIdeas({ ideas, onPick }: { ideas: string[]; onPick: (idea: st
 export function StateStyles() {
   return (
     <style>{`
-.plx-shimmer { display: block; background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.09), rgba(255,255,255,0.04)); background-size: 200% 100%; animation: plx-shimmer 1.4s ease-in-out infinite; }
+.plx-shimmer { display: block; background: linear-gradient(90deg, var(--ed-w-040), var(--ed-w-090), var(--ed-w-040)); background-size: 200% 100%; animation: plx-shimmer 1.4s ease-in-out infinite; }
 @keyframes plx-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .plx-icon-btn { transition: color 0.15s, border-color 0.15s, background 0.15s; }
-.plx-icon-btn:not(:disabled):hover { color: #f0f2ff; border-color: rgba(255,255,255,0.2); background: rgba(255,255,255,0.05); }
-.plx-icon-btn.is-danger:not(:disabled):hover { color: #f87171; border-color: rgba(248,113,113,0.4); background: rgba(248,113,113,0.08); }
+.plx-icon-btn:not(:disabled):hover { color: var(--ed-text); border-color: var(--ed-w-200); background: var(--ed-w-050); }
+.plx-icon-btn.is-danger:not(:disabled):hover { color: var(--ed-danger); border-color: color-mix(in srgb, var(--ed-danger) 40%, transparent); background: color-mix(in srgb, var(--ed-danger) 8%, transparent); }
 .plx-row { transition: background 0.15s; }
-.plx-row:hover { background: rgba(255,255,255,0.025); }
+.plx-row:hover { background: var(--ed-w-025); }
 .plx-lift { transition: transform 0.15s, border-color 0.15s, background 0.15s; }
-.plx-lift:not(:disabled):hover { transform: translateY(-1px); border-color: rgba(var(--brand-rgb), 0.5) !important; }
+.plx-lift:not(:disabled):hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--brand) 50%, transparent) !important; }
 @media (max-width: 1000px) { .plx-hero { grid-template-columns: minmax(0, 1fr) !important; } .plx-hero-art { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { .plx-shimmer { animation: none; } .plx-lift:hover { transform: none !important; } }
 `}</style>
@@ -252,8 +251,8 @@ export function ListSkeleton({ rows = 5, label = "Loading" }: { rows?: number; l
 /** Couldn't load: what happened in plain words, reassurance, and a way forward. */
 export function ProblemState({ title, message, onRetry }: { title: string; message?: ReactNode; onRetry?: () => void }) {
   return (
-    <section role="alert" style={{ display: "flex", alignItems: "center", gap: "1.2rem", flexWrap: "wrap", padding: "1.8rem 2rem", borderRadius: 20, border: "1px solid rgba(251,191,36,0.3)", background: "rgba(251,191,36,0.05)" }}>
-      <span style={{ width: 48, height: 48, borderRadius: 14, display: "grid", placeItems: "center", background: "rgba(251,191,36,0.14)", color: C.warning, flexShrink: 0 }}>
+    <section role="alert" style={{ display: "flex", alignItems: "center", gap: "1.2rem", flexWrap: "wrap", padding: "1.8rem 2rem", borderRadius: 20, border: "1px solid color-mix(in srgb, var(--ed-warning) 30%, transparent)", background: "color-mix(in srgb, var(--ed-warning) 5%, transparent)" }}>
+      <span style={{ width: 48, height: 48, borderRadius: 14, display: "grid", placeItems: "center", background: "color-mix(in srgb, var(--ed-warning) 14%, transparent)", color: C.warning, flexShrink: 0 }}>
         <CloudOff size={22} />
       </span>
       <div style={{ flex: "1 1 320px", minWidth: 0 }}>
@@ -271,7 +270,7 @@ export function ProblemState({ title, message, onRetry }: { title: string; messa
 
 /** A page with nothing in it yet: a wide, tinted panel — words and actions on the left, a
  *  picture on the right. `tint` colours the glow (defaults to brand purple). */
-export function EmptyHero({ title, body, children, art, tint = BRAND.primary }: { title: string; body: ReactNode; children?: ReactNode; art?: ReactNode; tint?: string }) {
+export function EmptyHero({ title, body, children, art, tint = "var(--ed-accent-text)" }: { title: string; body: ReactNode; children?: ReactNode; art?: ReactNode; tint?: string }) {
   return (
     <section
       className="plx-hero"
@@ -283,7 +282,7 @@ export function EmptyHero({ title, body, children, art, tint = BRAND.primary }: 
         padding: "clamp(1.2rem, 4.5vw, 2.2rem)",
         borderRadius: 20,
         border: `1px solid ${C.border}`,
-        background: `radial-gradient(70% 90% at 100% 0%, ${tint}24, transparent 60%), radial-gradient(60% 80% at 0% 100%, rgba(var(--brand-rgb), 0.08), transparent 60%), rgba(255,255,255,0.015)`,
+        background: `radial-gradient(70% 90% at 100% 0%, color-mix(in srgb, ${tint} 14%, transparent), transparent 60%), radial-gradient(60% 80% at 0% 100%, color-mix(in srgb, var(--brand) 8%, transparent), transparent 60%), var(--ed-w-015)`,
       }}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "1.2rem", minWidth: 0 }}>
@@ -305,8 +304,8 @@ export function EmptyHero({ title, body, children, art, tint = BRAND.primary }: 
 /** A coloured summary number. */
 export function StatCard({ label, value, color, icon: Icon }: { label: string; value: ReactNode; color: string; icon: ComponentType<{ size?: number }> }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "1rem 1.1rem", borderRadius: 16, border: `1px solid ${C.border}`, background: `linear-gradient(135deg, ${color}1f, transparent 70%)` }}>
-      <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: `${color}2e`, color, flexShrink: 0 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "1rem 1.1rem", borderRadius: 16, border: `1px solid ${C.border}`, background: `linear-gradient(135deg, color-mix(in srgb, ${color} 12%, transparent), transparent 70%)` }}>
+      <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: `color-mix(in srgb, ${color} 18%, transparent)`, color, flexShrink: 0 }}>
         <Icon size={19} />
       </span>
       <span style={{ minWidth: 0 }}>
@@ -320,7 +319,7 @@ export function StatCard({ label, value, color, icon: Icon }: { label: string; v
 /** A small coloured status tag with a dot. */
 export function Pill({ color, children }: { color: string; children: ReactNode }) {
   return (
-    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 650, color, background: `${color}1f`, whiteSpace: "nowrap" }}>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 9px", borderRadius: 99, fontSize: "0.7rem", fontWeight: 650, color, background: `color-mix(in srgb, ${color} 12%, transparent)`, whiteSpace: "nowrap" }}>
       <span style={{ width: 6, height: 6, borderRadius: 99, background: color }} />
       {children}
     </span>
@@ -346,7 +345,7 @@ export function IconButton({ label, danger, disabled, onClick, children }: { lab
 
 // Picked per name so the same thing always gets the same colour. Plexo's own purple family only:
 // brand, orchid, indigo, deep violet — status colours (C.success/warning/danger) are the only others.
-export const HUES = [BRAND.primary, BRAND[300], "#6366f1", BRAND.deep, BRAND[400], BRAND[700], "#9333ea", "#818cf8"];
+export const HUES = ["var(--brand)", "var(--brand-light)", "var(--ed-violet)", "var(--brand-deep)", "var(--brand-soft)", "var(--brand-deeper)", "var(--ed-violet)", "var(--ed-lavender)"];
 export function hueGradient(key: string): string {
   let h = 0;
   for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;

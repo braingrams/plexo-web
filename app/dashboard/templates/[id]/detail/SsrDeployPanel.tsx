@@ -11,12 +11,12 @@ import { ZipDropzone } from "../../../_components/ZipDropzone";
 // The deploy section for a server-rendered (SSR) app. Replaces the static-site upload: the zip is a
 // Next.js / Remix / Astro / Nuxt / Nitro project, built on the server, and goes live when published.
 
-const card: CSSProperties = { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 14, padding: "20px 22px", marginBottom: 16 };
+const card: CSSProperties = { border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 9%, transparent)", borderRadius: 14, padding: "20px 22px", marginBottom: 16 };
 const heading: CSSProperties = { margin: "0 0 4px", fontSize: 15, fontWeight: 700 };
 const muted: CSSProperties = { margin: "0 0 14px", fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 };
 const button = (enabled: boolean): CSSProperties => ({
   padding: "8px 14px", borderRadius: 9, border: "none", fontWeight: 650, fontSize: 13,
-  cursor: enabled ? "pointer" : "not-allowed", background: enabled ? "var(--brand)" : "rgba(255,255,255,0.08)", color: enabled ? "#fff" : "var(--text-muted)",
+  cursor: enabled ? "pointer" : "not-allowed", background: enabled ? "var(--brand)" : "color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", color: enabled ? "#fff" : "var(--text-muted)",
 });
 
 type GitConnection = {
@@ -196,9 +196,9 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
                           : "Keep one warm copy running so visitors never wait for a cold start. Plexo reviews each request by hand."}
           </p>
           {alwaysOn?.request === "APPROVED" && alwaysOn.status === "FAILED" && alwaysOn.error ? (
-            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#f87171" }}>{alwaysOn.error}</p>
+            <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--plx-danger, #f87171)" }}>{alwaysOn.error}</p>
           ) : null}
-          {alwaysOnError ? <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "#f87171" }}>{alwaysOnError}</p> : null}
+          {alwaysOnError ? <p style={{ margin: "6px 0 0", fontSize: 12.5, color: "var(--plx-danger, #f87171)" }}>{alwaysOnError}</p> : null}
         </div>
         {alwaysOn?.request === "APPROVED" ? (
           <button type="button" onClick={() => void turnOffAlwaysOn()} disabled={alwaysOnBusy || alwaysOnTurningOff || building} style={button(!alwaysOnBusy && !alwaysOnTurningOff && !building)}>
@@ -217,15 +217,15 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
             Connected to {git.repo} on {git.branch}. {git.publishOnPush ? "Each push to that branch builds and goes live on its own." : "Each push to that branch builds. You publish it yourself."}
           </p>
           {git.statusMessage ? (
-            <p style={{ margin: 0, fontSize: 12.5, color: git.status === "ERROR" ? "#f87171" : "var(--text-muted)" }}>{git.statusMessage}</p>
+            <p style={{ margin: 0, fontSize: 12.5, color: git.status === "ERROR" ? "var(--plx-danger, #f87171)" : "var(--text-muted)" }}>{git.statusMessage}</p>
           ) : null}
         </div>
       ) : null}
 
-      {error ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "#f87171" }}>{error}</p> : null}
-      {notice ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--brand)" }}>{notice}</p> : null}
+      {error ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--plx-danger, #f87171)" }}>{error}</p> : null}
+      {notice ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--plx-link, var(--brand))" }}>{notice}</p> : null}
       {warnings.map((w) => (
-        <p key={w} style={{ margin: "0 0 8px", fontSize: 12.5, color: "#fbbf24" }}>{w}</p>
+        <p key={w} style={{ margin: "0 0 8px", fontSize: 12.5, color: "var(--plx-warning, #fbbf24)" }}>{w}</p>
       ))}
       {progress ? <p style={{ margin: "0 0 12px", fontSize: 12.5, color: "var(--text-muted)" }}>{progress}</p> : null}
       {!building ? (
@@ -286,7 +286,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
           <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} disabled={busy !== null} style={{ marginTop: 3, width: 15, height: 15, flexShrink: 0 }} />
           <span>
             I agree to the{" "}
-            <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--brand)" }}>Acceptable Use Policy</Link>
+            <Link href="/legal/acceptable-use" target="_blank" style={{ color: "var(--plx-link, var(--brand))" }}>Acceptable Use Policy</Link>
             . The app's code is built and run on Plexo's servers exactly as uploaded.
           </span>
         </label>

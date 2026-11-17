@@ -172,7 +172,7 @@ export function AppTab({ siteId, siteName, info }: { siteId: string; siteName: s
         <div className="plx-form">
           <input ref={fileRef} type="file" accept=".zip,application/zip" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
           <div className="plx-pt__file"><Button variant="secondary" leftIcon={<Upload size={18} aria-hidden />} onClick={() => fileRef.current?.click()}>{file ? "Choose another file" : "Choose a .zip file"}</Button><span className="plx-small">{file ? file.name : "No file chosen yet"}</span></div>
-          {!server && file && file.size > 4_000_000 ? <div className="plx-inlinemsg plx-inlinemsg--warn">That file is big. Use the full uploader instead: <a href={`/dashboard/templates/${siteId}/detail`}>open it here</a>, then come back with the Back button.</div> : null}
+          {!server && file && file.size > 4_000_000 ? <div className="plx-inlinemsg plx-inlinemsg--warn">That file is big. Use the full uploader instead: <a href={`/dashboard/templates/${siteId}/detail?classic=1`}>open it here</a>, then come back with the Back button.</div> : null}
           <label className="plx-toggle" style={{ alignItems: "flex-start" }}><span className="plx-small">I agree to the <a href="/legal/acceptable-use" target="_blank" rel="noreferrer">rules for what&apos;s allowed</a>. My app runs on Plexo&apos;s servers exactly as I wrote it.</span><input type="checkbox" className="plx-switch" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} aria-label="I agree to the rules" /></label>
           {progress ? <p className="plx-small" role="status">{progress}</p> : null}
           {error ? <p className="plx-field__error" role="alert">{error}</p> : null}

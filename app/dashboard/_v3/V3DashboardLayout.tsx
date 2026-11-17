@@ -33,6 +33,8 @@ export async function V3DashboardLayout({ user, organizationId, orgBranding, pla
             nav={data.nav}
             sites={data.sites}
             currentSiteId={data.currentSite?.id ?? null}
+            workspaces={data.workspaces}
+            currentWorkspaceId={organizationId}
             orgBranding={orgBranding}
             tourState={data.tourState}
           >

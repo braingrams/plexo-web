@@ -56,8 +56,8 @@ function Thread({
         borderRadius: 12,
         padding: "0.75rem",
         marginBottom: "0.6rem",
-        background: highlighted ? "rgba(var(--brand-rgb),0.1)" : "rgba(255,255,255,0.03)",
-        border: highlighted ? "1px solid rgba(var(--brand-rgb),0.35)" : "1px solid transparent",
+        background: highlighted ? "color-mix(in srgb, var(--brand) 10%, transparent)" : "var(--ed-w-030)",
+        border: highlighted ? "1px solid color-mix(in srgb, var(--brand) 35%, transparent)" : "1px solid transparent",
         transition: "background 0.2s, border-color 0.2s",
         opacity: root.resolved ? 0.6 : 1,
       }}
@@ -67,16 +67,16 @@ function Thread({
           <Avatar name={c.author.name} size={26} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: "0.4rem" }}>
-              <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#f0f2ff" }}>{c.author.name}</span>
-              <span style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.35)" }}>{timeAgo(c.createdAt)}</span>
+              <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--ed-text)" }}>{c.author.name}</span>
+              <span style={{ fontSize: "0.68rem", color: "var(--ed-t-350)" }}>{timeAgo(c.createdAt)}</span>
             </div>
-            <p style={{ fontSize: "0.82rem", color: c.deleted ? "rgba(240,242,255,0.35)" : "rgba(240,242,255,0.85)", lineHeight: 1.5, fontStyle: c.deleted ? "italic" : "normal" }}>
+            <p style={{ fontSize: "0.82rem", color: c.deleted ? "var(--ed-t-350)" : "var(--ed-t-850)", lineHeight: 1.5, fontStyle: c.deleted ? "italic" : "normal" }}>
               {c.deleted ? "Comment deleted" : <CommentBody body={c.body} />}
             </p>
             {!c.deleted && (c.author.id === currentUserId || canDeleteAny) && (
               <button
                 onClick={() => onRemove(c.id)}
-                style={{ background: "none", border: "none", color: "rgba(240,242,255,0.35)", fontSize: "0.68rem", cursor: "pointer", padding: 0, marginTop: 2 }}
+                style={{ background: "none", border: "none", color: "var(--ed-t-350)", fontSize: "0.68rem", cursor: "pointer", padding: 0, marginTop: 2 }}
               >
                 Delete
               </button>
@@ -89,7 +89,7 @@ function Thread({
         {!replying && (
           <button
             onClick={() => setReplying(true)}
-            style={{ background: "none", border: "none", color: "var(--brand)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}
+            style={{ background: "none", border: "none", color: "var(--ed-accent-text)", fontSize: "0.75rem", fontWeight: 600, cursor: "pointer" }}
           >
             Reply
           </button>
@@ -97,7 +97,7 @@ function Thread({
         {canResolve && (
           <button
             onClick={() => onResolve(root.id, !root.resolved)}
-            style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", fontSize: "0.75rem", cursor: "pointer" }}
+            style={{ background: "none", border: "none", color: "var(--ed-t-500)", fontSize: "0.75rem", cursor: "pointer" }}
           >
             {root.resolved ? "Reopen" : "Resolve"}
           </button>
@@ -164,20 +164,20 @@ export function CommentPanel({
     <div
       style={{
         position: "fixed", top: 0, right: 0, bottom: 0, width: 340, zIndex: 90,
-        background: "rgba(13,15,26,0.98)", borderLeft: "1px solid rgba(255,255,255,0.09)",
+        background: "var(--ed-panel)", borderLeft: "1px solid var(--ed-w-090)",
         backdropFilter: "blur(20px)", display: "flex", flexDirection: "column",
       }}
     >
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1rem 0.75rem", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>Comments</h2>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1rem 0.75rem", borderBottom: "1px solid var(--ed-w-060)" }}>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--ed-text)" }}>Comments</h2>
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
           <button
             onClick={() => setShowResolved((v) => !v)}
-            style={{ background: "none", border: "none", color: "rgba(240,242,255,0.45)", fontSize: "0.72rem", cursor: "pointer" }}
+            style={{ background: "none", border: "none", color: "var(--ed-t-450)", fontSize: "0.72rem", cursor: "pointer" }}
           >
             {showResolved ? "Hide resolved" : "Show resolved"}
           </button>
-          <button onClick={onClose} style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", cursor: "pointer", display: "flex", alignItems: "center" }}>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--ed-t-500)", cursor: "pointer", display: "flex", alignItems: "center" }}>
             <IconClose />
           </button>
         </div>
@@ -185,7 +185,7 @@ export function CommentPanel({
 
       <div style={{ flex: 1, overflowY: "auto", padding: "0.85rem" }}>
         {threads.length === 0 && (
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.35)", textAlign: "center", marginTop: "2rem" }}>
+          <p style={{ fontSize: "0.8rem", color: "var(--ed-t-350)", textAlign: "center", marginTop: "2rem" }}>
             No comments yet. Click anywhere on the canvas to leave one.
           </p>
         )}

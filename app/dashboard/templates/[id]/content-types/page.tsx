@@ -1,6 +1,7 @@
 import { requireCustomContentPageAccess } from "@/lib/customContent/adminAuthDynamo";
 import { CustomContentType, CustomContentEntry } from "@/lib/db/customContentEntities";
 import { ContentTypesClient, type ContentTypeSummary } from "./ContentTypesClient";
+import { SiteToolBack } from "@/app/dashboard/_v3/page/SiteToolBack";
 
 /**
  * /dashboard/templates/[id]/content-types — the "define your own structured content" dashboard
@@ -28,5 +29,10 @@ export default async function ContentTypesPage({ params }: { params: Promise<{ i
     createdAt: ct.createdAt ?? new Date().toISOString(),
   }));
 
-  return <ContentTypesClient templateId={templateId} templateName={access.templateName} initialContentTypes={initialContentTypes} />;
+  return (
+    <>
+    <SiteToolBack siteId={templateId} tab="settings" />
+      <ContentTypesClient templateId={templateId} templateName={access.templateName} initialContentTypes={initialContentTypes} />
+    </>
+  );
 }

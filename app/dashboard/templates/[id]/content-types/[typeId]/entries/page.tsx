@@ -3,6 +3,7 @@ import { requireCustomContentPageAccess } from "@/lib/customContent/adminAuthDyn
 import { CustomContentType, CustomContentEntry } from "@/lib/db/customContentEntities";
 import type { CustomContentField } from "@/lib/db/customContentEntities";
 import { EntriesClient, type EntrySummary } from "./EntriesClient";
+import { SiteToolBack } from "@/app/dashboard/_v3/page/SiteToolBack";
 
 /** First text-ish field's value, trimmed for a list preview — same idea as
  * form-submissions/page.tsx's findFieldByKeyword, just simpler: there's a real field schema
@@ -45,11 +46,14 @@ export default async function EntriesPage({ params }: { params: Promise<{ id: st
   }));
 
   return (
+    <>
+    <SiteToolBack siteId={templateId} tab="settings" />
     <EntriesClient
       templateId={templateId}
       templateName={access.templateName}
       contentType={{ id: contentType.id, name: contentType.name, slug: contentType.slug, fields }}
       initialEntries={initialEntries}
     />
+    </>
   );
 }

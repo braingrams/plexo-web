@@ -15,7 +15,7 @@ const TOOLBAR_BUTTON_STYLE = (active: boolean): React.CSSProperties => ({
   minWidth: 30, height: 30, padding: "0 6px", borderRadius: 6, border: "none", cursor: "pointer",
   fontSize: "0.8rem", fontWeight: 700,
   background: active ? "var(--brand-subtle)" : "transparent",
-  color: active ? "var(--brand)" : "rgba(240,242,255,0.7)",
+  color: active ? "var(--ed-accent-text)" : "var(--ed-t-700)",
 });
 
 function ToolbarButton({ onClick, active, label, children }: { onClick: () => void; active?: boolean; label: string; children: React.ReactNode }) {
@@ -122,7 +122,7 @@ function LinkModal({ initialValue, hasLink, onSubmit, onRemove, onClose }: {
   return (
     <div
       style={{
-        position: "fixed", inset: 0, background: "rgba(5,6,12,0.7)", backdropFilter: "blur(4px)",
+        position: "fixed", inset: 0, background: "var(--ed-scrim)", backdropFilter: "blur(4px)",
         display: "grid", placeItems: "center", zIndex: 200, padding: "1rem",
       }}
       onClick={onClose}
@@ -130,12 +130,12 @@ function LinkModal({ initialValue, hasLink, onSubmit, onRemove, onClose }: {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          width: "min(380px, 100%)", background: "rgba(16,18,28,0.98)",
-          border: "1px solid rgba(255,255,255,0.09)", borderRadius: 16,
+          width: "min(380px, 100%)", background: "var(--ed-panel)",
+          border: "1px solid var(--ed-w-090)", borderRadius: 16,
           padding: "1.25rem", boxShadow: "0 30px 80px -20px rgba(0,0,0,0.7)",
         }}
       >
-        <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.75rem" }}>Link</p>
+        <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--ed-text)", marginBottom: "0.75rem" }}>Link</p>
         <input
           autoFocus
           value={value}
@@ -143,8 +143,8 @@ function LinkModal({ initialValue, hasLink, onSubmit, onRemove, onClose }: {
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSubmit(value); } if (e.key === "Escape") onClose(); }}
           placeholder="https://"
           style={{
-            width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 10, color: "#f0f2ff", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
+            width: "100%", background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)",
+            borderRadius: 10, color: "var(--ed-text)", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
             outline: "none", fontFamily: "inherit", marginBottom: "1rem",
           }}
         />
@@ -153,7 +153,7 @@ function LinkModal({ initialValue, hasLink, onSubmit, onRemove, onClose }: {
             <button
               type="button"
               onClick={onRemove}
-              style={{ padding: "0.55rem 0.9rem", borderRadius: 9, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.08)", color: "#f87171", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, fontFamily: "inherit" }}
+              style={{ padding: "0.55rem 0.9rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--ed-danger) 30%, transparent)", background: "color-mix(in srgb, var(--ed-danger) 8%, transparent)", color: "var(--ed-danger)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, fontFamily: "inherit" }}
             >
               Remove link
             </button>
@@ -161,14 +161,14 @@ function LinkModal({ initialValue, hasLink, onSubmit, onRemove, onClose }: {
           <button
             type="button"
             onClick={onClose}
-            style={{ padding: "0.55rem 0.9rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.65)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, fontFamily: "inherit" }}
+            style={{ padding: "0.55rem 0.9rem", borderRadius: 9, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-t-650)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 600, fontFamily: "inherit" }}
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={() => onSubmit(value)}
-            style={{ padding: "0.55rem 1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, fontFamily: "inherit" }}
+            style={{ padding: "0.55rem 1rem", borderRadius: 9, border: "none", background: "var(--ed-cta)", color: "var(--ed-on-brand)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, fontFamily: "inherit" }}
           >
             Set link
           </button>
@@ -185,27 +185,27 @@ function Toolbar({ editor, onUploadFile }: { editor: Editor; onUploadFile: (file
     <div
       style={{
         display: "flex", flexWrap: "wrap", gap: "0.2rem", padding: "0.5rem",
-        borderBottom: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)",
+        borderBottom: "1px solid var(--ed-w-080)", background: "var(--ed-w-020)",
       }}
     >
       <ToolbarButton label="Bold" active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>B</ToolbarButton>
       <ToolbarButton label="Italic" active={editor.isActive("italic")} onClick={() => editor.chain().focus().toggleItalic().run()}><i>I</i></ToolbarButton>
       <ToolbarButton label="Strikethrough" active={editor.isActive("strike")} onClick={() => editor.chain().focus().toggleStrike().run()}><s>S</s></ToolbarButton>
       <ToolbarButton label="Inline code" active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()}>{"</>"}</ToolbarButton>
-      <span style={{ width: 1, background: "rgba(255,255,255,0.1)", margin: "4px 4px" }} />
+      <span style={{ width: 1, background: "var(--ed-w-100)", margin: "4px 4px" }} />
       <ToolbarButton label="Heading 1" active={editor.isActive("heading", { level: 1 })} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}>H1</ToolbarButton>
       <ToolbarButton label="Heading 2" active={editor.isActive("heading", { level: 2 })} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>H2</ToolbarButton>
       <ToolbarButton label="Heading 3" active={editor.isActive("heading", { level: 3 })} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>H3</ToolbarButton>
-      <span style={{ width: 1, background: "rgba(255,255,255,0.1)", margin: "4px 4px" }} />
+      <span style={{ width: 1, background: "var(--ed-w-100)", margin: "4px 4px" }} />
       <ToolbarButton label="Bullet list" active={editor.isActive("bulletList")} onClick={() => editor.chain().focus().toggleBulletList().run()}><IconBulletList /></ToolbarButton>
       <ToolbarButton label="Numbered list" active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()}><IconOrderedList /></ToolbarButton>
       <ToolbarButton label="Quote" active={editor.isActive("blockquote")} onClick={() => editor.chain().focus().toggleBlockquote().run()}><IconQuote /></ToolbarButton>
       <ToolbarButton label="Code block" active={editor.isActive("codeBlock")} onClick={() => editor.chain().focus().toggleCodeBlock().run()}>{"{ }"}</ToolbarButton>
-      <span style={{ width: 1, background: "rgba(255,255,255,0.1)", margin: "4px 4px" }} />
+      <span style={{ width: 1, background: "var(--ed-w-100)", margin: "4px 4px" }} />
       <ToolbarButton label="Align left" active={editor.isActive({ textAlign: "left" })} onClick={() => editor.chain().focus().setTextAlign("left").run()}><IconAlignLeft /></ToolbarButton>
       <ToolbarButton label="Align center" active={editor.isActive({ textAlign: "center" })} onClick={() => editor.chain().focus().setTextAlign("center").run()}><IconAlignCenter /></ToolbarButton>
       <ToolbarButton label="Align right" active={editor.isActive({ textAlign: "right" })} onClick={() => editor.chain().focus().setTextAlign("right").run()}><IconAlignRight /></ToolbarButton>
-      <span style={{ width: 1, background: "rgba(255,255,255,0.1)", margin: "4px 4px" }} />
+      <span style={{ width: 1, background: "var(--ed-w-100)", margin: "4px 4px" }} />
       <ToolbarButton label="Link" active={editor.isActive("link")} onClick={() => setLinkModalOpen(true)}>Link</ToolbarButton>
       <ToolbarButton label="Insert image" onClick={() => insertImageWithUpload(editor, onUploadFile)}>Image</ToolbarButton>
       <span style={{ flex: 1 }} />
@@ -323,14 +323,14 @@ export function BlogRichTextEditor({
   if (!editor) return null;
 
   return (
-    <div style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, overflow: "hidden" }}>
+    <div style={{ border: "1px solid var(--ed-w-100)", borderRadius: 10, overflow: "hidden" }}>
       <Toolbar editor={editor} onUploadFile={onUploadFile} />
       <div style={{ padding: "1.25rem", minHeight: 360 }}>
         <EditorContent editor={editor} className="plexo-editor-prose" />
       </div>
       <style>{`
-        .plexo-editor-prose .ProseMirror { outline: none; color: #f0f2ff; font-size: 1rem; line-height: 1.7; }
-        .plexo-editor-prose .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: rgba(240,242,255,0.3); float: left; pointer-events: none; height: 0; }
+        .plexo-editor-prose .ProseMirror { outline: none; color: var(--ed-text); font-size: 1rem; line-height: 1.7; }
+        .plexo-editor-prose .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); color: var(--ed-t-300); float: left; pointer-events: none; height: 0; }
         /* Tailwind's preflight resets h1-h6 to font-size:inherit/font-weight:inherit/margin:0
            and gives p no margin at all — without restoring both here, AI- or hand-written
            content collapses into one undifferentiated, jammed-together block: headings look
@@ -338,7 +338,7 @@ export function BlogRichTextEditor({
         .plexo-editor-prose .ProseMirror p { margin: 0 0 1em; }
         .plexo-editor-prose .ProseMirror h1, .plexo-editor-prose .ProseMirror h2, .plexo-editor-prose .ProseMirror h3,
         .plexo-editor-prose .ProseMirror h4, .plexo-editor-prose .ProseMirror h5, .plexo-editor-prose .ProseMirror h6 {
-          color: #f0f2ff; font-weight: 800; line-height: 1.3;
+          color: var(--ed-text); font-weight: 800; line-height: 1.3;
         }
         .plexo-editor-prose .ProseMirror h1 { font-size: 1.85em; margin: 1.4em 0 0.5em; }
         .plexo-editor-prose .ProseMirror h2 { font-size: 1.5em; margin: 1.3em 0 0.5em; }
@@ -352,13 +352,13 @@ export function BlogRichTextEditor({
         .plexo-editor-prose .ProseMirror ol { list-style: decimal; }
         .plexo-editor-prose .ProseMirror li { margin: 0.25em 0; }
         .plexo-editor-prose .ProseMirror li p { margin: 0; }
-        .plexo-editor-prose .ProseMirror blockquote { border-left: 3px solid var(--brand); margin: 1em 0; padding-left: 1em; color: rgba(240,242,255,0.7); }
-        .plexo-editor-prose .ProseMirror pre { background: #0b0f19; padding: 12px; border-radius: 8px; overflow-x: auto; }
-        .plexo-editor-prose .ProseMirror code { background: rgba(255,255,255,0.08); padding: 2px 5px; border-radius: 4px; }
+        .plexo-editor-prose .ProseMirror blockquote { border-left: 3px solid var(--brand); margin: 1em 0; padding-left: 1em; color: var(--ed-t-700); }
+        .plexo-editor-prose .ProseMirror pre { background: var(--ed-bg); padding: 12px; border-radius: 8px; overflow-x: auto; }
+        .plexo-editor-prose .ProseMirror code { background: var(--ed-w-080); padding: 2px 5px; border-radius: 4px; }
         .plexo-editor-prose .ProseMirror pre code { background: none; padding: 0; }
         .plexo-editor-upload-spinner {
           width: 26px; height: 26px; border-radius: 50%;
-          border: 3px solid rgba(255,255,255,0.25); border-top-color: #fff;
+          border: 3px solid var(--ed-w-250); border-top-color: var(--ed-text);
           animation: plexo-editor-spin 0.7s linear infinite;
         }
         @keyframes plexo-editor-spin { to { transform: rotate(360deg); } }

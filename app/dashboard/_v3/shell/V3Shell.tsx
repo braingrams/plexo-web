@@ -36,6 +36,8 @@ import { Avatar } from "../ui/Avatar";
 import { Modal } from "../ui/Modal";
 import { MenuPanel, useMenu } from "./Menu";
 import { SiteSwitcher } from "./SiteSwitcher";
+import { FloatingPanel } from "../ui/FloatingPanel";
+import { WorkspaceList, WorkspaceSwitcher, type Workspace } from "./WorkspaceSwitcher";
 
 const ICONS: Record<NavIcon, React.ComponentType<{ size?: number; "aria-hidden"?: boolean; strokeWidth?: number }>> = {
   home: House,
@@ -55,6 +57,11 @@ export type V3ShellProps = {
   nav: V3NavItem[];
   sites: SiteSummary[];
   currentSiteId?: string | null;
+  /** Every workspace this person belongs to, and the one they're in. Hidden when there's only one. */
+  workspaces?: Workspace[];
+  currentWorkspaceId?: string | null;
+  /** Dev preview: called instead of switching for real. */
+  onWorkspaceSwitch?: (id: string) => void;
   orgBranding?: OrgBranding;
   tourState: TourState;
   /** Tour steps (default: lib/dashboardV3/tourSteps.ts). The dev preview passes its own. */
@@ -100,7 +107,7 @@ export function V3Shell(props: V3ShellProps) {
   );
 }
 
-function ShellFrame({ user, experience, nav, sites, currentSiteId, orgBranding, persist = true, onExperienceChange, onSiteSelect, children }: V3ShellProps) {
+function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = [], currentWorkspaceId, onWorkspaceSwitch, orgBranding, persist = true, onExperienceChange, onSiteSelect, children }: V3ShellProps) {
   const pathname = usePathname() ?? "/dashboard";
   const active = activeNavId(nav, pathname);
   const beginner = experience === "beginner";
@@ -123,6 +130,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, orgBranding, 
         <Link href="/dashboard" className="plx-sidebar__brand" aria-label={`${orgBranding?.name ?? "Plexo"} home`}>
           {brand}
         </Link>
+        <WorkspaceSwitcher workspaces={workspaces} currentId={currentWorkspaceId} onSwitch={onWorkspaceSwitch} />
         {switcher}
         <nav className="plx-nav" aria-label="Main menu" data-tour="main-nav">
           {nav.map((item) => {
@@ -152,10 +160,10 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, orgBranding, 
               <MessageCircle size={20} aria-hidden />
             </Link>
             <div className="plx-topbar__theme" data-tour="theme-switch">
-              <ThemeSwitch />
+              <ThemeSwitch compact />
             </div>
             <HelpMenu />
-            <AccountMenu user={user} experience={experience} persist={persist} onExperienceChange={onExperienceChange} />
+            <AccountMenu user={user} experience={experience} persist={persist} onExperienceChange={onExperienceChange} workspaces={workspaces} currentWorkspaceId={currentWorkspaceId} onWorkspaceSwitch={onWorkspaceSwitch} />
           </div>
         </header>
         <main id="main" className="plx-content">
@@ -198,7 +206,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, orgBranding, 
           <div className="plx-menu__sep" />
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "8px 12px" }}>
             <span style={{ fontWeight: 700 }}>Appearance</span>
-            <ThemeSwitch />
+            <ThemeSwitch compact />
           </div>
         </div>
       </Modal>
@@ -316,8 +324,11 @@ function HelpMenu() {
   );
 }
 
-function AccountMenu({ user, experience, persist, onExperienceChange }: { user: V3ShellProps["user"]; experience: Experience; persist: boolean; onExperienceChange?: (e: Experience) => void }) {
+function AccountMenu({ user, experience, persist, onExperienceChange, workspaces = [], currentWorkspaceId, onWorkspaceSwitch }: { user: V3ShellProps["user"]; experience: Experience; persist: boolean; onExperienceChange?: (e: Experience) => void; workspaces?: Workspace[]; currentWorkspaceId?: string | null; onWorkspaceSwitch?: (id: string) => void }) {
   const menu = useMenu();
+  const [wsOpen, setWsOpen] = useState(false);
+  const accountBtn = useRef<HTMLElement | null>(null);
+  const currentWs = workspaces.find((w) => w.id === currentWorkspaceId) ?? workspaces[0];
   const router = useRouter();
   const target: Experience = experience === "pro" ? "beginner" : "pro";
   const versions = useVersionSwitch();
@@ -341,7 +352,7 @@ function AccountMenu({ user, experience, persist, onExperienceChange }: { user: 
   };
 
   return (
-    <div {...menu.wrapProps}>
+    <div {...menu.wrapProps} ref={(el) => { menu.wrapProps.ref.current = el; accountBtn.current = el; }}>
       <button type="button" className="plx-account-btn" aria-label={`Account: ${user.name}`} {...menu.buttonProps}>
         <Avatar name={user.name || user.email} src={user.image} size={38} />
       </button>
@@ -356,6 +367,15 @@ function AccountMenu({ user, experience, persist, onExperienceChange }: { user: 
               </span>
             </div>
           </div>
+          {workspaces.length > 1 && currentWs ? (
+            <button type="button" role="menuitem" className="plx-menu__item plx-mobile-flex" onClick={() => { menu.close(false); setWsOpen(true); }}>
+              <ArrowLeftRight size={18} aria-hidden />
+              <span style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
+                <span>Switch workspace</span>
+                <span className="plx-small" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{currentWs.name}</span>
+              </span>
+            </button>
+          ) : null}
           <div className="plx-menu__sep" />
           <button type="button" role="menuitem" className="plx-menu__item" onClick={switchView}>
             <SlidersHorizontal size={18} aria-hidden />
@@ -387,6 +407,9 @@ function AccountMenu({ user, experience, persist, onExperienceChange }: { user: 
           </button>
         </MenuPanel>
       ) : null}
+      <FloatingPanel open={wsOpen} onClose={() => setWsOpen(false)} anchorRef={accountBtn} width={340} label="Switch workspace">
+        <WorkspaceList workspaces={workspaces} currentId={currentWs?.id} onClose={() => setWsOpen(false)} onSwitch={onWorkspaceSwitch} />
+      </FloatingPanel>
     </div>
   );
 }

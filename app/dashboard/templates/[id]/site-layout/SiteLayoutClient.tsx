@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PageContainer } from "../../../_components/PageContainer";
 
-const FIELD_LABEL: React.CSSProperties = { fontSize: "0.75rem", fontWeight: 700, color: "rgba(240,242,255,0.5)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: "0.4rem" };
-const PANEL: React.CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem", background: "rgba(255,255,255,0.02)" };
+const FIELD_LABEL: React.CSSProperties = { fontSize: "0.75rem", fontWeight: 700, color: "var(--ed-t-500)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: "0.4rem" };
+const PANEL: React.CSSProperties = { border: "1px solid var(--ed-w-080)", borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem", background: "var(--ed-w-020)" };
 
 type FragmentInfo = { templateId: string; updatedAt: string } | null;
 type FragmentCandidate = { fragmentTemplateId: string; fragmentName: string; siteName: string; updatedAt: string };
@@ -92,11 +92,11 @@ function FragmentDesignRow({
   }
 
   return (
-    <div style={{ padding: "0.8rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+    <div style={{ padding: "0.8rem 0", borderBottom: "1px solid var(--ed-w-060)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff", marginBottom: "0.2rem" }}>{label}</p>
-          <p style={{ fontSize: "0.75rem", color: fragment ? "#4ade80" : "rgba(240,242,255,0.4)" }}>
+          <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--ed-text)", marginBottom: "0.2rem" }}>{label}</p>
+          <p style={{ fontSize: "0.75rem", color: fragment ? "var(--ed-success)" : "var(--ed-t-400)" }}>
             {fragment ? `Designed — updated ${new Date(fragment.updatedAt).toLocaleDateString()}` : hint}
           </p>
         </div>
@@ -105,20 +105,20 @@ function FragmentDesignRow({
             <>
               <Link
                 href={`/dashboard/templates/${fragment.templateId}`}
-                style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}
+                style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid var(--ed-w-120)", color: "var(--ed-t-800)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}
               >
                 Edit
               </Link>
-              <button type="button" onClick={handleRemove} disabled={busy} style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
+              <button type="button" onClick={handleRemove} disabled={busy} style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--ed-danger) 25%, transparent)", background: "color-mix(in srgb, var(--ed-danger) 8%, transparent)", color: "var(--ed-danger)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
                 Remove
               </button>
             </>
           ) : (
             <>
-              <button type="button" onClick={handleTogglePicker} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
+              <button type="button" onClick={handleTogglePicker} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid var(--ed-w-120)", background: "transparent", color: "var(--ed-t-800)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
                 Use existing…
               </button>
-              <button type="button" onClick={handleDesignNew} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "none", background: "var(--brand)", color: "#fff", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}>
+              <button type="button" onClick={handleDesignNew} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "none", background: "var(--brand)", color: "var(--ed-on-brand)", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}>
                 {busy ? "Working…" : "Design new"}
               </button>
             </>
@@ -127,25 +127,25 @@ function FragmentDesignRow({
       </div>
 
       {showPicker && !fragment && (
-        <div style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: 8, background: "var(--ed-w-030)", border: "1px solid var(--ed-w-080)" }}>
           {loadingCandidates ? (
-            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>Loading…</p>
+            <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)" }}>Loading…</p>
           ) : !candidates || candidates.length === 0 ? (
-            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>
+            <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)" }}>
               No other {label.toLowerCase()}s yet — design one on another site first, or start new here.
             </p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {candidates.map((c) => (
                 <div key={c.fragmentTemplateId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-                  <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.8)" }}>
-                    {c.fragmentName} <span style={{ color: "rgba(240,242,255,0.4)" }}>— from {c.siteName} · updated {new Date(c.updatedAt).toLocaleDateString()}</span>
+                  <p style={{ fontSize: "0.8rem", color: "var(--ed-t-800)" }}>
+                    {c.fragmentName} <span style={{ color: "var(--ed-t-400)" }}>— from {c.siteName} · updated {new Date(c.updatedAt).toLocaleDateString()}</span>
                   </p>
                   <button
                     type="button"
                     onClick={() => handleUseExisting(c.fragmentTemplateId)}
                     disabled={busy}
-                    style={{ flexShrink: 0, padding: "0.35rem 0.7rem", borderRadius: 6, border: "none", background: "var(--brand)", color: "#fff", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flexShrink: 0, padding: "0.35rem 0.7rem", borderRadius: 6, border: "none", background: "var(--brand)", color: "var(--ed-on-brand)", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer" }}
                   >
                     Use this
                   </button>
@@ -194,27 +194,27 @@ export function SiteLayoutClient({
 
   return (
     <PageContainer>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.4rem" }}>Site Layout</h1>
-      <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginBottom: "1.5rem" }}>
+      <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "0.4rem" }}>Site Layout</h1>
+      <p style={{ fontSize: "0.85rem", color: "var(--ed-t-500)", marginBottom: "1.5rem" }}>
         Design a header and footer once for &quot;{siteName}&quot; and every page picks them up automatically — edit the
         nav or a phone number in one place instead of every page.
       </p>
 
       <div style={PANEL}>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "0.9rem", fontWeight: 600, color: "#f0f2ff" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--ed-text)" }}>
           <input type="checkbox" checked={enabled} onChange={(e) => handleToggle(e.target.checked)} disabled={saving} />
           Use this header and footer on every page
         </label>
-        <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", marginTop: "0.5rem" }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)", marginTop: "0.5rem" }}>
           Off by default — every page compiles exactly as it did before. Turning this on (or editing the header/footer
           below) republishes every page on this site with the change.
         </p>
-        {savedAt && <span style={{ display: "block", marginTop: "0.5rem", fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>Saved {savedAt.toLocaleTimeString()}</span>}
+        {savedAt && <span style={{ display: "block", marginTop: "0.5rem", fontSize: "0.75rem", color: "var(--ed-t-400)" }}>Saved {savedAt.toLocaleTimeString()}</span>}
       </div>
 
       <div style={PANEL}>
         <label style={FIELD_LABEL}>Header &amp; Footer</label>
-        <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", marginTop: "-0.2rem", marginBottom: "0.5rem" }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)", marginTop: "-0.2rem", marginBottom: "0.5rem" }}>
           Design each in the same drag-and-drop builder as any other page — your nav, logo, contact details, whatever
           you want repeated. They're spliced onto every page at the top and bottom automatically.
         </p>

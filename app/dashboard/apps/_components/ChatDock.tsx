@@ -85,7 +85,7 @@ export function ChatDock(props: { overlay: boolean; open: boolean; mobileActive:
         .ed-chat { width: 420px; flex-shrink: 0; border-right: 1px solid ${C.border}; min-height: 0; display: flex; flex-direction: column; }
         .ed-chat-bar { display: flex; align-items: center; justify-content: space-between; padding: 0.55rem 0.8rem 0.55rem 1.2rem; border-bottom: 1px solid ${C.border}; font-size: 0.82rem; font-weight: 700; }
         .ed-chat-bar button { display: inline-flex; padding: 0.3rem; border-radius: 8px; border: none; background: transparent; color: ${C.muted}; cursor: pointer; }
-        .ed-chat-bar button:hover { background: rgba(255,255,255,0.08); color: ${C.text}; }
+        .ed-chat-bar button:hover { background: var(--ed-w-080); color: ${C.text}; }
         .ed-chat.is-overlay { position: absolute; top: 0; bottom: 0; left: 0; z-index: 40; width: min(420px, 92%); background: ${C.bg}; box-shadow: 18px 0 50px -18px rgba(0,0,0,0.65); transform: translateX(-104%); visibility: hidden; transition: transform 0.2s ease, visibility 0s linear 0.2s; }
         .ed-chat.is-overlay.is-open { transform: none; visibility: visible; transition: transform 0.2s ease; }
         .ed-dot-working { animation: ed-pulse 1.3s ease-in-out infinite; }

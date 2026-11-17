@@ -53,7 +53,7 @@ function EditorSkeleton() {
         display: "flex",
         flexDirection: "column",
         height: "100vh",
-        background: "#0a0c15",
+        background: "var(--ed-bg)",
         alignItems: "center",
         justifyContent: "center",
         gap: "1rem",
@@ -64,12 +64,12 @@ function EditorSkeleton() {
           width: 40,
           height: 40,
           borderRadius: "50%",
-          border: "3px solid rgba(var(--brand-rgb),0.2)",
+          border: "3px solid color-mix(in srgb, var(--brand) 20%, transparent)",
           borderTopColor: "var(--brand)",
           animation: "spin 0.7s linear infinite",
         }}
       />
-      <p style={{ color: "rgba(240,242,255,0.4)", fontSize: "0.875rem" }}>
+      <p style={{ color: "var(--ed-t-400)", fontSize: "0.875rem" }}>
         Loading editor…
       </p>
     </div>

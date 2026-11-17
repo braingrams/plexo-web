@@ -1,3 +1,4 @@
+import { redirectToSitesIfV3 } from "@/lib/dashboardV3/hubRedirect";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
@@ -27,7 +28,9 @@ type TemplateSummary = {
   isLmsFunnel: boolean;
 };
 
-export default async function TemplatesDashboardPage() {
+export default async function TemplatesDashboardPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // The new dashboard keeps emails on their own page and sites on "My sites": the mixed list is gone.
+  await redirectToSitesIfV3("websites", (await searchParams).classic);
   const session = await auth();
 
   if (!session?.user) {

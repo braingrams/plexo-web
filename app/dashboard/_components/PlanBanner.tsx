@@ -44,7 +44,7 @@ export function PlanBanner({ state }: { state: PlanBannerState }) {
   }, [key]);
 
   const inEditor = /^\/dashboard\/(templates\/[^/]+$|apps\/[^/]+)/.test(pathname);
-  const onBillingPage = pathname.startsWith("/dashboard/settings/subscription");
+  const onBillingPage = (pathname.startsWith("/dashboard/settings/subscription") || pathname.startsWith("/dashboard/settings/plan"));
   // A failing card is never hidden: it's the one thing that will cost the owner their plan.
   if (inEditor || onBillingPage || (dismissed && state.kind !== "past_due")) return null;
 

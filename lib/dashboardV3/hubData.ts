@@ -65,6 +65,7 @@ export type HubSite = {
 const asSource = (s: unknown): HubSite["sourceType"] => (s === "RAW_UPLOAD" || s === "REACT_PROJECT" ? s : "BUILDER");
 
 import { editHrefFor } from "./hubPaths";
+import { isAppKind } from "./siteFilter";
 export { editHrefFor };
 
 /** The site (a root page) with what it uses; 404 when it isn't theirs. */
@@ -167,7 +168,7 @@ export async function loadHubVisits(siteId: string, days = 14): Promise<HubVisit
   };
 }
 
-export type HubSiteCard = { id: string; name: string; kind: SiteKindLabel; status: "live" | "draft"; address: string | null; visits7d: number; editHref: string };
+export type HubSiteCard = { id: string; name: string; kind: SiteKindLabel; status: "live" | "draft"; address: string | null; visits7d: number; editHref: string; app: boolean };
 
 /** Every site as a card for /dashboard/sites. */
 export async function loadHubSiteCards(organizationId: string, userId: string): Promise<HubSiteCard[]> {
@@ -184,7 +185,7 @@ export async function loadHubSiteCards(organizationId: string, userId: string): 
         PageView.query.primary({ templateId: s.id }).between({ createdAt: week }, { createdAt: new Date().toISOString() }).go({ pages: "all" }).then((r) => r.data.length).catch(() => 0),
       ]);
       const features: HubFeatures = { store: !!commerce?.enabled, blog: !!blog?.enabled, course: !!t?.isLmsFunnel, app: t?.sourceType === "REACT_PROJECT", ownCode: t?.sourceType === "RAW_UPLOAD", deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null };
-      return { id: s.id, name: s.name, kind: hubKindLabel(features), status: s.status, address: s.address ?? null, visits7d: views, editHref: editHrefFor(s.id, t?.sourceType) };
+      return { id: s.id, name: s.name, kind: hubKindLabel(features), status: s.status, address: s.address ?? null, visits7d: views, editHref: editHrefFor(s.id, t?.sourceType), app: isAppKind(hubKindLabel(features)) };
     }),
   );
 }

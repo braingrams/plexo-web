@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Card } from "../../../_components/Card";
 
-const CARD_TITLE: React.CSSProperties = { fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", margin: 0 };
-const FIELD_LABEL: React.CSSProperties = { fontSize: "0.82rem", color: "rgba(240,242,255,0.5)", fontWeight: 600 };
-const FIELD_HINT: React.CSSProperties = { fontSize: "0.74rem", color: "rgba(240,242,255,0.35)", margin: "0.35rem 0 0" };
+const CARD_TITLE: React.CSSProperties = { fontSize: "0.95rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)", margin: 0 };
+const FIELD_LABEL: React.CSSProperties = { fontSize: "0.82rem", color: "var(--plx-muted, rgba(240,242,255,0.5))", fontWeight: 600 };
+const FIELD_HINT: React.CSSProperties = { fontSize: "0.74rem", color: "var(--plx-faint, rgba(240,242,255,0.35))", margin: "0.35rem 0 0" };
 
 // Matches GeneralSettingsClient.tsx's own `inputStyle` (Commerce settings) exactly, plus
 // the `.site-appearance-field:focus` rule below — outline:none alone (as this codebase's
@@ -13,8 +13,8 @@ const FIELD_HINT: React.CSSProperties = { fontSize: "0.74rem", color: "rgba(240,
 // blue focus ring against this dark theme, jarring enough on its own to be the main
 // complaint about this panel's polish.
 const FIELD_STYLE: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
+  width: "100%", background: "color-mix(in srgb, var(--plx-text, #fff) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
+  borderRadius: 9, color: "var(--plx-text, #f0f2ff)", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit", boxSizing: "border-box",
 };
 
@@ -50,7 +50,7 @@ function ImageField({
         <div
           style={{
             flexShrink: 0, width: 44, height: 44, borderRadius: 8,
-            border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)",
+            border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
             display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
           }}
         >
@@ -58,7 +58,7 @@ function ImageField({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={value} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           ) : (
-            <span style={{ fontSize: "0.65rem", color: "rgba(240,242,255,0.25)" }}>None</span>
+            <span style={{ fontSize: "0.65rem", color: "var(--plx-faint, rgba(240,242,255,0.25))" }}>None</span>
           )}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -77,7 +77,7 @@ function ImageField({
           disabled={uploading}
           style={{
             flexShrink: 0, padding: "0.6rem 0.9rem", borderRadius: 9, fontSize: "0.8rem", fontWeight: 700,
-            border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "rgba(240,242,255,0.85)",
+            border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 4%, transparent)", color: "var(--plx-text, rgba(240,242,255,0.85))",
             cursor: uploading ? "not-allowed" : "pointer", whiteSpace: "nowrap", opacity: uploading ? 0.6 : 1,
             fontFamily: "inherit",
           }}
@@ -146,14 +146,14 @@ export function SiteAppearancePanel({ templateId }: { templateId: string }) {
   return (
     <Card>
       <h2 style={{ ...CARD_TITLE, marginBottom: "0.3rem" }}>Site Appearance</h2>
-      <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0 0 1.25rem" }}>
+      <p style={{ fontSize: "0.8rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", margin: "0 0 1.25rem" }}>
         The favicon, browser-tab title, and social share preview for your home page.
       </p>
 
       {loading ? (
-        <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.4)" }}>Loading…</p>
+        <p style={{ fontSize: "0.82rem", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>Loading…</p>
       ) : !meta ? (
-        <p style={{ fontSize: "0.82rem", color: "#f87171" }}>{error ?? "Couldn't load site appearance."}</p>
+        <p style={{ fontSize: "0.82rem", color: "var(--plx-danger, #f87171)" }}>{error ?? "Couldn't load site appearance."}</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "1.4rem" }}>
           <div className="site-appearance-row" style={{ display: "grid", gridTemplateColumns: "minmax(220px, 320px) 1fr", gap: "1.4rem", alignItems: "start" }}>
@@ -225,33 +225,33 @@ export function SiteAppearancePanel({ templateId }: { templateId: string }) {
             }}
           />
 
-          {error && <p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>{error}</p>}
+          {error && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)", margin: 0 }}>{error}</p>}
 
-          <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", paddingTop: "0.25rem", borderTop: "1px solid rgba(255,255,255,0.06)", marginTop: "0.1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.85rem", paddingTop: "0.25rem", borderTop: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)", marginTop: "0.1rem" }}>
             <button
               type="button"
               onClick={save}
               disabled={saving}
               style={{
                 padding: "0.65rem 1.4rem", borderRadius: 9, fontSize: "0.85rem", fontWeight: 700, border: "none",
-                background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff",
+                background: "var(--plx-brand, linear-gradient(135deg,var(--brand),var(--brand-deep)))", color: "var(--plx-on-brand, #fff)",
                 cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", marginTop: "0.85rem",
               }}
             >
               {saving ? "Saving…" : "Save"}
             </button>
-            {saved && <span style={{ fontSize: "0.8rem", color: "#4ade80", fontWeight: 600, marginTop: "0.85rem" }}>Saved ✓</span>}
+            {saved && <span style={{ fontSize: "0.8rem", color: "var(--plx-success, #4ade80)", fontWeight: 600, marginTop: "0.85rem" }}>Saved ✓</span>}
           </div>
         </div>
       )}
 
       <style jsx>{`
         :global(.site-appearance-field:focus) {
-          border-color: rgba(var(--brand-rgb), 0.5) !important;
-          box-shadow: 0 0 0 3px rgba(var(--brand-rgb), 0.15);
+          border-color: color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 50%, transparent) !important;
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 15%, transparent);
         }
         :global(.site-appearance-field::placeholder) {
-          color: rgba(240, 242, 255, 0.3);
+          color: var(--plx-faint, rgba(240, 242, 255, 0.3));
         }
         @media (max-width: 620px) {
           :global(.site-appearance-row) {

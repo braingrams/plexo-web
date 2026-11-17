@@ -14,7 +14,7 @@ export function PageSkeleton({ withSidebar = false }: { withSidebar?: boolean })
           100% { background-position: 400px 0; }
         }
         .plexo-skeleton-block {
-          background: linear-gradient(90deg, rgba(255,255,255,0.045) 25%, rgba(255,255,255,0.09) 37%, rgba(255,255,255,0.045) 63%);
+          background: linear-gradient(90deg, color-mix(in srgb, var(--plx-text, #fff) 4.5%, transparent) 25%, color-mix(in srgb, var(--plx-text, #fff) 9%, transparent) 37%, color-mix(in srgb, var(--plx-text, #fff) 4.5%, transparent) 63%);
           background-size: 800px 100%;
           animation: plexo-skeleton-shimmer 1.4s ease-in-out infinite;
           border-radius: 8px;

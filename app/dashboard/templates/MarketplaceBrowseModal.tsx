@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 import type { MarketplaceListItem } from "@/lib/marketplace";
-import { MarketplaceFilters } from "@/app/marketplace/MarketplaceFilters";
-import { MarketplaceSkeletonGrid } from "@/app/marketplace/MarketplaceBrowse";
-import { MarketplaceRowExpandGrid } from "@/app/marketplace/MarketplaceRowExpandGrid";
+import { MarketplaceFilters } from "@/app/dashboard/marketplace/_shared/MarketplaceFilters";
+import { MarketplaceSkeletonGrid } from "@/app/dashboard/marketplace/_shared/MarketplaceBrowse";
+import { MarketplaceRowExpandGrid } from "@/app/dashboard/marketplace/_shared/MarketplaceRowExpandGrid";
 
 type Filters = { category?: string; kind?: string; free?: string; q?: string; sort: string };
 

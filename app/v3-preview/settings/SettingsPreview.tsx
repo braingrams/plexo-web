@@ -9,6 +9,7 @@ import { DomainsSection } from "@/app/dashboard/_v3/settings/DomainsSection";
 import { NotificationsSection } from "@/app/dashboard/_v3/settings/NotificationsSection";
 import { ConnectSection } from "@/app/dashboard/_v3/settings/ConnectSection";
 import { DevelopersSection } from "@/app/dashboard/_v3/settings/DevelopersSection";
+import { BrandingSection } from "@/app/dashboard/_v3/settings/BrandingSection";
 import { MovingSection } from "@/app/dashboard/_v3/settings/MovingSection";
 import { parseExperience } from "@/lib/dashboardV3/nav";
 import type { SettingsSectionId } from "@/lib/dashboardV3/settingsNav";
@@ -21,7 +22,13 @@ const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString(
 export function SettingsPreview({ section }: { section: SettingsSectionId }) {
   const params = useSearchParams();
   const experience = parseExperience(params.get("exp")) ?? "beginner";
-  const free = params.get("plan") === "free";
+  const planParam = params.get("plan") ?? "paid";
+  const free = planParam === "free";
+  const trial = planParam === "trial";
+  const near = planParam === "near";
+  const bigTeam = params.get("team") === "5";
+  const pending = params.get("domain") === "pending";
+  const manyKeys = params.get("keys") === "many";
   return (
     <SettingsFrame current={section} experience={experience} base="/v3-preview/settings">
       {section === "profile" ? <ProfileSection mock name="Ama Owusu" email="ama@amaskitchen.com" experience={experience} /> : null}
@@ -29,9 +36,10 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
         <PlanSection
           mock
           prices={{ STARTER: "$9 a month", PRO: "$19 a month", ENTERPRISE: "from $99 a month" }}
-          state={free ? { plan: "FREE", paying: false } : { plan: "STARTER", paying: true, basis: "SUBSCRIPTION", renewsAt: inDays(19) }}
+          state={free ? { plan: "FREE", paying: false } : trial ? { plan: "STARTER", paying: true, basis: "TRIAL", daysLeft: 9 } : near ? { plan: "PRO", paying: true, basis: "SUBSCRIPTION", renewsAt: inDays(6) } : { plan: "STARTER", paying: true, basis: "SUBSCRIPTION", renewsAt: inDays(19) }}
+          usage={free ? { sites: 1, products: 0, teammates: 0 } : near ? { sites: 4, products: 960, teammates: 4 } : { sites: 1, products: 12, teammates: 1 }}
           trialAvailable={free}
-          allowanceBalance={1240}
+          allowanceBalance={near ? 60 : 1240}
           topupBalance={2500}
           allowanceResetAt={inDays(19)}
           activity={[
@@ -53,7 +61,9 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
           currentUserId="u1"
           currentRole="owner"
           organizationName="Ama's Kitchen"
+          seatLimit={bigTeam ? 5 : 2}
           members={[
+            ...(bigTeam ? [{ id: "u3", userId: "u3", role: "admin", scopedTemplateIds: [], name: "Adwoa Boateng", email: "adwoa@amaskitchen.com" }, { id: "u4", userId: "u4", role: "blogger", scopedTemplateIds: [], name: "Yaw Asante", email: "yaw@amaskitchen.com" }, { id: "u5", userId: "u5", role: "viewer", scopedTemplateIds: [], name: "Efua Darko", email: "efua@amaskitchen.com" }] : []),
             { id: "u1", userId: "u1", role: "owner", scopedTemplateIds: [], name: "Ama Owusu", email: "ama@amaskitchen.com" },
             { id: "u2", userId: "u2", role: "editor", scopedTemplateIds: [], name: "Kofi Mensah", email: "kofi@amaskitchen.com" },
           ]}
@@ -68,13 +78,14 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
           addresses={[
             { id: "d1", domain: "amaskitchen.plexopages.com", type: "SUBDOMAIN", siteId: "s1", siteName: "Ama's Kitchen", online: true, pausedByPlan: false, bought: false },
             { id: "d2", domain: "learn.amaskitchen.com", type: "CUSTOM", siteId: "s2", siteName: "Cooking with Ama", online: true, pausedByPlan: false, bought: false },
-            { id: "d3", domain: "www.amaskitchen.com", type: "CUSTOM", siteId: "s1", siteName: "Ama's Kitchen", online: false, pausedByPlan: false, bought: false },
+            { id: "d3", domain: "www.amaskitchen.com", type: "CUSTOM", siteId: "s1", siteName: "Ama's Kitchen", online: pending ? false : false, pausedByPlan: false, bought: false },
           ]}
         />
       ) : null}
       {section === "notifications" ? <NotificationsSection mock accountEmail="ama@amaskitchen.com" initial={{ payments: true, formSubmissions: false, blogComments: true, commentMentions: true, notificationEmail: null }} /> : null}
       {section === "connect" ? <ConnectSection baseUrl="https://plexobuilder.com" apiKeyHint="plexo_sk_••••a1b2" /> : null}
-      {section === "developers" ? <DevelopersSection mock keys={[{ id: "k1", name: "Key", maskedKey: "plexo_sk_••••a1b2", createdAt: daysAgo(9) }]} maxKeys={3} canPublishViaApi={false} publishViaApi={false} canCompile /> : null}
+      {section === "developers" ? <DevelopersSection mock keys={Array.from({ length: manyKeys ? 9 : 1 }, (_, i) => ({ id: `k${i}`, name: "Key", maskedKey: `plexo_sk_••••a1b${i}`, createdAt: daysAgo(9 + i * 7) }))} maxKeys={manyKeys ? 10 : 3} canPublishViaApi={false} publishViaApi={false} canCompile /> : null}
+      {section === "brand" ? <BrandingSection mock organizationId="o1" canManage planAllowsWhiteLabel={params.get("wl") !== "no"} initial={{ name: "Ama's Kitchen", logo: "", color: "", mode: "BOTH", on: false }} /> : null}
       {section === "moving" ? (
         <MovingSection
           mock

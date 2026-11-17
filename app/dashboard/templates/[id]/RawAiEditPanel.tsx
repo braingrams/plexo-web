@@ -102,7 +102,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
   if (!useAi) {
     return (
       <div style={{ flex: 1, display: "grid", placeItems: "center", padding: "2rem", textAlign: "center" }}>
-        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", maxWidth: 360 }}>
+        <p style={{ fontSize: "0.85rem", color: "var(--ed-t-500)", maxWidth: 360 }}>
           SOL isn&apos;t turned on for this account yet. Turn it on in Settings → AI.
         </p>
       </div>
@@ -122,7 +122,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
         <div className="raw-ai-empty" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1.25rem", gap: "1.5rem" }}>
           <h2 style={{
             fontFamily: "var(--font-heading), sans-serif", fontSize: "clamp(1.2rem, 5vw, 1.6rem)", fontWeight: 700,
-            color: "#f0f2ff", textAlign: "center", margin: 0,
+            color: "var(--ed-text)", textAlign: "center", margin: 0,
             display: "flex", alignItems: "center", justifyContent: "center", gap: "0.55rem",
           }}>
             <SolIcon size={26} /> What should SOL change?
@@ -130,7 +130,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
 
           <div style={{ width: "100%", maxWidth: 680 }}>
             <div style={{
-              background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)",
+              background: "var(--ed-w-050)", border: "1px solid var(--ed-w-080)",
               borderRadius: 22, padding: "0.65rem 0.65rem 0.65rem 1.1rem", boxShadow: "0 20px 50px rgba(0,0,0,0.25)",
               display: "flex", alignItems: "flex-end", gap: "0.5rem",
             }}>
@@ -149,7 +149,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
                 autoFocus
                 style={{
                   flex: 1, background: "none", border: "none", resize: "none",
-                  color: "#f0f2ff", fontSize: "0.95rem", outline: "none", fontFamily: "inherit",
+                  color: "var(--ed-text)", fontSize: "0.95rem", outline: "none", fontFamily: "inherit",
                   lineHeight: 1.5, padding: "0.4rem 0", maxHeight: 200, overflowY: "auto",
                 }}
               />
@@ -161,8 +161,8 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
                 style={{
                   width: 32, height: 32, borderRadius: "50%", border: "none",
                   display: "grid", placeItems: "center", flexShrink: 0,
-                  background: canSubmit ? "linear-gradient(135deg,var(--brand),var(--brand-deep))" : "rgba(255,255,255,0.08)",
-                  color: canSubmit ? "#fff" : "rgba(240,242,255,0.3)",
+                  background: canSubmit ? "var(--ed-cta)" : "var(--ed-w-080)",
+                  color: canSubmit ? "var(--ed-on-brand)" : "var(--ed-t-300)",
                   cursor: canSubmit ? "pointer" : "default",
                   transition: "background 0.15s, color 0.15s",
                 }}
@@ -170,7 +170,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
                 {generating ? (
                   <span style={{
                     width: 14, height: 14, borderRadius: "50%",
-                    border: "2px solid rgba(255,255,255,0.25)", borderTopColor: "#fff",
+                    border: "2px solid var(--ed-w-250)", borderTopColor: "var(--ed-on-brand)",
                     animation: "spin 0.65s linear infinite",
                   }} />
                 ) : (
@@ -180,7 +180,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
             </div>
 
             {generating && (
-              <p aria-live="polite" style={{ color: "rgba(240,242,255,0.55)", fontSize: "0.78rem", textAlign: "center", marginTop: "0.9rem" }}>
+              <p aria-live="polite" style={{ color: "var(--ed-t-550)", fontSize: "0.78rem", textAlign: "center", marginTop: "0.9rem" }}>
                 {!progress || progress.characters === 0
                   ? "Reading your page and planning the change…"
                   : progress.attempt > 1
@@ -201,13 +201,13 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
               </div>
             )}
             {error && !insufficientCredits && (
-              <p style={{ color: "#f87171", fontSize: "0.8rem", textAlign: "center", marginTop: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem" }}><IconWarning /> {error}</p>
+              <p style={{ color: "var(--ed-danger)", fontSize: "0.8rem", textAlign: "center", marginTop: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem" }}><IconWarning /> {error}</p>
             )}
           </div>
 
           <p style={{
             fontSize: "0.75rem", textAlign: "center", maxWidth: 480, margin: 0,
-            color: isLargePage ? "#f59e0b" : "rgba(240,242,255,0.3)",
+            color: isLargePage ? "var(--ed-amber)" : "var(--ed-t-300)",
             display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem",
           }}>
             {isLargePage && <IconWarning />}
@@ -219,12 +219,12 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
         </div>
       ) : (
         <div className="raw-ai-result" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1.25rem", maxWidth: 900, margin: "0 auto", width: "100%" }}>
-          <p style={{ fontSize: "0.8rem", color: "#34d399", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconCheck /> {result.summary}</p>
+          <p style={{ fontSize: "0.8rem", color: "var(--ed-success)", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconCheck /> {result.summary}</p>
           <iframe
             srcDoc={result.html}
             title="AI edit preview"
             sandbox=""
-            style={{ flex: 1, minHeight: 240, width: "100%", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, background: "#fff" }}
+            style={{ flex: 1, minHeight: 240, width: "100%", border: "1px solid var(--ed-w-100)", borderRadius: 12, background: "#fff" }}
           />
           <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
             <button
@@ -232,7 +232,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
               onClick={() => onApply(result.html)}
               style={{
                 padding: "0.5rem 1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
-                background: "rgba(16,185,129,0.15)", border: "1px solid rgba(16,185,129,0.3)", color: "#34d399",
+                background: "color-mix(in srgb, var(--ed-success) 15%, transparent)", border: "1px solid color-mix(in srgb, var(--ed-success) 30%, transparent)", color: "var(--ed-success)",
                 cursor: "pointer",
               }}
             >
@@ -243,14 +243,14 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
               onClick={() => setResult(null)}
               style={{
                 padding: "0.5rem 1rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 600,
-                background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.7)",
+                background: "none", border: "1px solid var(--ed-w-120)", color: "var(--ed-t-700)",
                 cursor: "pointer",
               }}
             >
               Discard
             </button>
           </div>
-          <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", margin: 0 }}>
+          <p style={{ fontSize: "0.72rem", color: "var(--ed-t-350)", margin: 0 }}>
             Applying switches you to the Code tab — click Save there to publish this change.
           </p>
         </div>

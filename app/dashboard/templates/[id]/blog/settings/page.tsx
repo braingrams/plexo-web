@@ -2,6 +2,7 @@ import { BlogSite, BlogCategory, BlogTag, BlogAuthor, Template } from "@/lib/db/
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
 import { hasBlogMarker } from "@/lib/pub/blogLayoutRender";
 import { BlogSettingsClient } from "./BlogSettingsClient";
+import { SiteToolBack } from "@/app/dashboard/_v3/page/SiteToolBack";
 
 export default async function BlogSettingsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -23,6 +24,8 @@ export default async function BlogSettingsPage({ params }: { params: Promise<{ i
   ]);
 
   return (
+    <>
+    <SiteToolBack siteId={access.templateId} tab="blog" label="Back to your blog" />
     <BlogSettingsClient
       templateId={access.templateId}
       initialSite={{
@@ -51,5 +54,6 @@ export default async function BlogSettingsPage({ params }: { params: Promise<{ i
       tags={tags}
       authors={authors}
     />
+    </>
   );
 }

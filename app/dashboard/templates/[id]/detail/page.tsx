@@ -17,15 +17,20 @@ import { PageView, FormSubmission } from "@/lib/db/opsEntities";
 import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { getTierFeatures } from "@/lib/subscription";
+import { hubTabForOldDetail } from "@/lib/dashboardV3/hubPaths";
+import { redirectToHubIfV3 } from "@/lib/dashboardV3/hubRedirect";
 
+import { redirectIfV3 } from "@/lib/dashboardV3/v3Redirect";
 import { DetailClient } from "./detail-client";
 
 const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 export default async function TemplateDetailPage(props: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await props.params;
+  const query = (await props.searchParams) ?? {};
   const session = await auth();
 
   if (!session?.user) {
@@ -47,8 +52,20 @@ export default async function TemplateDetailPage(props: {
   }
   if (found.parentId) {
     const rootId = await findRootTemplateId(found.id, found.parentId);
-    redirect(`/dashboard/templates/${rootId}/detail`);
+    const rootQuery = new URLSearchParams();
+    for (const [k, v] of Object.entries(query)) for (const x of Array.isArray(v) ? v : v === undefined ? [] : [v]) rootQuery.append(k, x);
+    redirect(`/dashboard/templates/${rootId}/detail${rootQuery.size ? `?${rootQuery}` : ""}`);
   }
+
+  // An email's "Back to emails" lands here: in the new dashboard that means the emails library.
+  if (found.kind === "EMAIL") await redirectIfV3("/dashboard/emails");
+
+  // On the new dashboard this page is the site hub: Preview -> Pages, Properties/Site modules -> Settings,
+  // Domain -> Web address, Traffic -> Visits, Deploy/Variables -> App (hosted apps) or Settings.
+  // (?classic=1 keeps the old page, for the full uploader.) Old-dashboard users never leave.
+  const oldTab = Array.isArray(query.tab) ? query.tab[0] : query.tab;
+  const { data: deployedForHub } = await DeployedApp.get({ templateId: found.id }).go();
+  await redirectToHubIfV3(found.id, hubTabForOldDetail(oldTab, !!deployedForHub), query.classic, session.user.id);
 
   const template = found;
 

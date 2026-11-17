@@ -36,9 +36,9 @@ export function useSiteProducts(siteId: string) {
   return { products, error, retry: () => setAttempt((n) => n + 1) };
 }
 
-const ink = "#f0f2ff";
-const muted = "rgba(240,242,255,0.5)";
-const line = "1px solid rgba(255,255,255,0.1)";
+const ink = "var(--plx-text, #f0f2ff)";
+const muted = "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 50%, transparent)";
+const line = "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)";
 
 /**
  * Pick which product — by its picture, name and price, never by pasting a code. Dark, to sit in
@@ -56,9 +56,9 @@ export function SiteProductPicker({ siteId, value, onChange }: { siteId: string;
 
   if (error)
     return (
-      <p style={{ fontSize: "0.8rem", color: "#fca5a5", margin: 0 }}>
+      <p style={{ fontSize: "0.8rem", color: "var(--plx-danger, #fca5a5)", margin: 0 }}>
         {error}{" "}
-        <button type="button" onClick={retry} style={{ background: "none", border: "none", color: "var(--brand)", cursor: "pointer", padding: 0, fontSize: "0.8rem", fontWeight: 600 }}>
+        <button type="button" onClick={retry} style={{ background: "none", border: "none", color: "var(--plx-link, var(--brand))", cursor: "pointer", padding: 0, fontSize: "0.8rem", fontWeight: 600 }}>
           Try again
         </button>
       </p>
@@ -68,7 +68,7 @@ export function SiteProductPicker({ siteId, value, onChange }: { siteId: string;
     return (
       <p style={{ fontSize: "0.8rem", color: muted, margin: 0, lineHeight: 1.5 }}>
         You have no products to sell yet.{" "}
-        <a href={`/dashboard/commerce/${siteId}/products`} style={{ color: "var(--brand)", fontWeight: 600 }}>
+        <a href={`/dashboard/commerce/${siteId}/products`} style={{ color: "var(--plx-link, var(--brand))", fontWeight: 600 }}>
           Create your first product
         </a>
       </p>
@@ -82,7 +82,7 @@ export function SiteProductPicker({ siteId, value, onChange }: { siteId: string;
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search your products"
-          style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: line, background: "rgba(255,255,255,0.03)", color: ink, fontFamily: "inherit" }}
+          style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: line, background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", color: ink, fontFamily: "inherit" }}
         />
       )}
       <div role="radiogroup" style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: 220, overflowY: "auto" }}>
@@ -97,8 +97,8 @@ export function SiteProductPicker({ siteId, value, onChange }: { siteId: string;
               onClick={() => onChange(p.id)}
               style={{
                 display: "flex", alignItems: "center", gap: "0.7rem", textAlign: "left", padding: "0.5rem 0.65rem", borderRadius: 10, cursor: "pointer", fontFamily: "inherit",
-                background: chosen ? "rgba(var(--brand-rgb),0.14)" : "rgba(255,255,255,0.03)",
-                border: chosen ? "1px solid rgba(var(--brand-rgb),0.45)" : line,
+                background: chosen ? "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 14%, transparent)" : "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
+                border: chosen ? "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 45%, transparent)" : line,
                 color: ink,
               }}
             >
@@ -106,13 +106,13 @@ export function SiteProductPicker({ siteId, value, onChange }: { siteId: string;
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={p.imageUrl} alt="" style={{ width: 38, height: 38, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} />
               ) : (
-                <span style={{ width: 38, height: 38, borderRadius: 6, background: "rgba(255,255,255,0.06)", flexShrink: 0 }} />
+                <span style={{ width: 38, height: 38, borderRadius: 6, background: "color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)", flexShrink: 0 }} />
               )}
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</span>
                 <span style={{ display: "block", fontSize: "0.74rem", color: muted }}>{p.priceLabel}{p.kind === "DIGITAL" ? " · digital" : ""}</span>
               </span>
-              {chosen && <span aria-hidden style={{ color: "var(--brand)", fontWeight: 800 }}>✓</span>}
+              {chosen && <span aria-hidden style={{ color: "var(--plx-link, var(--brand))", fontWeight: 800 }}>✓</span>}
             </button>
           );
         })}

@@ -10,15 +10,15 @@ export type RedirectSummary = {
 };
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
+  width: "100%", background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)",
+  borderRadius: 9, color: "var(--ed-text)", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
 function FieldLabel({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>{label}</span>
+      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--ed-t-800)", marginBottom: "0.35rem" }}>{label}</span>
       {children}
     </label>
   );
@@ -112,28 +112,28 @@ export function RedirectsClient({ templateId, initialRedirects }: { templateId: 
     <PageContainer>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1.5rem" }}>
         <div>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.4rem" }}>Redirects</h1>
-          <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", margin: 0 }}>
+          <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "0.4rem" }}>Redirects</h1>
+          <p style={{ fontSize: "0.85rem", color: "var(--ed-t-500)", margin: 0 }}>
             Send visitors from an old path on this site to a new one. Takes priority over the site&apos;s own page tree.
           </p>
         </div>
         <button
           type="button" onClick={openCreate}
-          style={{ padding: "0.6rem 1.1rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", whiteSpace: "nowrap" }}
+          style={{ padding: "0.6rem 1.1rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "var(--ed-cta)", color: "var(--ed-on-brand)", whiteSpace: "nowrap" }}
         >
           + Add redirect
         </button>
       </div>
 
       {redirects.length === 0 ? (
-        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "rgba(240,242,255,0.45)", fontSize: "0.85rem" }}>
+        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed var(--ed-w-120)", background: "var(--ed-w-020)", color: "var(--ed-t-450)", fontSize: "0.85rem" }}>
           No redirects yet.
         </div>
       ) : (
-        <div style={{ overflowX: "auto", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14 }}>
+        <div style={{ overflowX: "auto", border: "1px solid var(--ed-w-080)", borderRadius: 14 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
             <thead>
-              <tr style={{ color: "rgba(240,242,255,0.4)", textAlign: "left", background: "rgba(255,255,255,0.02)" }}>
+              <tr style={{ color: "var(--ed-t-400)", textAlign: "left", background: "var(--ed-w-020)" }}>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>From</th>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>To</th>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Created</th>
@@ -142,15 +142,15 @@ export function RedirectsClient({ templateId, initialRedirects }: { templateId: 
             </thead>
             <tbody>
               {redirects.map((r) => (
-                <tr key={r.fromPath} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "#e2e4f5" }}>
+                <tr key={r.fromPath} style={{ borderTop: "1px solid var(--ed-w-060)", color: "var(--ed-text)" }}>
                   <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace", fontWeight: 700 }}>{r.fromPath}</td>
-                  <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace", color: "rgba(240,242,255,0.75)" }}>{r.toPath}</td>
-                  <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.55)" }}>{new Date(r.createdAt).toLocaleDateString()}</td>
+                  <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace", color: "var(--ed-t-750)" }}>{r.toPath}</td>
+                  <td style={{ padding: "0.7rem 1rem", color: "var(--ed-t-550)" }}>{new Date(r.createdAt).toLocaleDateString()}</td>
                   <td style={{ padding: "0.7rem 1rem", display: "flex", gap: "0.5rem" }}>
-                    <button type="button" onClick={() => openEdit(r)} style={{ background: "none", border: "none", color: "var(--brand)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => openEdit(r)} style={{ background: "none", border: "none", color: "var(--ed-accent-text)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
                       Edit
                     </button>
-                    <button type="button" onClick={() => void handleDelete(r)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => void handleDelete(r)} style={{ background: "none", border: "none", color: "var(--ed-danger)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
                       Delete
                     </button>
                   </td>
@@ -164,11 +164,11 @@ export function RedirectsClient({ templateId, initialRedirects }: { templateId: 
       {modalOpen && (
         <div
           role="dialog" aria-modal="true"
-          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.7)", padding: "1rem" }}
+          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "var(--plx-overlay, rgba(0,0,0,0.7))", padding: "1rem" }}
           onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false); }}
         >
-          <div style={{ width: "min(100%,420px)", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "1.75rem" }}>
-            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "1.25rem" }}>
+          <div style={{ width: "min(100%,420px)", background: "var(--ed-bg)", border: "1px solid var(--ed-w-120)", borderRadius: 20, padding: "1.75rem" }}>
+            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "1.25rem" }}>
               {editingFromPath ? "Edit Redirect" : "New Redirect"}
             </h2>
 
@@ -189,15 +189,15 @@ export function RedirectsClient({ templateId, initialRedirects }: { templateId: 
                 />
               </FieldLabel>
 
-              {error && <p style={{ fontSize: "0.82rem", color: "#f87171" }}>{error}</p>}
+              {error && <p style={{ fontSize: "0.82rem", color: "var(--ed-danger)" }}>{error}</p>}
 
               <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-                <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.65)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>
+                <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-t-650)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>
                   Cancel
                 </button>
                 <button
                   type="button" onClick={() => void handleSave()} disabled={saving}
-                  style={{ padding: "0.6rem 1.4rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 700 }}
+                  style={{ padding: "0.6rem 1.4rem", borderRadius: 9, border: "none", background: "var(--ed-cta)", color: "var(--ed-on-brand)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 700 }}
                 >
                   {saving ? "Saving…" : editingFromPath ? "Save changes" : "Create redirect"}
                 </button>

@@ -34,7 +34,7 @@ async function purchaseCountFor(templateId: string): Promise<number> {
   return data.length;
 }
 
-/** Used by app/marketplace/[id]'s Server Component — direct DB access, no self-fetch. */
+/** Used by app/dashboard/marketplace/[id]'s Server Component — direct DB access, no self-fetch. */
 export async function getMarketplaceTemplateDetail(id: string, userId: string | null): Promise<MarketplaceDetail | null> {
   const { data: template } = await Template.get({ id }).go();
   if (!template || template.marketplaceStatus !== "PUBLISHED") return null;
@@ -94,7 +94,7 @@ export async function listPublishedSiteTemplates(): Promise<Array<{ id: string; 
 
 /**
  * Shared by app/api/v1/marketplace/templates (external/API consumers) and
- * app/marketplace (the browse page itself, called directly as a Server Component —
+ * app/dashboard/marketplace (the browse page itself, called directly as a Server Component —
  * no self-HTTP-fetch) so the filter/sort logic lives in exactly one place.
  */
 export async function listMarketplaceTemplates(

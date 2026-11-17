@@ -9,6 +9,14 @@ function statLine(r: HomeSiteRow) {
   return r.stats.stats.map((s) => `${s.value} ${s.label.toLowerCase()}`).join(" · ");
 }
 
+function hostOf(url: string): string {
+  try {
+    return new URL(url.includes("://") ? url : `https://${url}`).host;
+  } catch {
+    return url;
+  }
+}
+
 const big: React.CSSProperties = { fontSize: 28, fontWeight: 800, lineHeight: 1.15 };
 
 /** Every site together: friendly cards for intermediate, a dense table for pro. */
@@ -37,7 +45,7 @@ export function AllSites({ rows, dense, newSiteHref }: { rows: HomeSiteRow[]; de
                 <tr key={r.site.id} style={{ borderTop: "1px solid var(--plx-border)" }}>
                   <td style={{ padding: "12px 20px", fontWeight: 700 }}>
                     {r.site.name}
-                    <div className="plx-small" style={{ fontWeight: 400 }}>{r.site.address ?? "No web address yet"}</div>
+                    <div className="plx-small" style={{ fontWeight: 400 }}>{r.site.address ?? (r.site.movedFrom ? `Moved from ${hostOf(r.site.movedFrom)}` : "No web address yet")}</div>
                   </td>
                   <td style={{ padding: "12px 20px" }}>{r.site.kind}</td>
                   <td style={{ padding: "12px 20px" }}><StatusPill status={r.site.status} /></td>
@@ -59,7 +67,7 @@ export function AllSites({ rows, dense, newSiteHref }: { rows: HomeSiteRow[]; de
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
                     <div className="plx-h3" style={{ overflowWrap: "anywhere" }}>{r.site.name}</div>
-                    <div className="plx-small" style={{ overflowWrap: "anywhere" }}>{r.site.kind} · {r.site.address ?? "No web address yet"}</div>
+                    <div className="plx-small" style={{ overflowWrap: "anywhere" }}>{r.site.kind} · {r.site.address ?? (r.site.movedFrom ? `Moved from ${hostOf(r.site.movedFrom)}` : "No web address yet")}</div>
                   </div>
                   <StatusPill status={r.site.status} label={r.site.status === "live" ? "Online" : "Not online yet"} />
                 </div>

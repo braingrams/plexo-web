@@ -31,14 +31,14 @@ const field = {
   width: "100%",
   padding: "0.45rem 0.6rem",
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.04)",
+  border: "1px solid var(--ed-w-120)",
+  background: "var(--ed-w-040)",
   color: "inherit",
   fontSize: "0.8rem",
   fontFamily: "inherit",
 } as const;
-const label = { display: "block", fontSize: "0.72rem", fontWeight: 600, color: "rgba(240,242,255,0.6)", marginBottom: 4 } as const;
-const hint = { margin: "4px 0 0", fontSize: "0.7rem", color: "rgba(240,242,255,0.45)", lineHeight: 1.4 } as const;
+const label = { display: "block", fontSize: "0.72rem", fontWeight: 600, color: "var(--ed-t-600)", marginBottom: 4 } as const;
+const hint = { margin: "4px 0 0", fontSize: "0.7rem", color: "var(--ed-t-450)", lineHeight: 1.4 } as const;
 
 export function PageSettings(props: Props) {
   const { slug, readOnly, email } = props;
@@ -64,7 +64,7 @@ export function PageSettings(props: Props) {
 
   // Shown inside the editor's own "Page settings" panel (left rail), so there is no button or popover of its own.
   return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14, color: "#f0f2ff" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14, color: "var(--ed-text)" }}>
           <div>
             <label style={label} htmlFor="ps-name">{email ? "Email name" : "Page name"}</label>
             <input id="ps-name" style={field} value={name} disabled={readOnly} onChange={(e) => setName(e.target.value)} onBlur={() => void saveNames()} />
@@ -78,10 +78,10 @@ export function PageSettings(props: Props) {
           ) : (
             <p style={{ ...hint, margin: 0 }}>This is your home page, so it lives at the main address of your site.</p>
           )}
-          {error && <p role="alert" style={{ margin: 0, fontSize: "0.75rem", color: "#f87171" }}>{error}</p>}
+          {error && <p role="alert" style={{ margin: 0, fontSize: "0.75rem", color: "var(--ed-danger)" }}>{error}</p>}
 
           {!email && (<fieldset style={{ border: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 10 }} disabled={readOnly}>
-            <legend style={{ ...label, fontSize: "0.78rem", color: "#f0f2ff", marginBottom: 6 }}>How this page shows up on Google and when shared</legend>
+            <legend style={{ ...label, fontSize: "0.78rem", color: "var(--ed-text)", marginBottom: 6 }}>How this page shows up on Google and when shared</legend>
             <div>
               <label style={label} htmlFor="ps-title">Title</label>
               <input id="ps-title" style={field} value={props.meta.htmlTitle ?? ""} maxLength={200} onChange={(e) => setMeta("htmlTitle", e.target.value)} placeholder={props.name} />
@@ -107,14 +107,14 @@ export function PageSettings(props: Props) {
           </details>)}
 
           {!readOnly && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 10, borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, paddingTop: 10, borderTop: "1px solid var(--ed-w-080)" }}>
               {!email && props.onGoBack && !confirmBack && (
                 <button type="button" onClick={() => setConfirmBack(true)} style={linkButton}>
                   <Undo2 size={14} /> Go back to the classic editor
                 </button>
               )}
               {!email && props.onGoBack && confirmBack && (
-                <div style={{ padding: "0.7rem", borderRadius: 10, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", fontSize: "0.76rem", lineHeight: 1.45 }}>
+                <div style={{ padding: "0.7rem", borderRadius: 10, background: "color-mix(in srgb, var(--ed-warning) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--ed-warning) 25%, transparent)", fontSize: "0.76rem", lineHeight: 1.45 }}>
                   This puts the page back the way it was before you tried the new editor. <strong>Anything you changed since will be lost.</strong>
                   <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
                     <button
@@ -126,7 +126,7 @@ export function PageSettings(props: Props) {
                         setBusy(false);
                         if (problem) setError(problem);
                       }}
-                      style={{ ...linkButton, color: "#fbbf24" }}
+                      style={{ ...linkButton, color: "var(--ed-warning)" }}
                     >
                       {busy ? "Going back…" : "Yes, go back"}
                     </button>
@@ -134,7 +134,7 @@ export function PageSettings(props: Props) {
                   </div>
                 </div>
               )}
-              <button type="button" onClick={props.onDelete} style={{ ...linkButton, color: "#f87171" }}>
+              <button type="button" onClick={props.onDelete} style={{ ...linkButton, color: "var(--ed-danger)" }}>
                 <Trash2 size={14} /> {email ? "Delete this email" : "Delete this page"}
               </button>
             </div>
@@ -143,4 +143,4 @@ export function PageSettings(props: Props) {
   );
 }
 
-const linkButton = { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, color: "rgba(240,242,255,0.75)", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600, fontFamily: "inherit" } as const;
+const linkButton = { display: "inline-flex", alignItems: "center", gap: 6, background: "none", border: "none", padding: 0, color: "var(--ed-t-750)", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600, fontFamily: "inherit" } as const;

@@ -7,6 +7,7 @@ import type { CommentTarget, V2EditorRef } from "@charisol/plexo-sdk/v2";
 import type { DesignSystem } from "@charisol/plexo-sdk/v2/compile";
 
 import { EDITOR_THEME } from "@/lib/theme";
+import { useEditorColors, useEditorV3, useSitesListHref } from "@/app/dashboard/_components/EditorTheme";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import type { V2Design, V2Meta } from "@/lib/v2/design";
 import { askSolStreaming } from "@/lib/ai/clientAssist";
@@ -54,6 +55,12 @@ type Props = {
 export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(function V2TemplateEditor(props, ref) {
   const { templateId, initialDesign, readOnly } = props;
   const router = useRouter();
+  const v3 = useEditorV3();
+  const sitesHref = useSitesListHref();
+  const colors = useEditorColors();
+  // New dashboard: Plexo's own brand tokens (lime, warm neutrals), light or dark. Old dashboard: the purple it always had.
+  // Until the tokens are read the editor uses its own default look, which is already the lime one.
+  const editorTheme = v3 ? (colors ? { accent: colors.accent, background: colors.background, text: colors.text } : undefined) : EDITOR_THEME;
   const [sdk, setSdk] = useState<SdkV2 | null>(null);
   const [sdkError, setSdkError] = useState(false);
   const [tree, setTree] = useState<TreePage[] | null>(null);
@@ -266,9 +273,9 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       if (id !== templateId) return void (await loadTree());
       dirtyRef.current = false;
       router.refresh();
-      router.push(isHome ? "/dashboard/templates" : `/dashboard/templates/${page.parentId}`);
+      router.push(isHome ? sitesHref : `/dashboard/templates/${page.parentId}`);
     },
-    [tree, templateId, router, loadTree],
+    [tree, templateId, router, loadTree, sitesHref],
   );
 
   const goBackToClassic = useCallback(async (): Promise<string | null> => {
@@ -328,7 +335,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       <Centered>
         <span style={{ display: "grid", gap: 12, justifyItems: "center", textAlign: "center" }}>
           <span>{brand.message}</span>
-          <button type="button" onClick={() => { setBrand({ state: "loading" }); setBrandTry((n) => n + 1); }} style={{ padding: "0.5rem 1rem", borderRadius: 10, border: "1px solid rgba(255,255,255,0.18)", background: "transparent", color: "inherit", cursor: "pointer" }}>Try again</button>
+          <button type="button" onClick={() => { setBrand({ state: "loading" }); setBrandTry((n) => n + 1); }} style={{ padding: "0.5rem 1rem", borderRadius: 10, border: "1px solid var(--ed-w-180)", background: "transparent", color: "inherit", cursor: "pointer" }}>Try again</button>
         </span>
       </Centered>
     );
@@ -344,7 +351,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
       {notice && (
-        <div role="alert" style={{ padding: "0.5rem 1rem", background: "rgba(248,113,113,0.12)", borderBottom: "1px solid rgba(248,113,113,0.3)", color: "#fca5a5", fontSize: "0.8rem", display: "flex", gap: 12, alignItems: "center" }}>
+        <div role="alert" style={{ padding: "0.5rem 1rem", background: "color-mix(in srgb, var(--ed-danger) 12%, transparent)", borderBottom: "1px solid color-mix(in srgb, var(--ed-danger) 30%, transparent)", color: "var(--ed-danger)", fontSize: "0.8rem", display: "flex", gap: 12, alignItems: "center" }}>
           <span style={{ flex: 1 }}>{notice}</span>
           <button type="button" onClick={() => setNotice(null)} style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600 }}>
             Dismiss
@@ -373,8 +380,8 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
             products={props.kind === "EMAIL" ? undefined : products}
-            // Plexo purple on Plexo's own background, so the editor looks like the rest of the app (and follows lib/theme.ts).
-            theme={EDITOR_THEME}
+            // Plexo's own colours, so the editor looks like the rest of the app (new dashboard: live brand tokens; old: lib/theme.ts).
+            theme={editorTheme}
             strata={strataOn ? strata : undefined}
             onSave={readOnly ? undefined : () => saveNow().then(() => undefined)}
             onPublish={readOnly ? undefined : props.onPublish}
@@ -439,5 +446,5 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
 });
 
 function Centered({ children }: { children: ReactNode }) {
-  return <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem", color: "rgba(240,242,255,0.6)", fontSize: "0.85rem" }}>{children}</div>;
+  return <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", padding: "1.5rem", color: "var(--ed-t-600)", fontSize: "0.85rem" }}>{children}</div>;
 }

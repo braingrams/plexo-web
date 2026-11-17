@@ -10,20 +10,21 @@ import { createStrataAdapter } from "./strataAdapter";
 import { C, Button, Notice } from "./ui";
 import { BLANK_TEMPLATE, defaultPageName, defaultRoute, freeRoute, pageFromTemplate, slugForName, templates } from "@/lib/projects/designTemplates";
 
-import { BRAND, EDITOR_THEME } from "@/lib/theme";
+import { EDITOR_THEME } from "@/lib/theme";
+import { useEditorColors, useEditorV3 } from "../../_components/EditorTheme";
 const CODE_CHANGED_NOTE = "This page was changed in code since you last designed it. Saving here replaces those code changes.";
 
 /** How each ready-made page looks on its card. Templates not listed here still get a card, with the default look. */
 const PICK_LOOKS: Record<string, { hint: string; accent: string; bg: string }> = {
-  home: { hint: "A welcoming front page for your site", accent: BRAND.primary, bg: "linear-gradient(135deg, rgba(var(--brand-rgb), 0.3), rgba(236,72,153,0.1))" },
-  landing: { hint: "One page that sells, from hello to sign-up", accent: BRAND.primary, bg: "linear-gradient(135deg, rgba(var(--brand-rgb), 0.28), rgba(192,132,252,0.12))" },
-  about: { hint: "Your story, your numbers and your team", accent: BRAND[400], bg: "linear-gradient(135deg, rgba(167,139,250,0.22), rgba(109,40,217,0.08))" },
-  services: { hint: "What you offer and how it works", accent: "#06b6d4", bg: "linear-gradient(135deg, rgba(6,182,212,0.2), rgba(99,102,241,0.1))" },
-  pricing: { hint: "Plans side by side", accent: "#6366f1", bg: "linear-gradient(135deg, rgba(99,102,241,0.22), rgba(196,181,253,0.08))" },
-  contact: { hint: "A way to get in touch", accent: BRAND.deep, bg: "linear-gradient(135deg, rgba(var(--brand-deep-rgb), 0.24), rgba(var(--brand-rgb), 0.08))" },
-  blank: { hint: "Start from nothing", accent: "#94a3b8", bg: "rgba(255,255,255,0.02)" },
+  home: { hint: "A welcoming front page for your site", accent: "var(--brand)", bg: "linear-gradient(135deg, color-mix(in srgb, var(--brand) 30%, transparent), color-mix(in srgb, var(--ed-amber) 10%, transparent))" },
+  landing: { hint: "One page that sells, from hello to sign-up", accent: "var(--brand)", bg: "linear-gradient(135deg, color-mix(in srgb, var(--brand) 28%, transparent), color-mix(in srgb, var(--ed-violet) 12%, transparent))" },
+  about: { hint: "Your story, your numbers and your team", accent: "var(--brand-soft)", bg: "linear-gradient(135deg, color-mix(in srgb, var(--ed-lavender) 22%, transparent), color-mix(in srgb, var(--ed-violet) 8%, transparent))" },
+  services: { hint: "What you offer and how it works", accent: "var(--ed-lavender)", bg: "linear-gradient(135deg, color-mix(in srgb, var(--ed-violet) 20%, transparent), color-mix(in srgb, var(--ed-violet) 10%, transparent))" },
+  pricing: { hint: "Plans side by side", accent: "var(--ed-violet)", bg: "linear-gradient(135deg, color-mix(in srgb, var(--ed-violet) 22%, transparent), color-mix(in srgb, var(--ed-lavender) 8%, transparent))" },
+  contact: { hint: "A way to get in touch", accent: "var(--brand-deep)", bg: "linear-gradient(135deg, color-mix(in srgb, var(--brand-deep) 24%, transparent), color-mix(in srgb, var(--brand) 8%, transparent))" },
+  blank: { hint: "Start from nothing", accent: "var(--ed-t-500)", bg: "var(--ed-w-020)" },
 };
-const DEFAULT_LOOK = { hint: "", accent: BRAND.primary, bg: "linear-gradient(135deg, rgba(var(--brand-rgb), 0.22), rgba(192,132,252,0.08))" };
+const DEFAULT_LOOK = { hint: "", accent: "var(--brand)", bg: "linear-gradient(135deg, color-mix(in srgb, var(--brand) 22%, transparent), color-mix(in srgb, var(--ed-violet) 8%, transparent))" };
 
 // The Design tab: design app pages visually in the Plexo editor (<V2Editor> from
 // @charisol/plexo-sdk/v2). Each design is one page; saving compiles it to real React code in
@@ -52,6 +53,10 @@ export function DesignPane(props: {
   onPreview: (route: string) => void;
 }) {
   const { appId, onSaved } = props;
+  const v3 = useEditorV3();
+  const colors = useEditorColors();
+  // New dashboard: Plexo's live brand colours (the editor's own lime look until they are read). Old dashboard: lib/theme.ts.
+  const editorTheme = v3 ? (colors ? { accent: colors.accent, background: colors.background, text: colors.text } : undefined) : EDITOR_THEME;
   const [sdk, setSdk] = useState<SdkV2 | null>(null);
   const [sdkError, setSdkError] = useState(false);
   const [designs, setDesigns] = useState<DesignSummary[] | null>(null);
@@ -437,7 +442,7 @@ export function DesignPane(props: {
                     cursor: busyWith ? "default" : "pointer",
                     color: C.text,
                     background: C.panel,
-                    border: `1px solid ${busy ? "rgba(var(--brand-rgb), 0.6)" : C.border}`,
+                    border: `1px solid ${busy ? "color-mix(in srgb, var(--brand) 60%, transparent)" : C.border}`,
                     opacity: busyWith && !busy ? 0.5 : 1,
                   }}
                 >
@@ -454,7 +459,7 @@ export function DesignPane(props: {
           </div>
           <p style={{ margin: 0, fontSize: "0.8rem", color: C.faint }}>You can rename any page or change its web address later.</p>
         </div>
-        <style>{`.design-pick { transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s; } .design-pick:not(:disabled):hover { transform: translateY(-3px); border-color: rgba(var(--brand-rgb), 0.55) !important; box-shadow: 0 16px 40px rgba(var(--brand-rgb), 0.18); } @media (prefers-reduced-motion: reduce) { .design-pick:hover { transform: none !important; } }`}</style>
+        <style>{`.design-pick { transition: transform 0.18s, border-color 0.18s, box-shadow 0.18s; } .design-pick:not(:disabled):hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--brand) 55%, transparent) !important; box-shadow: 0 16px 40px color-mix(in srgb, var(--brand) 18%, transparent); } @media (prefers-reduced-motion: reduce) { .design-pick:hover { transform: none !important; } }`}</style>
       </div>
     );
   }
@@ -521,7 +526,7 @@ export function DesignPane(props: {
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
             // Plexo purple on Plexo's own background, so the editor looks like the rest of the app (and follows lib/theme.ts).
-            theme={EDITOR_THEME}
+            theme={editorTheme}
             strata={strataOn ? strata : undefined}
             onSave={() => save()}
             saveState={saveState === "saving" || saveState === "error" || saveState === "saved" ? saveState : dirty ? "dirty" : "idle"}
@@ -580,12 +585,12 @@ export function DesignPane(props: {
 
 /** A small drawing of each kind of page, so the choice is visual. */
 function PickThumb({ kind, accent }: { kind: string; accent: string }) {
-  const line = (w: string, o = 0.35, h = 6) => <span style={{ display: "block", width: w, height: h, borderRadius: 99, background: `rgba(255,255,255,${o})` }} />;
-  const frame: React.CSSProperties = { height: "100%", borderRadius: 10, background: "rgba(11,15,25,0.55)", border: "1px solid rgba(255,255,255,0.08)", padding: 12, display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" };
+  const line = (w: string, o = 0.35, h = 6) => <span style={{ display: "block", width: w, height: h, borderRadius: 99, background: `color-mix(in srgb, var(--ed-text) ${Math.round(o * 100)}%, transparent)` }} />;
+  const frame: React.CSSProperties = { height: "100%", borderRadius: 10, background: "color-mix(in srgb, var(--ed-bg) 55%, transparent)", border: "1px solid var(--ed-w-080)", padding: 12, display: "flex", flexDirection: "column", gap: 8, overflow: "hidden" };
   if (kind === BLANK_TEMPLATE)
     return (
-      <div style={{ ...frame, border: "1.5px dashed rgba(255,255,255,0.16)", background: "transparent", alignItems: "center", justifyContent: "center" }}>
-        <span style={{ width: 38, height: 38, borderRadius: 12, display: "grid", placeItems: "center", background: "rgba(255,255,255,0.06)", color: "rgba(255,255,255,0.6)" }}>
+      <div style={{ ...frame, border: "1.5px dashed var(--ed-w-160)", background: "transparent", alignItems: "center", justifyContent: "center" }}>
+        <span style={{ width: 38, height: 38, borderRadius: 12, display: "grid", placeItems: "center", background: "var(--ed-w-060)", color: "var(--ed-w-600)" }}>
           <Plus size={20} />
         </span>
       </div>
@@ -598,12 +603,12 @@ function PickThumb({ kind, accent }: { kind: string; accent: string }) {
       </div>
       {(kind === "landing" || kind === "home") && (
         <>
-          <div style={{ flex: 1, borderRadius: 8, background: `linear-gradient(135deg, ${accent}, ${BRAND[300]})`, padding: 10, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
+          <div style={{ flex: 1, borderRadius: 8, background: `linear-gradient(135deg, ${accent}, var(--brand-light))`, padding: 10, display: "flex", flexDirection: "column", gap: 6, justifyContent: "center" }}>
             {line("60%", 0.9, 8)}
             {line("40%", 0.55, 5)}
             <span style={{ width: 44, height: 14, borderRadius: 5, background: "#fff", marginTop: 2 }} />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>{[0, 1, 2].map((i) => <span key={i} style={{ height: 16, borderRadius: 5, background: "rgba(255,255,255,0.08)" }} />)}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>{[0, 1, 2].map((i) => <span key={i} style={{ height: 16, borderRadius: 5, background: "var(--ed-w-080)" }} />)}</div>
         </>
       )}
       {kind === "services" && (
@@ -611,7 +616,7 @@ function PickThumb({ kind, accent }: { kind: string; accent: string }) {
           {line("48%", 0.6, 7)}
           <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
             {[0, 1, 2, 3].map((i) => (
-              <div key={i} style={{ borderRadius: 7, padding: 7, display: "flex", flexDirection: "column", gap: 5, background: "rgba(255,255,255,0.06)" }}>
+              <div key={i} style={{ borderRadius: 7, padding: 7, display: "flex", flexDirection: "column", gap: 5, background: "var(--ed-w-060)" }}>
                 <span style={{ width: 14, height: 14, borderRadius: 5, background: accent }} />
                 {line("70%", 0.35, 4)}
                 {line("50%", 0.2, 3)}
@@ -626,16 +631,16 @@ function PickThumb({ kind, accent }: { kind: string; accent: string }) {
           {line("80%", 0.2, 4)}
           {line("70%", 0.2, 4)}
           <div style={{ display: "flex", gap: 8, marginTop: "auto" }}>
-            {[accent, BRAND[700], "#c4b5fd"].map((c) => <span key={c} style={{ width: 26, height: 26, borderRadius: 99, background: c }} />)}
+            {[accent, "var(--brand-deeper)", "var(--ed-lavender)"].map((c) => <span key={c} style={{ width: 26, height: 26, borderRadius: 99, background: c }} />)}
           </div>
         </>
       )}
       {kind === "pricing" && (
         <div style={{ flex: 1, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
           {[0, 1, 2].map((i) => (
-            <div key={i} style={{ borderRadius: 7, padding: 7, display: "flex", flexDirection: "column", gap: 5, background: i === 1 ? accent : "rgba(255,255,255,0.06)" }}>
+            <div key={i} style={{ borderRadius: 7, padding: 7, display: "flex", flexDirection: "column", gap: 5, background: i === 1 ? accent : "var(--ed-w-060)" }}>
               {line("50%", i === 1 ? 0.9 : 0.4, 5)}
-              <span style={{ fontSize: 11, fontWeight: 800, color: "#fff" }}>${[9, 29, 99][i]}</span>
+              <span style={{ fontSize: 11, fontWeight: 800, color: "var(--ed-on-brand)" }}>${[9, 29, 99][i]}</span>
               {line("80%", 0.25, 3)}
               {line("60%", 0.25, 3)}
             </div>
@@ -645,8 +650,8 @@ function PickThumb({ kind, accent }: { kind: string; accent: string }) {
       {kind === "contact" && (
         <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
           {line("45%", 0.6, 7)}
-          {[0, 1].map((i) => <span key={i} style={{ height: 14, borderRadius: 5, border: "1px solid rgba(255,255,255,0.18)" }} />)}
-          <span style={{ flex: 1, minHeight: 16, borderRadius: 5, border: "1px solid rgba(255,255,255,0.18)" }} />
+          {[0, 1].map((i) => <span key={i} style={{ height: 14, borderRadius: 5, border: "1px solid var(--ed-w-180)" }} />)}
+          <span style={{ flex: 1, minHeight: 16, borderRadius: 5, border: "1px solid var(--ed-w-180)" }} />
           <span style={{ width: 52, height: 14, borderRadius: 5, background: accent }} />
         </div>
       )}

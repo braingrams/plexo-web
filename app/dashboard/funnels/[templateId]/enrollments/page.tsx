@@ -1,8 +1,10 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/v3Redirect";
 import { LmsEnrollment, LmsPage } from "@/lib/db/contentEntities";
 import { EnrollmentsClient } from "./EnrollmentsClient";
 
 export default async function FunnelEnrollmentsPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
+  await redirectIfV3(`/dashboard/learners?course=${templateId}`);
 
   const [{ data: enrollments }, { data: pages }] = await Promise.all([
     LmsEnrollment.query.byEnrolledAt({ templateId }).go({ pages: "all" }),

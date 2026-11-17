@@ -166,12 +166,12 @@ export function CommentLayer({
           style={{
             position: "fixed", left: pin.x - 12, top: pin.y - 12, width: 24, height: 24,
             borderRadius: "50% 50% 50% 0", transform: "rotate(45deg)",
-            background: highlightedId === pin.id ? "#ec4899" : "var(--brand)",
-            border: "2px solid #0b0f19", cursor: "pointer", zIndex: 70,
+            background: highlightedId === pin.id ? "var(--ed-violet)" : "var(--brand)",
+            border: "2px solid var(--ed-bg)", cursor: "pointer", zIndex: 70,
             display: "grid", placeItems: "center", boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
           }}
         >
-          <span style={{ transform: "rotate(-45deg)", fontSize: "0.6rem", fontWeight: 800, color: "#fff" }}>
+          <span style={{ transform: "rotate(-45deg)", fontSize: "0.6rem", fontWeight: 800, color: "var(--ed-on-brand)" }}>
             {index + 1}
           </span>
         </button>
@@ -195,7 +195,7 @@ export function CommentLayer({
             position: "fixed", right: 24, bottom: 24, zIndex: 70,
             display: "flex", alignItems: "center", gap: "0.4rem",
             padding: "0.5rem 0.8rem", borderRadius: 999, cursor: "pointer",
-            background: "#f59e0b", color: "#1a1200", border: "2px solid #0b0f19",
+            background: "var(--ed-amber)", color: "var(--ed-on-brand)", border: "2px solid var(--ed-bg)",
             fontSize: "0.75rem", fontWeight: 700, boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
           }}
         >
@@ -209,12 +209,12 @@ export function CommentLayer({
             position: "fixed",
             left: Math.min(pendingPin.clientX, window.innerWidth - 300),
             top: Math.min(pendingPin.clientY, window.innerHeight - 200),
-            width: 280, zIndex: 95, background: "rgba(13,15,26,0.98)",
-            border: "1px solid rgba(var(--brand-rgb),0.4)", borderRadius: 12,
+            width: 280, zIndex: 95, background: "var(--ed-panel)",
+            border: "1px solid color-mix(in srgb, var(--brand) 40%, transparent)", borderRadius: 12,
             boxShadow: "0 20px 50px rgba(0,0,0,0.5)", padding: "0.75rem",
           }}
         >
-          <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+          <p style={{ fontSize: "0.72rem", color: "var(--ed-t-400)", marginBottom: "0.5rem" }}>
             New comment on this {pendingPin.nodeType}
           </p>
           <MentionComposer

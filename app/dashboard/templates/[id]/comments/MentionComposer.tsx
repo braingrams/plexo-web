@@ -102,8 +102,8 @@ export function MentionComposer({
         placeholder={placeholder}
         rows={3}
         style={{
-          width: "100%", background: "#090d16", border: "1px solid rgba(255,255,255,0.09)",
-          borderRadius: 10, padding: "0.6rem 0.75rem", color: "#f0f2ff", fontSize: "0.82rem",
+          width: "100%", background: "var(--ed-sunken)", border: "1px solid var(--ed-w-090)",
+          borderRadius: 10, padding: "0.6rem 0.75rem", color: "var(--ed-text)", fontSize: "0.82rem",
           resize: "none", fontFamily: "inherit",
         }}
       />
@@ -111,7 +111,7 @@ export function MentionComposer({
       {query !== null && members.length > 0 && (
         <div style={{
           position: "absolute", bottom: "100%", left: 0, marginBottom: 4, width: 220,
-          background: "rgba(13,15,26,0.98)", border: "1px solid rgba(255,255,255,0.09)",
+          background: "var(--ed-panel)", border: "1px solid var(--ed-w-090)",
           borderRadius: 10, boxShadow: "0 12px 30px rgba(0,0,0,0.5)", zIndex: 80, padding: "0.3rem",
           maxHeight: 180, overflowY: "auto",
         }}>
@@ -121,11 +121,11 @@ export function MentionComposer({
               onClick={() => selectMember(m)}
               style={{
                 display: "block", width: "100%", textAlign: "left", padding: "0.4rem 0.5rem",
-                borderRadius: 8, border: "none", background: "transparent", color: "#f0f2ff",
+                borderRadius: 8, border: "none", background: "transparent", color: "var(--ed-text)",
                 fontSize: "0.78rem", cursor: "pointer",
               }}
             >
-              {m.name} <span style={{ color: "rgba(240,242,255,0.4)" }}>{m.email}</span>
+              {m.name} <span style={{ color: "var(--ed-t-400)" }}>{m.email}</span>
             </button>
           ))}
         </div>
@@ -135,7 +135,7 @@ export function MentionComposer({
         {onCancel && (
           <button
             onClick={onCancel}
-            style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", fontSize: "0.78rem", cursor: "pointer" }}
+            style={{ background: "none", border: "none", color: "var(--ed-t-500)", fontSize: "0.78rem", cursor: "pointer" }}
           >
             Cancel
           </button>
@@ -145,7 +145,7 @@ export function MentionComposer({
           disabled={submitting || !text.trim()}
           style={{
             background: "var(--brand)", border: "none", borderRadius: 8, padding: "0.4rem 0.9rem",
-            color: "#fff", fontWeight: 700, fontSize: "0.78rem",
+            color: "var(--ed-on-brand)", fontWeight: 700, fontSize: "0.78rem",
             cursor: submitting ? "not-allowed" : "pointer", opacity: submitting ? 0.6 : 1,
           }}
         >

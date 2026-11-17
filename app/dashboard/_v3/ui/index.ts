@@ -16,3 +16,4 @@ export { SegmentedControl, type SegmentOption } from "./SegmentedControl";
 export { HelpMedia, HelpMediaPlayer, HelpVideoLink } from "./HelpMedia";
 export { Portal, PORTAL_ID } from "./portal";
 export { cx } from "./cx";
+export { Notice, NoticeStack, type NoticeKind, type NoticeAction as V3NoticeAction } from "./Notice";

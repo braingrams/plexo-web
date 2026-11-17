@@ -71,10 +71,20 @@ export function V3ThemeRoot({
   );
 }
 
+/** True when rendered inside the v3 shell (so shared components can use the v3 look). */
+export function useIsV3(): boolean {
+  return useContext(Ctx) !== null;
+}
+
 export function useV3Theme(): ThemeCtx {
   const ctx = useContext(Ctx);
   if (!ctx) throw new Error("useV3Theme must be used inside V3ThemeRoot.");
   return ctx;
+}
+
+/** The resolved theme when inside the v3 root, null anywhere else (the old dashboard). */
+export function useV3ThemeOptional(): ThemeCtx | null {
+  return useContext(Ctx);
 }
 
 /** Light / Dark / System. `compact` shows icons only (top bar on smaller screens). */

@@ -2,9 +2,12 @@ import Link from "next/link";
 import type { TemplateKind } from "@/lib/db/contentEntities";
 
 import { listMarketplaceTemplates } from "@/lib/marketplace";
-import { MarketplaceFilters } from "../../marketplace/MarketplaceFilters";
-import { MarketplaceRowExpandGrid } from "../../marketplace/MarketplaceRowExpandGrid";
+import { MarketplaceFilters } from "./_shared/MarketplaceFilters";
+import { MarketplaceRowExpandGrid } from "./_shared/MarketplaceRowExpandGrid";
 import { PageContainer } from "../_components/PageContainer";
+import { currentUserOnNewDashboard } from "@/lib/dashboardV3/hubRedirect";
+import { DesignsFrame } from "../_v3/designs/DesignsFrame";
+import { DesignsBrowser } from "../_v3/designs/DesignsBrowser";
 
 export default async function DashboardMarketplacePage({
   searchParams,
@@ -26,6 +29,15 @@ export default async function DashboardMarketplacePage({
   });
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+
+  // New dashboard: the same designs, in the new look, with links that stay inside the dashboard.
+  if (await currentUserOnNewDashboard()) {
+    return (
+      <DesignsFrame tab="browse" title="Designs" intro="Pick a ready-made page or email, then change the words and pictures to make it yours.">
+        <DesignsBrowser designs={templates} total={total} categories={categories} current={{ category: sp.category, kind: sp.kind, free: sp.free, q: sp.q, sort }} page={page} pageCount={totalPages} />
+      </DesignsFrame>
+    );
+  }
 
   // Category counts map
   const categoryCounts = templates.reduce((acc, t) => {

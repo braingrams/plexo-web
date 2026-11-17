@@ -69,7 +69,7 @@ export async function listSiteTemplates(userId: string, filters: SiteTemplateFil
         owned: free || owned.has(t.id),
         price: free ? null : `$${(t.priceCents / 100).toFixed(2)}`,
         editableInVisualEditor: t.designFormat === "v2",
-        previewUrl: `${baseUrl()}/marketplace/${t.id}`,
+        previewUrl: `${baseUrl()}/dashboard/marketplace/${t.id}`,
       };
       return { item, score: scoreTemplate(tags, `${t.name} ${t.category ?? ""} ${t.description ?? ""}`, { industry, style, words }) };
     })

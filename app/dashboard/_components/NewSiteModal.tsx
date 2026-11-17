@@ -3,6 +3,7 @@
 import type { PlanId } from "@/lib/plan/plans";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { NewSiteWizard } from "../new/NewSiteWizard";
+import "../_v3/legacy.css";
 
 type Plan = PlanId;
 type NewSiteContextValue = { openNewSite: () => void };
@@ -36,6 +37,7 @@ export function NewSiteProvider({ plan, children }: { plan: Plan; children: Reac
       {open && (
         <div
           role="dialog"
+          className="plx-legacy"
           aria-modal="true"
           aria-label="Create a new site"
           onClick={close}

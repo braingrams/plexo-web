@@ -24,10 +24,10 @@ export type BrandState = {
 };
 export type StrataProject = { id: string; name: string; color?: string | null };
 
-const MUTED: React.CSSProperties = { fontSize: "0.8rem", color: "rgba(240,242,255,0.5)", margin: 0, lineHeight: 1.5 };
-const ROW: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "0.85rem 0", borderTop: "1px solid rgba(255,255,255,0.06)" };
-const BTN: React.CSSProperties = { padding: "0.55rem 0.95rem", borderRadius: 9, fontSize: "0.8rem", fontWeight: 700, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.04)", color: "rgba(240,242,255,0.88)", cursor: "pointer" };
-const PRIMARY: React.CSSProperties = { ...BTN, border: "none", background: "linear-gradient(135deg,#6d5efc,#4f46e5)", color: "#fff" };
+const MUTED: React.CSSProperties = { fontSize: "0.8rem", color: "var(--plx-muted, rgba(240,242,255,0.5))", margin: 0, lineHeight: 1.5 };
+const ROW: React.CSSProperties = { display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", padding: "0.85rem 0", borderTop: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" };
+const BTN: React.CSSProperties = { padding: "0.55rem 0.95rem", borderRadius: 9, fontSize: "0.8rem", fontWeight: 700, border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 4%, transparent)", color: "var(--plx-text, rgba(240,242,255,0.88))", cursor: "pointer" };
+const PRIMARY: React.CSSProperties = { ...BTN, border: "none", background: "linear-gradient(135deg,var(--plx-violet, #6d5efc),var(--plx-violet, #4f46e5))", color: "var(--plx-on-brand, #fff)" };
 
 /** "just now", "2 min ago", "3 hours ago", "on 4 Nov". */
 export function timeAgo(iso: string | null, now = Date.now()): string {
@@ -124,13 +124,13 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
   if (available === false) return null;
 
   const headline = state?.linked ? brandHeadline(state) : null;
-  const toneColor = headline?.tone === "bad" ? "#f87171" : headline?.tone === "warn" ? "#fbbf24" : "#4ade80";
+  const toneColor = headline?.tone === "bad" ? "var(--plx-danger, #f87171)" : headline?.tone === "warn" ? "var(--plx-warning, #fbbf24)" : "var(--plx-success, #4ade80)";
 
   return (
     <Card>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "0.9rem" }}>
         <div>
-          <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", margin: "0 0 0.3rem" }}>Brand</h2>
+          <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)", margin: "0 0 0.3rem" }}>Brand</h2>
           <p style={MUTED}>Use your brand from Strata on every page of this site. When you publish a change in Strata, your site changes too.</p>
         </div>
         {state?.linked && !picking && (
@@ -175,17 +175,17 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
 
       {state?.linked && !picking && headline && (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)", marginBottom: "0.4rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)", marginBottom: "0.4rem" }}>
             <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: toneColor, flexShrink: 0 }} />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f0f2ff" }}>{state.projectName ?? "Your Strata brand"}</div>
-              <div style={{ ...MUTED, color: headline.tone === "ok" ? "rgba(240,242,255,0.55)" : toneColor }}>{headline.text}</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>{state.projectName ?? "Your Strata brand"}</div>
+              <div style={{ ...MUTED, color: headline.tone === "ok" ? "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 55%, transparent)" : toneColor }}>{headline.text}</div>
             </div>
           </div>
 
           <div style={ROW}>
             <div>
-              <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff" }}>Keep in sync with Strata</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>Keep in sync with Strata</div>
               <p style={MUTED}>{state.autoSync ? "Changes you publish in Strata appear on your site within a couple of minutes." : "Your site keeps its current brand until you turn this back on."}</p>
             </div>
             <Toggle checked={state.autoSync} disabled={busy !== null || state.status !== "active"} label="Keep in sync with Strata" onChange={(on) => run("sync", () => call({ method: "PATCH", body: { autoSync: on } }))} />
@@ -194,7 +194,7 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
           {isRaw && (
             <div style={ROW}>
               <div>
-                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff" }}>Use my brand on this site</div>
+                <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>Use my brand on this site</div>
                 <p style={MUTED}>
                   {state.canUseOnSite
                     ? "Your site's main colours and fonts are swapped for your brand's. Turn it off to see the original look again — nothing is lost."
@@ -217,7 +217,7 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
             </button>
             <button
               type="button"
-              style={{ ...BTN, background: "transparent", color: "rgba(248,113,113,0.9)", border: "1px solid rgba(248,113,113,0.25)" }}
+              style={{ ...BTN, background: "transparent", color: "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 90%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 25%, transparent)" }}
               disabled={busy !== null}
               onClick={() => {
                 if (window.confirm("Stop using this brand? Your pages go back to the colours and fonts they were built with.")) void run("unlink", () => call({ method: "DELETE" }));
@@ -229,7 +229,7 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
         </>
       )}
 
-      {error && <p role="alert" style={{ ...MUTED, color: "#f87171", marginTop: "0.75rem" }}>{error}</p>}
+      {error && <p role="alert" style={{ ...MUTED, color: "var(--plx-danger, #f87171)", marginTop: "0.75rem" }}>{error}</p>}
     </Card>
   );
 }

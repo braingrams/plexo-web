@@ -542,7 +542,7 @@ export function ProductsClient({
           marginBottom: "1.5rem",
         }}
       >
-        <span style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)" }}>
+        <span style={{ fontSize: "0.85rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))" }}>
           {products.length} product{products.length === 1 ? "" : "s"}
         </span>
         <div style={{ display: "flex", gap: "0.6rem" }}>
@@ -556,9 +556,9 @@ export function ProductsClient({
               fontSize: "0.85rem",
               fontWeight: 700,
               fontFamily: "inherit",
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.04)",
-              color: "#f0f2ff",
+              border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)",
+              background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
+              color: "var(--cmx-text, #f0f2ff)",
             }}
           >
             Import CSV
@@ -573,9 +573,9 @@ export function ProductsClient({
               fontSize: "0.85rem",
               fontWeight: 700,
               fontFamily: "inherit",
-              border: "1px solid rgba(255,255,255,0.12)",
-              background: "rgba(255,255,255,0.04)",
-              color: "#f0f2ff",
+              border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)",
+              background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
+              color: "var(--cmx-text, #f0f2ff)",
             }}
           >
             Import with SOL
@@ -592,8 +592,8 @@ export function ProductsClient({
               fontWeight: 700,
               fontFamily: "inherit",
               background:
-                "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-              color: "#fff",
+                "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))",
+              color: "var(--cmx-on-brand, #fff)",
             }}
           >
             + New Product
@@ -645,9 +645,9 @@ export function ProductsClient({
             padding: "3rem 2rem",
             textAlign: "center",
             borderRadius: 14,
-            border: "1px dashed rgba(255,255,255,0.12)",
-            background: "rgba(255,255,255,0.02)",
-            color: "rgba(240,242,255,0.45)",
+            border: "1px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)",
+            background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)",
+            color: "var(--cmx-muted, rgba(240,242,255,0.45))",
             fontSize: "0.85rem",
           }}
         >
@@ -683,7 +683,7 @@ export function ProductsClient({
               <option value="out">Out of stock</option>
             </select>
             <span
-              style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}
+              style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}
             >
               {filteredProducts.length}{" "}
               {filteredProducts.length === 1 ? "product" : "products"}
@@ -693,8 +693,8 @@ export function ProductsClient({
                 marginLeft: "auto",
                 display: "flex",
                 gap: "0.35rem",
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)",
                 borderRadius: 9,
                 padding: 3,
               }}
@@ -713,10 +713,10 @@ export function ProductsClient({
                   placeItems: "center",
                   background:
                     view === "grid"
-                      ? "rgba(var(--brand-rgb),0.18)"
+                      ? "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 18%, transparent)"
                       : "transparent",
                   color:
-                    view === "grid" ? "var(--brand)" : "rgba(240,242,255,0.4)",
+                    view === "grid" ? "var(--cmx-brand, var(--brand))" : "var(--cmx-muted, rgba(240,242,255,0.4))",
                 }}
               >
                 <IconGrid />
@@ -735,10 +735,10 @@ export function ProductsClient({
                   placeItems: "center",
                   background:
                     view === "list"
-                      ? "rgba(var(--brand-rgb),0.18)"
+                      ? "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 18%, transparent)"
                       : "transparent",
                   color:
-                    view === "list" ? "var(--brand)" : "rgba(240,242,255,0.4)",
+                    view === "list" ? "var(--cmx-brand, var(--brand))" : "var(--cmx-muted, rgba(240,242,255,0.4))",
                 }}
               >
                 <IconList />
@@ -754,7 +754,7 @@ export function ProductsClient({
                 gap: "0.5rem",
                 marginBottom: "0.75rem",
                 fontSize: "0.78rem",
-                color: "rgba(240,242,255,0.5)",
+                color: "var(--cmx-muted, rgba(240,242,255,0.5))",
                 cursor: "pointer",
                 width: "fit-content",
               }}
@@ -782,9 +782,9 @@ export function ProductsClient({
                 padding: "2.5rem 2rem",
                 textAlign: "center",
                 borderRadius: 14,
-                border: "1px dashed rgba(255,255,255,0.1)",
-                background: "rgba(255,255,255,0.02)",
-                color: "rgba(240,242,255,0.4)",
+                border: "1px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)",
+                color: "var(--cmx-muted, rgba(240,242,255,0.4))",
                 fontSize: "0.85rem",
               }}
             >
@@ -804,10 +804,10 @@ export function ProductsClient({
                   style={{
                     position: "relative",
                     border: selectedIds.has(product.id)
-                      ? "1px solid rgba(var(--brand-rgb),0.5)"
-                      : "1px solid rgba(255,255,255,0.08)",
+                      ? "1px solid color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 50%, transparent)"
+                      : "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)",
                     borderRadius: 14,
-                    background: "rgba(255,255,255,0.02)",
+                    background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)",
                     overflow: "hidden",
                     opacity: product.active ? 1 : 0.55,
                   }}
@@ -837,7 +837,7 @@ export function ProductsClient({
                       height: 140,
                       background: product.imageUrl
                         ? `url(${product.imageUrl}) center/cover`
-                        : "rgba(var(--brand-rgb),0.08)",
+                        : "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 8%, transparent)",
                       display: "grid",
                       placeItems: "center",
                     }}
@@ -845,7 +845,7 @@ export function ProductsClient({
                     {!product.imageUrl && (
                       <span
                         style={{
-                          color: "rgba(240,242,255,0.25)",
+                          color: "var(--cmx-muted, rgba(240,242,255,0.25))",
                           fontSize: "0.75rem",
                         }}
                       >
@@ -866,7 +866,7 @@ export function ProductsClient({
                         style={{
                           fontSize: "0.9rem",
                           fontWeight: 600,
-                          color: "#f0f2ff",
+                          color: "var(--cmx-text, #f0f2ff)",
                         }}
                       >
                         {product.name}
@@ -876,8 +876,8 @@ export function ProductsClient({
                           style={{
                             fontSize: "0.65rem",
                             fontWeight: 700,
-                            color: "#f87171",
-                            background: "rgba(248,113,113,0.12)",
+                            color: "var(--cmx-danger, #f87171)",
+                            background: "color-mix(in srgb, var(--cmx-danger, rgb(248,113,113)) 12%, transparent)",
                             padding: "2px 6px",
                             borderRadius: 6,
                             flexShrink: 0,
@@ -890,7 +890,7 @@ export function ProductsClient({
                     <div
                       style={{
                         fontSize: "0.78rem",
-                        color: "rgba(240,242,255,0.45)",
+                        color: "var(--cmx-muted, rgba(240,242,255,0.45))",
                         marginTop: 2,
                       }}
                     >
@@ -909,7 +909,7 @@ export function ProductsClient({
                         style={{
                           fontSize: "0.95rem",
                           fontWeight: 700,
-                          color: "var(--brand)",
+                          color: "var(--cmx-accent, var(--brand))",
                           fontVariantNumeric: "tabular-nums",
                         }}
                       >
@@ -918,7 +918,7 @@ export function ProductsClient({
                       <span
                         style={{
                           fontSize: "0.75rem",
-                          color: "rgba(240,242,255,0.4)",
+                          color: "var(--cmx-muted, rgba(240,242,255,0.4))",
                         }}
                       >
                         {kindMetaText(product)}
@@ -939,9 +939,9 @@ export function ProductsClient({
                           style={{
                             padding: "0.4rem 0.7rem",
                             borderRadius: 8,
-                            border: "1px solid rgba(var(--brand-rgb),0.35)",
-                            background: "rgba(var(--brand-rgb),0.12)",
-                            color: "var(--brand)",
+                            border: "1px solid color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 35%, transparent)",
+                            background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 12%, transparent)",
+                            color: "var(--cmx-accent, var(--brand))",
                             fontSize: "0.78rem",
                             fontWeight: 600,
                             cursor: "pointer",
@@ -958,9 +958,9 @@ export function ProductsClient({
                           flex: 1,
                           padding: "0.4rem",
                           borderRadius: 8,
-                          border: "1px solid rgba(255,255,255,0.1)",
-                          background: "rgba(255,255,255,0.04)",
-                          color: "#f0f2ff",
+                          border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                          background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
+                          color: "var(--cmx-text, #f0f2ff)",
                           fontSize: "0.78rem",
                           cursor: "pointer",
                           fontFamily: "inherit",
@@ -975,9 +975,9 @@ export function ProductsClient({
                           style={{
                             padding: "0.4rem 0.7rem",
                             borderRadius: 8,
-                            border: "1px solid rgba(239,68,68,0.25)",
-                            background: "rgba(239,68,68,0.08)",
-                            color: "#f87171",
+                            border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 25%, transparent)",
+                            background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 8%, transparent)",
+                            color: "var(--cmx-danger, #f87171)",
                             fontSize: "0.78rem",
                             cursor: "pointer",
                             fontFamily: "inherit",
@@ -994,7 +994,7 @@ export function ProductsClient({
           ) : (
             <div
               style={{
-                border: "1px solid rgba(255,255,255,0.08)",
+                border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)",
                 borderRadius: 14,
                 overflow: "hidden",
               }}
@@ -1008,10 +1008,10 @@ export function ProductsClient({
                     gap: "0.9rem",
                     padding: "0.7rem 1rem",
                     background: selectedIds.has(product.id)
-                      ? "rgba(var(--brand-rgb),0.06)"
-                      : "rgba(255,255,255,0.015)",
+                      ? "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 6%, transparent)"
+                      : "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 1.5%, transparent)",
                     borderTop:
-                      i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)",
+                      i === 0 ? "none" : "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)",
                     opacity: product.active ? 1 : 0.55,
                   }}
                 >
@@ -1029,7 +1029,7 @@ export function ProductsClient({
                       flexShrink: 0,
                       background: product.imageUrl
                         ? `url(${product.imageUrl}) center/cover`
-                        : "rgba(var(--brand-rgb),0.08)",
+                        : "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 8%, transparent)",
                     }}
                   />
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -1044,7 +1044,7 @@ export function ProductsClient({
                         style={{
                           fontSize: "0.85rem",
                           fontWeight: 600,
-                          color: "#f0f2ff",
+                          color: "var(--cmx-text, #f0f2ff)",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
@@ -1057,8 +1057,8 @@ export function ProductsClient({
                           style={{
                             fontSize: "0.62rem",
                             fontWeight: 700,
-                            color: "#f87171",
-                            background: "rgba(248,113,113,0.12)",
+                            color: "var(--cmx-danger, #f87171)",
+                            background: "color-mix(in srgb, var(--cmx-danger, rgb(248,113,113)) 12%, transparent)",
                             padding: "2px 6px",
                             borderRadius: 6,
                             flexShrink: 0,
@@ -1071,7 +1071,7 @@ export function ProductsClient({
                     <div
                       style={{
                         fontSize: "0.75rem",
-                        color: "rgba(240,242,255,0.45)",
+                        color: "var(--cmx-muted, rgba(240,242,255,0.45))",
                       }}
                     >
                       {product.category?.name ?? "Uncategorized"} ·{" "}
@@ -1082,7 +1082,7 @@ export function ProductsClient({
                     style={{
                       fontSize: "0.85rem",
                       fontWeight: 700,
-                      color: "var(--brand)",
+                      color: "var(--cmx-accent, var(--brand))",
                       fontVariantNumeric: "tabular-nums",
                       flexShrink: 0,
                       width: 100,
@@ -1094,7 +1094,7 @@ export function ProductsClient({
                   <span
                     style={{
                       fontSize: "0.75rem",
-                      color: "rgba(240,242,255,0.4)",
+                      color: "var(--cmx-muted, rgba(240,242,255,0.4))",
                       flexShrink: 0,
                       width: 90,
                       textAlign: "right",
@@ -1113,9 +1113,9 @@ export function ProductsClient({
                         style={{
                           padding: "0.35rem 0.6rem",
                           borderRadius: 7,
-                          border: "1px solid rgba(var(--brand-rgb),0.35)",
-                          background: "rgba(var(--brand-rgb),0.12)",
-                          color: "var(--brand)",
+                          border: "1px solid color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 35%, transparent)",
+                          background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 12%, transparent)",
+                          color: "var(--cmx-accent, var(--brand))",
                           fontSize: "0.75rem",
                           fontWeight: 600,
                           cursor: "pointer",
@@ -1131,9 +1131,9 @@ export function ProductsClient({
                       style={{
                         padding: "0.35rem 0.6rem",
                         borderRadius: 7,
-                        border: "1px solid rgba(255,255,255,0.1)",
-                        background: "rgba(255,255,255,0.04)",
-                        color: "#f0f2ff",
+                        border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                        background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
+                        color: "var(--cmx-text, #f0f2ff)",
                         fontSize: "0.75rem",
                         cursor: "pointer",
                         fontFamily: "inherit",
@@ -1148,9 +1148,9 @@ export function ProductsClient({
                         style={{
                           padding: "0.35rem 0.6rem",
                           borderRadius: 7,
-                          border: "1px solid rgba(239,68,68,0.25)",
-                          background: "rgba(239,68,68,0.08)",
-                          color: "#f87171",
+                          border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 25%, transparent)",
+                          background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 8%, transparent)",
+                          color: "var(--cmx-danger, #f87171)",
                           fontSize: "0.75rem",
                           cursor: "pointer",
                           fontFamily: "inherit",
@@ -1182,9 +1182,9 @@ export function ProductsClient({
                 style={{
                   padding: "0.4rem 0.9rem",
                   borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.03)",
-                  color: "#f0f2ff",
+                  border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
+                  color: "var(--cmx-text, #f0f2ff)",
                   fontSize: "0.8rem",
                   cursor: currentPage <= 1 ? "not-allowed" : "pointer",
                   opacity: currentPage <= 1 ? 0.4 : 1,
@@ -1194,7 +1194,7 @@ export function ProductsClient({
                 Previous
               </button>
               <span
-                style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)" }}
+                style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))" }}
               >
                 Page {currentPage} of {totalPages}
               </span>
@@ -1205,9 +1205,9 @@ export function ProductsClient({
                 style={{
                   padding: "0.4rem 0.9rem",
                   borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.03)",
-                  color: "#f0f2ff",
+                  border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
+                  color: "var(--cmx-text, #f0f2ff)",
                   fontSize: "0.8rem",
                   cursor: currentPage >= totalPages ? "not-allowed" : "pointer",
                   opacity: currentPage >= totalPages ? 0.4 : 1,
@@ -1233,15 +1233,15 @@ export function ProductsClient({
             display: "flex",
             alignItems: "center",
             gap: "1rem",
-            background: "#141726",
-            border: "1px solid rgba(255,255,255,0.12)",
+            background: "var(--cmx-surface, #141726)",
+            border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)",
             borderRadius: 14,
             padding: "0.7rem 1rem",
             boxShadow: "0 12px 32px rgba(0,0,0,0.5)",
           }}
         >
           <span
-            style={{ fontSize: "0.82rem", fontWeight: 600, color: "#f0f2ff" }}
+            style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--cmx-text, #f0f2ff)" }}
           >
             {selectedIds.size} selected
           </span>
@@ -1251,9 +1251,9 @@ export function ProductsClient({
             style={{
               padding: "0.4rem 0.7rem",
               borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.1)",
+              border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
               background: "transparent",
-              color: "rgba(240,242,255,0.6)",
+              color: "var(--cmx-muted, rgba(240,242,255,0.6))",
               fontSize: "0.78rem",
               cursor: "pointer",
               fontFamily: "inherit",
@@ -1267,9 +1267,9 @@ export function ProductsClient({
             style={{
               padding: "0.4rem 0.8rem",
               borderRadius: 8,
-              border: "1px solid rgba(239,68,68,0.3)",
-              background: "rgba(239,68,68,0.1)",
-              color: "#f87171",
+              border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)",
+              background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 10%, transparent)",
+              color: "var(--cmx-danger, #f87171)",
               fontSize: "0.78rem",
               fontWeight: 600,
               cursor: "pointer",
@@ -1302,8 +1302,8 @@ export function ProductsClient({
           <div
             style={{
               width: "min(100%,420px)",
-              background: "#0d0f1a",
-              border: "1px solid rgba(239,68,68,0.3)",
+              background: "var(--cmx-surface, #0d0f1a)",
+              border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)",
               borderRadius: 18,
               padding: "1.5rem",
             }}
@@ -1312,7 +1312,7 @@ export function ProductsClient({
               style={{
                 fontSize: "1.05rem",
                 fontWeight: 700,
-                color: "#f0f2ff",
+                color: "var(--cmx-text, #f0f2ff)",
                 marginBottom: "0.5rem",
               }}
             >
@@ -1322,7 +1322,7 @@ export function ProductsClient({
             <p
               style={{
                 fontSize: "0.82rem",
-                color: "rgba(240,242,255,0.55)",
+                color: "var(--cmx-muted, rgba(240,242,255,0.55))",
                 marginBottom: "1.25rem",
               }}
             >
@@ -1342,9 +1342,9 @@ export function ProductsClient({
                 style={{
                   padding: "0.55rem 1rem",
                   borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "#f0f2ff",
+                  border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)",
+                  color: "var(--cmx-text, #f0f2ff)",
                   cursor: "pointer",
                   fontFamily: "inherit",
                   fontSize: "0.82rem",
@@ -1360,8 +1360,8 @@ export function ProductsClient({
                   padding: "0.55rem 1rem",
                   borderRadius: 8,
                   border: "none",
-                  background: "#dc2626",
-                  color: "#fff",
+                  background: "var(--cmx-danger, #dc2626)",
+                  color: "var(--cmx-on-brand, #fff)",
                   cursor: bulkActing ? "not-allowed" : "pointer",
                   opacity: bulkActing ? 0.7 : 1,
                   fontFamily: "inherit",
@@ -1399,8 +1399,8 @@ export function ProductsClient({
               width: "min(100%,560px)",
               maxHeight: "90vh",
               overflowY: "auto",
-              background: "#0d0f1a",
-              border: "1px solid rgba(255,255,255,0.12)",
+              background: "var(--cmx-surface, #0d0f1a)",
+              border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)",
               borderRadius: 20,
               padding: "1.75rem",
             }}
@@ -1410,7 +1410,7 @@ export function ProductsClient({
                 fontFamily: "var(--font-heading), sans-serif",
                 fontSize: "1.2rem",
                 fontWeight: 800,
-                color: "#f0f2ff",
+                color: "var(--cmx-text, #f0f2ff)",
                 marginBottom: "1.25rem",
               }}
             >
@@ -1432,16 +1432,16 @@ export function ProductsClient({
                       fontFamily: "inherit",
                       border:
                         form.kind === k
-                          ? "1.5px solid var(--brand)"
-                          : "1px solid rgba(255,255,255,0.1)",
+                          ? "1.5px solid var(--cmx-brand, var(--brand))"
+                          : "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
                       background:
                         form.kind === k
-                          ? "var(--brand-subtle)"
-                          : "rgba(255,255,255,0.03)",
+                          ? "var(--cmx-brand-subtle, var(--brand-subtle))"
+                          : "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
                       color:
                         form.kind === k
-                          ? "var(--brand)"
-                          : "rgba(240,242,255,0.6)",
+                          ? "var(--cmx-brand, var(--brand))"
+                          : "var(--cmx-muted, rgba(240,242,255,0.6))",
                       fontWeight: 600,
                       fontSize: "0.85rem",
                     }}
@@ -1483,7 +1483,7 @@ export function ProductsClient({
               >
                 {form.hasOptions && form.kind !== "SERVICE" ? (
                   <FieldLabel label={`Price (${currencySymbol})`}>
-                    <span style={{ display: "block", fontSize: "0.78rem", color: "#8a92b6", paddingTop: "0.5rem" }}>Set per option below</span>
+                    <span style={{ display: "block", fontSize: "0.78rem", color: "var(--cmx-muted, #8a92b6)", paddingTop: "0.5rem" }}>Set per option below</span>
                   </FieldLabel>
                 ) : (
                   <FieldLabel label={`Price (${currencySymbol})`}>
@@ -1593,7 +1593,7 @@ export function ProductsClient({
                       borderRadius: 12,
                       overflow: "hidden",
                       cursor: uploading ? "wait" : "pointer",
-                      border: "1px solid rgba(255,255,255,0.1)",
+                      border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
                     }}
                   >
                     <img
@@ -1616,7 +1616,7 @@ export function ProductsClient({
                         background:
                           "linear-gradient(to top, rgba(0,0,0,0.7), transparent)",
                         textAlign: "center",
-                        color: "#fff",
+                        color: "var(--cmx-on-brand, #fff)",
                         fontSize: "0.68rem",
                         fontWeight: 600,
                       }}
@@ -1637,7 +1637,7 @@ export function ProductsClient({
                         height: 20,
                         borderRadius: "50%",
                         background: "rgba(0,0,0,0.6)",
-                        color: "#fff",
+                        color: "var(--cmx-on-brand, #fff)",
                         border: "none",
                         cursor: "pointer",
                         fontSize: "0.75rem",
@@ -1657,28 +1657,28 @@ export function ProductsClient({
                       height: 120,
                       borderRadius: 12,
                       cursor: uploading ? "wait" : "pointer",
-                      border: "1.5px dashed rgba(var(--brand-rgb),0.35)",
-                      background: "rgba(var(--brand-rgb),0.05)",
+                      border: "1.5px dashed color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 35%, transparent)",
+                      background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 5%, transparent)",
                       display: "flex",
                       flexDirection: "column",
                       alignItems: "center",
                       justifyContent: "center",
                       gap: "0.4rem",
-                      color: "var(--brand)",
+                      color: "var(--cmx-accent, var(--brand))",
                       fontFamily: "inherit",
                       transition: "background 0.15s, border-color 0.15s",
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background =
-                        "rgba(var(--brand-rgb),0.1)";
+                        "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 10%, transparent)";
                       e.currentTarget.style.borderColor =
-                        "rgba(var(--brand-rgb),0.6)";
+                        "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 60%, transparent)";
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background =
-                        "rgba(var(--brand-rgb),0.05)";
+                        "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 5%, transparent)";
                       e.currentTarget.style.borderColor =
-                        "rgba(var(--brand-rgb),0.35)";
+                        "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 35%, transparent)";
                     }}
                   >
                     <IconUploadImage />
@@ -1702,7 +1702,7 @@ export function ProductsClient({
                         height: 72,
                         borderRadius: 10,
                         overflow: "hidden",
-                        border: "1px solid rgba(255,255,255,0.1)",
+                        border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
                       }}
                     >
                       <img
@@ -1733,7 +1733,7 @@ export function ProductsClient({
                           height: 18,
                           borderRadius: "50%",
                           background: "rgba(0,0,0,0.65)",
-                          color: "#fff",
+                          color: "var(--cmx-on-brand, #fff)",
                           border: "none",
                           cursor: "pointer",
                           fontSize: "0.7rem",
@@ -1765,26 +1765,26 @@ export function ProductsClient({
                       height: 72,
                       borderRadius: 10,
                       cursor: uploading ? "wait" : "pointer",
-                      border: "1.5px dashed rgba(var(--brand-rgb),0.35)",
-                      background: "rgba(var(--brand-rgb),0.05)",
+                      border: "1.5px dashed color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 35%, transparent)",
+                      background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 5%, transparent)",
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      color: "var(--brand)",
+                      color: "var(--cmx-accent, var(--brand))",
                       fontFamily: "inherit",
                       transition: "background 0.15s, border-color 0.15s",
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background =
-                        "rgba(var(--brand-rgb),0.1)";
+                        "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 10%, transparent)";
                       e.currentTarget.style.borderColor =
-                        "rgba(var(--brand-rgb),0.6)";
+                        "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 60%, transparent)";
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.background =
-                        "rgba(var(--brand-rgb),0.05)";
+                        "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 5%, transparent)";
                       e.currentTarget.style.borderColor =
-                        "rgba(var(--brand-rgb),0.35)";
+                        "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 35%, transparent)";
                     }}
                   >
                     <IconPlusSmall />
@@ -1818,8 +1818,8 @@ export function ProductsClient({
                             fontSize: "0.82rem",
                             color:
                               checked || !atLimit
-                                ? "rgba(240,242,255,0.75)"
-                                : "rgba(240,242,255,0.3)",
+                                ? "var(--cmx-text, rgba(240,242,255,0.75))"
+                                : "var(--cmx-muted, rgba(240,242,255,0.3))",
                           }}
                         >
                           <input
@@ -1849,7 +1849,7 @@ export function ProductsClient({
               )}
 
               {error && (
-                <p style={{ fontSize: "0.82rem", color: "#f87171" }}>{error}</p>
+                <p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)" }}>{error}</p>
               )}
 
               <div
@@ -1866,9 +1866,9 @@ export function ProductsClient({
                   style={{
                     padding: "0.6rem 1.1rem",
                     borderRadius: 9,
-                    border: "1px solid rgba(255,255,255,0.1)",
+                    border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
                     background: "transparent",
-                    color: "rgba(240,242,255,0.65)",
+                    color: "var(--cmx-muted, rgba(240,242,255,0.65))",
                     cursor: "pointer",
                     fontFamily: "inherit",
                     fontSize: "0.85rem",
@@ -1886,8 +1886,8 @@ export function ProductsClient({
                     borderRadius: 9,
                     border: "none",
                     background:
-                      "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-                    color: "#fff",
+                      "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))",
+                    color: "var(--cmx-on-brand, #fff)",
                     cursor: saving ? "not-allowed" : "pointer",
                     opacity: saving ? 0.7 : 1,
                     fontFamily: "inherit",
@@ -1930,8 +1930,8 @@ export function ProductsClient({
           <div
             style={{
               width: "min(100%,420px)",
-              background: "#0d0f1a",
-              border: "1px solid rgba(239,68,68,0.3)",
+              background: "var(--cmx-surface, #0d0f1a)",
+              border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)",
               borderRadius: 18,
               padding: "1.5rem",
             }}
@@ -1940,7 +1940,7 @@ export function ProductsClient({
               style={{
                 fontSize: "1.05rem",
                 fontWeight: 700,
-                color: "#f0f2ff",
+                color: "var(--cmx-text, #f0f2ff)",
                 marginBottom: "0.5rem",
               }}
             >
@@ -1949,7 +1949,7 @@ export function ProductsClient({
             <p
               style={{
                 fontSize: "0.82rem",
-                color: "rgba(240,242,255,0.55)",
+                color: "var(--cmx-muted, rgba(240,242,255,0.55))",
                 marginBottom: "1.25rem",
               }}
             >
@@ -1969,9 +1969,9 @@ export function ProductsClient({
                 style={{
                   padding: "0.55rem 1rem",
                   borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "#f0f2ff",
+                  border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)",
+                  color: "var(--cmx-text, #f0f2ff)",
                   cursor: "pointer",
                   fontFamily: "inherit",
                   fontSize: "0.82rem",
@@ -1986,8 +1986,8 @@ export function ProductsClient({
                   padding: "0.55rem 1rem",
                   borderRadius: 8,
                   border: "none",
-                  background: "#dc2626",
-                  color: "#fff",
+                  background: "var(--cmx-danger, #dc2626)",
+                  color: "var(--cmx-on-brand, #fff)",
                   cursor: "pointer",
                   fontFamily: "inherit",
                   fontSize: "0.82rem",
@@ -2084,10 +2084,10 @@ function IconPlusSmall() {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
   borderRadius: 9,
-  color: "#f0f2ff",
+  color: "var(--cmx-text, #f0f2ff)",
   padding: "0.55rem 0.7rem",
   fontSize: "0.85rem",
   outline: "none",
@@ -2109,7 +2109,7 @@ function FieldLabel({
           display: "block",
           fontSize: "0.78rem",
           fontWeight: 600,
-          color: "#c5cbe8",
+          color: "var(--cmx-text, #c5cbe8)",
           marginBottom: "0.35rem",
         }}
       >
@@ -2180,16 +2180,16 @@ function DigitalDeliveryFields({
                 fontFamily: "inherit",
                 border:
                   form.digitalDeliveryMethod === m.value
-                    ? "1.5px solid var(--brand)"
-                    : "1px solid rgba(255,255,255,0.1)",
+                    ? "1.5px solid var(--cmx-brand, var(--brand))"
+                    : "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
                 background:
                   form.digitalDeliveryMethod === m.value
-                    ? "var(--brand-subtle)"
-                    : "rgba(255,255,255,0.03)",
+                    ? "var(--cmx-brand-subtle, var(--brand-subtle))"
+                    : "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
                 color:
                   form.digitalDeliveryMethod === m.value
-                    ? "var(--brand)"
-                    : "rgba(240,242,255,0.6)",
+                    ? "var(--cmx-brand, var(--brand))"
+                    : "var(--cmx-muted, rgba(240,242,255,0.6))",
                 fontWeight: 600,
                 fontSize: "0.78rem",
               }}
@@ -2223,9 +2223,9 @@ function DigitalDeliveryFields({
                 padding: "0.6rem 0.8rem",
                 borderRadius: 9,
                 cursor: uploading ? "wait" : "pointer",
-                border: "1.5px dashed rgba(var(--brand-rgb),0.35)",
-                background: "rgba(var(--brand-rgb),0.05)",
-                color: "var(--brand)",
+                border: "1.5px dashed color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 35%, transparent)",
+                background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 5%, transparent)",
+                color: "var(--cmx-accent, var(--brand))",
                 fontFamily: "inherit",
                 fontSize: "0.82rem",
                 fontWeight: 600,

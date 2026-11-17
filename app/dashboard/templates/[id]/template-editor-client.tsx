@@ -11,6 +11,7 @@
 import { SolOutOfCredits } from "../../_components/sol/SolTopUp";
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useEditorBackHref, useEditorColors, useEditorV3 } from "../../_components/EditorTheme";
 import {
   PlexoBuilder,
   type PlexoBuilderRef,
@@ -288,10 +289,12 @@ function EditorHeaderLeft({
   isEmail,
   templateName,
   onBack,
+  backLabel,
 }: {
   isEmail: boolean;
   templateName: string;
   onBack: () => void;
+  backLabel: string;
 }) {
   return (
     <div
@@ -311,9 +314,9 @@ function EditorHeaderLeft({
           gap: "0.4rem",
           padding: "0.4rem 0.75rem",
           borderRadius: 8,
-          border: "1px solid rgba(255,255,255,0.1)",
+          border: "1px solid var(--ed-w-100)",
           background: "transparent",
-          color: "rgba(240,242,255,0.6)",
+          color: "var(--ed-t-600)",
           cursor: "pointer",
           fontFamily: "inherit",
           fontSize: "0.8rem",
@@ -323,14 +326,14 @@ function EditorHeaderLeft({
         }}
       >
         <IconArrowLeft />
-        Details
+        {backLabel}
       </button>
 
       <div
         style={{
           width: 1,
           height: 20,
-          background: "rgba(255,255,255,0.1)",
+          background: "var(--ed-w-100)",
           flexShrink: 0,
         }}
       />
@@ -356,9 +359,9 @@ function EditorHeaderLeft({
             textTransform: "uppercase",
             background: isEmail
               ? "var(--brand-subtle)"
-              : "rgba(129,140,248,0.1)",
-            color: isEmail ? "var(--brand)" : "#818cf8",
-            border: `1px solid ${isEmail ? "rgba(var(--brand-rgb),0.25)" : "rgba(129,140,248,0.2)"}`,
+              : "color-mix(in srgb, var(--ed-lavender) 10%, transparent)",
+            color: isEmail ? "var(--ed-accent-text)" : "var(--ed-lavender)",
+            border: `1px solid ${isEmail ? "color-mix(in srgb, var(--brand) 25%, transparent)" : "color-mix(in srgb, var(--ed-lavender) 20%, transparent)"}`,
             flexShrink: 0,
           }}
         >
@@ -370,7 +373,7 @@ function EditorHeaderLeft({
             fontFamily: "var(--font-heading), sans-serif",
             fontSize: "0.95rem",
             fontWeight: 700,
-            color: "#f0f2ff",
+            color: "var(--ed-text)",
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
@@ -434,7 +437,7 @@ function EditorHeaderRight({
           gap: "0.4rem",
           fontSize: "0.8rem",
           fontWeight: 600,
-          color: autoSaveEnabled ? "var(--brand)" : "rgba(240,242,255,0.6)",
+          color: autoSaveEnabled ? "var(--ed-accent-text)" : "var(--ed-t-600)",
           whiteSpace: "nowrap",
         }}
         title={autoSaveEnabled ? "Auto-save enabled" : "Auto-save disabled"}
@@ -452,7 +455,7 @@ function EditorHeaderRight({
         <span
           style={{
             fontSize: "0.78rem",
-            color: autoSaveEnabled ? "#34d399" : "rgba(240,242,255,0.6)",
+            color: autoSaveEnabled ? "var(--ed-success)" : "var(--ed-t-600)",
             whiteSpace: "nowrap",
           }}
         >
@@ -471,9 +474,9 @@ function EditorHeaderRight({
           borderRadius: 9,
           border: commentsOpen
             ? "1px solid var(--brand)"
-            : "1px solid rgba(255,255,255,0.1)",
+            : "1px solid var(--ed-w-100)",
           background: commentsOpen ? "var(--brand-subtle)" : "transparent",
-          color: commentsOpen ? "var(--brand)" : "rgba(240,242,255,0.6)",
+          color: commentsOpen ? "var(--ed-accent-text)" : "var(--ed-t-600)",
           cursor: "pointer",
           fontFamily: "inherit",
           fontSize: "0.8rem",
@@ -489,7 +492,7 @@ function EditorHeaderRight({
         <span
           style={{
             fontSize: "0.78rem",
-            color: "#34d399",
+            color: "var(--ed-success)",
             whiteSpace: "nowrap",
             display: "inline-flex",
             alignItems: "center",
@@ -503,7 +506,7 @@ function EditorHeaderRight({
         <span
           style={{
             fontSize: "0.78rem",
-            color: "#f87171",
+            color: "var(--ed-danger)",
             whiteSpace: "nowrap",
             maxWidth: 200,
             overflow: "hidden",
@@ -518,7 +521,7 @@ function EditorHeaderRight({
         <span
           style={{
             fontSize: "0.78rem",
-            color: "#34d399",
+            color: "var(--ed-success)",
             whiteSpace: "nowrap",
             display: "inline-flex",
             alignItems: "center",
@@ -532,7 +535,7 @@ function EditorHeaderRight({
         <span
           style={{
             fontSize: "0.78rem",
-            color: "#f87171",
+            color: "var(--ed-danger)",
             whiteSpace: "nowrap",
             maxWidth: 200,
             overflow: "hidden",
@@ -552,7 +555,7 @@ function EditorHeaderRight({
             gap: "0.35rem",
             fontSize: "0.75rem",
             fontWeight: 600,
-            color: "#fbbf24",
+            color: "var(--ed-warning)",
             whiteSpace: "nowrap",
           }}
         >
@@ -561,7 +564,7 @@ function EditorHeaderRight({
               width: 6,
               height: 6,
               borderRadius: "50%",
-              background: "#fbbf24",
+              background: "var(--ed-warning)",
             }}
           />
           Unpublished changes
@@ -577,9 +580,9 @@ function EditorHeaderRight({
           fontWeight: 700,
           letterSpacing: "0.06em",
           textTransform: "uppercase",
-          background: "rgba(255,255,255,0.06)",
-          color: "rgba(240,242,255,0.45)",
-          border: "1px solid rgba(255,255,255,0.08)",
+          background: "var(--ed-w-060)",
+          color: "var(--ed-t-450)",
+          border: "1px solid var(--ed-w-080)",
         }}
         className="sm:inline-flex"
       >
@@ -597,12 +600,12 @@ function EditorHeaderRight({
           gap: "0.45rem",
           padding: "0.5rem 1rem",
           borderRadius: 9,
-          border: "1px solid rgba(255,255,255,0.12)",
+          border: "1px solid var(--ed-w-120)",
           cursor: isSaving ? "not-allowed" : "pointer",
           fontSize: "0.85rem",
           fontWeight: 700,
           background: "transparent",
-          color: "rgba(240,242,255,0.85)",
+          color: "var(--ed-t-850)",
           opacity: isSaving ? 0.7 : 1,
           fontFamily: "inherit",
           transition: "opacity 0.15s",
@@ -614,8 +617,8 @@ function EditorHeaderRight({
               width: 13,
               height: 13,
               borderRadius: "50%",
-              border: "2px solid rgba(255,255,255,0.3)",
-              borderTopColor: "#fff",
+              border: "2px solid var(--ed-w-300)",
+              borderTopColor: "var(--ed-text)",
               animation: "spin 0.65s linear infinite",
               flexShrink: 0,
             }}
@@ -643,8 +646,8 @@ function EditorHeaderRight({
           fontSize: "0.85rem",
           fontWeight: 700,
           background:
-            "linear-gradient(135deg, var(--brand), var(--brand-deep))",
-          color: "#fff",
+            "var(--ed-cta)",
+          color: "var(--ed-on-brand)",
           opacity: isPublishing ? 0.7 : 1,
           boxShadow: "0 3px 16px var(--brand-glow)",
           fontFamily: "inherit",
@@ -657,8 +660,8 @@ function EditorHeaderRight({
               width: 13,
               height: 13,
               borderRadius: "50%",
-              border: "2px solid rgba(255,255,255,0.3)",
-              borderTopColor: "#fff",
+              border: "2px solid var(--ed-w-300)",
+              borderTopColor: "var(--ed-on-brand)",
               animation: "spin 0.65s linear infinite",
               flexShrink: 0,
             }}
@@ -701,6 +704,9 @@ export function TemplateEditorClient({
   templateSlug = null,
 }: Props) {
   const router = useRouter();
+  const v3 = useEditorV3();
+  const backToSiteHref = useEditorBackHref(rootTemplateId);
+  const editorColors = useEditorColors();
   const isV2 = designFormat === "v2" && !!initialV2Design;
   const v2Ref = useRef<V2TemplateEditorHandle>(null);
   const [tryOpen, setTryOpen] = useState(false);
@@ -1153,9 +1159,9 @@ export function TemplateEditorClient({
         <div
           style={{
             padding: "0.6rem 1rem",
-            background: "rgba(var(--brand-rgb),0.1)",
-            borderBottom: "1px solid rgba(var(--brand-rgb),0.25)",
-            color: "#c4b5fd",
+            background: "color-mix(in srgb, var(--brand) 10%, transparent)",
+            borderBottom: "1px solid color-mix(in srgb, var(--brand) 25%, transparent)",
+            color: "var(--ed-lavender)",
             fontSize: "0.78rem",
             textAlign: "center",
           }}
@@ -1174,7 +1180,7 @@ export function TemplateEditorClient({
           <SolOutOfCredits onDismiss={() => setSolOutOfCredits(false)} onToppedUp={() => setSolOutOfCredits(false)} />
         </div>
       )}
-      <div style={{ flex: 1, overflow: "hidden", background: "#0a0c15" }}>
+      <div style={{ flex: 1, overflow: "hidden", background: "var(--ed-bg)" }}>
         {isV2 && initialV2Design ? (
           <V2TemplateEditor
             ref={v2Ref}
@@ -1192,7 +1198,7 @@ export function TemplateEditorClient({
             kind={templateKind}
             headerRight={headerRightNode}
             onPublish={handlePublish}
-            onBack={() => router.push(`/dashboard/templates/${rootTemplateId}/detail`)}
+            onBack={() => router.push(backToSiteHref)}
             onSaved={() => {
               setSaveError(null);
               setHasUnpublishedChanges(true);
@@ -1210,10 +1216,10 @@ export function TemplateEditorClient({
           maildripConnected={maildripConnected}
           onMaildripAuth={isEmail ? undefined : handleMaildripAuth}
           initialTemplate={initialDesignJson}
-          backgroundColor="#0b1526"
-          themeBgColor="var(--brand)"
-          themeFgColor="#ffffff"
-          textColor="#ecfeff"
+          backgroundColor={v3 ? editorColors?.surface : "#0b1526"}
+          themeBgColor={v3 ? editorColors?.accent : "var(--brand)"}
+          themeFgColor={v3 ? editorColors?.onAccent : "#ffffff"}
+          textColor={v3 ? editorColors?.text : "#ecfeff"}
           showSaveButton={false}
           autoSave={autoSaveEnabled}
           autoSaveDuration={6000}
@@ -1245,11 +1251,12 @@ export function TemplateEditorClient({
             <EditorHeaderLeft
               isEmail={isEmail}
               templateName={templateName}
+              backLabel={v3 ? "My site" : "Details"}
               onBack={() => {
                 // The Detail page is server-rendered fresh on every navigation, so a
                 // just-saved edit is never stale there the way the old flat Templates
                 // list needed a forced refresh to avoid.
-                router.push(`/dashboard/templates/${rootTemplateId}/detail`);
+                router.push(backToSiteHref);
               }}
             />
           }
@@ -1281,7 +1288,7 @@ export function TemplateEditorClient({
             left: 0,
             right: 0,
             bottom: 0,
-            background: "rgba(3, 7, 18, 0.85)",
+            background: "var(--ed-scrim)",
             zIndex: 100,
             display: "grid",
             placeItems: "center",
@@ -1291,8 +1298,8 @@ export function TemplateEditorClient({
         >
           <div
             style={{
-              background: "#0d1324",
-              border: "1px solid rgba(255,255,255,0.08)",
+              background: "var(--ed-panel)",
+              border: "1px solid var(--ed-w-080)",
               borderRadius: 16,
               width: "90%",
               maxWidth: 480,
@@ -1314,7 +1321,7 @@ export function TemplateEditorClient({
                 style={{
                   fontSize: "1.2rem",
                   fontWeight: 800,
-                  color: "#f0f2ff",
+                  color: "var(--ed-text)",
                   fontFamily: "var(--font-heading)",
                   display: "flex",
                   alignItems: "center",
@@ -1328,7 +1335,7 @@ export function TemplateEditorClient({
                 style={{
                   background: "none",
                   border: "none",
-                  color: "rgba(240,242,255,0.4)",
+                  color: "var(--ed-t-400)",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
@@ -1341,7 +1348,7 @@ export function TemplateEditorClient({
             <p
               style={{
                 fontSize: "0.82rem",
-                color: "rgba(240,242,255,0.6)",
+                color: "var(--ed-t-600)",
                 lineHeight: 1.5,
                 marginBottom: "1.25rem",
               }}
@@ -1357,7 +1364,7 @@ export function TemplateEditorClient({
               <div
                 style={{
                   display: "flex",
-                  background: "rgba(255,255,255,0.04)",
+                  background: "var(--ed-w-040)",
                   padding: 3,
                   borderRadius: 8,
                   gap: 2,
@@ -1380,8 +1387,8 @@ export function TemplateEditorClient({
                         : "transparent",
                     color:
                       modalDomainType === "SUBDOMAIN"
-                        ? "#fff"
-                        : "rgba(240,242,255,0.55)",
+                        ? "var(--ed-on-brand)"
+                        : "var(--ed-t-550)",
                     transition: "all 0.15s",
                   }}
                 >
@@ -1404,8 +1411,8 @@ export function TemplateEditorClient({
                         : "transparent",
                     color:
                       modalDomainType === "CUSTOM"
-                        ? "#fff"
-                        : "rgba(240,242,255,0.55)",
+                        ? "var(--ed-on-brand)"
+                        : "var(--ed-t-550)",
                     transition: "all 0.15s",
                   }}
                 >
@@ -1429,8 +1436,8 @@ export function TemplateEditorClient({
                         : "transparent",
                     color:
                       modalDomainType === "BUY"
-                        ? "#fff"
-                        : "rgba(240,242,255,0.55)",
+                        ? "var(--ed-on-brand)"
+                        : "var(--ed-t-550)",
                     transition: "all 0.15s",
                   }}
                 >
@@ -1461,7 +1468,7 @@ export function TemplateEditorClient({
                         style={{
                           fontSize: "0.78rem",
                           fontWeight: 600,
-                          color: "rgba(240,242,255,0.65)",
+                          color: "var(--ed-t-650)",
                         }}
                       >
                         Configure Subdomain
@@ -1488,8 +1495,8 @@ export function TemplateEditorClient({
                         />
                         <span
                           style={{
-                            background: "rgba(255,255,255,0.04)",
-                            border: "1px solid rgba(255,255,255,0.08)",
+                            background: "var(--ed-w-040)",
+                            border: "1px solid var(--ed-w-080)",
                             borderLeft: "none",
                             borderTopRightRadius: 8,
                             borderBottomRightRadius: 8,
@@ -1497,7 +1504,7 @@ export function TemplateEditorClient({
                             alignItems: "center",
                             padding: "0 0.65rem",
                             fontSize: "0.75rem",
-                            color: "rgba(240,242,255,0.45)",
+                            color: "var(--ed-t-450)",
                             fontWeight: 550,
                           }}
                         >
@@ -1515,7 +1522,7 @@ export function TemplateEditorClient({
                         style={{
                           fontSize: "0.78rem",
                           fontWeight: 600,
-                          color: "rgba(240,242,255,0.65)",
+                          color: "var(--ed-t-650)",
                         }}
                       >
                         Custom Domain Name
@@ -1537,16 +1544,16 @@ export function TemplateEditorClient({
                         style={{
                           marginTop: "0.6rem",
                           padding: "0.6rem",
-                          background: "rgba(var(--brand-rgb),0.04)",
-                          border: "1px solid rgba(var(--brand-rgb),0.12)",
+                          background: "color-mix(in srgb, var(--brand) 4%, transparent)",
+                          border: "1px solid color-mix(in srgb, var(--brand) 12%, transparent)",
                           borderRadius: 8,
                           fontSize: "0.72rem",
-                          color: "rgba(240,242,255,0.65)",
+                          color: "var(--ed-t-650)",
                           lineHeight: 1.35,
                         }}
                       >
                         Configure a CNAME record mapping your domain to{" "}
-                        <code style={{ color: "var(--brand)" }}>
+                        <code style={{ color: "var(--ed-accent-text)" }}>
                           {routingEndpoint ?? "connecting…"}
                         </code>
                         .
@@ -1556,11 +1563,11 @@ export function TemplateEditorClient({
                           style={{
                             marginTop: "0.5rem",
                             padding: "0.6rem",
-                            background: "rgba(52,211,153,0.05)",
-                            border: "1px solid rgba(52,211,153,0.2)",
+                            background: "color-mix(in srgb, var(--ed-success) 5%, transparent)",
+                            border: "1px solid color-mix(in srgb, var(--ed-success) 20%, transparent)",
                             borderRadius: 8,
                             fontSize: "0.72rem",
-                            color: "rgba(240,242,255,0.65)",
+                            color: "var(--ed-t-650)",
                             lineHeight: 1.35,
                           }}
                         >
@@ -1570,7 +1577,7 @@ export function TemplateEditorClient({
                             style={{
                               fontFamily: "monospace",
                               fontSize: "0.68rem",
-                              color: "#6ee7b7",
+                              color: "var(--ed-success)",
                               marginTop: "0.3rem",
                               wordBreak: "break-all",
                             }}
@@ -1587,7 +1594,7 @@ export function TemplateEditorClient({
                     <p
                       style={{
                         fontSize: "0.78rem",
-                        color: "#f87171",
+                        color: "var(--ed-danger)",
                         margin: 0,
                         display: "flex",
                         alignItems: "center",
@@ -1602,7 +1609,7 @@ export function TemplateEditorClient({
                     <p
                       style={{
                         fontSize: "0.78rem",
-                        color: "#34d399",
+                        color: "var(--ed-success)",
                         margin: 0,
                         display: "flex",
                         alignItems: "center",

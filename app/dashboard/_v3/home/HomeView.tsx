@@ -26,7 +26,7 @@ const SOL_IDEAS: Record<string, string> = {
 
 /** Home: picks the right view for what the person is doing. Stays mounted across refreshes so "You're live" can finish its moment. */
 export function HomeView(props: HomeProps) {
-  const { mode, site, all, brand, experience, firstName, baseDomain, newSiteHref, demo } = props;
+  const { mode, site, all, brand, experience, firstName, baseDomain, newSiteHref, demo, tuneHref } = props;
   const [celebrate, setCelebrate] = useState(false);
 
   if (mode === "none" || !site) {
@@ -39,7 +39,7 @@ export function HomeView(props: HomeProps) {
 
   if (mode === "all") {
     return (
-      <Page eyebrow={`${greeting()}, ${firstName}`} title={experience === "pro" ? "Everything you're building" : "Your websites"}>
+      <Page tuneHref={tuneHref} eyebrow={`${greeting()}, ${firstName}`} title={experience === "pro" ? "Everything you're building" : "Your websites"}>
         <AllSites rows={all} dense={experience === "pro"} newSiteHref={newSiteHref} />
       </Page>
     );
@@ -51,7 +51,7 @@ export function HomeView(props: HomeProps) {
   if (showGuide) {
     const title = progress.allDone ? `${site.site.name} is online` : `Let's get ${site.site.name} online`;
     return (
-      <Page eyebrow={`${greeting()}, ${firstName}`} title={title}>
+      <Page tuneHref={tuneHref} eyebrow={`${greeting()}, ${firstName}`} title={title}>
         <div className="plx-page__grid">
           <section data-tour="home-main" style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
             {celebrate && progress.allDone ? (
@@ -98,7 +98,7 @@ export function HomeView(props: HomeProps) {
   const stats = site.stats;
   const href = siteHref(site.site);
   return (
-    <Page eyebrow={`${greeting()}, ${firstName}`} title={site.site.name}>
+    <Page tuneHref={tuneHref} eyebrow={`${greeting()}, ${firstName}`} title={site.site.name}>
       <div className="plx-page__grid">
         <section data-tour="home-main" style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
           {stats ? <StatGrid stats={stats.stats} /> : null}
@@ -122,14 +122,28 @@ export function HomeView(props: HomeProps) {
   );
 }
 
-function Page({ eyebrow, title, children }: { eyebrow: string; title: string; children: React.ReactNode }) {
+function Page({ eyebrow, title, tuneHref, children }: { eyebrow: string; title: string; tuneHref?: string; children: React.ReactNode }) {
   return (
     <div className="plx-page">
       <div>
         <p className="plx-eyebrow">{eyebrow}</p>
         <h1 className="plx-h1">{title}</h1>
       </div>
+      {tuneHref ? <FineTuneCard href={tuneHref} /> : null}
       {children}
     </div>
+  );
+}
+
+/** For people who already have sites: a quick way to tell Plexo (and SOL) how they work, then start on a site. */
+function FineTuneCard({ href }: { href: string }) {
+  return (
+    <Card tone="tint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: 560 }}>
+        <span className="plx-h3">Fine-tune with SOL</span>
+        <span className="plx-body">Two quick questions, then SOL can start on any of your sites: a fresh look, better words or a new page.</span>
+      </div>
+      <ButtonLink href={href} rightIcon={<ArrowRight size={18} aria-hidden />}>Tune Plexo to me</ButtonLink>
+    </Card>
   );
 }

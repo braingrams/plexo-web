@@ -1,0 +1,27 @@
+"use client";
+
+import { useRouter } from "next/navigation";
+import { PageContainer } from "../../../_components/PageContainer";
+import { SiteImportPanel } from "./SiteImportPanel";
+
+const card: React.CSSProperties = {
+  padding: "1.25rem", borderRadius: 16,
+  border: "1px solid var(--plx-border, rgba(255,255,255,0.08))",
+  background: "var(--plx-surface, rgba(255,255,255,0.03))",
+};
+
+export function SiteImportPageClient({ templateId, siteName }: { templateId: string; siteName: string }) {
+  const router = useRouter();
+  const done = () => router.push(`/dashboard/sites/${templateId}`);
+  return (
+    <PageContainer>
+      <h1 style={{ fontSize: "1.6rem", fontWeight: 800, letterSpacing: "-0.02em", color: "var(--plx-text, #f0f2ff)", margin: 0 }}>Bring in a website</h1>
+      <p style={{ fontSize: "0.95rem", color: "var(--plx-muted, rgba(240,242,255,0.5))", margin: "0.4rem 0 1.5rem" }}>
+        Paste the address of your old website and we will copy its pages into {siteName}. Nothing changes on the old site.
+      </p>
+      <div style={card}>
+        <SiteImportPanel templateId={templateId} onImported={() => router.refresh()} onClose={done} />
+      </div>
+    </PageContainer>
+  );
+}

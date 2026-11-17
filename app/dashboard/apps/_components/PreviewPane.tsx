@@ -111,7 +111,7 @@ export function PreviewPane(props: {
   }
 
   return (
-    <div ref={containerRef} style={{ position: "relative", height: "100%", overflow: "hidden", background: width ? "#070a12" : "#fff", display: "flex", justifyContent: "center", alignItems: width ? "flex-start" : "stretch", padding: width ? "16px 0" : 0 }}>
+    <div ref={containerRef} style={{ position: "relative", height: "100%", overflow: "hidden", background: width ? "var(--ed-sunken)" : "#fff", display: "flex", justifyContent: "center", alignItems: width ? "flex-start" : "stretch", padding: width ? "16px 0" : 0 }}>
       <div
         style={{
           width: width ?? "100%",
@@ -120,7 +120,7 @@ export function PreviewPane(props: {
           transformOrigin: "top center",
           borderRadius: width ? 18 : 0,
           overflow: "hidden",
-          boxShadow: width ? "0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.08)" : undefined,
+          boxShadow: width ? "0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px var(--ed-w-080)" : undefined,
           background: "#fff",
           flexShrink: 0,
         }}
@@ -141,12 +141,12 @@ export function PreviewPane(props: {
         )}
       </div>
       {inspecting && (
-        <div style={{ position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", padding: "0.35rem 0.75rem", borderRadius: 999, background: C.brandDeep, color: "#fff", fontSize: "0.74rem", fontWeight: 600, boxShadow: "0 6px 20px rgba(0,0,0,0.4)", pointerEvents: "none" }}>
+        <div style={{ position: "absolute", top: 10, left: "50%", transform: "translateX(-50%)", padding: "0.35rem 0.75rem", borderRadius: 999, background: "var(--ed-cta)", color: "var(--ed-on-brand)", fontSize: "0.74rem", fontWeight: 600, boxShadow: "0 6px 20px rgba(0,0,0,0.4)", pointerEvents: "none" }}>
           Click anything in your app to edit it
         </div>
       )}
       {props.building && (
-        <div style={{ position: "absolute", bottom: 12, right: 12, padding: "0.35rem 0.7rem", borderRadius: 999, background: "rgba(11,15,25,0.85)", border: `1px solid ${C.border}`, color: C.text, fontSize: "0.72rem", display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ position: "absolute", bottom: 12, right: 12, padding: "0.35rem 0.7rem", borderRadius: 999, background: "color-mix(in srgb, var(--ed-bg) 85%, transparent)", border: `1px solid ${C.border}`, color: C.text, fontSize: "0.72rem", display: "flex", alignItems: "center", gap: 6 }}>
           <span className="plexo-spin" style={{ width: 10, height: 10, borderRadius: "50%", border: `2px solid ${C.brand}`, borderTopColor: "transparent", display: "inline-block" }} />
           Updating preview…
           <style>{`.plexo-spin{animation:plexo-spin .8s linear infinite}@keyframes plexo-spin{to{transform:rotate(360deg)}}`}</style>

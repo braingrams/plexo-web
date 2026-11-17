@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 
-import { BRAND } from "@/lib/theme";
 import { Pagination } from "../../../_components/Pagination";
 export type OrderSummary = {
   id: string;
@@ -47,40 +46,40 @@ export type DigitalDeliverySummary = {
 };
 
 const STATUS_COLORS: Record<OrderSummary["status"], string> = {
-  PENDING: "#fbbf24",
-  PAID: "#34d399",
-  FAILED: "#f87171",
-  REFUNDED: BRAND[400],
-  CANCELLED: "rgba(240,242,255,0.4)",
+  PENDING: "var(--cmx-warning, #fbbf24)",
+  PAID: "var(--cmx-success, #34d399)",
+  FAILED: "var(--cmx-danger, #f87171)",
+  REFUNDED: "var(--cmx-violet, var(--brand-light))",
+  CANCELLED: "var(--cmx-muted, rgba(240,242,255,0.4))",
 };
 
 const FULFILLMENT_OPTIONS: OrderSummary["fulfillmentStatus"][] = ["UNFULFILLED", "PROCESSING", "READY_FOR_PICKUP", "SHIPPED", "COMPLETED"];
 
 function StatusPill({ status, awaitingTransfer }: { status: OrderSummary["status"]; awaitingTransfer?: boolean }) {
-  const color = awaitingTransfer ? "#60a5fa" : STATUS_COLORS[status];
+  const color = awaitingTransfer ? "var(--cmx-info, #60a5fa)" : STATUS_COLORS[status];
   return (
-    <span style={{ fontSize: "0.7rem", fontWeight: 700, color, background: `${color}22`, padding: "2px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>
+    <span style={{ fontSize: "0.7rem", fontWeight: 700, color, background: `color-mix(in srgb, ${color} 13%, transparent)`, padding: "2px 8px", borderRadius: 6, whiteSpace: "nowrap" }}>
       {awaitingTransfer ? "CONFIRM TRANSFER" : status}
     </span>
   );
 }
 
 function DeliveryInfoCell({ rows, onShowAll }: { rows: [string, string][]; onShowAll: () => void }) {
-  if (!rows.length) return <span style={{ color: "rgba(240,242,255,0.3)" }}>—</span>;
+  if (!rows.length) return <span style={{ color: "var(--cmx-muted, rgba(240,242,255,0.3))" }}>—</span>;
   const preview = rows.slice(0, DELIVERY_PREVIEW_ROWS);
   const more = rows.length - preview.length;
   return (
     <div style={{ display: "grid", gap: 2, maxWidth: 260 }}>
       {preview.map(([label, value], i) => (
         <div key={i} style={{ fontSize: "0.74rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} title={`${label}: ${value}`}>
-          <span style={{ color: "rgba(240,242,255,0.4)" }}>{label}:</span> <span style={{ color: "rgba(240,242,255,0.75)" }}>{value}</span>
+          <span style={{ color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}>{label}:</span> <span style={{ color: "var(--cmx-text, rgba(240,242,255,0.75))" }}>{value}</span>
         </div>
       ))}
       {more > 0 && (
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onShowAll(); }}
-          style={{ justifySelf: "start", marginTop: 2, padding: "1px 8px", borderRadius: 999, border: "1px solid rgba(var(--brand-rgb),0.35)", background: "rgba(var(--brand-rgb),0.12)", color: "var(--brand-light)", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+          style={{ justifySelf: "start", marginTop: 2, padding: "1px 8px", borderRadius: 999, border: "1px solid color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 35%, transparent)", background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 12%, transparent)", color: "var(--cmx-accent, var(--brand-light))", fontSize: "0.7rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
         >
           +{more} more
         </button>
@@ -94,14 +93,14 @@ function DeliveryInfoDrawer({ order, onClose }: { order: OrderSummary; onClose: 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Delivery info for ${order.orderNumber}`} onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       style={{ position: "fixed", inset: 0, zIndex: 70, background: "rgba(0,0,0,0.55)", display: "flex", justifyContent: "flex-end" }}>
-      <div style={{ width: "min(100%, 420px)", height: "100%", overflowY: "auto", background: "#0d0f1a", borderLeft: "1px solid rgba(255,255,255,0.12)", padding: "1.5rem" }}>
+      <div style={{ width: "min(100%, 420px)", height: "100%", overflowY: "auto", background: "var(--cmx-surface, #0d0f1a)", borderLeft: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", padding: "1.5rem" }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem" }}>
           <div>
-            <div style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Delivery info</div>
-            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.1rem", fontWeight: 800, color: "#f0f2ff", margin: "2px 0 0" }}>{order.orderNumber}</h2>
-            <div style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.55)", marginTop: 4 }}>{order.customerName ?? "—"} · {order.customerEmail}</div>
+            <div style={{ fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", textTransform: "uppercase", letterSpacing: "0.05em" }}>Delivery info</div>
+            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.1rem", fontWeight: 800, color: "var(--cmx-text, #f0f2ff)", margin: "2px 0 0" }}>{order.orderNumber}</h2>
+            <div style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.55))", marginTop: 4 }}>{order.customerName ?? "—"} · {order.customerEmail}</div>
           </div>
-          <button type="button" onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,0.06)", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.5)", padding: "0.4rem", borderRadius: 8 }}>✕</button>
+          <button type="button" onClick={onClose} aria-label="Close" style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)", border: "none", cursor: "pointer", color: "var(--cmx-muted, rgba(240,242,255,0.5))", padding: "0.4rem", borderRadius: 8 }}>✕</button>
         </div>
         <DeliveryDetailsList rows={order.deliveryDetails} />
       </div>
@@ -110,13 +109,13 @@ function DeliveryInfoDrawer({ order, onClose }: { order: OrderSummary; onClose: 
 }
 
 function DeliveryDetailsList({ rows }: { rows: [string, string][] }) {
-  if (!rows.length) return <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.45)" }}>No delivery details on this order.</p>;
+  if (!rows.length) return <p style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))" }}>No delivery details on this order.</p>;
   return (
-    <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "0.4rem 1rem" }}>
+    <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)", borderRadius: 10, padding: "0.4rem 1rem" }}>
       {rows.map(([label, value], i) => (
-        <div key={i} style={{ display: "flex", gap: "0.8rem", padding: "0.5rem 0", borderTop: i ? "1px solid rgba(255,255,255,0.06)" : "none", fontSize: "0.82rem" }}>
-          <span style={{ flex: "0 0 38%", color: "rgba(240,242,255,0.45)" }}>{label}</span>
-          <span style={{ flex: 1, minWidth: 0, color: "#e2e4f5", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{value}</span>
+        <div key={i} style={{ display: "flex", gap: "0.8rem", padding: "0.5rem 0", borderTop: i ? "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)" : "none", fontSize: "0.82rem" }}>
+          <span style={{ flex: "0 0 38%", color: "var(--cmx-muted, rgba(240,242,255,0.45))" }}>{label}</span>
+          <span style={{ flex: 1, minWidth: 0, color: "var(--cmx-text, #e2e4f5)", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{value}</span>
         </div>
       ))}
     </div>
@@ -339,34 +338,34 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
           type="search" value={q} onChange={(e) => setQ(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }}
           placeholder="Search order # or customer…"
-          style={{ flex: 1, minWidth: 200, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, color: "#f0f2ff", padding: "0.5rem 0.8rem", fontSize: "0.82rem", outline: "none", fontFamily: "inherit" }}
+          style={{ flex: 1, minWidth: 200, background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.5rem 0.8rem", fontSize: "0.82rem", outline: "none", fontFamily: "inherit" }}
         />
         <select
           value={statusFilter} onChange={(e) => { setStatusFilter(e.target.value); }}
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, color: "#f0f2ff", padding: "0.5rem 0.8rem", fontSize: "0.82rem", fontFamily: "inherit" }}
+          style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.5rem 0.8rem", fontSize: "0.82rem", fontFamily: "inherit" }}
         >
           <option value="">All statuses</option>
-          <option value="AWAITING_TRANSFER" style={{ background: "#0d0f1a" }}>Bank transfer to confirm</option>
+          <option value="AWAITING_TRANSFER" style={{ background: "var(--cmx-surface, #0d0f1a)" }}>Bank transfer to confirm</option>
           {(["PENDING", "PAID", "FAILED", "REFUNDED", "CANCELLED"] as const).map((s) => (
-            <option key={s} value={s} style={{ background: "#0d0f1a" }}>{s}</option>
+            <option key={s} value={s} style={{ background: "var(--cmx-surface, #0d0f1a)" }}>{s}</option>
           ))}
         </select>
         <button
           type="button" onClick={() => void runSearch()} disabled={loading}
-          style={{ padding: "0.5rem 1rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem" }}
+          style={{ padding: "0.5rem 1rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", color: "var(--cmx-text, #f0f2ff)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem" }}
         >
           {loading ? "…" : "Filter"}
         </button>
       </div>
 
       {awaitingCount > 0 && statusFilter !== "AWAITING_TRANSFER" && (
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.25)", borderRadius: 12, padding: "0.7rem 1rem", marginBottom: "1rem", fontSize: "0.82rem", color: "#bfdbfe" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap", background: "color-mix(in srgb, var(--cmx-info, rgb(96,165,250)) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-info, rgb(96,165,250)) 25%, transparent)", borderRadius: 12, padding: "0.7rem 1rem", marginBottom: "1rem", fontSize: "0.82rem", color: "var(--cmx-info, #bfdbfe)" }}>
           <span style={{ flex: 1, minWidth: 200 }}>
             {awaitingCount === 1 ? "1 bank transfer is" : `${awaitingCount} bank transfers are`} waiting for you to confirm the money arrived.
           </span>
           <button
             type="button" onClick={() => { setStatusFilter("AWAITING_TRANSFER"); void runSearch({ status: "AWAITING_TRANSFER" }); }}
-            style={{ padding: "0.35rem 0.8rem", borderRadius: 8, border: "1px solid rgba(96,165,250,0.4)", background: "transparent", color: "#bfdbfe", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+            style={{ padding: "0.35rem 0.8rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-info, rgb(96,165,250)) 40%, transparent)", background: "transparent", color: "var(--cmx-info, #bfdbfe)", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
           >
             Show them
           </button>
@@ -374,14 +373,14 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
       )}
 
       {orders.length === 0 ? (
-        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "rgba(240,242,255,0.45)", fontSize: "0.85rem" }}>
+        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", color: "var(--cmx-muted, rgba(240,242,255,0.45))", fontSize: "0.85rem" }}>
           {statusFilter || q ? "No orders match this filter." : "No orders yet."}
         </div>
       ) : (
-        <div style={{ overflowX: "auto", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14 }}>
+        <div style={{ overflowX: "auto", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
             <thead>
-              <tr style={{ color: "rgba(240,242,255,0.4)", textAlign: "left", background: "rgba(255,255,255,0.02)" }}>
+              <tr style={{ color: "var(--cmx-muted, rgba(240,242,255,0.4))", textAlign: "left", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)" }}>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Order</th>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Customer</th>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Total</th>
@@ -396,7 +395,7 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
                 <tr
                   key={order.id}
                   onClick={() => openOrder(order)}
-                  style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "#e2e4f5", cursor: "pointer" }}
+                  style={{ borderTop: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)", color: "var(--cmx-text, #e2e4f5)", cursor: "pointer" }}
                 >
                   <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace" }}>{order.orderNumber}</td>
                   <td style={{ padding: "0.7rem 1rem" }}>{order.customerName ?? order.customerEmail}</td>
@@ -404,14 +403,14 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
                   <td style={{ padding: "0.7rem 1rem" }}>
                     <StatusPill status={order.status} awaitingTransfer={isAwaitingTransfer(order)} />
                     {order.paymentMethod === "BANK_TRANSFER" && !isAwaitingTransfer(order) && (
-                      <div style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.35)", marginTop: 3 }}>Bank transfer</div>
+                      <div style={{ fontSize: "0.68rem", color: "var(--cmx-muted, rgba(240,242,255,0.35))", marginTop: 3 }}>Bank transfer</div>
                     )}
                   </td>
-                  <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.55)" }}>{order.fulfillmentStatus.replace(/_/g, " ").toLowerCase()}</td>
+                  <td style={{ padding: "0.7rem 1rem", color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>{order.fulfillmentStatus.replace(/_/g, " ").toLowerCase()}</td>
                   <td style={{ padding: "0.7rem 1rem", verticalAlign: "top" }}>
                     <DeliveryInfoCell rows={order.deliveryDetails} onShowAll={() => setDrawerOrder(order)} />
                   </td>
-                  <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.4)" }}>{new Date(order.createdAt).toLocaleDateString()}</td>
+                  <td style={{ padding: "0.7rem 1rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}>{new Date(order.createdAt).toLocaleDateString()}</td>
                 </tr>
               ))}
             </tbody>
@@ -431,28 +430,28 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
           style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.7)", padding: "1rem" }}
           onClick={(e) => { if (e.target === e.currentTarget) openOrder(null); }}
         >
-          <div style={{ width: "min(100%,480px)", maxHeight: "88vh", overflowY: "auto", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "1.75rem" }}>
+          <div style={{ width: "min(100%,480px)", maxHeight: "88vh", overflowY: "auto", background: "var(--cmx-surface, #0d0f1a)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", borderRadius: 20, padding: "1.75rem" }}>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1rem" }}>
               <div>
-                <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "#f0f2ff" }}>
+                <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "var(--cmx-text, #f0f2ff)" }}>
                   {selected.orderNumber}
                 </h2>
                 <div style={{ marginTop: 4 }}><StatusPill status={selected.status} awaitingTransfer={isAwaitingTransfer(selected)} /></div>
               </div>
-              <button type="button" onClick={() => openOrder(null)} style={{ background: "rgba(255,255,255,0.06)", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.5)", padding: "0.4rem", borderRadius: 8 }}>
+              <button type="button" onClick={() => openOrder(null)} style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)", border: "none", cursor: "pointer", color: "var(--cmx-muted, rgba(240,242,255,0.5))", padding: "0.4rem", borderRadius: 8 }}>
                 ✕
               </button>
             </div>
 
-            <div style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.6)", marginBottom: "1rem" }}>
+            <div style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.6))", marginBottom: "1rem" }}>
               {selected.customerName ?? "—"} · {selected.customerEmail}
-              {selected.paymentMethod === "BANK_TRANSFER" && <span style={{ color: "rgba(240,242,255,0.4)" }}> · paid by bank transfer</span>}
+              {selected.paymentMethod === "BANK_TRANSFER" && <span style={{ color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}> · paid by bank transfer</span>}
             </div>
 
             {isAwaitingTransfer(selected) && (
-              <div style={{ background: "rgba(96,165,250,0.08)", border: "1px solid rgba(96,165,250,0.25)", borderRadius: 12, padding: "0.9rem 1rem", marginBottom: "1rem" }}>
-                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#dbeafe" }}>Waiting for you to confirm the transfer</div>
-                <p style={{ fontSize: "0.78rem", color: "rgba(219,234,254,0.75)", margin: "0.3rem 0 0.8rem", lineHeight: 1.5 }}>
+              <div style={{ background: "color-mix(in srgb, var(--cmx-info, rgb(96,165,250)) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-info, rgb(96,165,250)) 25%, transparent)", borderRadius: 12, padding: "0.9rem 1rem", marginBottom: "1rem" }}>
+                <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--cmx-info, #dbeafe)" }}>Waiting for you to confirm the transfer</div>
+                <p style={{ fontSize: "0.78rem", color: "color-mix(in srgb, var(--cmx-info, rgb(219,234,254)) 75%, transparent)", margin: "0.3rem 0 0.8rem", lineHeight: 1.5 }}>
                   The customer says they sent {formatMoney(selected.amountMinor, selected.currency)} to your bank account. Check it has arrived before confirming —
                   confirming emails them their order confirmation and lets you fulfil it.
                 </p>
@@ -460,13 +459,13 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
                   <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
                     <button
                       type="button" disabled={transferBusy} onClick={() => void handleBankTransfer(selected, "confirm")}
-                      style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", fontWeight: 700, fontSize: "0.8rem", cursor: transferBusy ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+                      style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)", fontWeight: 700, fontSize: "0.8rem", cursor: transferBusy ? "not-allowed" : "pointer", fontFamily: "inherit" }}
                     >
                       {transferBusy ? "Confirming…" : "Confirm payment received"}
                     </button>
                     <button
                       type="button" disabled={transferBusy} onClick={() => setRejectOpen(true)}
-                      style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.75)", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}
+                      style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", background: "transparent", color: "var(--cmx-text, rgba(240,242,255,0.75))", fontWeight: 600, fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}
                     >
                       Not received
                     </button>
@@ -476,17 +475,17 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
                     <textarea
                       value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} rows={2} maxLength={500}
                       placeholder="Optional note to the customer, e.g. No transfer with this reference reached our account."
-                      style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, color: "#f0f2ff", padding: "0.5rem 0.7rem", fontSize: "0.8rem", fontFamily: "inherit", resize: "vertical" }}
+                      style={{ width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.5rem 0.7rem", fontSize: "0.8rem", fontFamily: "inherit", resize: "vertical" }}
                     />
-                    <span style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)" }}>The order will be cancelled, its stock released, and the customer emailed.</span>
+                    <span style={{ fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))" }}>The order will be cancelled, its stock released, and the customer emailed.</span>
                     <div style={{ display: "flex", gap: "0.5rem" }}>
                       <button
                         type="button" disabled={transferBusy} onClick={() => void handleBankTransfer(selected, "reject")}
-                        style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#f87171", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}
+                        style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)", background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 10%, transparent)", color: "var(--cmx-danger, #f87171)", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}
                       >
                         {transferBusy ? "Cancelling…" : "Cancel order"}
                       </button>
-                      <button type="button" onClick={() => setRejectOpen(false)} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "transparent", color: "rgba(240,242,255,0.55)", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
+                      <button type="button" onClick={() => setRejectOpen(false)} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "transparent", color: "var(--cmx-muted, rgba(240,242,255,0.55))", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
                         Back
                       </button>
                     </div>
@@ -496,17 +495,17 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
             )}
 
             {selected.status === "CANCELLED" && selected.bankTransferRejectReason && (
-              <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", marginBottom: "1rem" }}>Cancelled — transfer not received: “{selected.bankTransferRejectReason}”</div>
+              <div style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", marginBottom: "1rem" }}>Cancelled — transfer not received: “{selected.bankTransferRejectReason}”</div>
             )}
 
-            <div style={{ background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: "0.8rem 1rem", marginBottom: "1rem" }}>
+            <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)", borderRadius: 10, padding: "0.8rem 1rem", marginBottom: "1rem" }}>
               {selected.items.map((item, i) => (
-                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "#e2e4f5", padding: "0.25rem 0" }}>
+                <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", color: "var(--cmx-text, #e2e4f5)", padding: "0.25rem 0" }}>
                   <span>{item.quantity}× {item.nameSnapshot}</span>
                   <span style={{ fontFamily: "ui-monospace, monospace" }}>{formatMoney(item.unitPriceMinor * item.quantity, selected.currency)}</span>
                 </div>
               ))}
-              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", fontWeight: 700, color: "#f0f2ff", borderTop: "1px solid rgba(255,255,255,0.08)", marginTop: "0.5rem", paddingTop: "0.5rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.88rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", borderTop: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", marginTop: "0.5rem", paddingTop: "0.5rem" }}>
                 <span>Total</span>
                 <span style={{ fontFamily: "ui-monospace, monospace" }}>{formatMoney(selected.amountMinor, selected.currency)}</span>
               </div>
@@ -514,20 +513,20 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
 
             {selected.deliveryDetails.length > 0 && (
               <div style={{ marginBottom: "1rem" }}>
-                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.4rem" }}>Delivery info</span>
+                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.4rem" }}>Delivery info</span>
                 <DeliveryDetailsList rows={selected.deliveryDetails} />
               </div>
             )}
 
             {selected.booking && (
-              <div style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.6)", marginBottom: "1rem" }}>
+              <div style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.6))", marginBottom: "1rem" }}>
                 Booked for {new Date(selected.booking.scheduledStart).toLocaleString()} — {selected.booking.status}
               </div>
             )}
 
             {selected.digitalDeliveries.length > 0 && (
               <div style={{ marginBottom: "1rem" }}>
-                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.4rem" }}>
+                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.4rem" }}>
                   Digital delivery
                 </span>
                 <div style={{ display: "grid", gap: "0.5rem" }}>
@@ -536,14 +535,14 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
                       key={d.id}
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem",
-                        background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.6rem 0.8rem",
+                        background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 10, padding: "0.6rem 0.8rem",
                       }}
                     >
                       <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: "0.82rem", color: "#e2e4f5", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <div style={{ fontSize: "0.82rem", color: "var(--cmx-text, #e2e4f5)", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {d.productName}
                         </div>
-                        <div style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)", marginTop: 2 }}>
+                        <div style={{ fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", marginTop: 2 }}>
                           {d.deliveredAt ? `Delivered ${new Date(d.deliveredAt).toLocaleString()}` : "Not yet delivered"}
                           {d.method === "FILE_DOWNLOAD" && ` · ${d.downloadCount}${d.maxDownloads !== null ? `/${d.maxDownloads}` : ""} downloads`}
                           {d.resendCount > 0 && ` · resent ${d.resendCount}×`}
@@ -554,8 +553,8 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
                         onClick={() => void handleResendDigital(selected, d)}
                         disabled={resendingId === d.id}
                         style={{
-                          flexShrink: 0, padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)",
-                          background: "rgba(255,255,255,0.05)", color: "#f0f2ff", cursor: resendingId === d.id ? "not-allowed" : "pointer",
+                          flexShrink: 0, padding: "0.4rem 0.7rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                          background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", color: "var(--cmx-text, #f0f2ff)", cursor: resendingId === d.id ? "not-allowed" : "pointer",
                           fontFamily: "inherit", fontSize: "0.75rem", fontWeight: 600,
                         }}
                       >
@@ -571,28 +570,28 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
               <select
                 value={selected.fulfillmentStatus}
                 onChange={(e) => void updateFulfillment(selected, e.target.value as OrderSummary["fulfillmentStatus"])}
-                style={{ width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, color: "#f0f2ff", padding: "0.55rem 0.8rem", fontSize: "0.85rem", fontFamily: "inherit" }}
+                style={{ width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.55rem 0.8rem", fontSize: "0.85rem", fontFamily: "inherit" }}
               >
                 {FULFILLMENT_OPTIONS.map((opt) => (
-                  <option key={opt} value={opt} style={{ background: "#0d0f1a" }}>{opt.replace(/_/g, " ")}</option>
+                  <option key={opt} value={opt} style={{ background: "var(--cmx-surface, #0d0f1a)" }}>{opt.replace(/_/g, " ")}</option>
                 ))}
               </select>
             </FieldLabel>
 
-            {actionError && <p style={{ fontSize: "0.8rem", color: "#f87171", marginTop: "0.75rem" }}>{actionError}</p>}
+            {actionError && <p style={{ fontSize: "0.8rem", color: "var(--cmx-danger, #f87171)", marginTop: "0.75rem" }}>{actionError}</p>}
 
             {selected.status === "REFUNDED" && selected.refundReason && (
-              <div style={{ fontSize: "0.76rem", color: "rgba(240,242,255,0.5)", marginTop: "1rem", lineHeight: 1.5 }}>
+              <div style={{ fontSize: "0.76rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", marginTop: "1rem", lineHeight: 1.5 }}>
                 Refunded{selected.refundedAt ? ` on ${new Date(selected.refundedAt).toLocaleDateString()}` : ""} — reason: “{selected.refundReason}”
               </div>
             )}
 
             {/* Destructive actions live behind a deliberate extra click — a refund used to be a
                 big red button right under the fulfilment dropdown, one mis-tap away. */}
-            <div style={{ marginTop: "1.5rem", borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: "0.75rem" }}>
+            <div style={{ marginTop: "1.5rem", borderTop: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)", paddingTop: "0.75rem" }}>
               <button
                 type="button" aria-expanded={moreOpen} onClick={() => { setMoreOpen((v) => !v); setRefundOpen(false); setDeleteOpen(false); setActionError(null); }}
-                style={{ background: "none", border: "none", padding: 0, color: "rgba(240,242,255,0.45)", fontSize: "0.76rem", cursor: "pointer", fontFamily: "inherit" }}
+                style={{ background: "none", border: "none", padding: 0, color: "var(--cmx-muted, rgba(240,242,255,0.45))", fontSize: "0.76rem", cursor: "pointer", fontFamily: "inherit" }}
               >
                 More actions {moreOpen ? "▴" : "▾"}
               </button>
@@ -600,30 +599,30 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
               {moreOpen && !refundOpen && !deleteOpen && (
                 <div style={{ marginTop: "0.6rem", display: "grid", gap: "0.5rem" }}>
                   {selected.status === "PAID" && (
-                    <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.75rem 0.9rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                    <div style={{ border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 10, padding: "0.75rem 0.9rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
                       <div>
-                        <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>Refund this order</div>
-                        <div style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)", marginTop: 2 }}>Returns {formatMoney(selected.amountMinor, selected.currency)} to the customer. Can&apos;t be undone.</div>
+                        <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--cmx-text, #f0f2ff)" }}>Refund this order</div>
+                        <div style={{ fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", marginTop: 2 }}>Returns {formatMoney(selected.amountMinor, selected.currency)} to the customer. Can&apos;t be undone.</div>
                       </div>
                       <button
                         type="button" onClick={() => setRefundOpen(true)}
-                        style={{ flexShrink: 0, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "transparent", color: "#f87171", cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem", fontWeight: 600 }}
+                        style={{ flexShrink: 0, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)", background: "transparent", color: "var(--cmx-danger, #f87171)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem", fontWeight: 600 }}
                       >
                         Start refund…
                       </button>
                     </div>
                   )}
-                  <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.75rem 0.9rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
+                  <div style={{ border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 10, padding: "0.75rem 0.9rem", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
                     <div>
-                      <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>Delete this order</div>
-                      <div style={{ fontSize: "0.72rem", color: selected.deleteBlocker ? "rgba(251,191,36,0.85)" : "rgba(240,242,255,0.45)", marginTop: 2, lineHeight: 1.45 }}>
+                      <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--cmx-text, #f0f2ff)" }}>Delete this order</div>
+                      <div style={{ fontSize: "0.72rem", color: selected.deleteBlocker ? "color-mix(in srgb, var(--cmx-warning, rgb(251,191,36)) 85%, transparent)" : "var(--cmx-muted, rgba(240,242,255,0.45))", marginTop: 2, lineHeight: 1.45 }}>
                         {selected.deleteBlocker ?? "Removes it from your store for good — handy for test orders. Can't be recovered."}
                       </div>
                     </div>
                     {!selected.deleteBlocker && (
                       <button
                         type="button" onClick={() => setDeleteOpen(true)}
-                        style={{ flexShrink: 0, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "transparent", color: "#f87171", cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem", fontWeight: 600 }}
+                        style={{ flexShrink: 0, padding: "0.4rem 0.75rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)", background: "transparent", color: "var(--cmx-danger, #f87171)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem", fontWeight: 600 }}
                       >
                         Delete…
                       </button>
@@ -695,35 +694,35 @@ function DeletePanel({
   if (order.digitalDeliveries.length > 0) consequences.push("Any download or access links already sent to the customer will stop working.");
   if (order.booking) consequences.push("Its booked time slot becomes available again.");
   consequences.push("The customer isn't notified.");
-  const field: React.CSSProperties = { width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, color: "#f0f2ff", padding: "0.5rem 0.7rem", fontSize: "0.82rem", fontFamily: "inherit" };
+  const field: React.CSSProperties = { width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.5rem 0.7rem", fontSize: "0.82rem", fontFamily: "inherit" };
   return (
-    <div style={{ marginTop: "0.6rem", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", borderRadius: 12, padding: "1rem", display: "grid", gap: "0.75rem" }}>
+    <div style={{ marginTop: "0.6rem", border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)", background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 5%, transparent)", borderRadius: 12, padding: "1rem", display: "grid", gap: "0.75rem" }}>
       <div>
-        <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#fecaca" }}>Delete order {order.orderNumber} forever?</div>
-        <p style={{ fontSize: "0.78rem", color: "#fecaca", margin: "0.35rem 0 0", lineHeight: 1.5, fontWeight: 600 }}>
+        <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--cmx-danger, #fecaca)" }}>Delete order {order.orderNumber} forever?</div>
+        <p style={{ fontSize: "0.78rem", color: "var(--cmx-danger, #fecaca)", margin: "0.35rem 0 0", lineHeight: 1.5, fontWeight: 600 }}>
           This can&apos;t be recovered. The order, its items and {order.customerName ?? "the customer"}&apos;s details are removed from your store for good.
         </p>
-        <ul style={{ fontSize: "0.76rem", color: "rgba(254,202,202,0.75)", margin: "0.4rem 0 0", paddingLeft: "1.1rem", listStyle: "disc", lineHeight: 1.55 }}>
+        <ul style={{ fontSize: "0.76rem", color: "color-mix(in srgb, var(--cmx-danger, rgb(254,202,202)) 75%, transparent)", margin: "0.4rem 0 0", paddingLeft: "1.1rem", listStyle: "disc", lineHeight: 1.55 }}>
           {consequences.map((c) => <li key={c}>{c}</li>)}
         </ul>
       </div>
       <label style={{ display: "block" }}>
-        <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>
-          Type <span style={{ fontFamily: "ui-monospace, monospace", color: "#f0f2ff" }}>{order.orderNumber}</span> to confirm
+        <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.3rem" }}>
+          Type <span style={{ fontFamily: "ui-monospace, monospace", color: "var(--cmx-text, #f0f2ff)" }}>{order.orderNumber}</span> to confirm
         </span>
         <input type="text" value={confirmNumber} onChange={(e) => onConfirmNumberChange(e.target.value)} autoComplete="off" spellCheck={false} style={{ ...field, fontFamily: "ui-monospace, monospace" }} />
       </label>
-      <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.76rem", color: "rgba(240,242,255,0.7)", cursor: "pointer" }}>
+      <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.76rem", color: "var(--cmx-text, rgba(240,242,255,0.7))", cursor: "pointer" }}>
         <input type="checkbox" checked={acknowledged} onChange={(e) => onAcknowledgedChange(e.target.checked)} style={{ marginTop: 2 }} />
         I understand this order will be deleted permanently and can&apos;t be brought back.
       </label>
       <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-        <button type="button" onClick={onCancel} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
+        <button type="button" onClick={onCancel} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "transparent", color: "var(--cmx-muted, rgba(240,242,255,0.6))", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
           Keep order
         </button>
         <button
           type="button" disabled={!ready} onClick={onSubmit}
-          style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.4)", background: ready ? "rgba(239,68,68,0.2)" : "rgba(239,68,68,0.06)", color: "#f87171", fontWeight: 700, fontSize: "0.8rem", cursor: ready ? "pointer" : "not-allowed", opacity: ready ? 1 : 0.55, fontFamily: "inherit" }}
+          style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 40%, transparent)", background: ready ? "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 20%, transparent)" : "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 6%, transparent)", color: "var(--cmx-danger, #f87171)", fontWeight: 700, fontSize: "0.8rem", cursor: ready ? "pointer" : "not-allowed", opacity: ready ? 1 : 0.55, fontFamily: "inherit" }}
         >
           {busy ? "Deleting…" : "Delete forever"}
         </button>
@@ -755,12 +754,12 @@ function RefundPanel({
   const isBankTransfer = order.paymentMethod === "BANK_TRANSFER";
   const numberMatches = confirmNumber.trim().toUpperCase() === order.orderNumber.toUpperCase();
   const ready = reason.trim().length >= 5 && numberMatches && acknowledged && !busy;
-  const field: React.CSSProperties = { width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 9, color: "#f0f2ff", padding: "0.5rem 0.7rem", fontSize: "0.82rem", fontFamily: "inherit" };
+  const field: React.CSSProperties = { width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.5rem 0.7rem", fontSize: "0.82rem", fontFamily: "inherit" };
   return (
-    <div style={{ marginTop: "0.6rem", border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.05)", borderRadius: 12, padding: "1rem", display: "grid", gap: "0.75rem" }}>
+    <div style={{ marginTop: "0.6rem", border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)", background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 5%, transparent)", borderRadius: 12, padding: "1rem", display: "grid", gap: "0.75rem" }}>
       <div>
-        <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "#fecaca" }}>Refund {amount}</div>
-        <p style={{ fontSize: "0.76rem", color: "rgba(254,202,202,0.75)", margin: "0.3rem 0 0", lineHeight: 1.5 }}>
+        <div style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--cmx-danger, #fecaca)" }}>Refund {amount}</div>
+        <p style={{ fontSize: "0.76rem", color: "color-mix(in srgb, var(--cmx-danger, rgb(254,202,202)) 75%, transparent)", margin: "0.3rem 0 0", lineHeight: 1.5 }}>
           {isBankTransfer
             ? `This order was paid by bank transfer, so Plexo can't send the money back for you. Transfer ${amount} back to the customer yourself first — this marks the order refunded and emails them.`
             : `${amount} goes back to the customer's original payment method via Paystack, and they're emailed. This can't be undone.`}
@@ -768,26 +767,26 @@ function RefundPanel({
         </p>
       </div>
       <label style={{ display: "block" }}>
-        <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>Reason for the refund</span>
+        <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.3rem" }}>Reason for the refund</span>
         <textarea value={reason} onChange={(e) => onReasonChange(e.target.value)} rows={2} maxLength={500} placeholder="e.g. Item arrived damaged" style={{ ...field, resize: "vertical" }} />
       </label>
       <label style={{ display: "block" }}>
-        <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>
-          Type <span style={{ fontFamily: "ui-monospace, monospace", color: "#f0f2ff" }}>{order.orderNumber}</span> to confirm
+        <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.3rem" }}>
+          Type <span style={{ fontFamily: "ui-monospace, monospace", color: "var(--cmx-text, #f0f2ff)" }}>{order.orderNumber}</span> to confirm
         </span>
         <input type="text" value={confirmNumber} onChange={(e) => onConfirmNumberChange(e.target.value)} autoComplete="off" spellCheck={false} style={{ ...field, fontFamily: "ui-monospace, monospace" }} />
       </label>
-      <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.76rem", color: "rgba(240,242,255,0.7)", cursor: "pointer" }}>
+      <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.76rem", color: "var(--cmx-text, rgba(240,242,255,0.7))", cursor: "pointer" }}>
         <input type="checkbox" checked={acknowledged} onChange={(e) => onAcknowledgedChange(e.target.checked)} style={{ marginTop: 2 }} />
         {isBankTransfer ? `I've already sent ${amount} back to the customer.` : "I understand this refund is final."}
       </label>
       <div style={{ display: "flex", gap: "0.5rem", justifyContent: "flex-end" }}>
-        <button type="button" onClick={onCancel} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
+        <button type="button" onClick={onCancel} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "none", background: "transparent", color: "var(--cmx-muted, rgba(240,242,255,0.6))", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit" }}>
           Cancel
         </button>
         <button
           type="button" disabled={!ready} onClick={onSubmit}
-          style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.4)", background: ready ? "rgba(239,68,68,0.2)" : "rgba(239,68,68,0.06)", color: "#f87171", fontWeight: 700, fontSize: "0.8rem", cursor: ready ? "pointer" : "not-allowed", opacity: ready ? 1 : 0.55, fontFamily: "inherit" }}
+          style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 40%, transparent)", background: ready ? "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 20%, transparent)" : "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 6%, transparent)", color: "var(--cmx-danger, #f87171)", fontWeight: 700, fontSize: "0.8rem", cursor: ready ? "pointer" : "not-allowed", opacity: ready ? 1 : 0.55, fontFamily: "inherit" }}
         >
           {busy ? "Refunding…" : isBankTransfer ? "Mark as refunded" : `Refund ${amount}`}
         </button>
@@ -799,7 +798,7 @@ function RefundPanel({
 function FieldLabel({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "block", marginTop: "0.75rem" }}>
-      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>{label}</span>
+      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.35rem" }}>{label}</span>
       {children}
     </label>
   );

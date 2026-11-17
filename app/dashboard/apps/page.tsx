@@ -5,6 +5,8 @@ import { Template } from "@/lib/db/contentEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
 import { previewUrl } from "@/lib/projects/previewHost";
 import { lockedTierFor } from "@/lib/ai/solEngine";
+import { redirectToSitesIfV3 } from "@/lib/dashboardV3/hubRedirect";
+import { LegacyBridge } from "../_v3/LegacyBridge";
 import { AppsHome, type HomeApp } from "./_components/AppsHome";
 
 export const dynamic = "force-dynamic";
@@ -16,11 +18,14 @@ export default async function AppsPage({ searchParams }: { searchParams: Promise
   const org = await ensureActiveOrganization(session.user.id);
   if (org.status === "needs-choice") redirect("/choose-org");
   const query = await searchParams;
-
   const { data } = await Template.query.byOrg({ organizationId: org.organizationId }).go({ pages: "all" });
   const projects = data
     .filter((t) => t.sourceType === "REACT_PROJECT" && !t.parentId)
     .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+
+  // The new dashboard lists apps with the sites. Making a new app (?create=1) and returns from other tools stay here.
+  const keys = Object.keys(query);
+  if (projects.length > 0 && (keys.length === 0 || (keys.length === 1 && query.view === "all"))) await redirectToSitesIfV3("apps");
 
   // "Needs a fix": the app's newest build didn't work.
   const apps: HomeApp[] = await Promise.all(
@@ -39,5 +44,9 @@ export default async function AppsPage({ searchParams }: { searchParams: Promise
 
   const lockedModelTier = await lockedTierFor(session.user.id);
 
-  return <AppsHome lockedModelTier={lockedModelTier} apps={apps} userName={session.user.name?.split(" ")[0] ?? null} showAll={query.view === "all"} />;
+  return (
+    <LegacyBridge>
+      <AppsHome lockedModelTier={lockedModelTier} apps={apps} userName={session.user.name?.split(" ")[0] ?? null} showAll={query.view === "all"} />
+    </LegacyBridge>
+  );
 }

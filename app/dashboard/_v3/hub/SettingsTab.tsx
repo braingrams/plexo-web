@@ -64,11 +64,21 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
             </div>
           </Card>
         ) : null}
+        <Card>
+          <CardHeader title="Visitors and your site's pages" description="Everything that happens around your pages, in one place." />
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
+            <ButtonLink href={`/dashboard/templates/${site.id}/form-submissions`} variant="link">Form replies and where they go</ButtonLink>
+            <ButtonLink href={`/dashboard/templates/${site.id}/redirects`} variant="link">Send an old link to a new page</ButtonLink>
+            <ButtonLink href={`/dashboard/templates/${site.id}/site-layout`} variant="link">Shared top and bottom of every page</ButtonLink>
+            <ButtonLink href={`/dashboard/templates/${site.id}/site-import`} variant="link">Bring in pages from another site</ButtonLink>
+            {experience === "pro" ? <ButtonLink href={`/dashboard/templates/${site.id}/content-types`} variant="link">Your own lists of content</ButtonLink> : null}
+          </div>
+        </Card>
         {experience === "pro" ? (
           <Card tone="elevated">
             <CardHeader title="How this site is built" description={`This site uses: ${builderLabel(site)}.`} />
             <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-start" }}>
-              <ButtonLink href={`/dashboard/templates/${site.id}/detail`} variant="link">Open advanced site settings</ButtonLink>
+              <ButtonLink href={`/dashboard/templates/${site.id}/detail?classic=1`} variant="link">Open advanced site settings</ButtonLink>
               <ButtonLink href="/dashboard/apps" variant="link">See my apps</ButtonLink>
             </div>
           </Card>

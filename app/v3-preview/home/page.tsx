@@ -4,6 +4,8 @@ import type { HomeProps, HomeSiteRow } from "@/app/dashboard/_v3/home/homeTypes"
 import { computeTasks, EMPTY_FACTS, type SiteFacts } from "@/lib/dashboardV3/tasks";
 import type { SiteStats } from "@/lib/dashboardV3/homeData";
 import type { SiteSummary } from "@/lib/dashboardV3/sites";
+import { MANY_SITES } from "../fixtures";
+import { PreviewNotices } from "../PreviewNotices";
 
 // Same made-up sites the preview shell shows (kept here: that module is a client file).
 const PREVIEW_SITES: SiteSummary[] = [
@@ -47,13 +49,15 @@ export default async function HomePreview({ searchParams }: { searchParams: Prom
     published: state === "live",
   };
   const progress = computeTasks("store", facts);
-  const rows: HomeSiteRow[] = PREVIEW_SITES.map((s, i) => ({
+  const list = q.sites === "many" ? MANY_SITES : PREVIEW_SITES;
+  const rows: HomeSiteRow[] = list.map((s, i) => ({
     site: s,
-    stats: i === 0 ? STORE_STATS : { ...STORE_STATS, stats: [{ id: "visits", label: "Visits this week", value: String(240 - i * 90) }, { id: "students", label: "Students", value: String(18 - i * 9) }] },
+    stats: i === 0 ? STORE_STATS : { ...STORE_STATS, stats: [{ id: "visits", label: "Visits this week", value: String(Math.max(0, 240 - i * 90)) }, { id: "students", label: "Students", value: String(Math.max(0, 18 - i * 9)) }] },
   }));
   const props: HomeProps = {
     firstName: "Ama",
     experience,
+    tuneHref: q.tune === "1" ? "/welcome/setup" : undefined,
     mode: state === "skipped" ? "none" : state === "all" ? "all" : "site",
     site: { site, progress, commerceEnabled: true, stats: progress.allDone ? STORE_STATS : null },
     all: rows,
@@ -62,5 +66,10 @@ export default async function HomePreview({ searchParams }: { searchParams: Prom
     newSiteHref: "/welcome/setup?new=1",
     demo: true,
   };
-  return <HomeView {...props} />;
+  return (
+    <>
+      {q.alert === "1" ? <PreviewNotices /> : null}
+      <HomeView {...props} />
+    </>
+  );
 }

@@ -14,8 +14,8 @@ import { getPusherClient, userChannelName } from "@/lib/realtime/pusherClient";
 function dropdownLookStyle(width: number): React.CSSProperties {
   return {
     width,
-    background: "rgba(13,15,26,0.98)",
-    border: "1px solid rgba(255,255,255,0.09)",
+    background: "var(--plx-surface, rgba(13,15,26,0.98))",
+    border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 9%, transparent)",
     borderRadius: 14,
     boxShadow: "0 24px 60px -12px rgba(0,0,0,0.6)",
     backdropFilter: "blur(20px)",
@@ -161,9 +161,9 @@ export function OrgSwitcher({ organizationName, anchor = "right" }: { organizati
         onClick={() => setOpen((v) => !v)}
         style={{
           display: "flex", alignItems: "center", gap: "0.4rem",
-          background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+          background: "color-mix(in srgb, var(--plx-text, #fff) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
           borderRadius: 999, padding: "0.35rem 0.75rem", cursor: "pointer",
-          color: "#f0f2ff", fontSize: "0.78rem", fontWeight: 600,
+          color: "var(--plx-text, #f0f2ff)", fontSize: "0.78rem", fontWeight: 600,
           maxWidth: 160, overflow: "hidden",
         }}
       >
@@ -173,11 +173,11 @@ export function OrgSwitcher({ organizationName, anchor = "right" }: { organizati
 
       {open && coords && createPortal(
         <div ref={popoverRef} style={{ position: "fixed", zIndex: 1000, ...coords, ...dropdownLookStyle(280) }}>
-          <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.4)", padding: "0.4rem 0.6rem" }}>
+          <p style={{ fontSize: "0.7rem", color: "var(--plx-muted, rgba(240,242,255,0.4))", padding: "0.4rem 0.6rem" }}>
             Switch organization
           </p>
           {!loaded && (
-            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", padding: "0.4rem 0.6rem" }}>Loading…</p>
+            <p style={{ fontSize: "0.78rem", color: "var(--plx-muted, rgba(240,242,255,0.5))", padding: "0.4rem 0.6rem" }}>Loading…</p>
           )}
           {orgs.map((org) => (
             <button
@@ -187,19 +187,19 @@ export function OrgSwitcher({ organizationName, anchor = "right" }: { organizati
                 display: "block", width: "100%", textAlign: "left",
                 padding: "0.55rem 0.6rem", borderRadius: 10, border: "none",
                 background: org.name === organizationName ? "var(--brand-subtle)" : "transparent",
-                color: "#f0f2ff", fontSize: "0.82rem", cursor: "pointer",
+                color: "var(--plx-text, #f0f2ff)", fontSize: "0.82rem", cursor: "pointer",
               }}
             >
               {org.name}
             </button>
           ))}
-          <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", margin: "0.4rem 0" }} />
+          <div style={{ borderTop: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)", margin: "0.4rem 0" }} />
           <Link
             href="/dashboard/settings/team"
             onClick={() => setOpen(false)}
             style={{
               display: "block", padding: "0.55rem 0.6rem", borderRadius: 10,
-              color: "var(--brand)", fontSize: "0.82rem", textDecoration: "none", fontWeight: 600,
+              color: "var(--plx-link, var(--brand))", fontSize: "0.82rem", textDecoration: "none", fontWeight: 600,
             }}
           >
             Manage team →
@@ -305,7 +305,7 @@ export function NotificationBell({ anchor = "right" }: { anchor?: "left" | "righ
         aria-label="Notifications"
         style={{
           position: "relative", background: "none", border: "none", cursor: "pointer",
-          color: "#f0f2ff", padding: "0.4rem", borderRadius: 8, display: "flex", alignItems: "center",
+          color: "var(--plx-text, #f0f2ff)", padding: "0.4rem", borderRadius: 8, display: "flex", alignItems: "center",
         }}
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -315,7 +315,7 @@ export function NotificationBell({ anchor = "right" }: { anchor?: "left" | "righ
         {unreadCount > 0 && (
           <span style={{
             position: "absolute", top: 2, right: 2, minWidth: 15, height: 15, borderRadius: 999,
-            background: "#ef4444", color: "#fff", fontSize: "0.6rem", fontWeight: 700,
+            background: "var(--plx-danger, #ef4444)", color: "var(--plx-on-danger, #fff)", fontSize: "0.6rem", fontWeight: 700,
             display: "grid", placeItems: "center", padding: "0 3px",
           }}>
             {unreadCount > 9 ? "9+" : unreadCount}
@@ -329,18 +329,18 @@ export function NotificationBell({ anchor = "right" }: { anchor?: "left" | "righ
           style={{ position: "fixed", zIndex: 1000, maxHeight: 360, overflowY: "auto", ...coords, ...dropdownLookStyle(320) }}
         >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.3rem 0.6rem 0.5rem" }}>
-            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#f0f2ff" }}>Notifications</span>
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>Notifications</span>
             {unreadCount > 0 && (
               <button
                 onClick={markAllRead}
-                style={{ background: "none", border: "none", color: "var(--brand)", fontSize: "0.72rem", cursor: "pointer" }}
+                style={{ background: "none", border: "none", color: "var(--plx-link, var(--brand))", fontSize: "0.72rem", cursor: "pointer" }}
               >
                 Mark all read
               </button>
             )}
           </div>
           {items.length === 0 && (
-            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", padding: "0.8rem 0.6rem", textAlign: "center" }}>
+            <p style={{ fontSize: "0.78rem", color: "var(--plx-muted, rgba(240,242,255,0.4))", padding: "0.8rem 0.6rem", textAlign: "center" }}>
               You're all caught up.
             </p>
           )}
@@ -351,12 +351,12 @@ export function NotificationBell({ anchor = "right" }: { anchor?: "left" | "righ
               style={{
                 display: "block", width: "100%", textAlign: "left",
                 padding: "0.6rem", borderRadius: 10, border: "none", marginBottom: 2,
-                background: item.readAt ? "transparent" : "rgba(var(--brand-rgb),0.08)",
-                color: "#f0f2ff", fontSize: "0.8rem", cursor: "pointer",
+                background: item.readAt ? "transparent" : "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 8%, transparent)",
+                color: "var(--plx-text, #f0f2ff)", fontSize: "0.8rem", cursor: "pointer",
               }}
             >
               <strong>{item.actorName ?? "Someone"}</strong>{" "}
-              <span style={{ color: "rgba(240,242,255,0.6)" }}>
+              <span style={{ color: "var(--plx-muted, rgba(240,242,255,0.6))" }}>
                 {NOTIFICATION_LABEL[item.type] ?? "sent you a notification"}
               </span>
             </button>

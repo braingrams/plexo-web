@@ -68,7 +68,7 @@ export function GitHubAccountsClient() {
       ))}
 
       {notice ? <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-muted)" }}>{notice}</p> : null}
-      {error ? <p style={{ margin: 0, fontSize: 12.5, color: "#f87171" }}>{error}</p> : null}
+      {error ? <p style={{ margin: 0, fontSize: 12.5, color: "var(--plx-danger, #f87171)" }}>{error}</p> : null}
     </div>
   );
 }
@@ -91,9 +91,9 @@ function revokeButton(enabled: boolean): CSSProperties {
   return {
     padding: "8px 14px",
     borderRadius: 9,
-    border: "1px solid #f87171",
+    border: "1px solid var(--plx-danger, #f87171)",
     background: "transparent",
-    color: "#f87171",
+    color: "var(--plx-danger, #f87171)",
     fontWeight: 650,
     fontSize: 13,
     cursor: enabled ? "pointer" : "not-allowed",

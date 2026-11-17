@@ -69,8 +69,8 @@ const actionButtonStyle: CSSProperties = {
   cursor: "pointer",
   fontSize: "0.8rem",
   fontWeight: 700,
-  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-  color: "#fff",
+  background: "var(--plx-brand, linear-gradient(135deg,var(--brand),var(--brand-deep)))",
+  color: "var(--plx-text, #fff)",
   fontFamily: "inherit",
   boxShadow: "0 3px 14px var(--brand-glow)",
   textAlign: "left",
@@ -79,8 +79,8 @@ const actionButtonStyle: CSSProperties = {
 const secondaryButtonStyle: CSSProperties = {
   ...actionButtonStyle,
   background: "transparent",
-  border: "1px solid rgba(255,255,255,0.1)",
-  color: "rgba(240,242,255,0.75)",
+  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
+  color: "var(--plx-text, rgba(240,242,255,0.75))",
   boxShadow: "none",
 };
 
@@ -281,8 +281,8 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
   return (
     <div
       style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
         borderRadius: 16,
         overflow: "hidden",
       }}
@@ -293,16 +293,16 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           alignItems: "center",
           justifyContent: "space-between",
           padding: "1.25rem 1.5rem",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)",
           flexWrap: "wrap",
           gap: "0.75rem",
         }}
       >
         <div>
-          <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>
+          <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>
             Billing &amp; Credits
           </h2>
-          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)" }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>
             AI features you use without your own AI key draw from this balance.
           </p>
         </div>
@@ -318,8 +318,8 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
             letterSpacing: "0.06em",
             textTransform: "uppercase",
             background: "var(--brand-subtle)",
-            color: "var(--brand)",
-            border: "1px solid rgba(var(--brand-rgb),0.25)",
+            color: "var(--plx-link, var(--brand))",
+            border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)",
           }}
         >
           {PLAN_LABELS[plan]} plan
@@ -331,9 +331,9 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           <div
             style={{
               display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.7rem 1rem", borderRadius: 10, fontSize: "0.82rem",
-              background: checkoutStatus.kind === "success" ? "rgba(52,211,153,0.1)" : checkoutStatus.kind === "error" ? "rgba(248,113,113,0.1)" : "rgba(251,191,36,0.1)",
-              border: `1px solid ${checkoutStatus.kind === "success" ? "rgba(52,211,153,0.25)" : checkoutStatus.kind === "error" ? "rgba(248,113,113,0.25)" : "rgba(251,191,36,0.25)"}`,
-              color: checkoutStatus.kind === "success" ? "#4ade80" : checkoutStatus.kind === "error" ? "#f87171" : "#fbbf24",
+              background: checkoutStatus.kind === "success" ? "color-mix(in srgb, var(--plx-success, rgb(52 211 153)) 10%, transparent)" : checkoutStatus.kind === "error" ? "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 10%, transparent)" : "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 10%, transparent)",
+              border: `1px solid ${checkoutStatus.kind === "success" ? "color-mix(in srgb, var(--plx-success, rgb(52 211 153)) 25%, transparent)" : checkoutStatus.kind === "error" ? "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 25%, transparent)" : "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 25%, transparent)"}`,
+              color: checkoutStatus.kind === "success" ? "var(--plx-success, #4ade80)" : checkoutStatus.kind === "error" ? "var(--plx-danger, #f87171)" : "var(--plx-warning, #fbbf24)",
             }}
           >
             {checkoutStatus.text}
@@ -343,31 +343,31 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
         {/* Balance */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem" }}>
           <div>
-            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.25rem" }}>
+            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.25rem" }}>
               Total balance
             </p>
-            <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff" }}>{total.toLocaleString()} credits</p>
+            <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--plx-text, #f0f2ff)" }}>{total.toLocaleString()} credits</p>
           </div>
           <div>
-            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.25rem" }}>
+            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.25rem" }}>
               Monthly allowance
             </p>
-            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "rgba(240,242,255,0.75)" }}>{allowanceBalance.toLocaleString()} left</p>
-            <p suppressHydrationWarning style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>
+            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--plx-text, rgba(240,242,255,0.75))" }}>{allowanceBalance.toLocaleString()} left</p>
+            <p suppressHydrationWarning style={{ fontSize: "0.7rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>
               Resets in {daysUntil(allowanceResetAt)}d ({formatDate(allowanceResetAt)})
             </p>
           </div>
           <div>
-            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.25rem" }}>
+            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.25rem" }}>
               Top-up balance
             </p>
-            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "rgba(240,242,255,0.75)" }}>{topupBalance.toLocaleString()}</p>
-            <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>Never expires</p>
+            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--plx-text, rgba(240,242,255,0.75))" }}>{topupBalance.toLocaleString()}</p>
+            <p style={{ fontSize: "0.7rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>Never expires</p>
           </div>
         </div>
         {total < 0 && (
-          <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "#fcd34d", background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, padding: "0.7rem 0.9rem" }}>
-            <strong style={{ color: "#fde68a" }}>Why is my balance below zero?</strong>{" "}Your credits ran out while SOL was partway through a step.
+          <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "var(--plx-warning, #fcd34d)", background: "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 7%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 25%, transparent)", borderRadius: 10, padding: "0.7rem 0.9rem" }}>
+            <strong style={{ color: "var(--plx-warning, #fde68a)" }}>Why is my balance below zero?</strong>{" "}Your credits ran out while SOL was partway through a step.
             We let it finish rather than stop, so your work wasn&apos;t left half-done. That amount is taken off your next monthly credits or
             top-up first; until you&apos;re back above zero, SOL waits for you to add credits.
           </p>
@@ -375,16 +375,16 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
 
         {/* Plan actions */}
         <div>
-          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
             Plan
           </p>
           {planNote && (
             <p
               style={{
                 fontSize: "0.82rem", lineHeight: 1.5, marginBottom: "0.75rem", padding: "0.6rem 0.9rem", borderRadius: 10,
-                color: planNote.tone === "warning" ? "#fbbf24" : "rgba(240,242,255,0.75)",
-                background: planNote.tone === "warning" ? "rgba(251,191,36,0.08)" : "rgba(var(--brand-rgb),0.07)",
-                border: `1px solid ${planNote.tone === "warning" ? "rgba(251,191,36,0.25)" : "rgba(var(--brand-rgb),0.25)"}`,
+                color: planNote.tone === "warning" ? "var(--plx-warning, #fbbf24)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 75%, transparent)",
+                background: planNote.tone === "warning" ? "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 8%, transparent)" : "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 7%, transparent)",
+                border: `1px solid ${planNote.tone === "warning" ? "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 25%, transparent)" : "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)"}`,
               }}
             >
               {planNote.text}
@@ -394,7 +394,7 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
             <p
               style={{
                 fontSize: "0.82rem", lineHeight: 1.5, marginBottom: "0.75rem", padding: "0.6rem 0.9rem", borderRadius: 10,
-                color: "rgba(240,242,255,0.75)", background: "rgba(var(--brand-rgb),0.07)", border: "1px solid rgba(var(--brand-rgb),0.25)",
+                color: "var(--plx-text, rgba(240,242,255,0.75))", background: "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 7%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)",
               }}
             >
               {`From your next renewal${scheduled.at ? ` on ${formatDate(scheduled.at)}` : ""} you'll be on ${PLAN_LABELS[scheduled.plan]}${scheduled.priceLabel ? ` at ${scheduled.priceLabel}` : ""}. It includes everything you have today — nothing for you to do.`}
@@ -434,11 +434,11 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
         {/* Funnel add-on slots */}
         {funnelSlots && (
           <div>
-            <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+            <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
               Funnel slots
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "0.83rem", color: "rgba(240,242,255,0.6)" }}>
+              <span style={{ fontSize: "0.83rem", color: "var(--plx-muted, rgba(240,242,255,0.6))" }}>
                 {funnelSlots.used} of {funnelSlots.total} in use
               </span>
               <button
@@ -450,7 +450,7 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
                 {busyAction === "addon-funnel-slot" ? "Opening…" : "Buy another funnel slot"}
               </button>
             </div>
-            <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)", marginTop: "0.4rem" }}>
+            <p style={{ fontSize: "0.7rem", color: "var(--plx-faint, rgba(240,242,255,0.35))", marginTop: "0.4rem" }}>
               Billed monthly in US dollars, per slot. Cancel any time from &quot;Manage subscription&quot; above.
             </p>
           </div>
@@ -458,7 +458,7 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
 
         {/* Top-up packs */}
         <div>
-          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
             Buy credits
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem" }}>
@@ -481,15 +481,15 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           </div>
         </div>
 
-        {error && <p style={{ fontSize: "0.78rem", color: "#f87171" }}>{error}</p>}
+        {error && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)" }}>{error}</p>}
 
         {/* Recent activity */}
         <div>
-          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
             Recent activity
           </p>
           {recentActivity.length === 0 ? (
-            <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.35)" }}>No credit activity yet.</p>
+            <p style={{ fontSize: "0.8rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>No credit activity yet.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
               {recentActivity.map((entry) => (
@@ -501,19 +501,19 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
                     justifyContent: "space-between",
                     padding: "0.5rem 0.75rem",
                     borderRadius: 9,
-                    background: "rgba(255,255,255,0.02)",
-                    border: "1px solid rgba(255,255,255,0.05)",
+                    background: "color-mix(in srgb, var(--plx-text, #fff) 2%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)",
                     fontSize: "0.8rem",
                     gap: "0.75rem",
                   }}
                 >
                   <div>
-                    <p style={{ color: "#f0f2ff", fontWeight: 600 }}>{TYPE_LABELS[entry.type]}</p>
-                    <p style={{ color: "rgba(240,242,255,0.35)", fontSize: "0.7rem" }}>
+                    <p style={{ color: "var(--plx-text, #f0f2ff)", fontWeight: 600 }}>{TYPE_LABELS[entry.type]}</p>
+                    <p style={{ color: "var(--plx-faint, rgba(240,242,255,0.35))", fontSize: "0.7rem" }}>
                       {entry.description ?? "—"} · {formatDate(entry.createdAt)}
                     </p>
                   </div>
-                  <span style={{ fontWeight: 700, color: entry.amount >= 0 ? "#34d399" : "#f87171", whiteSpace: "nowrap" }}>
+                  <span style={{ fontWeight: 700, color: entry.amount >= 0 ? "var(--plx-success, #34d399)" : "var(--plx-danger, #f87171)", whiteSpace: "nowrap" }}>
                     {entry.amount >= 0 ? "+" : ""}
                     {entry.amount.toLocaleString()}
                   </span>

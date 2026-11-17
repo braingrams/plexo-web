@@ -1,3 +1,4 @@
+import { redirectToHubIfV3 } from "@/lib/dashboardV3/hubRedirect";
 import Link from "next/link";
 import { Template } from "@/lib/db/contentEntities";
 import { CommerceSettings, CommerceProduct, CommerceOrder, CommerceBooking } from "@/lib/db/commerceEntities";
@@ -8,8 +9,8 @@ function StatTile({ label, value, tint, icon }: { label: string; value: string; 
     <div style={{
       flex: 1,
       minWidth: 150,
-      background: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.08)",
+      background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
+      border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)",
       borderRadius: 14,
       padding: "1rem 1.1rem",
       display: "flex",
@@ -18,8 +19,8 @@ function StatTile({ label, value, tint, icon }: { label: string; value: string; 
       gap: "0.75rem",
     }}>
       <div>
-        <div style={{ fontSize: "1.5rem", fontWeight: 600, color: "#f0f2ff", fontVariantNumeric: "tabular-nums" }}>{value}</div>
-        <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", marginTop: 2 }}>{label}</div>
+        <div style={{ fontSize: "1.5rem", fontWeight: 600, color: "var(--cmx-text, #f0f2ff)", fontVariantNumeric: "tabular-nums" }}>{value}</div>
+        <div style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", marginTop: 2 }}>{label}</div>
       </div>
       <div style={{
         width: 38, height: 38, borderRadius: 10, flexShrink: 0,
@@ -34,8 +35,10 @@ function StatTile({ label, value, tint, icon }: { label: string; value: string; 
 // Real Overview, scoped to this one site (see the layout for the ownership check) — stat
 // tiles and the orders list are honest about being empty until checkout (step 2) exists;
 // this page starts reading real data on day one rather than shipping fake numbers now.
-export default async function CommerceOverviewPage({ params }: { params: Promise<{ templateId: string }> }) {
+export default async function CommerceOverviewPage({ params, searchParams }: { params: Promise<{ templateId: string }>; searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const { templateId } = await params;
+  // New dashboard: the shop is the site's Products tab.
+  await redirectToHubIfV3(templateId, "products", (await searchParams)?.classic);
 
   const { data: site } = await Template.get({ id: templateId }).go();
 
@@ -66,9 +69,9 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
           href={`/dashboard/commerce/${templateId}/settings`}
           style={{
             display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem",
-            background: "rgba(var(--brand-rgb),0.1)", border: "1px solid rgba(var(--brand-rgb),0.3)",
+            background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 30%, transparent)",
             borderRadius: 12, padding: "0.8rem 1.1rem", marginBottom: "1.25rem",
-            fontSize: "0.83rem", color: "#c4b5fd", textDecoration: "none",
+            fontSize: "0.83rem", color: "var(--cmx-violet, #c4b5fd)", textDecoration: "none",
           }}
         >
           <span style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
@@ -84,9 +87,9 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
       {lowStockCount > 0 && (
         <div style={{
           display: "flex", alignItems: "center", gap: "0.6rem",
-          background: "rgba(251,191,36,0.1)", border: "1px solid rgba(251,191,36,0.25)",
+          background: "color-mix(in srgb, var(--cmx-warning, rgb(251,191,36)) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-warning, rgb(251,191,36)) 25%, transparent)",
           borderRadius: 12, padding: "0.7rem 1rem", marginBottom: "1.25rem",
-          fontSize: "0.83rem", color: "#fbbf24",
+          fontSize: "0.83rem", color: "var(--cmx-warning, #fbbf24)",
         }}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 9v4M12 17h.01" /><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /></svg>
           {lowStockCount} product{lowStockCount === 1 ? "" : "s"} running low on stock.
@@ -97,39 +100,39 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
         <StatTile
           label="Products"
           value={String(activeProducts.length)}
-          tint="rgba(var(--brand-rgb),0.16)"
-          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-light)" strokeWidth="1.8"><path d="M3 9l2-5h14l2 5" /><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z" /></svg>}
+          tint="color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 16%, transparent)"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cmx-accent, var(--brand-light))" strokeWidth="1.8"><path d="M3 9l2-5h14l2 5" /><path d="M3 9h18v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9z" /></svg>}
         />
         <StatTile
           label="Orders"
           value={String(paidOrders.length)}
-          tint="rgba(96,165,250,0.16)"
-          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" /></svg>}
+          tint="color-mix(in srgb, var(--cmx-info, rgb(96,165,250)) 16%, transparent)"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cmx-info, #60a5fa)" strokeWidth="1.8"><path d="M6 2h9l5 5v13a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" /></svg>}
         />
         <StatTile
           label="Total sales"
           value={formatMoney(salesTotal, settings?.currency ?? "NGN")}
-          tint="rgba(52,211,153,0.16)"
-          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="1.8"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>}
+          tint="color-mix(in srgb, var(--cmx-success, rgb(52,211,153)) 16%, transparent)"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cmx-success, #34d399)" strokeWidth="1.8"><path d="M12 1v22M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>}
         />
         <StatTile
           label="Upcoming bookings"
           value={String(upcomingBookingCount)}
-          tint="rgba(251,191,36,0.16)"
-          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="1.8"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" /></svg>}
+          tint="color-mix(in srgb, var(--cmx-warning, rgb(251,191,36)) 16%, transparent)"
+          icon={<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cmx-warning, #fbbf24)" strokeWidth="1.8"><rect x="3" y="4" width="18" height="17" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" /></svg>}
         />
       </div>
 
       <div style={{
-        background: "rgba(255,255,255,0.02)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)",
         borderRadius: 14,
         padding: "1.25rem 1.4rem",
       }}>
-        <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "#f0f2ff", marginBottom: "0.9rem" }}>Recent orders</div>
+        <div style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--cmx-text, #f0f2ff)", marginBottom: "0.9rem" }}>Recent orders</div>
 
         {recentOrders.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "2.5rem 1rem", color: "rgba(240,242,255,0.4)" }}>
+          <div style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}>
             <p style={{ fontSize: "0.85rem", margin: 0 }}>
               No orders yet — they'll show up here once checkout is live and someone pays.
             </p>
@@ -138,7 +141,7 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
               <thead>
-                <tr style={{ color: "rgba(240,242,255,0.4)", textAlign: "left" }}>
+                <tr style={{ color: "var(--cmx-muted, rgba(240,242,255,0.4))", textAlign: "left" }}>
                   <th style={{ fontWeight: 500, paddingBottom: 8 }}>Order</th>
                   <th style={{ fontWeight: 500, paddingBottom: 8 }}>Customer</th>
                   <th style={{ fontWeight: 500, paddingBottom: 8 }}>Total</th>
@@ -148,12 +151,12 @@ export default async function CommerceOverviewPage({ params }: { params: Promise
               </thead>
               <tbody>
                 {recentOrders.map((order) => (
-                  <tr key={order.orderNumber} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "#e2e4f5" }}>
+                  <tr key={order.orderNumber} style={{ borderTop: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)", color: "var(--cmx-text, #e2e4f5)" }}>
                     <td style={{ padding: "10px 0", fontFamily: "ui-monospace, monospace" }}>{order.orderNumber}</td>
                     <td style={{ padding: "10px 0" }}>{order.customerName ?? order.customerEmail}</td>
                     <td style={{ padding: "10px 0", fontFamily: "ui-monospace, monospace" }}>{formatMoney(order.amountMinor, settings?.currency ?? "NGN")}</td>
-                    <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.55)" }}>{(order.fulfillmentStatus ?? "UNFULFILLED").replace(/_/g, " ").toLowerCase()}</td>
-                    <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.4)" }}>{new Date(order.createdAt ?? Date.now()).toLocaleDateString()}</td>
+                    <td style={{ padding: "10px 0", color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>{(order.fulfillmentStatus ?? "UNFULFILLED").replace(/_/g, " ").toLowerCase()}</td>
+                    <td style={{ padding: "10px 0", color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}>{new Date(order.createdAt ?? Date.now()).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>

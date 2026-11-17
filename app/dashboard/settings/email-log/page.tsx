@@ -1,4 +1,7 @@
 import { redirect } from "next/navigation";
+import { getV3SettingsContext } from "@/lib/dashboardV3/settingsContext";
+import { SettingsPage } from "../../_v3/settings/SettingsPage";
+import { SettingsPageShell } from "../../_v3/settings/bits";
 
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
@@ -17,6 +20,7 @@ export default async function EmailLogPage() {
     redirect("/auth/login?redirectTo=/dashboard/settings/email-log");
   }
 
+  const v3 = await getV3SettingsContext("/dashboard/settings/email-log");
   const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
@@ -29,6 +33,26 @@ export default async function EmailLogPage() {
     .byOrg({ organizationId: orgResolution.organizationId })
     .go({ order: "desc", limit: PAGE_SIZE });
 
+  const rows = logs.map((l) => ({
+    id: l.id,
+    to: l.to,
+    subject: l.subject,
+    context: l.context,
+    status: l.status,
+    errorMessage: l.errorMessage,
+    createdAt: l.createdAt ?? "",
+  }));
+
+  if (v3) {
+    return (
+      <SettingsPage current="developers" experience={v3.experience}>
+        <SettingsPageShell title="Emails we sent for you" purpose={`The last ${logs.length} email${logs.length === 1 ? "" : "s"} Plexo sent for ${orgResolution.organizationName}, such as sign-in links and order notices.`}>
+          <EmailLogClient logs={rows} />
+        </SettingsPageShell>
+      </SettingsPage>
+    );
+  }
+
   return (
     <SettingsShell>
       <PageHeader
@@ -37,15 +61,7 @@ export default async function EmailLogPage() {
         subtitle={`The last ${logs.length} transactional/notification email(s) sent on behalf of ${orgResolution.organizationName}.`}
       />
       <EmailLogClient
-        logs={logs.map((l) => ({
-          id: l.id,
-          to: l.to,
-          subject: l.subject,
-          context: l.context,
-          status: l.status,
-          errorMessage: l.errorMessage,
-          createdAt: l.createdAt ?? "",
-        }))}
+        logs={rows}
       />
     </SettingsShell>
   );

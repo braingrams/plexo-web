@@ -23,7 +23,7 @@ export function FeedbackButton() {
       title="Feedback: tell us what is not working"
       style={{
         background: "none", border: "none", cursor: "pointer",
-        color: "var(--color-text-primary, var(--text-main, #f0f2ff))", padding: "0.4rem", borderRadius: 8, display: "flex", alignItems: "center",
+        color: "var(--color-text-primary, var(--text-main, var(--plx-text, #f0f2ff)))", padding: "0.4rem", borderRadius: 8, display: "flex", alignItems: "center",
       }}
     >
       <IconFeedback />

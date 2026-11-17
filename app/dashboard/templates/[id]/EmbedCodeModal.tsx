@@ -117,25 +117,25 @@ export function EmbedCodeModal({ onClose, siteId, pageId, canAddForMe = true, on
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", zIndex: 9998 }} />
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "var(--plx-overlay, rgba(0,0,0,0.5))", backdropFilter: "blur(4px)", zIndex: 9998 }} />
       <div
         style={{
           position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
           width: "100%", maxWidth: "580px", maxHeight: "85vh", overflowY: "auto",
-          background: "rgba(18,16,36,0.98)", backdropFilter: "blur(20px)",
-          border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16,
+          background: "var(--ed-panel)", backdropFilter: "blur(20px)",
+          border: "1px solid var(--ed-w-080)", borderRadius: 16,
           boxShadow: "0 20px 60px rgba(0,0,0,0.5)", zIndex: 9999,
           padding: "1.75rem", display: "flex", flexDirection: "column", gap: "1.25rem",
         }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#f0f2ff", margin: 0 }}>Add to a page</h3>
-            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 0" }}>
+            <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--ed-text)", margin: 0 }}>Add to a page</h3>
+            <p style={{ fontSize: "0.78rem", color: "var(--ed-t-450)", margin: "0.3rem 0 0" }}>
               Copy this snippet into your HTML anywhere you want it to appear. Works in the visual builder (an HTML block), raw HTML pages and React projects. Shop blocks need Commerce enabled.
             </p>
           </div>
-          <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.4)", fontSize: "1.2rem", lineHeight: 1, padding: "0.2rem" }}>
+          <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ed-t-400)", fontSize: "1.2rem", lineHeight: 1, padding: "0.2rem" }}>
             ×
           </button>
         </div>
@@ -148,51 +148,51 @@ export function EmbedCodeModal({ onClose, siteId, pageId, canAddForMe = true, on
               onClick={() => setBlock(b.key)}
               style={{
                 padding: "0.4rem 0.75rem", borderRadius: 8, fontSize: "0.78rem", fontWeight: 600,
-                background: block === b.key ? "rgba(var(--brand-rgb),0.14)" : "rgba(255,255,255,0.03)",
-                border: block === b.key ? "1px solid rgba(var(--brand-rgb),0.35)" : "1px solid rgba(255,255,255,0.08)",
-                color: block === b.key ? "var(--brand)" : "rgba(240,242,255,0.65)", cursor: "pointer",
+                background: block === b.key ? "color-mix(in srgb, var(--brand) 14%, transparent)" : "var(--ed-w-030)",
+                border: block === b.key ? "1px solid color-mix(in srgb, var(--brand) 35%, transparent)" : "1px solid var(--ed-w-080)",
+                color: block === b.key ? "var(--ed-accent-text)" : "var(--ed-t-650)", cursor: "pointer",
               }}
             >
               {b.label}
             </button>
           ))}
         </div>
-        <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: 0 }}>{active.description}</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)", margin: 0 }}>{active.description}</p>
 
         {block === "content_list" && (
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 140px" }}>
-              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block", marginBottom: "0.3rem" }}>Content name (as in Content Types)</label>
-              <input type="text" value={contentSlug} onChange={(e) => setContentSlug(e.target.value)} placeholder="videos" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontFamily: "inherit" }} />
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block", marginBottom: "0.3rem" }}>Content name (as in Content Types)</label>
+              <input type="text" value={contentSlug} onChange={(e) => setContentSlug(e.target.value)} placeholder="videos" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontFamily: "inherit" }} />
             </div>
             <div style={{ flex: "1 1 140px" }}>
-              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block", marginBottom: "0.3rem" }}>Look</label>
-              <select value={contentLayout} onChange={(e) => setContentLayout(e.target.value as ContentLayout)} style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontFamily: "inherit" }}>
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block", marginBottom: "0.3rem" }}>Look</label>
+              <select value={contentLayout} onChange={(e) => setContentLayout(e.target.value as ContentLayout)} style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontFamily: "inherit" }}>
                 <option value="gallery">Video gallery</option><option value="stories">Story cards</option><option value="events">Upcoming events</option><option value="posts">Latest blog posts (name: blog)</option><option value="list">Simple list</option>
               </select>
             </div>
             <div style={{ flex: "1 1 100px" }}>
-              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block", marginBottom: "0.3rem" }}>How many</label>
-              <input type="text" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder="All" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontFamily: "inherit" }} />
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block", marginBottom: "0.3rem" }}>How many</label>
+              <input type="text" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder="All" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontFamily: "inherit" }} />
             </div>
           </div>
         )}
 
         {block === "connect_form" && (
           <div>
-            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block", marginBottom: "0.3rem" }}>Form name (shown in your Form Submissions inbox)</label>
-            <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Contact" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontFamily: "inherit" }} />
-            <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", margin: "0.4rem 0 0" }}>Already have a form? Just add <code>data-plexo-form="{formName || "Contact"}"</code> to its opening tag — keep your own fields and styling.</p>
+            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block", marginBottom: "0.3rem" }}>Form name (shown in your Form Submissions inbox)</label>
+            <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Contact" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontFamily: "inherit" }} />
+            <p style={{ fontSize: "0.72rem", color: "var(--ed-t-400)", margin: "0.4rem 0 0" }}>Already have a form? Just add <code>data-plexo-form="{formName || "Contact"}"</code> to its opening tag — keep your own fields and styling.</p>
           </div>
         )}
 
         {block === "product" && (
           <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block" }}>Which product?</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block" }}>Which product?</label>
             {siteId ? (
               <SiteProductPicker siteId={siteId} value={productId} onChange={(id) => { setProductId(id); setAddResult(null); }} />
             ) : (
-              <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.5)", margin: 0 }}>Open this from your site's editor to pick from your products.</p>
+              <p style={{ fontSize: "0.8rem", color: "var(--ed-t-500)", margin: 0 }}>Open this from your site's editor to pick from your products.</p>
             )}
             {siteId && pageId && productId && (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
@@ -200,16 +200,16 @@ export function EmbedCodeModal({ onClose, siteId, pageId, canAddForMe = true, on
                   type="button"
                   onClick={() => void addForMe()}
                   disabled={adding || !canAddForMe}
-                  style={{ padding: "0.55rem 0.9rem", borderRadius: 9, fontSize: "0.82rem", fontWeight: 700, border: "none", color: "#fff", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", cursor: adding || !canAddForMe ? "default" : "pointer", opacity: adding || !canAddForMe ? 0.6 : 1 }}
+                  style={{ padding: "0.55rem 0.9rem", borderRadius: 9, fontSize: "0.82rem", fontWeight: 700, border: "none", color: "var(--ed-on-brand)", background: "var(--ed-cta)", cursor: adding || !canAddForMe ? "default" : "pointer", opacity: adding || !canAddForMe ? 0.6 : 1 }}
                 >
                   {adding ? "Adding…" : "Add it to my page for me"}
                 </button>
-                {!canAddForMe && <p style={{ fontSize: "0.72rem", color: "#fcd34d", margin: 0 }}>Save your changes first, then I can add it for you — or copy the snippet below.</p>}
+                {!canAddForMe && <p style={{ fontSize: "0.72rem", color: "var(--ed-warning)", margin: 0 }}>Save your changes first, then I can add it for you — or copy the snippet below.</p>}
                 {addResult && (
-                  <div style={{ fontSize: "0.78rem", lineHeight: 1.5, color: addResult.ok ? "#86efac" : "#fca5a5" }}>
+                  <div style={{ fontSize: "0.78rem", lineHeight: 1.5, color: addResult.ok ? "var(--ed-success)" : "var(--ed-danger)" }}>
                     {addResult.message}
                     {addResult.warnings.map((w) => (
-                      <p key={w} style={{ margin: "0.3rem 0 0", color: "#fcd34d" }}>{w}</p>
+                      <p key={w} style={{ margin: "0.3rem 0 0", color: "var(--ed-warning)" }}>{w}</p>
                     ))}
                   </div>
                 )}
@@ -221,24 +221,24 @@ export function EmbedCodeModal({ onClose, siteId, pageId, canAddForMe = true, on
         {block === "shop_grid" && (
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
             <div style={{ flex: "1 1 140px" }}>
-              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block", marginBottom: "0.3rem" }}>Category slug (optional)</label>
-              <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. tea" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontFamily: "inherit" }} />
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block", marginBottom: "0.3rem" }}>Category slug (optional)</label>
+              <input type="text" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. tea" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontFamily: "inherit" }} />
             </div>
             <div style={{ flex: "1 1 100px" }}>
-              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block", marginBottom: "0.3rem" }}>Max items</label>
-              <input type="text" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder="e.g. 6" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontFamily: "inherit" }} />
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block", marginBottom: "0.3rem" }}>Max items</label>
+              <input type="text" value={limit} onChange={(e) => setLimit(e.target.value)} placeholder="e.g. 6" style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontFamily: "inherit" }} />
             </div>
             <div style={{ flex: "1 1 100px" }}>
-              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block", marginBottom: "0.3rem" }}>Columns</label>
-              <input type="text" value={itemsPerRow} onChange={(e) => setItemsPerRow(e.target.value)} style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontFamily: "inherit" }} />
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block", marginBottom: "0.3rem" }}>Columns</label>
+              <input type="text" value={itemsPerRow} onChange={(e) => setItemsPerRow(e.target.value)} style={{ width: "100%", padding: "0.5rem 0.7rem", borderRadius: 8, fontSize: "0.82rem", border: "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontFamily: "inherit" }} />
             </div>
           </div>
         )}
 
         <div>
-          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", display: "block", marginBottom: "0.3rem" }}>Snippet to paste</label>
+          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block", marginBottom: "0.3rem" }}>Snippet to paste</label>
           <div style={{ position: "relative" }}>
-            <pre style={{ margin: 0, padding: "0.9rem 1rem", borderRadius: 10, background: "rgba(0,0,0,0.35)", border: "1px solid rgba(255,255,255,0.08)", fontSize: "0.8rem", color: "#c4b5fd", overflowX: "auto", fontFamily: "ui-monospace, monospace" }}>
+            <pre style={{ margin: 0, padding: "0.9rem 1rem", borderRadius: 10, background: "rgba(0,0,0,0.35)", border: "1px solid var(--ed-w-080)", fontSize: "0.8rem", color: "var(--ed-lavender)", overflowX: "auto", fontFamily: "ui-monospace, monospace" }}>
               {snippet}
             </pre>
             <button
@@ -247,7 +247,7 @@ export function EmbedCodeModal({ onClose, siteId, pageId, canAddForMe = true, on
               style={{
                 position: "absolute", top: "0.6rem", right: "0.6rem",
                 padding: "0.35rem 0.7rem", borderRadius: 7, fontSize: "0.72rem", fontWeight: 700,
-                border: "1px solid rgba(var(--brand-rgb),0.3)", background: "rgba(var(--brand-rgb),0.12)", color: "var(--brand)", cursor: "pointer",
+                border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)", background: "color-mix(in srgb, var(--brand) 12%, transparent)", color: "var(--ed-accent-text)", cursor: "pointer",
               }}
             >
               {copied ? "Copied!" : "Copy"}

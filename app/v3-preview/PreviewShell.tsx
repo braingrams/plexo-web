@@ -6,6 +6,7 @@ import { buildV3Nav, parseExperience, type BuildGoal, type Experience } from "@/
 import type { SiteSummary } from "@/lib/dashboardV3/sites";
 import { INITIAL_TOUR_STATE, type TourStep } from "@/lib/dashboardV3/tour";
 import { TOUR_STEPS } from "@/lib/dashboardV3/tourSteps";
+import { MANY_SITES, PREVIEW_WORKSPACES } from "./fixtures";
 import { V3Shell } from "@/app/dashboard/_v3/shell/V3Shell";
 
 export const PREVIEW_SITES: SiteSummary[] = [
@@ -26,17 +27,23 @@ export function PreviewShell({ children }: { children: React.ReactNode }) {
   const homePath = pathname.startsWith("/v3-preview/home") ? "/v3-preview/home" : "/v3-preview";
   const [experience, setExperience] = useState<Experience>(parseExperience(params.get("exp")) ?? "beginner");
   const goal = (params.get("goal") as BuildGoal | null) ?? "store";
-  const [site, setSite] = useState("s1");
+  const many = params.get("sites") === "many";
+  const sites = many ? MANY_SITES : PREVIEW_SITES;
+  const [site, setSite] = useState(many ? MANY_SITES[0].id : "s1");
+  const [ws, setWs] = useState("w1");
   const nav = useMemo(
-    () => buildV3Nav({ experience, goal, siteCount: PREVIEW_SITES.length }).map((n) => (n.id === "home" ? { ...n, href: homePath } : n.id === "settings" ? { ...n, href: "/v3-preview/settings" } : n)),
-    [experience, goal],
+    () => buildV3Nav({ experience, goal, siteCount: sites.length }).map((n) => (n.id === "home" ? { ...n, href: homePath } : n.id === "settings" ? { ...n, href: "/v3-preview/settings" } : n.id === "learners" ? { ...n, href: "/v3-preview/learners" } : n.id === "emails" ? { ...n, href: "/v3-preview/emails" } : n)),
+    [experience, goal, sites.length],
   );
   return (
     <V3Shell
       user={{ name: "Ama Owusu", email: "ama@amaskitchen.com" }}
       experience={experience}
       nav={nav}
-      sites={PREVIEW_SITES}
+      sites={sites}
+      workspaces={params.get("ws") === "0" ? [PREVIEW_WORKSPACES[0]] : PREVIEW_WORKSPACES}
+      currentWorkspaceId={ws}
+      onWorkspaceSwitch={setWs}
       currentSiteId={site}
       tourState={params.get("tour") === "active" ? { status: "active", mode: "short", stepId: "home-intro" } : INITIAL_TOUR_STATE}
       tourSteps={previewTour(homePath)}

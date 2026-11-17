@@ -175,7 +175,7 @@ export function PublishDialog(props: { appId: string; summary: AppSummary | null
 
         {phase === "done" && liveUrl && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0.6rem 0.75rem", borderRadius: 10, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0.6rem 0.75rem", borderRadius: 10, background: "color-mix(in srgb, var(--ed-success) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--ed-success) 25%, transparent)" }}>
               <a href={liveUrl} target="_blank" rel="noopener" style={{ flex: 1, color: C.success, fontSize: "0.85rem", wordBreak: "break-all" }}>
                 {liveUrl}
               </a>

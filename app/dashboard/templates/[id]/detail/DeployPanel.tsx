@@ -25,11 +25,11 @@ type DeployResult = {
 
 const LABEL: React.CSSProperties = {
   fontSize: "0.82rem",
-  color: "rgba(240,242,255,0.5)",
+  color: "var(--plx-muted, rgba(240,242,255,0.5))",
 };
 const VALUE: React.CSSProperties = {
   fontSize: "0.82rem",
-  color: "#f0f2ff",
+  color: "var(--plx-text, #f0f2ff)",
   fontWeight: 600,
 };
 const ROW: React.CSSProperties = {
@@ -39,7 +39,7 @@ const ROW: React.CSSProperties = {
   flexWrap: "wrap",
   gap: "0.5rem 1rem",
   padding: "0.7rem 0",
-  borderBottom: "1px solid rgba(255,255,255,0.06)",
+  borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)",
 };
 
 const TIER_META: Record<HostingTier, { label: string; description: string; color: string }> = {
@@ -56,7 +56,7 @@ const TIER_META: Record<HostingTier, { label: string; description: string; color
   PROVISIONED: {
     label: "Provisioned",
     description: "Always-warm Lambda. No cold starts — consistent performance.",
-    color: "#34d399",
+    color: "var(--plx-success, #34d399)",
   },
 };
 
@@ -205,12 +205,12 @@ export function DeployPanel({
   }
 
   const dropZoneStyle: React.CSSProperties = {
-    border: `1.5px dashed ${isDragging ? "#818cf8" : "rgba(255,255,255,0.14)"}`,
+    border: `1.5px dashed ${isDragging ? "var(--plx-violet, #818cf8)" : "color-mix(in srgb, var(--plx-text, #fff) 14%, transparent)"}`,
     borderRadius: 10,
     padding: "1.8rem 1rem",
     textAlign: "center",
     cursor: "pointer",
-    background: isDragging ? "rgba(129,140,248,0.06)" : "transparent",
+    background: isDragging ? "color-mix(in srgb, var(--plx-violet, rgb(129 140 248)) 6%, transparent)" : "transparent",
     transition: "border-color 0.15s, background 0.15s",
     marginTop: "1rem",
   };
@@ -229,7 +229,7 @@ export function DeployPanel({
           marginBottom: "0.3rem",
         }}
       >
-        <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
+        <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)", margin: 0 }}>
           Deploy
         </p>
         {liveDomain && deployedApp && (
@@ -240,8 +240,8 @@ export function DeployPanel({
             style={{
               padding: "0.35rem 0.75rem",
               borderRadius: 8,
-              border: "1px solid rgba(255,255,255,0.12)",
-              color: "rgba(240,242,255,0.85)",
+              border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
+              color: "var(--plx-text, rgba(240,242,255,0.85))",
               fontSize: "0.78rem",
               fontWeight: 600,
               textDecoration: "none",
@@ -251,10 +251,10 @@ export function DeployPanel({
           </a>
         )}
       </div>
-      <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0 0 0.5rem" }}>
+      <p style={{ fontSize: "0.8rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", margin: "0 0 0.5rem" }}>
         Upload a pre-built framework app — Vite, Next.js (static export), Nuxt, Astro, etc.
-        Zip the contents of your <code style={{ fontSize: "0.75rem", color: "#818cf8" }}>dist/</code> or{" "}
-        <code style={{ fontSize: "0.75rem", color: "#818cf8" }}>out/</code> folder.
+        Zip the contents of your <code style={{ fontSize: "0.75rem", color: "var(--plx-violet, #818cf8)" }}>dist/</code> or{" "}
+        <code style={{ fontSize: "0.75rem", color: "var(--plx-violet, #818cf8)" }}>out/</code> folder.
       </p>
 
       {deployedApp && (
@@ -265,7 +265,7 @@ export function DeployPanel({
           </div>
           <div style={{ ...ROW }}>
             <span style={LABEL}>SPA routing</span>
-            <span style={{ ...VALUE, color: deployedApp.spaMode ? "#4ade80" : "rgba(240,242,255,0.4)" }}>
+            <span style={{ ...VALUE, color: deployedApp.spaMode ? "var(--plx-success, #4ade80)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 40%, transparent)" }}>
               {deployedApp.spaMode ? "Enabled" : "Disabled"}
             </span>
           </div>
@@ -295,12 +295,12 @@ export function DeployPanel({
                       borderRadius: 8,
                       border: isActive
                         ? `1.5px solid ${meta.color}`
-                        : "1.5px solid rgba(255,255,255,0.08)",
+                        : "1.5px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
                       background: isActive
                         ? `${meta.color}14`
                         : isAllowed
                         ? "transparent"
-                        : "rgba(255,255,255,0.02)",
+                        : "color-mix(in srgb, var(--plx-text, #fff) 2%, transparent)",
                       cursor: isActive || !isAllowed || tierChanging ? "default" : "pointer",
                       textAlign: "left",
                       opacity: !isAllowed ? 0.45 : 1,
@@ -312,7 +312,7 @@ export function DeployPanel({
                         width: 8,
                         height: 8,
                         borderRadius: "50%",
-                        background: isActive ? meta.color : "rgba(255,255,255,0.2)",
+                        background: isActive ? meta.color : "var(--plx-faint, rgba(255,255,255,0.2))",
                         flexShrink: 0,
                       }}
                     />
@@ -322,17 +322,17 @@ export function DeployPanel({
                           display: "block",
                           fontSize: "0.8rem",
                           fontWeight: 700,
-                          color: isActive ? meta.color : "rgba(240,242,255,0.8)",
+                          color: isActive ? meta.color : "var(--plx-text, rgba(240,242,255,0.8))",
                         }}
                       >
                         {meta.label}
                         {!isAllowed && (
-                          <span style={{ marginLeft: "0.4rem", fontSize: "0.68rem", fontWeight: 600, color: "rgba(240,242,255,0.3)" }}>
+                          <span style={{ marginLeft: "0.4rem", fontSize: "0.68rem", fontWeight: 600, color: "var(--plx-faint, rgba(240,242,255,0.3))" }}>
                             Upgrade required
                           </span>
                         )}
                       </span>
-                      <span style={{ display: "block", fontSize: "0.73rem", color: "rgba(240,242,255,0.38)", marginTop: "0.1rem" }}>
+                      <span style={{ display: "block", fontSize: "0.73rem", color: "var(--plx-faint, rgba(240,242,255,0.38))", marginTop: "0.1rem" }}>
                         {meta.description}
                       </span>
                     </span>
@@ -346,10 +346,10 @@ export function DeployPanel({
                 style={{
                   marginTop: "0.6rem",
                   fontSize: "0.78rem",
-                  color: "#f87171",
+                  color: "var(--plx-danger, #f87171)",
                   padding: "0.5rem 0.75rem",
-                  background: "rgba(248,113,113,0.08)",
-                  border: "1px solid rgba(248,113,113,0.2)",
+                  background: "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 8%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 20%, transparent)",
                   borderRadius: 8,
                 }}
               >
@@ -366,10 +366,10 @@ export function DeployPanel({
             marginTop: "1rem",
             padding: "0.75rem 1rem",
             borderRadius: 8,
-            background: "rgba(74,222,128,0.08)",
-            border: "1px solid rgba(74,222,128,0.2)",
+            background: "color-mix(in srgb, var(--plx-success, rgb(74 222 128)) 8%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--plx-success, rgb(74 222 128)) 20%, transparent)",
             fontSize: "0.82rem",
-            color: "#4ade80",
+            color: "var(--plx-success, #4ade80)",
             lineHeight: 1.5,
           }}
         >
@@ -393,19 +393,19 @@ export function DeployPanel({
         />
         {selectedFile ? (
           <div>
-            <div style={{ fontSize: "0.85rem", color: "#f0f2ff", fontWeight: 600, marginBottom: "0.25rem" }}>
+            <div style={{ fontSize: "0.85rem", color: "var(--plx-text, #f0f2ff)", fontWeight: 600, marginBottom: "0.25rem" }}>
               {selectedFile.name}
             </div>
-            <div style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>
+            <div style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>
               {(selectedFile.size / 1024 / 1024).toFixed(1)} MB · Click to change
             </div>
           </div>
         ) : (
           <div>
-            <div style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginBottom: "0.35rem" }}>
+            <div style={{ fontSize: "0.85rem", color: "var(--plx-muted, rgba(240,242,255,0.6))", marginBottom: "0.35rem" }}>
               Drop your zip here or click to browse
             </div>
-            <div style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.3)" }}>
+            <div style={{ fontSize: "0.75rem", color: "var(--plx-faint, rgba(240,242,255,0.3))" }}>
               .zip only · max 50 MB
             </div>
           </div>
@@ -417,10 +417,10 @@ export function DeployPanel({
           style={{
             marginTop: "0.75rem",
             fontSize: "0.8rem",
-            color: "#f87171",
+            color: "var(--plx-danger, #f87171)",
             padding: "0.6rem 0.9rem",
-            background: "rgba(248,113,113,0.08)",
-            border: "1px solid rgba(248,113,113,0.2)",
+            background: "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 8%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 20%, transparent)",
             borderRadius: 8,
           }}
         >
@@ -439,8 +439,8 @@ export function DeployPanel({
             padding: "0.65rem",
             borderRadius: 8,
             border: "none",
-            background: uploading ? "rgba(129,140,248,0.3)" : "#6366f1",
-            color: "#fff",
+            background: uploading ? "color-mix(in srgb, var(--plx-violet, rgb(129 140 248)) 30%, transparent)" : "var(--plx-violet, #6366f1)",
+            color: "var(--plx-text, #fff)",
             fontSize: "0.85rem",
             fontWeight: 700,
             cursor: uploading ? "not-allowed" : "pointer",

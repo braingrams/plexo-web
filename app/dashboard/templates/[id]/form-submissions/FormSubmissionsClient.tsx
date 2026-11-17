@@ -163,10 +163,10 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
     }
   }
 
-  if (loading && submissions.length === 0) return <p style={{ color: "rgba(240,242,255,0.4)", fontSize: "0.85rem" }}>Loading…</p>;
+  if (loading && submissions.length === 0) return <p style={{ color: "var(--ed-t-400)", fontSize: "0.85rem" }}>Loading…</p>;
   if (error) {
     return (
-      <div style={{ padding: "2rem", textAlign: "center", borderRadius: 14, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: "0.85rem" }}>
+      <div style={{ padding: "2rem", textAlign: "center", borderRadius: 14, border: "1px solid color-mix(in srgb, var(--ed-danger) 25%, transparent)", background: "color-mix(in srgb, var(--ed-danger) 6%, transparent)", color: "var(--ed-danger)", fontSize: "0.85rem" }}>
         {error}
       </div>
     );
@@ -174,12 +174,12 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
 
   if (submissions.length === 0) {
     return (
-      <div style={{ padding: "3.5rem 2rem", textAlign: "center", borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 14, background: "rgba(255,255,255,0.04)", color: "rgba(240,242,255,0.3)", marginBottom: "1rem" }}>
+      <div style={{ padding: "3.5rem 2rem", textAlign: "center", borderRadius: 14, border: "1px solid var(--ed-w-080)", background: "var(--ed-w-020)" }}>
+        <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 14, background: "var(--ed-w-040)", color: "var(--ed-t-300)", marginBottom: "1rem" }}>
           <IconInbox />
         </div>
-        <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "rgba(240,242,255,0.7)" }}>No submissions yet</p>
-        <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", marginTop: "0.3rem" }}>
+        <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--ed-t-700)" }}>No submissions yet</p>
+        <p style={{ fontSize: "0.8rem", color: "var(--ed-t-400)", marginTop: "0.3rem" }}>
           Messages sent through a form on this site will show up here.
         </p>
       </div>
@@ -194,7 +194,7 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1rem" }}>
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", color: "rgba(240,242,255,0.55)", cursor: "pointer" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", color: "var(--ed-t-550)", cursor: "pointer" }}>
             <input type="checkbox" checked={allOnPageSelected} onChange={toggleAll} />
             {selected.size > 0 ? `${selected.size} selected` : "Select all"}
           </label>
@@ -202,7 +202,7 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
             <button
               type="button"
               onClick={selectLikelySpam}
-              style={{ padding: "0.35rem 0.7rem", borderRadius: 8, border: "1px solid rgba(245,158,11,0.3)", background: "rgba(245,158,11,0.08)", color: "#f59e0b", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer" }}
+              style={{ padding: "0.35rem 0.7rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--ed-amber) 30%, transparent)", background: "color-mix(in srgb, var(--ed-amber) 8%, transparent)", color: "var(--ed-amber)", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer" }}
             >
               Select {likelySpamIds.length} likely spam
             </button>
@@ -213,14 +213,14 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
             type="button"
             onClick={deleteSelected}
             disabled={deleting}
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.45rem 0.9rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.3)", background: "rgba(239,68,68,0.1)", color: "#f87171", fontSize: "0.8rem", fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.6 : 1 }}
+            style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.45rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--ed-danger) 30%, transparent)", background: "color-mix(in srgb, var(--ed-danger) 10%, transparent)", color: "var(--ed-danger)", fontSize: "0.8rem", fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.6 : 1 }}
           >
             <IconTrash /> {deleting ? "Deleting…" : `Delete selected (${selected.size})`}
           </button>
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: "1px solid rgba(255,255,255,0.08)", overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: "1px solid var(--ed-w-080)", overflow: "hidden" }}>
         {submissions.map((s, i) => {
           const fields = Object.entries(s.fields);
           const email = findSubmissionEmail(fields);
@@ -230,30 +230,30 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
               key={s.id}
               style={{
                 display: "flex", alignItems: "center", gap: "1rem", padding: "0.9rem 1rem",
-                borderTop: i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)",
-                background: selected.has(s.id) ? "rgba(129,140,248,0.06)" : "transparent",
+                borderTop: i === 0 ? "none" : "1px solid var(--ed-w-060)",
+                background: selected.has(s.id) ? "color-mix(in srgb, var(--ed-lavender) 6%, transparent)" : "transparent",
               }}
             >
               <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleOne(s.id)} />
               <div style={{ flex: "0 0 130px" }}>
-                <span style={{ display: "inline-flex", padding: "0.2rem 0.55rem", borderRadius: 999, fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", background: "rgba(129,140,248,0.1)", color: "#818cf8" }}>
+                <span style={{ display: "inline-flex", padding: "0.2rem 0.55rem", borderRadius: 999, fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", background: "color-mix(in srgb, var(--ed-lavender) 10%, transparent)", color: "var(--ed-lavender)" }}>
                   {s.formName}
                 </span>
               </div>
-              <div style={{ flex: "0 0 170px", fontSize: "0.78rem", color: "rgba(240,242,255,0.7)" }}>{senderName || email || "—"}</div>
-              <div style={{ flex: "1", minWidth: 0, fontSize: "0.8rem", color: "rgba(240,242,255,0.5)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <div style={{ flex: "0 0 170px", fontSize: "0.78rem", color: "var(--ed-t-700)" }}>{senderName || email || "—"}</div>
+              <div style={{ flex: "1", minWidth: 0, fontSize: "0.8rem", color: "var(--ed-t-500)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {messagePreview(s.fields)}
               </div>
               {s.likelySpam && (
-                <span style={{ flex: "0 0 auto", fontSize: "0.68rem", fontWeight: 700, color: "#f59e0b", background: "rgba(245,158,11,0.1)", padding: "0.2rem 0.5rem", borderRadius: 999 }}>
+                <span style={{ flex: "0 0 auto", fontSize: "0.68rem", fontWeight: 700, color: "var(--ed-amber)", background: "color-mix(in srgb, var(--ed-amber) 10%, transparent)", padding: "0.2rem 0.5rem", borderRadius: 999 }}>
                   Likely spam
                 </span>
               )}
-              <div style={{ flex: "0 0 130px", fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", textAlign: "right" }}>{formatDateTime(s.createdAt)}</div>
+              <div style={{ flex: "0 0 130px", fontSize: "0.75rem", color: "var(--ed-t-400)", textAlign: "right" }}>{formatDateTime(s.createdAt)}</div>
               <button
                 type="button"
                 onClick={() => setViewing(s)}
-                style={{ flex: "0 0 auto", padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer" }}
+                style={{ flex: "0 0 auto", padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer" }}
               >
                 View
               </button>
@@ -273,21 +273,21 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
           <div
             style={{
               position: "fixed", top: 0, right: 0, bottom: 0, width: "100%", maxWidth: "560px",
-              background: "rgba(18,16,36,0.98)", backdropFilter: "blur(20px)",
-              borderLeft: "1px solid rgba(255,255,255,0.08)", boxShadow: "-10px 0 40px rgba(0,0,0,0.5)",
+              background: "var(--ed-panel)", backdropFilter: "blur(20px)",
+              borderLeft: "1px solid var(--ed-w-080)", boxShadow: "-10px 0 40px rgba(0,0,0,0.5)",
               zIndex: 9999, padding: "2.2rem 2rem", overflowY: "auto",
               display: "flex", flexDirection: "column", gap: "1.5rem",
             }}
           >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid rgba(255,255,255,0.06)", paddingBottom: "1rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--ed-w-060)", paddingBottom: "1rem" }}>
               <div>
-                <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#f0f2ff", margin: 0 }}>{viewing.formName}</h3>
-                <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>{formatDateTime(viewing.createdAt)}</p>
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--ed-text)", margin: 0 }}>{viewing.formName}</h3>
+                <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)", margin: "0.25rem 0 0" }}>{formatDateTime(viewing.createdAt)}</p>
               </div>
               <button
                 type="button"
                 onClick={() => setViewing(null)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.35)", padding: "0.25rem", lineHeight: 1 }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ed-t-350)", padding: "0.25rem", lineHeight: 1 }}
               >
                 <IconClose />
               </button>
@@ -296,7 +296,7 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
             {viewingEmail && (
               <a
                 href={buildMailtoHref(viewingEmail, viewing.formName, viewingName)}
-                style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", width: "fit-content", padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(var(--brand-rgb),0.25)", background: "rgba(var(--brand-rgb),0.1)", color: "var(--brand)", fontSize: "0.8rem", fontWeight: 700, textDecoration: "none" }}
+                style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", width: "fit-content", padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--brand) 25%, transparent)", background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--ed-accent-text)", fontSize: "0.8rem", fontWeight: 700, textDecoration: "none" }}
               >
                 <IconMail /> Reply by email
               </a>
@@ -305,10 +305,10 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
             <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
               {viewingFields.map(([key, value]) => (
                 <div key={key}>
-                  <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.35)", marginBottom: "0.3rem" }}>
+                  <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--ed-t-350)", marginBottom: "0.3rem" }}>
                     {key}
                   </div>
-                  <div style={{ fontSize: "0.85rem", color: "#f0f2ff", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+                  <div style={{ fontSize: "0.85rem", color: "var(--ed-text)", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                     {value}
                   </div>
                 </div>

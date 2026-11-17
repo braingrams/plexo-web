@@ -175,3 +175,11 @@ button.plx-linklike { font: inherit; color: inherit; background: none; border: 0
 .plx-envrow { flex-wrap: wrap; padding: 10px 0 !important; }
 .plx-envrow .plx-row__main { flex-basis: 180px; }
 .plx-envrow .plx-row__title, .plx-envrow .plx-row__sub { white-space: normal; overflow-wrap: anywhere; }
+
+/* Order details: label / value rows */
+.plx-kv { margin: 0; display: flex; flex-direction: column; border: 1px solid var(--plx-border); border-radius: 14px; overflow: hidden; }
+.plx-kv__row { display: grid; grid-template-columns: minmax(90px, 160px) 1fr; gap: 12px; padding: 10px 16px; border-top: 1px solid var(--plx-border); font-size: 14px; }
+.plx-kv__row:first-child { border-top: 0; }
+.plx-kv dt { color: var(--plx-muted); font-weight: 600; }
+.plx-kv dd { margin: 0; overflow-wrap: anywhere; }
+.plx-search { max-width: 420px; flex: 1 1 240px; }

@@ -3,6 +3,8 @@
 import type { LucideIcon } from "lucide-react";
 import { X } from "lucide-react";
 import Link from "next/link";
+import { Notice } from "../_v3/ui/Notice";
+import { useIsV3 } from "../_v3/theme/ThemeContext";
 
 // The one look for notices above dashboard pages (plan status, a WordPress site moving
 // in). Sits inside the same column and side padding as the page below it — never pinned
@@ -12,9 +14,9 @@ import Link from "next/link";
 export type NoticeTone = "brand" | "warning" | "success";
 
 const TONES: Record<NoticeTone, { accent: string; tile: string; ring: string; bar: string }> = {
-  brand: { accent: "#c4b5fd", tile: "rgba(var(--brand-rgb),0.14)", ring: "rgba(var(--brand-rgb),0.22)", bar: "var(--brand)" },
-  warning: { accent: "#fcd34d", tile: "rgba(245,183,74,0.13)", ring: "rgba(245,183,74,0.24)", bar: "#f5b74a" },
-  success: { accent: "#6ee7b7", tile: "rgba(110,231,168,0.12)", ring: "rgba(110,231,168,0.22)", bar: "#6ee7a8" },
+  brand: { accent: "var(--plx-violet, #c4b5fd)", tile: "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 14%, transparent)", ring: "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 22%, transparent)", bar: "var(--brand)" },
+  warning: { accent: "var(--plx-warning, #fcd34d)", tile: "color-mix(in srgb, var(--plx-warning, rgb(245 183 74)) 13%, transparent)", ring: "color-mix(in srgb, var(--plx-warning, rgb(245 183 74)) 24%, transparent)", bar: "#f5b74a" },
+  success: { accent: "var(--plx-success, #6ee7b7)", tile: "rgba(110,231,168,0.12)", ring: "rgba(110,231,168,0.22)", bar: "var(--plx-success, #6ee7a8)" },
 };
 
 export type NoticeAction = { label: string; href?: string; onClick?: () => void; busy?: boolean; variant?: "primary" | "quiet" };
@@ -37,7 +39,24 @@ export function DashboardNotice({
   progress?: number;
   onDismiss?: () => void;
 }) {
+  const inV3 = useIsV3();
   const t = TONES[tone];
+  if (inV3) {
+    // The new dashboard has its own theme-aware banner; the old dashboard keeps the look below.
+    const first = actions[0];
+    return (
+      <Notice
+        kind={tone === "warning" ? "warning" : tone === "success" ? "success" : "info"}
+        icon={Icon}
+        title={title}
+        progress={progress}
+        action={first ? { label: first.label, href: first.href, onClick: first.onClick, busy: first.busy } : undefined}
+        onDismiss={onDismiss}
+      >
+        {detail}
+      </Notice>
+    );
+  }
   return (
     <div className="dashboard-notice-wrap" style={{ padding: "1.5rem 32px 0", maxWidth: 1920, width: "100%", margin: "0 auto" }}>
       <div
@@ -50,7 +69,7 @@ export function DashboardNotice({
           gap: 14,
           padding: "10px 10px 10px 12px",
           borderRadius: 14,
-          background: "rgba(255,255,255,0.025)",
+          background: "color-mix(in srgb, var(--plx-text, #fff) 2.5%, transparent)",
           border: `1px solid ${t.ring}`,
         }}
       >
@@ -62,12 +81,12 @@ export function DashboardNotice({
         </span>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: "rgba(240,242,255,0.6)" }}>
-            <span style={{ fontWeight: 700, color: "#f0f2ff" }}>{title}</span>
+          <p style={{ margin: 0, fontSize: 13, lineHeight: 1.45, color: "var(--plx-muted, rgba(240,242,255,0.6))" }}>
+            <span style={{ fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>{title}</span>
             {detail ? <span className="dashboard-notice-detail"> · {detail}</span> : null}
           </p>
           {typeof progress === "number" && (
-            <div style={{ height: 3, borderRadius: 999, background: "rgba(255,255,255,0.07)", marginTop: 7, maxWidth: 320, overflow: "hidden" }}>
+            <div style={{ height: 3, borderRadius: 999, background: "color-mix(in srgb, var(--plx-text, #fff) 7%, transparent)", marginTop: 7, maxWidth: 320, overflow: "hidden" }}>
               <div style={{ height: "100%", width: `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`, background: t.bar, borderRadius: 999, transition: "width 0.6s" }} />
             </div>
           )}
@@ -124,7 +143,7 @@ const primaryButton: React.CSSProperties = {
 const quietButton: React.CSSProperties = {
   ...primaryButton,
   background: "transparent",
-  color: "rgba(240,242,255,0.7)",
+  color: "var(--plx-muted, rgba(240,242,255,0.7))",
   fontWeight: 600,
 };
 
@@ -136,6 +155,6 @@ const closeButton: React.CSSProperties = {
   borderRadius: 8,
   border: "none",
   background: "transparent",
-  color: "rgba(240,242,255,0.4)",
+  color: "var(--plx-muted, rgba(240,242,255,0.4))",
   cursor: "pointer",
 };

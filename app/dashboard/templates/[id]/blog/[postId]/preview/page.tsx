@@ -7,7 +7,7 @@ import { hasBlogMarker, substituteBlogMarkers, extractMarkerPrefix } from "@/lib
 import { buildPostFragments } from "@/lib/pub/blogLayoutFragments";
 
 const PREVIEW_BANNER = (status: string) => (
-  <div style={{ background: "#f59e0b", color: "#1a1300", textAlign: "center", padding: "0.5rem", fontSize: "0.8rem", fontWeight: 700 }}>
+  <div style={{ background: "var(--ed-amber)", color: "var(--ed-on-brand)", textAlign: "center", padding: "0.5rem", fontSize: "0.8rem", fontWeight: 700 }}>
     Preview — status: {status}. This page isn&apos;t what visitors see unless the post is published.
   </div>
 );

@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isPrPreviewHost } from "@/lib/isPrPreviewHost";
+import { legacyMarketplaceRedirect } from "@/lib/dashboardV3/legacyMarketplace";
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   // CloudFront's OAC can't reliably sign POST bodies to a Lambda Function URL origin (see
@@ -205,6 +206,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     return NextResponse.rewrite(new URL(`/pub/${lookupDomain}${pathname}${request.nextUrl.search}`, request.url));
   }
 
+  // The marketplace has no public pages any more: old links go to the dashboard copy (the query,
+  // e.g. ?purchase=success, comes along), and signed-out visitors sign in and come back to it.
+  const marketplaceTarget = legacyMarketplaceRedirect(pathname);
+  if (marketplaceTarget) return NextResponse.redirect(new URL(marketplaceTarget + request.nextUrl.search, request.url), 308);
+
   if (hasTrailingSlash) return stripTrailingSlash();
 
   // 2. Enforce session cookie check for dashboard paths. Auth.js's default cookie name
@@ -218,7 +224,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
     if (!hasSessionCookie) {
       const loginUrl = new URL("/auth/login", request.url);
-      loginUrl.searchParams.set("redirectTo", pathname);
+      loginUrl.searchParams.set("redirectTo", pathname + request.nextUrl.search);
       return NextResponse.redirect(loginUrl);
     }
   }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { TemplatePreviewModal } from "@/app/marketplace/TemplatePreviewModal";
+import { TemplatePreviewModal } from "@/app/dashboard/marketplace/_shared/TemplatePreviewModal";
 
 function IconEye() {
   return (
@@ -26,7 +26,7 @@ type MarketplaceItem = {
  * public, unauthenticated GET /api/v1/marketplace/templates (same endpoint the SDK/AI
  * tools use) — no new backend route needed. Free templates clone straight into the
  * caller's account via the existing /use route and drop them into the editor; paid
- * templates hand off to the standalone /marketplace/[id] page, which already owns the
+ * templates hand off to the /dashboard/marketplace/[id] page, which already owns the
  * full Stripe checkout flow.
  */
 export function NewFromMarketplace({
@@ -72,7 +72,7 @@ export function NewFromMarketplace({
 
     if (item.priceCents > 0) {
       onClose();
-      router.push(`/marketplace/${item.id}`);
+      router.push(`/dashboard/marketplace/${item.id}`);
       return;
     }
 

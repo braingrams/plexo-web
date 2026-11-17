@@ -18,16 +18,16 @@ type Props = {
   starterTemplates: StarterTemplate[];
 };
 
-const hairline = "rgba(255,255,255,0.09)";
-const hairlineSoft = "rgba(255,255,255,0.055)";
+const hairline = "color-mix(in srgb, var(--plx-text, #fff) 9%, transparent)";
+const hairlineSoft = "color-mix(in srgb, var(--plx-text, #fff) 5.5%, transparent)";
 
 // Deterministic accent per card — there's no thumbnail to show for a fresh marketplace
 // pick, so this is a category-color cue, not a fabricated screenshot.
 const SWATCHES = [
   "linear-gradient(150deg,#312e81,var(--brand-deep) 60%,var(--brand-light))",
   "linear-gradient(150deg,#0f172a,#0ea5e9 65%,#67e8f9)",
-  "linear-gradient(150deg,#134e4a,#10b981 65%,#6ee7b7)",
-  "linear-gradient(150deg,#450a0a,#f43f5e 65%,#fda4af)",
+  "linear-gradient(150deg,#134e4a,var(--plx-success, #10b981) 65%,var(--plx-success, #6ee7b7))",
+  "linear-gradient(150deg,#450a0a,var(--plx-danger, #f43f5e) 65%,#fda4af)",
 ];
 
 function kindLabel(kind: TemplateKind): string {
@@ -42,7 +42,7 @@ export function OverviewSetup({ userName, starterTemplates }: Props) {
   async function handleUse(item: StarterTemplate) {
     setError(null);
     if (item.priceCents > 0) {
-      router.push(`/marketplace/${item.id}`);
+      router.push(`/dashboard/marketplace/${item.id}`);
       return;
     }
     setBusyId(item.id);
@@ -76,7 +76,7 @@ export function OverviewSetup({ userName, starterTemplates }: Props) {
       <div style={{ height: 1, background: hairline }} />
       <div style={{ display: "flex", alignItems: "center", padding: "22px 0" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-          <span style={{ fontFamily: "var(--font-mono)", fontSize: "13px", fontWeight: 700, color: "var(--brand)" }}>01</span>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: "13px", fontWeight: 700, color: "var(--plx-link, var(--brand))" }}>01</span>
           <span style={{ fontSize: "10.5px", fontWeight: 650, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-main)" }}>Start</span>
         </div>
         <div style={{ flex: 1, height: 1, background: "var(--brand)", opacity: 0.35, margin: "0 20px" }} />
@@ -100,7 +100,7 @@ export function OverviewSetup({ userName, starterTemplates }: Props) {
           </span>
           <span style={{ fontSize: "12.5px", fontWeight: 600, color: "var(--text-muted)" }}>
             or{" "}
-            <Link href="/dashboard/templates" style={{ fontWeight: 650, color: "var(--brand)" }}>
+            <Link href="/dashboard/templates" style={{ fontWeight: 650, color: "var(--plx-link, var(--brand))" }}>
               start from a blank canvas
             </Link>
           </span>
@@ -115,7 +115,7 @@ export function OverviewSetup({ userName, starterTemplates }: Props) {
         {starterTemplates.length === 0 ? (
           <p style={{ fontSize: "12.5px", color: "var(--text-faint)" }}>
             No marketplace templates available right now —{" "}
-            <Link href="/dashboard/templates" style={{ color: "var(--brand)", fontWeight: 650 }}>
+            <Link href="/dashboard/templates" style={{ color: "var(--plx-link, var(--brand))", fontWeight: 650 }}>
               start from a blank canvas
             </Link>{" "}
             instead.

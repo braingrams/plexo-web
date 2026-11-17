@@ -6,7 +6,6 @@ import {
   LogIn, MessagesSquare, Newspaper, PenLine, Search, Share2, Star, TrendingUp, Users, type LucideIcon,
 } from "lucide-react";
 
-import { BRAND } from "@/lib/theme";
 // The three questions on the Apps home, what they turn into (the prompt SOL builds from, the
 // plain-words build checklist) and the sketch of the app they describe — shared by the Apps
 // home and the editor, so the sketch an owner sees while answering is the one they watch turn
@@ -20,13 +19,13 @@ export const faint = "var(--text-faint)";
 export const surface = "var(--surface)";
 export const border = "color-mix(in srgb, var(--text-main) 16%, transparent)";
 export const fill = (pct: number) => `color-mix(in srgb, var(--text-main) ${pct}%, transparent)`;
-export const accent = "var(--brand)";
+export const accent = "var(--ed-accent-text)";
 export const tint = (color: string, pct: number) => `color-mix(in srgb, ${color} ${pct}%, transparent)`;
-export const brandGradient = "linear-gradient(135deg, var(--brand-light), var(--brand) 55%, var(--brand-deep))";
+export const brandGradient = "var(--ed-cta-wide)";
 
 /** Colours for app thumbnails and choice icons, picked per name so an app keeps its colour. */
 // Plexo's purple family only (never a rainbow): brand, orchid, lavender, indigo, deep violet.
-export const HUES = [BRAND.primary, BRAND[300], "#6366f1", BRAND.deep, BRAND[400], BRAND[700], "#9333ea", "#818cf8"];
+export const HUES = ["var(--brand)", "var(--brand-light)", "var(--ed-violet)", "var(--brand-deep)", "var(--brand-soft)", "var(--brand-deeper)", "var(--ed-violet)", "var(--ed-lavender)"];
 export function hueFor(key: string): string {
   let h = 0;
   for (const ch of key) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
@@ -148,7 +147,7 @@ function Bar({ w, o = 14, h = 6 }: { w: string; o?: number; h?: number }) {
 
 function Block({ id, other }: { id: FeatureId; other: string }) {
   const box: CSSProperties = { borderRadius: 10, border: `1px solid ${tint(accent, 22)}`, background: tint(accent, 5), padding: 10, display: "flex", flexDirection: "column", gap: 7, minHeight: 0 };
-  const button = (label: string) => <span style={{ alignSelf: "flex-start", padding: "4px 10px", borderRadius: 7, background: accent, color: "#fff", fontSize: 10, fontWeight: 700 }}>{label}</span>;
+  const button = (label: string) => <span style={{ alignSelf: "flex-start", padding: "4px 10px", borderRadius: 7, background: accent, color: "var(--ed-on-brand)", fontSize: 10, fontWeight: 700 }}>{label}</span>;
   switch (id) {
     case "book":
       return (
@@ -165,11 +164,11 @@ function Block({ id, other }: { id: FeatureId; other: string }) {
     case "signin":
       return <div style={box}><Bar w="45%" o={22} /><span style={{ height: 14, borderRadius: 5, border: `1px solid ${border}` }} /><span style={{ height: 14, borderRadius: 5, border: `1px solid ${border}` }} />{button("Sign in")}</div>;
     case "remind":
-      return <div style={box}>{[0, 1, 2].map((i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}><Bell size={11} color={BRAND[400]} /><Bar w={`${70 - i * 15}%`} /></div>)}</div>;
+      return <div style={box}>{[0, 1, 2].map((i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}><Bell size={11} color={"var(--brand-soft)"} /><Bar w={`${70 - i * 15}%`} /></div>)}</div>;
     case "reviews":
-      return <div style={box}><div style={{ display: "flex", gap: 2 }}>{[0, 1, 2, 3, 4].map((i) => <Star key={i} size={12} fill={i < 4 ? "currentColor" : "none"} color={BRAND[400]} />)}</div><Bar w="85%" /><Bar w="60%" /></div>;
+      return <div style={box}><div style={{ display: "flex", gap: 2 }}>{[0, 1, 2, 3, 4].map((i) => <Star key={i} size={12} fill={i < 4 ? "currentColor" : "none"} color={"var(--brand-soft)"} />)}</div><Bar w="85%" /><Bar w="60%" /></div>;
     case "tasks":
-      return <div style={box}>{[1, 1, 0, 0].map((d, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: d ? "#6366f1" : "transparent", border: `1.5px solid ${d ? "#6366f1" : border}` }} /><Bar w={`${75 - i * 10}%`} /></div>)}</div>;
+      return <div style={box}>{[1, 1, 0, 0].map((d, i) => <div key={i} style={{ display: "flex", gap: 6, alignItems: "center" }}><span style={{ width: 10, height: 10, borderRadius: 3, background: d ? "var(--ed-violet)" : "transparent", border: `1.5px solid ${d ? "var(--ed-violet)" : border}` }} /><Bar w={`${75 - i * 10}%`} /></div>)}</div>;
     case "files":
       return <div style={{ ...box, display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>{[0, 1, 2, 3, 4, 5].map((i) => <span key={i} style={{ aspectRatio: "4 / 5", borderRadius: 5, background: tint(HUES[i % HUES.length], 35) }} />)}</div>;
     case "approve":
@@ -211,7 +210,7 @@ export function AppPreview({ audience, features, other, name }: { audience: Audi
         <span style={{ marginLeft: 10, padding: "3px 10px", borderRadius: 99, fontSize: 11, color: muted, background: fill(6), overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{slug(title)}.plexopages.com</span>
       </div>
       {!audience ? (
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 24, textAlign: "center", background: `radial-gradient(70% 60% at 30% 20%, ${tint(BRAND[300], 14)}, transparent 70%), radial-gradient(70% 60% at 75% 80%, ${tint(accent, 20)}, transparent 70%)` }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, padding: 24, textAlign: "center", background: `radial-gradient(70% 60% at 30% 20%, ${tint("var(--brand-light)", 14)}, transparent 70%), radial-gradient(70% 60% at 75% 80%, ${tint(accent, 20)}, transparent 70%)` }}>
           <span style={{ width: 52, height: 52, borderRadius: 16, background: brandGradient, boxShadow: "0 10px 30px var(--brand-glow)" }} />
           <span style={{ fontSize: 14, fontWeight: 700, color: ink }}>Your app will appear here</span>
           <span style={{ fontSize: 12.5, color: muted, maxWidth: 240 }}>It takes shape as you answer.</span>
@@ -225,8 +224,8 @@ export function AppPreview({ audience, features, other, name }: { audience: Audi
             </span>
           </div>
           <div style={{ padding: "18px 14px", borderRadius: 12, background: brandGradient, display: "flex", flexDirection: "column", gap: 7 }}>
-            <span style={{ display: "block", width: "55%", height: 9, borderRadius: 99, background: "rgba(255,255,255,0.9)" }} />
-            <span style={{ display: "block", width: "75%", height: 6, borderRadius: 99, background: "rgba(255,255,255,0.5)" }} />
+            <span style={{ display: "block", width: "55%", height: 9, borderRadius: 99, background: "var(--ed-w-900)" }} />
+            <span style={{ display: "block", width: "75%", height: 6, borderRadius: 99, background: "var(--ed-w-500)" }} />
             <span style={{ alignSelf: "flex-start", marginTop: 4, padding: "4px 10px", borderRadius: 7, background: "#fff", color: "var(--brand-deep)", fontSize: 10, fontWeight: 700 }}>Get started</span>
           </div>
           {features.length ? (
@@ -244,3 +243,11 @@ export function AppPreview({ audience, features, other, name }: { audience: Audi
   );
 }
 
+
+/** Text and icons that sit on the brand colour (dark on the new lime, white on the old green). */
+export const onBrand = "var(--plx-on-brand, #fff)";
+/** Link colour: deep green on light, lime on dark in the new dashboard. */
+export const linkColor = "var(--plx-link, var(--brand))";
+export const warnColor = "var(--ed-warning)";
+export const okColor = "var(--plx-success, #10b981)";
+export const dangerColor = "var(--ed-danger)";

@@ -2,8 +2,10 @@ import { cookies } from "next/headers";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { buildV3Nav, type Experience, type V3NavItem } from "./nav";
 import { readBuildProfile, userExperience } from "./profile";
-import { CURRENT_SITE_COOKIE, pickCurrentSite, siteKindOf, type SiteSummary } from "./sites";
+import { CURRENT_SITE_COOKIE, pickCurrentSite, type SiteSummary } from "./sites";
+import { summarizeSites } from "./siteList";
 import { resolveThemePreference, THEME_COOKIE, type ThemePreference } from "./theme";
+import { membershipsForUser } from "@/server/orgMemberships";
 import { readTourState, type TourState } from "./tour";
 
 export type V3ShellData = {
@@ -13,6 +15,7 @@ export type V3ShellData = {
   currentSite: SiteSummary | null;
   themePreference: ThemePreference;
   tourState: TourState;
+  workspaces: { id: string; name: string; role: string }[];
 };
 
 type ShellUser = {
@@ -23,34 +26,39 @@ type ShellUser = {
   tourState?: unknown;
 };
 
-/** The organisation's sites (root landing pages and apps), lightest possible read. */
+const SITE_ATTRIBUTES = ["id", "name", "kind", "parentId", "marketplaceStatus", "isBlogLayout", "isSiteLayoutFragment", "isCommerceLayout", "isLmsPageDesign", "isLmsFunnel", "sourceType", "migratedFrom", "updatedAt"] as const;
+
+/**
+ * Every site in the workspace (builder pages, uploaded pages, moved WordPress sites, apps,
+ * funnels), lightest possible read. Two things used to make a person with many sites look like
+ * they had none: the web-address lookup failing took the whole list down with it (the caller
+ * swallowed the error), and a workspace whose sites sit under a different workspace id showed
+ * empty. Now the address lookup is forgiving on its own, and an empty workspace falls back to
+ * the sites the person owns.
+ */
 export async function loadV3Sites(organizationId: string, userId: string): Promise<SiteSummary[]> {
-  const [{ data: templates }, { data: domains }] = await Promise.all([
-    Template.query
-      .byOrg({ organizationId })
-      .go({
-        pages: "all",
-        attributes: ["id", "name", "kind", "parentId", "marketplaceStatus", "isBlogLayout", "isSiteLayoutFragment", "isCommerceLayout", "isLmsPageDesign", "isLmsFunnel", "sourceType", "updatedAt"],
+  const [{ data: templates }, domains] = await Promise.all([
+    Template.query.byOrg({ organizationId }).go({ pages: "all", attributes: [...SITE_ATTRIBUTES] }),
+    PublishedDomain.query
+      .byUser({ userId })
+      .go({ pages: "all", attributes: ["templateId", "domain", "type", "active", "organizationId"] })
+      .then((r) => r.data)
+      .catch((err) => {
+        console.error("v3 sites: web addresses failed to load", err);
+        return [];
       }),
-    PublishedDomain.query.byUser({ userId }).go({ pages: "all", attributes: ["templateId", "domain", "type", "active", "organizationId"] }),
   ]);
-  const roots = templates.filter((t) => t.kind === "LANDING_PAGE" && !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout && !t.isLmsPageDesign);
-  const live = new Map<string, string>();
-  for (const d of domains) {
-    if (d.active === false || d.organizationId !== organizationId) continue;
-    // Prefer showing their own web address over the free plexopages one.
-    if (!live.has(d.templateId) || d.type === "CUSTOM") live.set(d.templateId, d.domain);
-  }
-  return roots
-    .map((t) => ({
-      id: t.id,
-      name: t.name || "Untitled site",
-      kind: siteKindOf({ sourceType: t.sourceType, isLmsFunnel: t.isLmsFunnel }),
-      status: live.has(t.id) ? ("live" as const) : ("draft" as const),
-      address: live.get(t.id) ?? null,
-      updatedAt: t.updatedAt ?? null,
-    }))
-    .sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
+  const inWorkspace = summarizeSites(templates, domains, organizationId);
+  if (inWorkspace.length) return inWorkspace;
+  const owned = await Template.query
+    .byUser({ userId })
+    .go({ pages: "all", attributes: [...SITE_ATTRIBUTES] })
+    .then((r) => r.data)
+    .catch((err) => {
+      console.error("v3 sites: owned-sites lookup failed", err);
+      return [];
+    });
+  return summarizeSites(owned, domains);
 }
 
 export async function loadV3ShellData(user: ShellUser, organizationId: string): Promise<V3ShellData> {
@@ -62,7 +70,11 @@ export async function loadV3ShellData(user: ShellUser, organizationId: string): 
     return [] as SiteSummary[];
   });
   const currentSite = pickCurrentSite(sites, jar.get(CURRENT_SITE_COOKIE)?.value);
+  const workspaces = await membershipsForUser(user.id)
+    .then((ms) => ms.map((m) => ({ id: m.organizationId, name: m.organization.name, role: m.role as string })))
+    .catch(() => []);
   return {
+    workspaces,
     experience,
     nav: buildV3Nav({ experience, goal, siteCount: sites.length, sells: sites.some((s) => s.kind === "Online store"), teaches: sites.some((s) => s.kind === "Course") }),
     sites,

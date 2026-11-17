@@ -2,11 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Globe, Search } from "lucide-react";
-import { Badge, Button, ButtonLink, Card, CardHeader, Input, Select, useToast } from "../ui";
+import { Check, ExternalLink, Globe, Search } from "lucide-react";
+import { Badge, Button, ButtonLink, Input, Select, useToast } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
 import type { AddressRow } from "@/lib/dashboardV3/domainsData";
-import { CopyBox, Notice, SectionHead } from "./bits";
+import { AsideCard, CopyBox, Notice, Panel, SettingsPageShell } from "./bits";
 
 type Steps = { validationName?: string | null; validationValue?: string | null; routing?: string | null; live: boolean };
 type Found = { domain: string; available: boolean; registrationPriceUsdCents: number | null; reason?: string };
@@ -121,36 +121,52 @@ export function DomainsSection({ addresses: a0, sites, canUseOwn, mock = false }
     }
   }
 
+  const waiting = addresses.filter((a) => a.type === "CUSTOM" && !a.online).length;
   return (
-    <>
-      <SectionHead title="Web addresses">Every address that points to your sites, in one place.</SectionHead>
+    <SettingsPageShell
+      title="Domains"
+      purpose="Every web address that points to your sites, in one place."
+      aside={
+        <>
+          <AsideCard title="How addresses work">
+            <ul>
+              <li><Check size={16} aria-hidden /> <span><b>Free address.</b> Every site gets one from Plexo, ready to share.</span></li>
+              <li><Check size={16} aria-hidden /> <span><b>Your own address.</b> Like mybusiness.com. Connect one you own, or find a new one.</span></li>
+              <li><Check size={16} aria-hidden /> <span><b>Nothing breaks.</b> Your free address keeps working while you set up your own.</span></li>
+            </ul>
+          </AsideCard>
+          {waiting ? (
+            <AsideCard title="Waiting for you">
+              <p>{waiting} {waiting === 1 ? "address is" : "addresses are"} not connected yet. Open &ldquo;Show steps&rdquo; on the address and follow the numbered list. It takes about five minutes, then a short wait.</p>
+            </AsideCard>
+          ) : null}
+        </>
+      }
+    >
       {error ? <Notice tone="bad">{error}</Notice> : null}
 
-      <Card padding="none" className="plx-listcard" data-tour="domains-list">
-        <div style={{ padding: "20px 20px 8px" }}>
-          <CardHeader title="Your addresses" />
-        </div>
+      <Panel title="Your addresses" description={addresses.length ? `${addresses.length} across your sites.` : undefined} flush data-tour="domains-list">
         {addresses.length === 0 ? (
-          <p className="plx-body" style={{ padding: "0 20px 20px", margin: 0 }}>No addresses yet. Pick a free one in your site&apos;s &ldquo;Web address&rdquo; tab, or connect your own below.</p>
+          <p className="plx-body" style={{ padding: "0 28px 28px" }}>No addresses yet. Pick a free one in your site&apos;s &ldquo;Web address&rdquo; tab, or connect your own below.</p>
         ) : (
           addresses.map((row) => {
             const st = steps[row.id];
             return (
               <div key={row.id}>
                 <div className="plx-addrrow">
-                  <Globe size={20} aria-hidden style={{ color: "var(--plx-muted)", flex: "none" }} />
+                  <span className="plx-tile"><Globe size={20} aria-hidden /></span>
                   <div className="plx-addrrow__main">
                     <a href={`https://${row.domain}`} target="_blank" rel="noreferrer">{row.domain} <ExternalLink size={14} aria-hidden /></a>
                     <span>{row.siteName}{row.type === "SUBDOMAIN" ? " · free address from Plexo" : row.bought ? " · bought through Plexo" : " · your own address"}</span>
                   </div>
                   {row.pausedByPlan ? <Badge tone="warning">Paused by your plan</Badge> : row.online ? <Badge tone="success" dot>Online</Badge> : <Badge tone="warning">Waiting for you</Badge>}
-                  <div className="plx-person__end">
+                  <div className="plx-addrrow__end">
                     {row.type === "CUSTOM" && !row.online ? <Button size="sm" variant="secondary" aria-expanded={open === row.id} onClick={() => toggle(row)}>{open === row.id ? "Hide steps" : "Show steps"}</Button> : null}
                     <Button size="sm" variant="ghost" loading={busy === row.id} onClick={() => remove(row)}>Remove</Button>
                   </div>
                 </div>
                 {open === row.id && row.type === "CUSTOM" ? (
-                  <div style={{ padding: "0 20px 20px 20px" }}>
+                  <div className="plx-addrsteps">
                     <ol className="plx-steps">
                       <li><div><b>Open the website where you bought {row.domain}.</b><p className="plx-small" style={{ margin: "4px 0 0" }}>That&apos;s a company like GoDaddy, Namecheap or Google Domains. Sign in and find the settings for your address.</p></div></li>
                       {st?.validationName && st.validationValue ? (
@@ -173,48 +189,46 @@ export function DomainsSection({ addresses: a0, sites, canUseOwn, mock = false }
             );
           })
         )}
-      </Card>
+      </Panel>
 
-      <div className="plx-set__grid">
-        <Card data-tour="domains-connect">
-          <CardHeader title="Use an address you already own" description="Like mybusiness.com. We'll show you exactly what to do." />
+      <div className="plx-sp__split">
+        <Panel title="Use an address you already own" description="Like mybusiness.com. We'll show you exactly what to do." data-tour="domains-connect">
           {sites.length === 0 ? (
-            <p className="plx-body" style={{ margin: 0 }}>Make a site first, then connect your address to it.</p>
+            <p className="plx-body">Make a site first, then connect your address to it.</p>
           ) : (
-            <div className="plx-form">
+            <div className="plx-sform plx-sform--wide">
               <Select label="Which site is it for?" value={siteId} onChange={(e) => setSiteId(e.target.value)} options={sites.map((s) => ({ value: s.id, label: s.name }))} />
-              <Input label="Your address" value={own} onChange={(e) => setOwn(e.target.value)} placeholder="www.mybusiness.com" autoCapitalize="none" autoCorrect="off" />
+              <Input label="Your address" value={own} onChange={(e) => setOwn(e.target.value)} placeholder="www.mybusiness.com" autoCapitalize="none" autoCorrect="off" help="Type it the way people would, like www.mybusiness.com." />
               {!canUseOwn ? <Notice tone="warn">Your own address comes with the Starter plan. <a href="/dashboard/settings/plan" style={{ fontWeight: 700 }}>See plans</a></Notice> : null}
               <div><Button loading={busy === "connect"} disabled={!own.trim() || !canUseOwn} onClick={connect}>Connect it</Button></div>
             </div>
           )}
-        </Card>
+        </Panel>
 
-        <Card data-tour="domains-buy">
-          <CardHeader title="Find a new address" description="Don't have one yet? Search for a name and we'll set it up for you." />
-          <div className="plx-form">
+        <Panel title="Find a new address" description="Don't have one yet? Search for a name and we'll set it up for you." data-tour="domains-buy">
+          <div className="plx-sform plx-sform--wide">
             <div className="plx-searchrow">
               <Input label="Search for a name" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="amaskitchen" onKeyDown={(e) => e.key === "Enter" && void search()} autoCapitalize="none" />
-              <div style={{ alignSelf: "flex-end" }}><Button variant="secondary" loading={busy === "search"} disabled={!query.trim()} leftIcon={<Search size={16} aria-hidden />} onClick={search}>Search</Button></div>
+              <Button variant="secondary" loading={busy === "search"} disabled={!query.trim()} leftIcon={<Search size={16} aria-hidden />} onClick={search}>Search</Button>
             </div>
             {found ? (
               found.length === 0 ? <p className="plx-small" style={{ margin: 0 }}>We couldn&apos;t find anything for that. Try another name.</p> : (
-                <ul className="plx-list" style={{ margin: "0 -20px" }}>
+                <div>
                   {found.map((f) => (
-                    <li key={f.domain} className="plx-row" style={{ minHeight: 64 }}>
-                      <div className="plx-row__main">
-                        <span className="plx-row__title">{f.domain}</span>
-                        <span className="plx-row__sub">{f.available ? (usd(f.registrationPriceUsdCents) ?? "Available") : "Already taken"}</span>
+                    <div key={f.domain} className="plx-findrow">
+                      <div>
+                        <b>{f.domain}</b>
+                        <span className="plx-small">{f.available ? (usd(f.registrationPriceUsdCents) ?? "Available") : "Already taken"}</span>
                       </div>
                       {f.available ? <ButtonLink size="sm" href={`/dashboard/domains?classic=1&q=${encodeURIComponent(f.domain)}`}>Get it</ButtonLink> : <Badge tone="neutral">Taken</Badge>}
-                    </li>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )
             ) : null}
           </div>
-        </Card>
+        </Panel>
       </div>
-    </>
+    </SettingsPageShell>
   );
 }

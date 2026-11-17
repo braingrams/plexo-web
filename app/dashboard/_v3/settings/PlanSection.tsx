@@ -10,10 +10,13 @@ import { usePricing } from "../../_components/usePricing";
 import { startCheckout, type CheckoutBody } from "@/lib/billing/clientCheckout";
 import { isPaidPlanId, type PaidPlanId } from "@/lib/plan/plans";
 import { packLabel, useTopupPacks, type TopupPackInfo } from "../../_components/useTopupPacks";
-import { Badge, Button, ButtonLink, Card, CardHeader, Modal } from "../ui";
+import { Badge, Button, ButtonLink, Card, Modal } from "../ui";
+import { getTierFeatures } from "@/lib/subscription";
+import { planMonthlyCredits } from "@/lib/credits/value";
+import { creditMeter, usageMeter } from "@/lib/dashboardV3/settingsUsage";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { ACTIVITY_LABELS, cancelExplanation, creditView, planName, planStatusLine, planView, plansAbove, priceSourceFrom, type PlanId, type PlanState, type PriceSource } from "@/lib/dashboardV3/billingView";
-import { Notice, SectionHead } from "./bits";
+import { AsideCard, DangerCard, Notice, Panel, SettingsPageShell, UsageMeter } from "./bits";
 
 export type ReceiptRow = {
   id: string;
@@ -31,6 +34,8 @@ export type ReceiptRow = {
 export type ActivityRow = { id: string; type: string; amount: number; description: string; createdAt: string };
 export type CardSummary = { cardBrand: string | null; cardLast4: string | null; cardExpMonth: number | null; cardExpYear: number | null };
 
+export type PlanUsage = { sites: number; products: number; teammates: number };
+
 export type PlanSectionProps = {
   state: PlanState;
   trialAvailable: boolean;
@@ -40,6 +45,8 @@ export type PlanSectionProps = {
   activity: ActivityRow[];
   payments: ReceiptRow[];
   card: CardSummary;
+  /** What the account uses now, for the meters (teammates = people besides the owner). */
+  usage?: PlanUsage;
   prices?: PriceSource;
   /** Preview: nothing is sent anywhere. */
   mock?: boolean;
@@ -92,7 +99,7 @@ function EmailReceipt({ id, mock }: { id: string; mock?: boolean }) {
 }
 
 export function PlanSection(props: PlanSectionProps) {
-  const { state, trialAvailable, allowanceBalance, topupBalance, allowanceResetAt, activity, payments, card, prices: pricesProp, mock = false } = props;
+  const { state, trialAvailable, allowanceBalance, topupBalance, allowanceResetAt, activity, payments, card, prices: pricesProp, usage = { sites: 0, products: 0, teammates: 0 }, mock = false } = props;
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
@@ -178,57 +185,96 @@ export function PlanSection(props: PlanSectionProps) {
   const shownPayments = showAll ? payments : payments.slice(0, 5);
   const cardLine = card.cardLast4 ? `${BRANDS[card.cardBrand ?? ""] ?? "Card"} ending ${card.cardLast4}${card.cardExpMonth && card.cardExpYear ? `, expires ${String(card.cardExpMonth).padStart(2, "0")}/${String(card.cardExpYear).slice(-2)}` : ""}` : null;
 
+  const features = getTierFeatures(state.plan, { trial: state.basis === "TRIAL" });
+  const monthly = planMonthlyCredits(state.plan);
+  const siteMeter = usageMeter(usage.sites, features.maxPublishedSites);
+  const productMeter = usageMeter(usage.products, features.maxCommerceProducts);
+  const seatMeter = usageMeter(usage.teammates, features.teamSeats);
+  const creditsMeter = creditMeter(allowanceBalance, monthly);
+  const nextPlan = upgrades[0];
+
   return (
-    <>
-      <SectionHead title="Plan & billing">What you have, what it includes, and what you've paid.</SectionHead>
+    <SettingsPageShell
+      title="Plan & billing"
+      purpose="What you have, what you're using, and what you've paid."
+      aside={
+        <>
+          <AsideCard title={`What ${current.name} includes`}>
+            <ul>
+              {current.included.map((line) => (
+                <li key={line}><Check size={16} aria-hidden /> <span>{line}</span></li>
+              ))}
+            </ul>
+          </AsideCard>
+          <AsideCard title="What happens if…">
+            <ul>
+              <li><ArrowRight size={16} aria-hidden /> <span><b>I upgrade?</b> The new plan starts straight away, and only the difference is charged.</span></li>
+              <li><ArrowRight size={16} aria-hidden /> <span><b>I run out of AI credits?</b> Top up any time. Credits you buy never expire.</span></li>
+              <li><ArrowRight size={16} aria-hidden /> <span><b>I cancel?</b> You keep your plan until the end of what you&apos;ve paid for. Nothing is deleted.</span></li>
+            </ul>
+          </AsideCard>
+        </>
+      }
+    >
       {error ? <Notice tone="bad">{error}</Notice> : null}
       {status ? <Notice tone={status.tone === "bad" ? "bad" : "info"}>{status.text}</Notice> : null}
 
-      <Card data-tour="plan-current" padding="lg">
+      <Panel data-tour="plan-current" aria-label="Your plan">
         <div className="plx-planhero">
-          <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0, flex: "1 1 320px" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
             <span className="plx-eyebrow">Your plan</span>
             <div className="plx-planhero__name">
-              <h2 className="plx-h1">{current.name}</h2>
-              <Badge tone={state.plan === "FREE" ? "neutral" : "success"} dot>{state.basis === "TRIAL" ? "Free trial" : state.plan === "FREE" ? "Free" : "Active"}</Badge>
+              <h3>{current.name}</h3>
+              <Badge tone={state.plan === "FREE" ? "neutral" : state.pastDue ? "danger" : "success"} dot>{state.pastDue ? "Payment needed" : state.basis === "TRIAL" ? "Free trial" : state.plan === "FREE" ? "Free" : "Active"}</Badge>
             </div>
-            <p className="plx-body" style={{ margin: 0, maxWidth: 560 }}>{planStatusLine(state)}</p>
+            <p className="plx-body" style={{ maxWidth: 560 }}>{planStatusLine(state)}</p>
             {cardLine ? <p className="plx-small" style={{ margin: 0, display: "flex", gap: 8, alignItems: "center" }}><CreditCard size={16} aria-hidden /> {cardLine}</p> : null}
           </div>
-          {state.paying ? (
-            <Button variant="secondary" loading={busy === "portal"} onClick={portal}>Update card or see invoices</Button>
-          ) : null}
+          <div className="plx-planhero__act">
+            {state.paying ? (
+              <Button loading={busy === "portal"} onClick={portal}>{state.pastDue ? "Update my card" : "Manage payment & invoices"}</Button>
+            ) : nextPlan ? (
+              <ButtonLink href="#plans" rightIcon={<ArrowRight size={18} aria-hidden />}>{state.plan === "FREE" ? "Upgrade my plan" : "See plans"}</ButtonLink>
+            ) : null}
+            {state.paying && nextPlan ? <ButtonLink href="#plans" variant="ghost" size="sm">See bigger plans</ButtonLink> : null}
+          </div>
         </div>
-        <hr style={{ border: 0, borderTop: "1px solid var(--plx-border)", margin: "24px 0" }} />
-        <h3 className="plx-h3" style={{ margin: "0 0 14px" }}>What&apos;s included</h3>
-        <ul className="plx-ticks">
-          {current.included.map((line) => (
-            <li key={line}><Check size={18} aria-hidden /> <span>{line}</span></li>
-          ))}
-        </ul>
-      </Card>
+        <div className="plx-meters" data-tour="plan-usage" aria-label="What you're using">
+          <UsageMeter label="Live websites" meter={siteMeter} hint={siteMeter.tone === "full" ? "All used. Upgrade to put more sites live." : siteMeter.tone === "near" ? "Nearly all used." : undefined} />
+          <UsageMeter label="AI credits this month" meter={creditsMeter} unit={{ one: "credit", many: "credits" }} hint={credits.low || credits.negative ? "Running low. Top up below." : `Refill in ${credits.resetsInDays} day${credits.resetsInDays === 1 ? "" : "s"}`} />
+          <UsageMeter label="Products" meter={productMeter} hint={features.maxCommerceProducts === 0 ? "Selling products comes with Starter." : productMeter.tone !== "ok" ? "Nearly full." : undefined} />
+          <UsageMeter label="Teammates" meter={seatMeter} hint={features.teamSeats === 0 ? "Inviting people comes with Starter." : seatMeter.tone === "full" ? "All seats used." : undefined} />
+        </div>
+      </Panel>
 
       {upgrades.length ? (
-        <section className="plx-set__stack" data-tour="plan-upgrade" aria-labelledby="up-h">
-          <h2 className="plx-h2" id="up-h">{state.plan === "FREE" ? "Need more?" : "Want even more?"}</h2>
+        <section id="plans" className="plx-sp__main" data-tour="plan-upgrade" aria-labelledby="up-h" style={{ scrollMarginTop: 90 }}>
+          <div>
+            <h3 className="plx-h2" id="up-h">{state.plan === "FREE" ? "Pick a plan that fits" : "Want even more?"}</h3>
+            <p className="plx-body" style={{ marginTop: 4 }}>Prices are in your own currency. Change or cancel any time.</p>
+          </div>
           <div className="plx-plans">
             {upgrades.map((id: PlanId, i) => {
               const v = planView(id, prices);
               return (
-                <Card key={id} tone={i === 0 ? "tint" : "surface"}>
-                  <CardHeader title={v.name} description={v.tagline} action={v.price ? <b>{v.price}</b> : undefined} />
-                  <ul className="plx-ticks" style={{ marginBottom: 20 }}>
+                <Card key={id} tone={i === 0 ? "tint" : "surface"} padding="none" className="plx-panel plx-plan">
+                  <div>
+                    <h3 className="plx-h3">{v.name}</h3>
+                    <p className="plx-small" style={{ margin: "4px 0 0" }}>{v.tagline}</p>
+                  </div>
+                  {v.price ? <div className="plx-plan__price">{v.price.replace(/ a month$/, "")}<small>{v.price.endsWith("a month") ? "a month" : ""}</small></div> : null}
+                  <ul className="plx-ticks">
                     {v.included.map((line) => (
                       <li key={line}><Check size={18} aria-hidden /> <span>{line}</span></li>
                     ))}
                   </ul>
-                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                    <Button loading={busy === `sub-${id}`} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => checkout({ kind: "subscription", plan: id as PaidPlanId }, `sub-${id}`)}>
+                  <div className="plx-plan__actions">
+                    <Button variant={i === 0 ? "primary" : "secondary"} loading={busy === `sub-${id}`} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => checkout({ kind: "subscription", plan: id as PaidPlanId }, `sub-${id}`)}>
                       {state.plan === "FREE" ? `Choose ${v.name}` : `Switch to ${v.name}`}
                     </Button>
                     {state.plan === "FREE" && trialAvailable && id !== "ENTERPRISE" ? (
                       <Button
-                        variant="secondary"
+                        variant="ghost"
                         loading={busy === `trial-${id}`}
                         onClick={async () => {
                           if (mock) return;
@@ -252,35 +298,35 @@ export function PlanSection(props: PlanSectionProps) {
         </section>
       ) : null}
 
-      <div className="plx-set__grid">
-        <Card data-tour="plan-credits">
-          <CardHeader title="AI credits" description="Credits are what SOL uses when it builds or writes for you." />
-          <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 20 }}>
+      <Panel title="AI credits" description="Credits are what SOL uses when it builds or writes for you." data-tour="plan-credits" flush>
+        <div style={{ padding: "0 28px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             <span className="plx-bigstat">{credits.total.toLocaleString("en-US")}</span>
             <span className="plx-small">
               {credits.negative ? "SOL finished your last job after your credits ran out. We take that off your next credits." : `${credits.allowance.toLocaleString("en-US")} from your plan, which refill in ${credits.resetsInDays} day${credits.resetsInDays === 1 ? "" : "s"}. ${credits.topup.toLocaleString("en-US")} you bought, which never run out.`}
             </span>
           </div>
           {credits.low || credits.negative ? <Notice tone="warn">Running low? Top up below and SOL carries on straight away.</Notice> : null}
-          <h3 className="plx-h3" style={{ margin: "16px 0 12px" }}>Add more credits</h3>
-          <div className="plx-packs">
-            {packs.map((p) => (
-              <button key={p.pack} type="button" className="plx-pack" disabled={busy !== null} onClick={() => checkout({ kind: "topup", pack: p.pack }, `topup-${p.pack}`)}>
-                <b>{busy === `topup-${p.pack}` ? "Opening…" : packLabel(p)}</b>
-                <span>{p.price}</span>
-              </button>
-            ))}
+          <div>
+            <h3 className="plx-h3" style={{ margin: "0 0 12px" }}>Add more credits</h3>
+            <div className="plx-packs">
+              {packs.map((p) => (
+                <button key={p.pack} type="button" className="plx-pack" disabled={busy !== null} onClick={() => checkout({ kind: "topup", pack: p.pack }, `topup-${p.pack}`)}>
+                  <b>{busy === `topup-${p.pack}` ? "Opening…" : packLabel(p)}</b>
+                  <span>{p.price}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </Card>
-
-        <Card>
-          <CardHeader title="Recent AI use" description="What your credits were spent on lately." />
+        </div>
+        <div style={{ borderTop: "1px solid var(--plx-border)" }}>
+          <h3 className="plx-h3" style={{ padding: "20px 28px 4px" }}>Recent AI use</h3>
           {activity.length === 0 ? (
-            <p className="plx-body" style={{ margin: 0 }}>Nothing yet. When SOL builds something for you, it shows up here.</p>
+            <p className="plx-body" style={{ padding: "4px 28px 24px" }}>Nothing yet. When SOL builds something for you, it shows up here.</p>
           ) : (
-            <ul className="plx-list" style={{ margin: "0 -20px" }}>
-              {activity.slice(0, 6).map((a) => (
-                <li key={a.id} className="plx-row" style={{ minHeight: 60 }}>
+            <ul className="plx-list" style={{ paddingBottom: 8 }}>
+              {activity.slice(0, 5).map((a) => (
+                <li key={a.id} className="plx-row" style={{ minHeight: 60, padding: "12px 28px" }}>
                   <div className="plx-row__main">
                     <span className="plx-row__title">{a.description || ACTIVITY_LABELS[a.type] || "Credits"}</span>
                     <span className="plx-row__sub">{when(a.createdAt)}</span>
@@ -290,15 +336,12 @@ export function PlanSection(props: PlanSectionProps) {
               ))}
             </ul>
           )}
-        </Card>
-      </div>
-
-      <Card padding="none" className="plx-listcard" data-tour="plan-payments">
-        <div style={{ padding: "20px 20px 8px" }}>
-          <CardHeader title="Payments & receipts" description="Everything you've paid Plexo. Download a receipt any time." />
         </div>
+      </Panel>
+
+      <Panel title="Payments & receipts" description="Everything you've paid Plexo. Download a receipt any time." flush data-tour="plan-payments">
         {payments.length === 0 ? (
-          <p className="plx-body" style={{ padding: "0 20px 20px", margin: 0 }}>No payments yet. When you subscribe or buy credits, your receipts appear here.</p>
+          <p className="plx-body" style={{ padding: "0 28px 28px" }}>No payments yet. When you subscribe or buy credits, your receipts appear here.</p>
         ) : (
           <>
             <div>
@@ -335,14 +378,13 @@ export function PlanSection(props: PlanSectionProps) {
             ) : null}
           </>
         )}
-      </Card>
+      </Panel>
 
       {cancelText ? (
-        <Card tone="elevated">
-          <CardHeader title="Cancel your plan" description={cancelText} />
-          <Button variant="secondary" loading={busy === "portal"} onClick={portal}>I want to cancel</Button>
-          <p className="plx-small" style={{ margin: "10px 0 0" }}>We&apos;ll open a secure page where you can cancel. You&apos;ll keep {planName(state.plan)} until the date shown there.</p>
-        </Card>
+        <DangerCard title="Cancel your plan" description={cancelText}>
+          <Button variant="danger" loading={busy === "portal"} onClick={portal}>I want to cancel</Button>
+          <p className="plx-small" style={{ margin: "12px 0 0", color: "var(--plx-text)" }}>We&apos;ll open a secure page where you can cancel. You&apos;ll keep {planName(state.plan)} until the date shown there.</p>
+        </DangerCard>
       ) : null}
 
       <Modal open={!!secret} onClose={() => setSecret(null)} title="Pay securely" width={600}>
@@ -354,6 +396,6 @@ export function PlanSection(props: PlanSectionProps) {
           </div>
         ) : null}
       </Modal>
-    </>
+    </SettingsPageShell>
   );
 }

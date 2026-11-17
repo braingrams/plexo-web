@@ -97,9 +97,9 @@ export function HubPreview() {
       <SitesList
         experience={exp}
         sites={[
-          { id: "s1", name: "Ama's Kitchen", kind: "Online store", status: "live", address: "amaskitchen.plexopages.com", visits7d: 214, editHref: "#" },
-          { id: "s2", name: "Cooking with Ama", kind: "Course", status: "live", address: "learn.amaskitchen.com", visits7d: 58, editHref: "#" },
-          { id: "s3", name: "Kitchen notes", kind: "Blog", status: "draft", address: null, visits7d: 0, editHref: "#" },
+          { id: "s1", name: "Ama's Kitchen", kind: "Online store", status: "live", address: "amaskitchen.plexopages.com", visits7d: 214, editHref: "#", app: false },
+          { id: "s2", name: "Cooking with Ama", kind: "Course", status: "live", address: "learn.amaskitchen.com", visits7d: 58, editHref: "#", app: false },
+          { id: "s3", name: "Kitchen notes", kind: "Blog", status: "draft", address: null, visits7d: 0, editHref: "#", app: false },
         ]}
       />
     );

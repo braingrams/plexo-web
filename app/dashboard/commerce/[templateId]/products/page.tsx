@@ -1,8 +1,10 @@
+import { redirectToHubIfV3 } from "@/lib/dashboardV3/hubRedirect";
 import { CommerceProduct, CommerceCategory, CommerceSettings } from "@/lib/db/commerceEntities";
 import { ProductsClient, type ProductSummary } from "./ProductsClient";
 
-export default async function CommerceProductsPage({ params }: { params: Promise<{ templateId: string }> }) {
+export default async function CommerceProductsPage({ params, searchParams }: { params: Promise<{ templateId: string }>; searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const { templateId } = await params;
+  await redirectToHubIfV3(templateId, "products", (await searchParams)?.classic);
 
   const [{ data: products }, { data: categories }, { data: settings }] = await Promise.all([
     CommerceProduct.query.primary({ templateId }).go({ pages: "all" }),

@@ -42,17 +42,17 @@ const TERMINAL_PHASES: Phase[] = ["COMPLETED", "FAILED", "CANCELLED"];
 const NON_TERMINAL_PHASES: Phase[] = ["PENDING", "DETECTING", "DISCOVERING", "FETCHING", "REWRITING", "PAUSED_ERROR"];
 
 const inputStyle: React.CSSProperties = {
-  flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
-  borderRadius: 7, color: "#f0f2ff", padding: "0.4rem 0.6rem", fontSize: "0.82rem", outline: "none", fontFamily: "inherit",
+  flex: 1, background: "var(--ed-w-050)", border: "1px solid var(--ed-w-120)",
+  borderRadius: 7, color: "var(--ed-text)", padding: "0.4rem 0.6rem", fontSize: "0.82rem", outline: "none", fontFamily: "inherit",
 };
 const smallBtn: React.CSSProperties = {
   display: "inline-flex", alignItems: "center", gap: "0.35rem",
-  padding: "0.35rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)",
-  background: "transparent", color: "rgba(240,242,255,0.7)", cursor: "pointer", fontFamily: "inherit",
+  padding: "0.35rem 0.7rem", borderRadius: 7, border: "1px solid var(--ed-w-100)",
+  background: "transparent", color: "var(--ed-t-700)", cursor: "pointer", fontFamily: "inherit",
   fontSize: "0.76rem", fontWeight: 600,
 };
 const smallBtnPrimary: React.CSSProperties = {
-  ...smallBtn, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff",
+  ...smallBtn, border: "none", background: "var(--ed-cta)", color: "var(--ed-on-brand)",
 };
 
 const PHASE_TEXT: Record<Phase, string> = {
@@ -313,7 +313,7 @@ export function SiteImportPanel({
   }
 
   if (loadingInitial) {
-    return <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>Checking for an import in progress…</p>;
+    return <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)" }}>Checking for an import in progress…</p>;
   }
 
   const progressPct = job?.totalPages ? Math.min(100, Math.round((job.processedPages / job.totalPages) * 100)) : job?.phase === "COMPLETED" ? 100 : 0;
@@ -337,7 +337,7 @@ export function SiteImportPanel({
     <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
       {!job && step === "url" && (
         <>
-          <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "rgba(240,242,255,0.5)" }}>Website URL</label>
+          <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--ed-t-500)" }}>Website URL</label>
           <div style={{ display: "flex", gap: "0.4rem" }}>
             <input
               autoFocus
@@ -352,14 +352,14 @@ export function SiteImportPanel({
             </button>
             <button type="button" onClick={onClose} style={smallBtn}>Cancel</button>
           </div>
-          {error && <p style={{ color: "#f87171", fontSize: "0.75rem" }}>{error}</p>}
+          {error && <p style={{ color: "var(--ed-danger)", fontSize: "0.75rem" }}>{error}</p>}
         </>
       )}
 
       {!job && step === "confirm" && (
         <>
           <div>
-            <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "rgba(240,242,255,0.5)", display: "block", marginBottom: "0.35rem" }}>Platform</label>
+            <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--ed-t-500)", display: "block", marginBottom: "0.35rem" }}>Platform</label>
             <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
               {(Object.keys(PLATFORM_LABEL) as Platform[]).map((p) => (
                 <button
@@ -367,10 +367,10 @@ export function SiteImportPanel({
                   type="button"
                   onClick={() => setPlatformOverride(p)}
                   style={{
-                    padding: "0.3rem 0.6rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer",
+                    padding: "0.3rem 0.6rem", borderRadius: 7, border: "1px solid var(--ed-w-120)", cursor: "pointer",
                     fontSize: "0.72rem", fontWeight: 700,
                     background: (platformOverride ?? detectedPlatform) === p ? "var(--brand-subtle)" : "transparent",
-                    color: (platformOverride ?? detectedPlatform) === p ? "var(--brand)" : "rgba(240,242,255,0.6)",
+                    color: (platformOverride ?? detectedPlatform) === p ? "var(--ed-accent-text)" : "var(--ed-t-600)",
                   }}
                 >
                   {PLATFORM_LABEL[p]}{p === detectedPlatform && !platformOverride ? " (detected)" : ""}
@@ -379,19 +379,19 @@ export function SiteImportPanel({
             </div>
           </div>
 
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem", color: "rgba(240,242,255,0.75)", cursor: "pointer" }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem", color: "var(--ed-t-750)", cursor: "pointer" }}>
             <input type="checkbox" checked={importBlogPosts} onChange={(e) => setImportBlogPosts(e.target.checked)} />
             Also import blog posts as editable posts
           </label>
 
-          <div style={{ padding: "0.7rem 0.8rem", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.75rem", color: "rgba(240,242,255,0.7)", cursor: "pointer", lineHeight: 1.4 }}>
+          <div style={{ padding: "0.7rem 0.8rem", borderRadius: 8, background: "var(--ed-w-030)", border: "1px solid var(--ed-w-080)" }}>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem", fontSize: "0.75rem", color: "var(--ed-t-700)", cursor: "pointer", lineHeight: 1.4 }}>
               <input type="checkbox" checked={ownershipAttested} onChange={(e) => setOwnershipAttested(e.target.checked)} style={{ marginTop: "0.15rem" }} />
               <span>I own <strong>{url}</strong>, or am authorized to migrate it.</span>
             </label>
           </div>
 
-          {error && <p style={{ color: "#f87171", fontSize: "0.75rem" }}>{error}</p>}
+          {error && <p style={{ color: "var(--ed-danger)", fontSize: "0.75rem" }}>{error}</p>}
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button type="button" onClick={() => void handleStart()} disabled={starting || !ownershipAttested} style={{ ...smallBtnPrimary, opacity: !ownershipAttested ? 0.5 : 1 }}>
               {starting ? "Starting…" : "Start import"}
@@ -403,11 +403,11 @@ export function SiteImportPanel({
       )}
 
       {aupPending && (
-        <div style={{ padding: "0.8rem 0.9rem", borderRadius: 8, background: "rgba(var(--brand-rgb),0.08)", border: "1px solid rgba(var(--brand-rgb),0.3)" }}>
-          <p style={{ fontSize: "0.8rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.4rem" }}>Accept the Acceptable Use Policy</p>
-          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.6)", marginBottom: "0.75rem", lineHeight: 1.4 }}>
+        <div style={{ padding: "0.8rem 0.9rem", borderRadius: 8, background: "color-mix(in srgb, var(--brand) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)" }}>
+          <p style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--ed-text)", marginBottom: "0.4rem" }}>Accept the Acceptable Use Policy</p>
+          <p style={{ fontSize: "0.75rem", color: "var(--ed-t-600)", marginBottom: "0.75rem", lineHeight: 1.4 }}>
             Imported pages are published exactly as fetched, with no content sanitization. Required once per account.{" "}
-            <a href="/legal/acceptable-use" target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>Read the policy</a>.
+            <a href="/legal/acceptable-use" target="_blank" rel="noopener noreferrer" style={{ color: "var(--ed-accent-text)" }}>Read the policy</a>.
           </p>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button type="button" onClick={() => setAupPending(false)} style={smallBtn}>Cancel</button>
@@ -420,22 +420,22 @@ export function SiteImportPanel({
 
       {job && (
         <>
-          <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f0f2ff" }}>{statusLine}</p>
-          <div style={{ height: 7, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
+          <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--ed-text)" }}>{statusLine}</p>
+          <div style={{ height: 7, borderRadius: 999, background: "var(--ed-w-080)", overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${progressPct}%`, background: "var(--brand)", transition: "width 0.4s" }} />
           </div>
-          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.5)" }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--ed-t-500)" }}>
             {job.processedPages}{job.totalPages ? ` / ${job.totalPages}` : ""} pages processed
           </p>
 
           <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             {showRetry && (
-              <button type="button" onClick={() => void handleRetry()} disabled={retrying} style={{ ...smallBtn, borderColor: "var(--brand)", color: "var(--brand)" }}>
+              <button type="button" onClick={() => void handleRetry()} disabled={retrying} style={{ ...smallBtn, borderColor: "var(--brand)", color: "var(--ed-accent-text)" }}>
                 {retrying ? "Retrying…" : "Retry now"}
               </button>
             )}
             {showCancel && (
-              <button type="button" onClick={() => void handleCancel()} disabled={cancelling} style={{ ...smallBtn, borderColor: "rgba(248,113,113,0.4)", color: "#f87171" }}>
+              <button type="button" onClick={() => void handleCancel()} disabled={cancelling} style={{ ...smallBtn, borderColor: "color-mix(in srgb, var(--ed-danger) 40%, transparent)", color: "var(--ed-danger)" }}>
                 {cancelling ? "Cancelling…" : "Cancel import"}
               </button>
             )}
@@ -446,33 +446,33 @@ export function SiteImportPanel({
 
           {job.errors.length > 0 && (
             <div>
-              <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "#f59e0b", marginBottom: "0.3rem" }}>
+              <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--ed-amber)", marginBottom: "0.3rem" }}>
                 {job.errors.length} item{job.errors.length === 1 ? "" : "s"} need a look:
               </p>
-              <ul style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.6)", paddingLeft: "1rem", maxHeight: 120, overflowY: "auto" }}>
+              <ul style={{ fontSize: "0.7rem", color: "var(--ed-t-600)", paddingLeft: "1rem", maxHeight: 120, overflowY: "auto" }}>
                 {job.errors.map((e, i) => <li key={i} style={{ marginBottom: "0.25rem" }}>{e}</li>)}
               </ul>
             </div>
           )}
 
           {report && TERMINAL_PHASES.includes(job.phase) && (
-            <div style={{ paddingTop: "0.75rem", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+            <div style={{ paddingTop: "0.75rem", borderTop: "1px solid var(--ed-w-080)" }}>
               <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem", flexWrap: "wrap" }}>
                 {[
                   { label: "Pages", value: report.pagesCreated },
                   { label: "Posts", value: report.postsCreated },
                   { label: "Assets", value: report.assetsInternalized },
                 ].map((tile) => (
-                  <div key={tile.label} style={{ flex: "1 1 90px", padding: "0.5rem 0.6rem", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
-                    <p style={{ fontSize: "1.1rem", fontWeight: 800, color: "#f0f2ff" }}>{tile.value}</p>
-                    <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.5)" }}>{tile.label}</p>
+                  <div key={tile.label} style={{ flex: "1 1 90px", padding: "0.5rem 0.6rem", borderRadius: 8, background: "var(--ed-w-030)", border: "1px solid var(--ed-w-080)" }}>
+                    <p style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--ed-text)" }}>{tile.value}</p>
+                    <p style={{ fontSize: "0.68rem", color: "var(--ed-t-500)" }}>{tile.label}</p>
                   </div>
                 ))}
               </div>
 
               {report.warnings.length > 0 && (
                 <div style={{ marginBottom: "0.75rem" }}>
-                  <ul style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.55)", paddingLeft: "1rem" }}>
+                  <ul style={{ fontSize: "0.72rem", color: "var(--ed-t-550)", paddingLeft: "1rem" }}>
                     {report.warnings.map((w, i) => <li key={i} style={{ marginBottom: "0.25rem" }}>{w}</li>)}
                   </ul>
                 </div>
@@ -480,8 +480,8 @@ export function SiteImportPanel({
 
               {report.pages.some((p) => p.interactiveFeatures.length > 0) && (
                 <div style={{ marginBottom: "0.75rem" }}>
-                  <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "#f59e0b", marginBottom: "0.35rem" }}>Some interactive features won&apos;t work after migration</p>
-                  <ul style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.65)", paddingLeft: "1rem", maxHeight: 140, overflowY: "auto" }}>
+                  <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--ed-amber)", marginBottom: "0.35rem" }}>Some interactive features won&apos;t work after migration</p>
+                  <ul style={{ fontSize: "0.72rem", color: "var(--ed-t-650)", paddingLeft: "1rem", maxHeight: 140, overflowY: "auto" }}>
                     {report.pages.filter((p) => p.interactiveFeatures.length > 0).map((p) => (
                       <li key={p.sourceUrl} style={{ marginBottom: "0.3rem" }}>
                         <strong>{p.plexoPath ?? p.sourceUrl}</strong>: {p.interactiveFeatures.map((f) => f.label).join("; ")}
@@ -493,8 +493,8 @@ export function SiteImportPanel({
 
               {report.pages.some((p) => p.heuristicExtraction) && (
                 <div>
-                  <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "rgba(240,242,255,0.7)", marginBottom: "0.35rem" }}>Heuristically extracted — please review</p>
-                  <ul style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.55)", paddingLeft: "1rem", maxHeight: 140, overflowY: "auto" }}>
+                  <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--ed-t-700)", marginBottom: "0.35rem" }}>Heuristically extracted — please review</p>
+                  <ul style={{ fontSize: "0.72rem", color: "var(--ed-t-550)", paddingLeft: "1rem", maxHeight: 140, overflowY: "auto" }}>
                     {report.pages.filter((p) => p.heuristicExtraction).map((p) => <li key={p.sourceUrl} style={{ marginBottom: "0.25rem" }}>{p.plexoPath ?? p.sourceUrl}</li>)}
                   </ul>
                 </div>

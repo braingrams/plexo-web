@@ -6,7 +6,6 @@ import { AlertTriangle, Bot, CheckCircle2, CalendarClock, ChevronDown, Clock, Co
 import { api, ApiError, type AppEnv } from "./api";
 import { Button, C, EmptyHero, IconButton, Notice, PaneHeader, Pill, ProblemState, Shimmer, StatCard, StateStyles, hueGradient, inputStyle, timeAgo, SolIdeas } from "./ui";
 
-import { BRAND } from "@/lib/theme";
 // "Server code": the small pieces of the app that run on Plexo's servers rather than in the
 // visitor's browser — sending emails, taking payments, jobs that run on a schedule.
 
@@ -92,7 +91,7 @@ const STATUS: Record<FunctionRow["status"], { label: string; color: string }> = 
 function EnvTag({ env }: { env: AppEnv }) {
   const live = env === "live";
   return (
-    <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: live ? "rgba(var(--brand-rgb), 0.22)" : "rgba(196,181,253,0.1)", color: live ? "#c4b5fd" : C.muted, border: `1px solid ${live ? "rgba(var(--brand-rgb), 0.4)" : C.border}` }}>
+    <span style={{ fontSize: "0.68rem", fontWeight: 700, padding: "3px 8px", borderRadius: 99, whiteSpace: "nowrap", background: live ? "color-mix(in srgb, var(--brand) 22%, transparent)" : "color-mix(in srgb, var(--ed-lavender) 10%, transparent)", color: live ? "var(--ed-lavender)" : C.muted, border: `1px solid ${live ? "color-mix(in srgb, var(--brand) 40%, transparent)" : C.border}` }}>
       {live ? "Live" : "Preview"}
     </span>
   );
@@ -179,7 +178,7 @@ export function FunctionsPane({ appId, refreshKey, onAskAi }: { appId: string; r
         <FunctionsSkeleton />
       ) : functions.length === 0 ? (
         <EmptyHero
-          tint={BRAND.primary}
+          tint={"var(--ed-accent-text)"}
           title="No server code yet"
           body={
             <>
@@ -200,8 +199,8 @@ export function FunctionsPane({ appId, refreshKey, onAskAi }: { appId: string; r
           {error && <Notice tone="warning">We couldn&rsquo;t refresh just now: {error} What you see below may be a moment out of date.</Notice>}
           {stats && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
-              <StatCard label={stats.total === 1 ? "Piece of server code" : "Pieces of server code"} value={stats.total} color={BRAND.primary} icon={Server} />
-              <StatCard label="Run on a schedule" value={stats.scheduled} color={BRAND[300]} icon={Clock} />
+              <StatCard label={stats.total === 1 ? "Piece of server code" : "Pieces of server code"} value={stats.total} color={"var(--ed-accent-text)"} icon={Server} />
+              <StatCard label="Run on a schedule" value={stats.scheduled} color={"var(--brand-light)"} icon={Clock} />
               <StatCard label={stats.problems ? "Need attention" : "All running fine"} value={stats.problems || "✓"} color={stats.problems ? C.danger : C.success} icon={stats.problems ? AlertTriangle : CheckCircle2} />
             </div>
           )}
@@ -220,10 +219,10 @@ export function FunctionsPane({ appId, refreshKey, onAskAi }: { appId: string; r
               return (
                 <li
                   key={`${f.env}:${f.name}`}
-                  style={{ borderRadius: 18, border: `1px solid ${open ? "rgba(var(--brand-rgb), 0.4)" : C.border}`, background: open ? "linear-gradient(180deg, rgba(var(--brand-rgb), 0.07), rgba(255,255,255,0.015) 160px)" : C.panel, overflow: "hidden" }}
+                  style={{ borderRadius: 18, border: `1px solid ${open ? "color-mix(in srgb, var(--brand) 40%, transparent)" : C.border}`, background: open ? "linear-gradient(180deg, color-mix(in srgb, var(--brand) 7%, transparent), var(--ed-w-015) 160px)" : C.panel, overflow: "hidden" }}
                 >
                   <div className="plx-row" style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap", padding: "1rem 1.15rem", cursor: "pointer" }} onClick={toggle}>
-                    <span aria-hidden style={{ width: 46, height: 46, borderRadius: 14, flexShrink: 0, display: "grid", placeItems: "center", background: hueGradient(f.name), color: "#fff", boxShadow: "0 8px 22px rgba(0,0,0,0.3)", opacity: f.status === "FAILED" ? 0.6 : 1 }}>
+                    <span aria-hidden style={{ width: 46, height: 46, borderRadius: 14, flexShrink: 0, display: "grid", placeItems: "center", background: hueGradient(f.name), color: "var(--ed-on-brand)", boxShadow: "0 8px 22px rgba(0,0,0,0.3)", opacity: f.status === "FAILED" ? 0.6 : 1 }}>
                       <Icon size={21} />
                     </span>
                     <span style={{ flex: "1 1 260px", minWidth: 0 }}>
@@ -295,36 +294,36 @@ function FunctionsSkeleton() {
 /** A friendly picture: a few everyday jobs wired up to a server. */
 function ServerIllustration() {
   const tasks = [
-    { icon: Mail, color: BRAND.primary, label: "Email sent", w: "62%" },
-    { icon: CreditCard, color: BRAND[300], label: "Payment taken", w: "48%" },
-    { icon: Clock, color: "#6366f1", label: "Every morning", w: "56%" },
+    { icon: Mail, color: "var(--ed-accent-text)", label: "Email sent", w: "62%" },
+    { icon: CreditCard, color: "var(--brand-light)", label: "Payment taken", w: "48%" },
+    { icon: Clock, color: "var(--ed-violet)", label: "Every morning", w: "56%" },
   ];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 0, transform: "rotate(-1.5deg)" }}>
       <div style={{ flex: "1 1 auto", display: "flex", flexDirection: "column", gap: 14, minWidth: 0 }}>
         {tasks.map(({ icon: Icon, color, label, w }, i) => (
           <div key={label} style={{ display: "flex", alignItems: "center", marginLeft: i === 1 ? 18 : 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.6rem 0.75rem", borderRadius: 13, background: "rgba(11,15,25,0.7)", border: `1px solid ${C.borderStrong}`, boxShadow: "0 14px 34px rgba(0,0,0,0.35)", minWidth: 150 }}>
-              <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "grid", placeItems: "center", background: `${color}33`, color }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.6rem 0.75rem", borderRadius: 13, background: "color-mix(in srgb, var(--ed-bg) 70%, transparent)", border: `1px solid ${C.borderStrong}`, boxShadow: "0 14px 34px rgba(0,0,0,0.35)", minWidth: 150 }}>
+              <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: "grid", placeItems: "center", background: `color-mix(in srgb, ${color} 20%, transparent)`, color }}>
                 <Icon size={15} />
               </span>
               <span style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1 }}>
                 <span style={{ fontSize: 10.5, fontWeight: 700, color: C.text }}>{label}</span>
-                <span style={{ width: w, height: 5, borderRadius: 99, background: "rgba(255,255,255,0.16)" }} />
+                <span style={{ width: w, height: 5, borderRadius: 99, background: "var(--ed-w-160)" }} />
               </span>
             </div>
-            <span style={{ flex: 1, minWidth: 18, height: 2, background: `linear-gradient(90deg, ${color}, rgba(var(--brand-rgb), 0.25))` }} />
+            <span style={{ flex: 1, minWidth: 18, height: 2, background: `linear-gradient(90deg, ${color}, color-mix(in srgb, var(--brand) 25%, transparent))` }} />
           </div>
         ))}
       </div>
-      <div style={{ width: 92, flexShrink: 0, borderRadius: 16, padding: 10, display: "flex", flexDirection: "column", gap: 8, background: `linear-gradient(160deg, ${BRAND.deep}, ${BRAND[700]})`, border: "1px solid rgba(196,181,253,0.35)", boxShadow: "0 24px 60px rgba(76,29,149,0.45)" }}>
+      <div style={{ width: 92, flexShrink: 0, borderRadius: 16, padding: 10, display: "flex", flexDirection: "column", gap: 8, background: `linear-gradient(160deg, var(--brand-deep), var(--brand-deeper))`, border: "1px solid color-mix(in srgb, var(--ed-lavender) 35%, transparent)", boxShadow: "0 24px 60px rgba(76,29,149,0.45)" }}>
         {[0, 1, 2].map((i) => (
-          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 8px", borderRadius: 8, background: "rgba(11,15,25,0.35)" }}>
+          <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 8px", borderRadius: 8, background: "color-mix(in srgb, var(--ed-bg) 35%, transparent)" }}>
             <span style={{ width: 6, height: 6, borderRadius: 99, background: C.success, boxShadow: `0 0 8px ${C.success}` }} />
-            <span style={{ flex: 1, height: 4, borderRadius: 99, background: "rgba(196,181,253,0.45)" }} />
+            <span style={{ flex: 1, height: 4, borderRadius: 99, background: "color-mix(in srgb, var(--ed-lavender) 45%, transparent)" }} />
           </div>
         ))}
-        <Server size={18} color="#ede9fe" style={{ alignSelf: "center", marginTop: 2 }} />
+        <Server size={18} color="var(--ed-text)" style={{ alignSelf: "center", marginTop: 2 }} />
       </div>
     </div>
   );
@@ -414,7 +413,7 @@ function FunctionDetail({ appId, fn }: { appId: string; fn: FunctionRow }) {
       {fn.status === "DEPLOYING" && <Notice tone="warning">Still getting ready. It&rsquo;ll be able to run in a moment.</Notice>}
 
       {/* Try it: run it right now and see what it sent back. */}
-      <section style={{ display: "flex", flexDirection: "column", gap: 12, padding: "1rem 1.1rem", borderRadius: 14, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.02)" }}>
+      <section style={{ display: "flex", flexDirection: "column", gap: 12, padding: "1rem 1.1rem", borderRadius: 14, border: `1px solid ${C.border}`, background: "var(--ed-w-020)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <span style={{ flex: "1 1 280px", minWidth: 0 }}>
             <span style={{ display: "block", fontSize: "0.88rem", fontWeight: 700, color: C.text }}>Try it now</span>
@@ -456,7 +455,7 @@ function FunctionDetail({ appId, fn }: { appId: string; fn: FunctionRow }) {
                 type="button"
                 aria-pressed={minutes === w.minutes}
                 onClick={() => setMinutes(w.minutes)}
-                style={{ padding: "0.36rem 0.7rem", fontSize: "0.74rem", fontWeight: 600, border: "none", cursor: "pointer", background: minutes === w.minutes ? "rgba(var(--brand-rgb), 0.25)" : "transparent", color: minutes === w.minutes ? C.text : C.muted }}
+                style={{ padding: "0.36rem 0.7rem", fontSize: "0.74rem", fontWeight: 600, border: "none", cursor: "pointer", background: minutes === w.minutes ? "color-mix(in srgb, var(--brand) 25%, transparent)" : "transparent", color: minutes === w.minutes ? C.text : C.muted }}
               >
                 {w.label}
               </button>
@@ -484,7 +483,7 @@ function FunctionDetail({ appId, fn }: { appId: string; fn: FunctionRow }) {
         {logError && <Notice tone="danger">{logError}</Notice>}
         <div style={frameStyle}>
           <div style={{ ...frameBar, display: "flex", alignItems: "center", gap: 6 }}>
-            {[BRAND.primary, BRAND[400], "#c4b5fd"].map((c) => (
+            {["var(--ed-accent-text)", "var(--brand-soft)", "var(--ed-lavender)"].map((c) => (
               <span key={c} aria-hidden style={{ width: 8, height: 8, borderRadius: 99, background: c, opacity: 0.8 }} />
             ))}
             <span style={{ marginLeft: 6 }}>{friendlyName(fn.name)} · {fn.env === "live" ? "Live" : "Preview"}</span>
@@ -515,7 +514,7 @@ function FunctionDetail({ appId, fn }: { appId: string; fn: FunctionRow }) {
               logs.map((l, i) => {
                 const bad = /error|exception|failed/i.test(l.message);
                 return (
-                  <div key={`${l.at}-${i}`} style={{ display: "flex", gap: "0.8rem", padding: "1px 6px", margin: "0 -6px", borderRadius: 6, color: bad ? C.danger : C.text, background: bad ? "rgba(248,113,113,0.07)" : "transparent" }}>
+                  <div key={`${l.at}-${i}`} style={{ display: "flex", gap: "0.8rem", padding: "1px 6px", margin: "0 -6px", borderRadius: 6, color: bad ? C.danger : C.text, background: bad ? "color-mix(in srgb, var(--ed-danger) 7%, transparent)" : "transparent" }}>
                     <time dateTime={l.at} style={{ color: C.faint, flexShrink: 0 }} title={new Date(l.at).toLocaleString()}>
                       {new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                     </time>
@@ -532,8 +531,8 @@ function FunctionDetail({ appId, fn }: { appId: string; fn: FunctionRow }) {
 }
 
 // A dark, framed window for anything shown in monospace (replies and activity).
-const frameStyle = { borderRadius: 12, border: `1px solid ${C.borderStrong}`, background: "rgba(5,7,14,0.6)", overflow: "hidden" as const };
-const frameBar = { padding: "0.45rem 0.8rem", borderBottom: `1px solid ${C.border}`, fontSize: "0.7rem", fontWeight: 600, color: C.muted, background: "rgba(var(--brand-rgb), 0.06)" };
+const frameStyle = { borderRadius: 12, border: `1px solid ${C.borderStrong}`, background: "var(--ed-scrim)", overflow: "hidden" as const };
+const frameBar = { padding: "0.45rem 0.8rem", borderBottom: `1px solid ${C.border}`, fontSize: "0.7rem", fontWeight: 600, color: C.muted, background: "color-mix(in srgb, var(--brand) 6%, transparent)" };
 
 const preStyle = {
   margin: 0,

@@ -7,7 +7,6 @@ import type { ExtractedColorNode } from "@/lib/htmlColorExtraction";
 import { ScriptAccessControl } from "./ScriptAccessControl";
 import { ColorSwatchPicker } from "./ColorSwatchPicker";
 
-import { BRAND } from "@/lib/theme";
 export type RawTextContentEditorHandle = {
   save: () => Promise<void>;
 };
@@ -96,7 +95,7 @@ function CollapsibleHeader({
       }}
     >
       <span style={{
-        display: "inline-flex", flexShrink: 0, color: "rgba(240,242,255,0.4)",
+        display: "inline-flex", flexShrink: 0, color: "var(--ed-t-400)",
         transform: collapsed ? "rotate(-90deg)" : "none", transition: "transform 0.15s",
       }}>
         <IconChevronDown />
@@ -168,7 +167,7 @@ const DEVICE_OPTIONS: Array<{ key: DeviceMode; icon: React.ReactNode; title: str
  * for a CSS-driven layout check. */
 function DeviceToggle({ value, onChange }: { value: DeviceMode; onChange: (device: DeviceMode) => void }) {
   return (
-    <div style={{ display: "flex", gap: "0.15rem", background: "rgba(255,255,255,0.06)", borderRadius: 8, padding: "0.15rem", flexShrink: 0 }}>
+    <div style={{ display: "flex", gap: "0.15rem", background: "var(--ed-w-060)", borderRadius: 8, padding: "0.15rem", flexShrink: 0 }}>
       {DEVICE_OPTIONS.map((opt) => {
         const active = value === opt.key;
         return (
@@ -179,8 +178,8 @@ function DeviceToggle({ value, onChange }: { value: DeviceMode; onChange: (devic
             onClick={() => onChange(opt.key)}
             style={{
               display: "grid", placeItems: "center", width: 26, height: 22, borderRadius: 6, border: "none",
-              background: active ? "rgba(var(--brand-rgb),0.4)" : "transparent",
-              color: active ? "#fff" : "rgba(240,242,255,0.55)",
+              background: active ? "color-mix(in srgb, var(--brand) 40%, transparent)" : "transparent",
+              color: active ? "var(--ed-on-brand)" : "var(--ed-t-550)",
               cursor: "pointer",
             }}
           >
@@ -237,14 +236,14 @@ function BackgroundSizeSelect({
         }}
         style={{
           width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-          background: "rgba(255,255,255,0.04)",
-          border: open ? "1px solid rgba(var(--brand-rgb),0.5)" : "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 7, color: "#f0f2ff", padding: "0.35rem 0.5rem", fontSize: "0.78rem",
+          background: "var(--ed-w-040)",
+          border: open ? "1px solid color-mix(in srgb, var(--brand) 50%, transparent)" : "1px solid var(--ed-w-100)",
+          borderRadius: 7, color: "var(--ed-text)", padding: "0.35rem 0.5rem", fontSize: "0.78rem",
           outline: "none", fontFamily: "inherit", cursor: "pointer",
         }}
       >
         <span>{selected.label}</span>
-        <span style={{ color: "rgba(240,242,255,0.4)", display: "inline-flex", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
+        <span style={{ color: "var(--ed-t-400)", display: "inline-flex", transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }}>
           <IconChevronDown />
         </span>
       </button>
@@ -252,7 +251,7 @@ function BackgroundSizeSelect({
       {open && (
         <div style={{
           position: "absolute", top: "calc(100% + 4px)", left: 0, right: 0, zIndex: 20,
-          background: "rgba(18,16,36,0.98)", border: "1px solid rgba(var(--brand-rgb),0.3)",
+          background: "var(--ed-panel)", border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)",
           borderRadius: 8, overflow: "hidden", boxShadow: "0 12px 30px rgba(0,0,0,0.5)",
         }}>
           {BG_SIZE_OPTIONS.map((opt) => {
@@ -267,8 +266,8 @@ function BackgroundSizeSelect({
                 }}
                 style={{
                   width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between",
-                  padding: "0.5rem 0.6rem", background: isActive ? "rgba(var(--brand-rgb),0.15)" : "transparent",
-                  border: "none", color: isActive ? "#c4b5fd" : "rgba(240,242,255,0.8)",
+                  padding: "0.5rem 0.6rem", background: isActive ? "color-mix(in srgb, var(--brand) 15%, transparent)" : "transparent",
+                  border: "none", color: isActive ? "var(--ed-lavender)" : "var(--ed-t-800)",
                   fontSize: "0.78rem", fontWeight: isActive ? 600 : 400, textAlign: "left", cursor: "pointer",
                   fontFamily: "inherit",
                 }}
@@ -801,21 +800,21 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
 
   if (loading) {
     return (
-      <div style={{ flex: 1, display: "grid", placeItems: "center", color: "rgba(240,242,255,0.4)" }}>
+      <div style={{ flex: 1, display: "grid", placeItems: "center", color: "var(--ed-t-400)" }}>
         Loading text content…
       </div>
     );
   }
   if (loadError) {
     return (
-      <div style={{ flex: 1, display: "grid", placeItems: "center", color: "#f87171" }}>
+      <div style={{ flex: 1, display: "grid", placeItems: "center", color: "var(--ed-danger)" }}>
         {loadError}
       </div>
     );
   }
   if ((!nodes || nodes.length === 0) && imgNodes.length === 0 && bgNodes.length === 0 && (colorNodes?.length ?? 0) === 0) {
     return (
-      <div style={{ flex: 1, display: "grid", placeItems: "center", color: "rgba(240,242,255,0.4)" }}>
+      <div style={{ flex: 1, display: "grid", placeItems: "center", color: "var(--ed-t-400)" }}>
         No editable text, images, or colors found in this page.
       </div>
     );
@@ -832,18 +831,18 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
 
   const sectionHeadingStyle: React.CSSProperties = {
     fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-    color: "rgba(240,242,255,0.35)", marginBottom: "0.6rem",
+    color: "var(--ed-t-350)", marginBottom: "0.6rem",
   };
   const fieldLabelStyle: React.CSSProperties = { ...sectionHeadingStyle, marginBottom: "0.3rem" };
   const sectionTitleStyle: React.CSSProperties = {
-    fontSize: "0.9rem", fontWeight: 800, color: "#f0f2ff", margin: "0 0 0.65rem",
+    fontSize: "0.9rem", fontWeight: 800, color: "var(--ed-text)", margin: "0 0 0.65rem",
     display: "flex", alignItems: "center", gap: "0.4rem",
   };
 
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div style={{
-        padding: "0.5rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)", flexShrink: 0,
+        padding: "0.5rem 1.25rem", borderBottom: "1px solid var(--ed-w-080)", flexShrink: 0,
       }}>
         <ScriptAccessControl
           templateId={templateId}
@@ -859,7 +858,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
           className={collapsedSide === "fields" ? "raw-text-editor-collapsed-strip" : undefined}
           style={
             collapsedSide === "fields"
-              ? { width: 36, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(255,255,255,0.02)", borderRight: "1px solid rgba(255,255,255,0.08)" }
+              ? { width: 36, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "var(--ed-w-020)", borderRight: "1px solid var(--ed-w-080)" }
               : { flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }
           }
           onClick={collapsedSide === "fields" ? () => setCollapsedSide("none") : undefined}
@@ -869,14 +868,14 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
             <IconChevron direction="right" />
           ) : (
             <>
-              <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end", padding: "0.3rem 0.6rem", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <div style={{ flexShrink: 0, display: "flex", justifyContent: "flex-end", padding: "0.3rem 0.6rem", borderBottom: "1px solid var(--ed-w-060)" }}>
                 <button
                   type="button"
                   onClick={() => setCollapsedSide("fields")}
                   title="Collapse fields panel"
                   style={{
                     display: "grid", placeItems: "center", width: 24, height: 22, borderRadius: 6,
-                    border: "1px solid rgba(255,255,255,0.1)", background: "none", color: "rgba(240,242,255,0.5)", cursor: "pointer",
+                    border: "1px solid var(--ed-w-100)", background: "none", color: "var(--ed-t-500)", cursor: "pointer",
                   }}
                 >
                   <IconChevron direction="left" />
@@ -910,16 +909,16 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                           style={{
                             display: "flex", gap: "0.65rem", padding: "0.65rem",
                             borderRadius: 10,
-                            border: isActive ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.08)",
-                            boxShadow: isActive ? "0 0 0 3px rgba(var(--brand-rgb),0.2)" : "none",
-                            background: "rgba(255,255,255,0.02)",
+                            border: isActive ? "1px solid var(--brand)" : "1px solid var(--ed-w-080)",
+                            boxShadow: isActive ? "0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent)" : "none",
+                            background: "var(--ed-w-020)",
                           }}
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
                             src={draft.src}
                             alt={node.alt || "preview"}
-                            style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, flexShrink: 0, background: "rgba(255,255,255,0.05)" }}
+                            style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, flexShrink: 0, background: "var(--ed-w-050)" }}
                           />
                           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                             <input
@@ -929,9 +928,9 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                               onChange={(e) => handleImgSrcChange(node, e.target.value)}
                               placeholder="Image URL"
                               style={{
-                                width: "100%", background: "rgba(255,255,255,0.04)",
-                                border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7,
-                                color: "#f0f2ff", padding: "0.4rem 0.6rem", fontSize: "0.8rem",
+                                width: "100%", background: "var(--ed-w-040)",
+                                border: "1px solid var(--ed-w-100)", borderRadius: 7,
+                                color: "var(--ed-text)", padding: "0.4rem 0.6rem", fontSize: "0.8rem",
                                 outline: "none", fontFamily: "inherit",
                               }}
                             />
@@ -943,13 +942,13 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                                 onChange={(e) => handleImgSizeChange(node, "width", e.target.value)}
                                 placeholder="Width"
                                 style={{
-                                  width: 70, background: "rgba(255,255,255,0.04)",
-                                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7,
-                                  color: "#f0f2ff", padding: "0.35rem 0.5rem", fontSize: "0.78rem",
+                                  width: 70, background: "var(--ed-w-040)",
+                                  border: "1px solid var(--ed-w-100)", borderRadius: 7,
+                                  color: "var(--ed-text)", padding: "0.35rem 0.5rem", fontSize: "0.78rem",
                                   outline: "none", fontFamily: "inherit",
                                 }}
                               />
-                              <span style={{ color: "rgba(240,242,255,0.3)", fontSize: "0.75rem" }}>×</span>
+                              <span style={{ color: "var(--ed-t-300)", fontSize: "0.75rem" }}>×</span>
                               <input
                                 type="number"
                                 value={draft.height ?? ""}
@@ -957,22 +956,22 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                                 onChange={(e) => handleImgSizeChange(node, "height", e.target.value)}
                                 placeholder="Height"
                                 style={{
-                                  width: 70, background: "rgba(255,255,255,0.04)",
-                                  border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7,
-                                  color: "#f0f2ff", padding: "0.35rem 0.5rem", fontSize: "0.78rem",
+                                  width: 70, background: "var(--ed-w-040)",
+                                  border: "1px solid var(--ed-w-100)", borderRadius: 7,
+                                  color: "var(--ed-text)", padding: "0.35rem 0.5rem", fontSize: "0.78rem",
                                   outline: "none", fontFamily: "inherit",
                                 }}
                               />
-                              <span style={{ color: "rgba(240,242,255,0.35)", fontSize: "0.7rem" }}>px</span>
+                              <span style={{ color: "var(--ed-t-350)", fontSize: "0.7rem" }}>px</span>
                               <button
                                 type="button"
                                 onClick={() => setLockAspect((prev) => ({ ...prev, [node.id]: !prev[node.id] }))}
                                 title={lockAspect[node.id] ? "Aspect ratio locked" : "Aspect ratio unlocked"}
                                 style={{
                                   marginLeft: "auto", width: 26, height: 26, borderRadius: 6,
-                                  border: "1px solid rgba(255,255,255,0.1)",
-                                  background: lockAspect[node.id] ? "rgba(var(--brand-rgb),0.18)" : "rgba(255,255,255,0.04)",
-                                  color: lockAspect[node.id] ? BRAND[400] : "rgba(240,242,255,0.4)",
+                                  border: "1px solid var(--ed-w-100)",
+                                  background: lockAspect[node.id] ? "color-mix(in srgb, var(--brand) 18%, transparent)" : "var(--ed-w-040)",
+                                  color: lockAspect[node.id] ? "var(--brand-soft)" : "var(--ed-t-400)",
                                   cursor: "pointer", display: "grid", placeItems: "center", flexShrink: 0,
                                 }}
                               >
@@ -1003,16 +1002,16 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                           style={{
                             display: "flex", gap: "0.65rem", padding: "0.65rem",
                             borderRadius: 10,
-                            border: isActive ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.08)",
-                            boxShadow: isActive ? "0 0 0 3px rgba(var(--brand-rgb),0.2)" : "none",
-                            background: "rgba(255,255,255,0.02)",
+                            border: isActive ? "1px solid var(--brand)" : "1px solid var(--ed-w-080)",
+                            boxShadow: isActive ? "0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent)" : "none",
+                            background: "var(--ed-w-020)",
                           }}
                         >
                           <div
                             style={{
                               width: 48, height: 48, borderRadius: 6, flexShrink: 0,
                               backgroundImage: `url("${draft.src}")`, backgroundSize: "cover", backgroundPosition: "center",
-                              border: "1px solid rgba(255,255,255,0.08)",
+                              border: "1px solid var(--ed-w-080)",
                             }}
                           />
                           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "0.4rem" }}>
@@ -1023,9 +1022,9 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                               onChange={(e) => handleBgChange(node, { src: e.target.value })}
                               placeholder="Background image URL"
                               style={{
-                                width: "100%", background: "rgba(255,255,255,0.04)",
-                                border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7,
-                                color: "#f0f2ff", padding: "0.4rem 0.6rem", fontSize: "0.8rem",
+                                width: "100%", background: "var(--ed-w-040)",
+                                border: "1px solid var(--ed-w-100)", borderRadius: 7,
+                                color: "var(--ed-text)", padding: "0.4rem 0.6rem", fontSize: "0.8rem",
                                 outline: "none", fontFamily: "inherit",
                               }}
                             />
@@ -1058,7 +1057,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
               />
               {!collapsedGroups.has("colors") && (
                 <div style={{ marginTop: "0.6rem" }}>
-              <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", margin: "0 0 0.75rem" }}>
+              <p style={{ fontSize: "0.72rem", color: "var(--ed-t-350)", margin: "0 0 0.75rem" }}>
                 One swatch per unique color — changing it updates every place on the page that uses it.
               </p>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "0.6rem" }}>
@@ -1073,8 +1072,8 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                       style={{
                         display: "flex", flexDirection: "column", gap: "0.4rem", width: 168,
                         padding: "0.55rem", borderRadius: 10, cursor: "pointer",
-                        border: changed ? "1px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.08)",
-                        background: "rgba(255,255,255,0.02)",
+                        border: changed ? "1px solid color-mix(in srgb, var(--brand) 40%, transparent)" : "1px solid var(--ed-w-080)",
+                        background: "var(--ed-w-020)",
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
@@ -1084,14 +1083,14 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                           value={value}
                           onChange={(e) => handleColorChange(node, e.target.value)}
                           style={{
-                            flex: 1, minWidth: 0, background: "rgba(255,255,255,0.04)",
-                            border: "1px solid rgba(255,255,255,0.1)", borderRadius: 7,
-                            color: "#f0f2ff", padding: "0.3rem 0.5rem", fontSize: "0.72rem",
+                            flex: 1, minWidth: 0, background: "var(--ed-w-040)",
+                            border: "1px solid var(--ed-w-100)", borderRadius: 7,
+                            color: "var(--ed-text)", padding: "0.3rem 0.5rem", fontSize: "0.72rem",
                             outline: "none", fontFamily: "monospace",
                           }}
                         />
                       </div>
-                      <p style={{ fontSize: "0.65rem", color: "rgba(240,242,255,0.35)", margin: 0, lineHeight: 1.4 }}>
+                      <p style={{ fontSize: "0.65rem", color: "var(--ed-t-350)", margin: 0, lineHeight: 1.4 }}>
                         {node.sections.join(" · ")}
                       </p>
                     </div>
@@ -1133,13 +1132,13 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                           const isActive = activeField?.kind === "text" && activeField.id === node.id;
                           const fieldStyle: React.CSSProperties = {
                             width: "100%",
-                            background: "rgba(255,255,255,0.04)",
+                            background: "var(--ed-w-040)",
                             border: isActive
                               ? "1px solid var(--brand)"
-                              : changed ? "1px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.1)",
-                            boxShadow: isActive ? "0 0 0 3px rgba(var(--brand-rgb),0.2)" : "none",
+                              : changed ? "1px solid color-mix(in srgb, var(--brand) 40%, transparent)" : "1px solid var(--ed-w-100)",
+                            boxShadow: isActive ? "0 0 0 3px color-mix(in srgb, var(--brand) 20%, transparent)" : "none",
                             borderRadius: 8,
-                            color: "#f0f2ff",
+                            color: "var(--ed-text)",
                             padding: "0.6rem 0.75rem",
                             fontSize: "0.85rem",
                             outline: "none",
@@ -1188,7 +1187,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                                   ...fieldStyle,
                                   fontSize: "0.75rem",
                                   padding: "0.4rem 0.65rem",
-                                  color: "rgba(240,242,255,0.7)",
+                                  color: "var(--ed-t-700)",
                                 }}
                               />
                             </div>
@@ -1213,8 +1212,8 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
           className={collapsedSide === "preview" ? "raw-text-editor-collapsed-strip" : "raw-text-editor-preview"}
           style={
             collapsedSide === "preview"
-              ? { width: 36, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "rgba(255,255,255,0.02)" }
-              : { flex: 1, minWidth: 0, borderLeft: "1px solid rgba(255,255,255,0.08)", background: "#fff", position: "relative", display: "flex", flexDirection: "column" }
+              ? { width: 36, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", background: "var(--ed-w-020)" }
+              : { flex: 1, minWidth: 0, borderLeft: "1px solid var(--ed-w-080)", background: "#fff", position: "relative", display: "flex", flexDirection: "column" }
           }
           onClick={collapsedSide === "preview" ? () => setCollapsedSide("none") : undefined}
           title={collapsedSide === "preview" ? "Expand preview panel" : undefined}
@@ -1232,7 +1231,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
           <div style={{
             flexShrink: 0, display: "flex", alignItems: "center", gap: "0.5rem",
             padding: "0.4rem 0.75rem", fontSize: "0.72rem", lineHeight: 1.4,
-            background: "rgba(17,19,31,0.85)", color: "rgba(240,242,255,0.6)",
+            background: "color-mix(in srgb, var(--ed-panel) 85%, transparent)", color: "var(--ed-t-600)",
           }}>
             <span style={{ flex: 1, minWidth: 0 }}>
             {scriptsActive ? (
@@ -1252,7 +1251,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
               title="Collapse preview panel"
               style={{
                 display: "grid", placeItems: "center", width: 24, height: 22, borderRadius: 6, flexShrink: 0,
-                border: "1px solid rgba(255,255,255,0.15)", background: "none", color: "rgba(240,242,255,0.6)", cursor: "pointer",
+                border: "1px solid var(--ed-w-150)", background: "none", color: "var(--ed-t-600)", cursor: "pointer",
               }}
             >
               <IconChevron direction="right" />
@@ -1307,7 +1306,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
           }
           .raw-text-editor-preview {
             border-left: none !important;
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            border-top: 1px solid var(--ed-w-080);
             min-height: 320px;
           }
           .raw-text-editor-collapsed-strip {

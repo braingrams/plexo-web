@@ -61,7 +61,7 @@ function Bar({ credits, monthly, height = 6 }: { credits: number; monthly: numbe
   // Full = the plan's monthly amount; top-ups beyond it still read as full.
   const pct = Math.max(credits > 0 ? 4 : 0, Math.min(100, (credits / Math.max(1, monthly ?? credits)) * 100));
   return (
-    <span style={{ display: "block", width: "100%", height, borderRadius: 99, background: "rgba(255,255,255,0.1)" }}>
+    <span style={{ display: "block", width: "100%", height, borderRadius: 99, background: "var(--ed-w-100)" }}>
       <span style={{ display: "block", width: `${pct}%`, height: "100%", borderRadius: 99, background: isLow(credits, monthly) ? C.warning : C.text }} />
     </span>
   );
@@ -91,12 +91,12 @@ function PackRow({ pack, highlight, onPick }: { pack: Pack; highlight?: boolean;
     <button
       type="button"
       onClick={onPick}
-      style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "0.7rem 0.75rem", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", color: C.text, background: highlight ? "rgba(255,255,255,0.04)" : "transparent", border: highlight ? `2px solid ${C.text}` : `1px solid ${C.border}` }}
+      style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", padding: "0.7rem 0.75rem", borderRadius: 12, cursor: "pointer", fontFamily: "inherit", textAlign: "left", color: C.text, background: highlight ? "var(--ed-w-040)" : "transparent", border: highlight ? `2px solid ${C.text}` : `1px solid ${C.border}` }}
     >
       <span style={{ flex: 1 }}>
         <span style={{ display: "block", fontSize: "0.86rem", fontWeight: 700 }}>
           {n(pack.credits)} credits
-          {highlight && <span style={{ marginLeft: 8, padding: "1px 8px", borderRadius: 99, background: "rgba(255,255,255,0.08)", fontSize: "0.68rem", fontWeight: 600 }}>Most popular</span>}
+          {highlight && <span style={{ marginLeft: 8, padding: "1px 8px", borderRadius: 99, background: "var(--ed-w-080)", fontSize: "0.68rem", fontWeight: 600 }}>Most popular</span>}
         </span>
       </span>
       <span style={{ padding: "0.35rem 0.7rem", borderRadius: 9, background: C.text, color: C.bg, fontSize: "0.76rem", fontWeight: 700 }}>{pack.price ?? "Buy"}</span>
@@ -128,7 +128,7 @@ export function CreditsPanel({ credits, monthly, onPick, onClose }: { credits: n
       </div>
       {credits !== null && <Bar credits={credits} monthly={monthly} height={8} />}
       {monthly !== null && <div style={{ fontSize: "0.74rem", color: C.faint }}>Your plan adds {n(monthly)} credits each month.</div>}
-      <div style={{ padding: "0.6rem 0.75rem", borderRadius: 10, background: "rgba(255,255,255,0.05)", fontSize: "0.8rem", lineHeight: 1.5, color: low ? C.warning : C.muted }}>
+      <div style={{ padding: "0.6rem 0.75rem", borderRadius: 10, background: "var(--ed-w-050)", fontSize: "0.8rem", lineHeight: 1.5, color: low ? C.warning : C.muted }}>
         {low ? "Running low. Top up so SOL doesn't stop in the middle of a change." : "SOL uses credits when it changes your app. Editing the code yourself is free."}
       </div>
       <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>Top up</div>
@@ -160,7 +160,7 @@ export function OutOfCreditsCard({ midTurn, onPick, onDismiss, onOpenCode }: { m
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
         {(packs ?? []).map((p) => (
-          <button key={p.pack} type="button" onClick={() => setChosen(p.pack)} aria-pressed={p.pack === chosen} style={{ padding: "0.55rem 0.3rem", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", color: C.text, textAlign: "center", background: p.pack === chosen ? "rgba(255,255,255,0.06)" : "transparent", border: p.pack === chosen ? `2px solid ${C.text}` : `1px solid ${C.border}` }}>
+          <button key={p.pack} type="button" onClick={() => setChosen(p.pack)} aria-pressed={p.pack === chosen} style={{ padding: "0.55rem 0.3rem", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", color: C.text, textAlign: "center", background: p.pack === chosen ? "var(--ed-w-060)" : "transparent", border: p.pack === chosen ? `2px solid ${C.text}` : `1px solid ${C.border}` }}>
             <span style={{ display: "block", fontSize: "0.82rem", fontWeight: 700 }}>{n(p.credits)}</span>
             <span style={{ display: "block", fontSize: "0.7rem", color: C.muted }}>{p.price ?? "credits"}</span>
           </button>
@@ -239,7 +239,7 @@ export function TopUpSheet({ pack, returnTo, startingCredits, onDone, onClose }:
           <X size={17} />
         </button>
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", margin: "1rem 1.1rem 0", padding: "0.7rem 0.85rem", borderRadius: 12, background: "rgba(255,255,255,0.05)", fontSize: "0.86rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", margin: "1rem 1.1rem 0", padding: "0.7rem 0.85rem", borderRadius: 12, background: "var(--ed-w-050)", fontSize: "0.86rem" }}>
         <span>{n(pack.credits)} AI credits</span>
         <strong>{pack.price ?? ""}</strong>
       </div>

@@ -86,10 +86,10 @@ export async function POST(
         // webhook skips crediting when this resolves to the marketplace system owner.
         sellerUserId: template.userId,
       },
-      // Card entry itself is now embedded in-page (see PurchaseAction.tsx's checkout
+      // Card entry itself is now embedded in-page (see DesignAction.tsx's checkout
       // modal) — Stripe still does one final navigation to return_url once payment
       // completes, same as every other embedded Checkout session in this codebase.
-      return_url: `${appUrl}/marketplace/${id}?purchase=success`,
+      return_url: `${appUrl}/dashboard/marketplace/${id}?purchase=success`,
     });
     return NextResponse.json({ clientSecret: checkoutSession.client_secret });
   } catch (err) {

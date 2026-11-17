@@ -1,9 +1,8 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
-import { Card } from "../ui";
+import { Check, ChevronDown } from "lucide-react";
 import { CONNECT_TOOLS, editorConfig, mcpUrl, type ConnectToolId } from "@/lib/dashboardV3/connectTools";
-import { CopyBox, SectionHead } from "./bits";
+import { AsideCard, CopyBox, Panel, SettingsPageShell } from "./bits";
 
 const MARK: Record<ConnectToolId, string> = { claude: "C", chatgpt: "G", cursor: "›" };
 
@@ -11,15 +10,26 @@ const MARK: Record<ConnectToolId, string> = { claude: "C", chatgpt: "G", cursor:
 export function ConnectSection({ baseUrl, apiKeyHint }: { baseUrl: string; apiKeyHint: string }) {
   const link = mcpUrl(baseUrl);
   return (
-    <>
-      <SectionHead title="Connect AI tools">Already use Claude or ChatGPT? Connect them to Plexo and ask for changes in your own words.</SectionHead>
-      <div className="plx-tools" data-tour="connect-cards">
+    <SettingsPageShell
+      title="AI tools"
+      purpose="Already use Claude or ChatGPT? Connect them to Plexo and ask for changes in your own words."
+      aside={
+        <AsideCard title="How it works">
+          <ul>
+            <li><Check size={16} aria-hidden /> <span>You copy one link and paste it into your AI tool, once.</span></li>
+            <li><Check size={16} aria-hidden /> <span>You sign in to Plexo, so the tool can only touch your sites.</span></li>
+            <li><Check size={16} aria-hidden /> <span>Then just ask, like &ldquo;make me a pricing page&rdquo;.</span></li>
+          </ul>
+        </AsideCard>
+      }
+    >
+      <div className="plx-sp__main" data-tour="connect-cards">
         {CONNECT_TOOLS.map((t) => (
-          <Card key={t.id} className="plx-tool" padding="lg">
+          <Panel key={t.id} className="plx-tool">
             <div className="plx-tool__head">
               <span className="plx-tool__mark" aria-hidden>{MARK[t.id]}</span>
               <div>
-                <h2 className="plx-h2">{t.name}</h2>
+                <h3>{t.name}</h3>
                 <p>{t.tagline}</p>
               </div>
             </div>
@@ -48,9 +58,9 @@ export function ConnectSection({ baseUrl, apiKeyHint }: { baseUrl: string; apiKe
                 </>
               )}
             </details>
-          </Card>
+          </Panel>
         ))}
       </div>
-    </>
+    </SettingsPageShell>
   );
 }

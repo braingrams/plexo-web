@@ -28,8 +28,8 @@ export function Card({ children, style, className, padded = true }: Props) {
         WebkitBackdropFilter: "blur(16px)",
       }
     : {
-        background: "rgba(255,255,255,0.02)",
-        border: "1px solid rgba(255,255,255,0.06)",
+        background: "color-mix(in srgb, var(--plx-text, #fff) 2%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)",
         borderRadius: 16,
         padding: padded ? "1.75rem" : undefined,
         boxShadow: "0 10px 30px rgba(0,0,0,0.15)",

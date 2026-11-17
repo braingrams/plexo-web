@@ -2,13 +2,14 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Camera, PlayCircle, RotateCcw } from "lucide-react";
-import { Avatar, Button, ButtonLink, Card, CardHeader, Input, useToast } from "../ui";
+import { Camera, Check, KeyRound, PlayCircle, RotateCcw } from "lucide-react";
+import { Avatar, Button, ButtonLink, Input, useToast } from "../ui";
 import { ThemeSwitch } from "../theme/ThemeContext";
 import { useOptionalTour } from "../tour/TourProvider";
 import { errMsg, hubApi } from "../hub/hubApi";
 import type { Experience } from "@/lib/dashboardV3/nav";
-import { SectionHead } from "./bits";
+import { AsideCard, Notice, Panel, SaveBar, SettingRow, SettingsPageShell } from "./bits";
+import { isDirty } from "@/lib/dashboardV3/settingsSaveBar";
 import { switchLabel, useVersionSwitch } from "../../_versions/VersionUi";
 
 const FEELS: { id: Experience; title: string; body: string }[] = [
@@ -100,83 +101,69 @@ export function ProfileSection({ name: initialName, email, image: initialImage, 
   }
 
   const versions = useVersionSwitch();
+  const dirty = isDirty({ name: saved }, { name: name.trim() });
   return (
-    <>
-      <SectionHead title="You & how Plexo looks">Your details, and how you want Plexo to look and feel.</SectionHead>
-      {error ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div> : null}
+    <SettingsPageShell
+      title="Profile & appearance"
+      purpose="Who you are in Plexo, how it looks, and how much help it gives you."
+      bar={<SaveBar dirty={dirty} saving={busy === "name"} valid={!!name.trim()} onSave={saveName} onDiscard={() => { setName(saved); setError(null); }} />}
+      aside={
+        <>
+          <AsideCard title="Need a hand?">
+            <p>You can walk around Plexo again, or answer the setup questions to change your goal and style. Nothing you&apos;ve made is touched.</p>
+            <Button variant="secondary" leftIcon={<PlayCircle size={18} aria-hidden />} disabled={!tour} onClick={() => tour?.openOffer()}>Show me around</Button>
+            <ButtonLink href="/welcome/setup?again=1" variant="secondary" leftIcon={<RotateCcw size={18} aria-hidden />}>Personalise again</ButtonLink>
+          </AsideCard>
+          {versions.targets.length > 0 ? (
+            <AsideCard title="Your dashboard">
+              <p>Change how Plexo looks. Everything you&apos;ve made stays exactly as it is.</p>
+              {versions.targets.map((t) => (
+                <Button key={t.id} variant="secondary" onClick={() => versions.request(t.id)}>{switchLabel(t)}</Button>
+              ))}
+            </AsideCard>
+          ) : null}
+        </>
+      }
+    >
+      {error ? <Notice tone="bad">{error}</Notice> : null}
 
-      <div className="plx-set__grid">
-        <Card>
-          <CardHeader title="You" description="This is how you appear to the people you work with." />
-          <div className="plx-form">
-            <div className="plx-photo">
-              <Avatar name={saved || email} src={image} size={72} />
-              <div className="plx-photo__actions">
-                <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void upload(f); }} />
-                <Button variant="secondary" size="sm" loading={busy === "photo"} leftIcon={<Camera size={16} aria-hidden />} onClick={() => fileRef.current?.click()}>
-                  {image ? "Change photo" : "Add a photo"}
-                </Button>
-                {image ? <Button variant="ghost" size="sm" onClick={removePhoto}>Remove photo</Button> : null}
-              </div>
-            </div>
-            <Input label="Your name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" onKeyDown={(e) => e.key === "Enter" && name.trim() !== saved && void saveName()} />
-            <Input label="Your email" value={email} readOnly help="This is what you sign in with." />
-            <div>
-              <Button loading={busy === "name"} disabled={!name.trim() || name.trim() === saved} onClick={saveName}>Save</Button>
+      <Panel title="Your profile" description="This is how you appear to the people you work with.">
+        <div className="plx-sform">
+          <div className="plx-photo">
+            <Avatar name={saved || email} src={image} size={80} />
+            <div className="plx-photo__actions">
+              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void upload(f); }} />
+              <Button variant="secondary" size="sm" loading={busy === "photo"} leftIcon={<Camera size={16} aria-hidden />} onClick={() => fileRef.current?.click()}>
+                {image ? "Change photo" : "Add a photo"}
+              </Button>
+              {image ? <Button variant="ghost" size="sm" onClick={removePhoto}>Remove</Button> : null}
             </div>
           </div>
-        </Card>
+          <Input label="Your name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" help="What your team and customers see." error={!name.trim() && dirty ? "Please type the name you'd like us to use." : undefined} onKeyDown={(e) => e.key === "Enter" && dirty && name.trim() && void saveName()} />
+          <Input label="Your email" value={email} readOnly help="This is what you sign in with." />
+        </div>
+      </Panel>
 
-        <Card>
-          <CardHeader title="Light or dark" description="System follows your phone or computer." />
-          <ThemeSwitch />
-        </Card>
-      </div>
+      <Panel title="Sign-in" description="Keep your account safe.">
+        <SettingRow title="Password" description="We'll email you a link to choose a new one.">
+          <ButtonLink href="/auth/forgot-password" variant="secondary" leftIcon={<KeyRound size={16} aria-hidden />}>Change password</ButtonLink>
+        </SettingRow>
+      </Panel>
 
-      <Card data-tour="settings-feel">
-        <CardHeader title="How do you want Plexo to feel?" description="You can change this any time. Nothing you've made is touched." />
+      <Panel title="Appearance" description="System follows your phone or computer.">
+        <ThemeSwitch />
+      </Panel>
+
+      <Panel title="How should Plexo feel for you?" description="You can change this any time. The menu and pages change to match." data-tour="settings-feel">
         <div className="plx-choice" role="radiogroup" aria-label="How Plexo feels">
           {FEELS.map((f) => (
             <button key={f.id} type="button" role="radio" aria-checked={experience === f.id} className="plx-choice__opt" onClick={() => chooseFeel(f.id)}>
-              <b>{f.title}</b>
+              <b>{f.title}{experience === f.id ? <Check size={18} aria-hidden style={{ color: "var(--plx-deep)" }} /> : null}</b>
               <span>{f.body}</span>
             </button>
           ))}
         </div>
-      </Card>
-
-      {versions.targets.length > 0 ? (
-        <Card>
-          <CardHeader title="Your dashboard" description="Change how Plexo looks. Everything you've made stays exactly as it is." />
-          <div className="plx-photo__actions">
-            {versions.targets.map((t) => (
-              <Button key={t.id} variant="secondary" size="sm" onClick={() => versions.request(t.id)}>{switchLabel(t)}</Button>
-            ))}
-          </div>
-        </Card>
-      ) : null}
-
-      <Card>
-        <CardHeader title="Need a hand?" />
-        <div className="plx-actionrow">
-          <div>
-            <b>Take the tour again</b>
-            <span>A quick walk around Plexo, one part at a time.</span>
-          </div>
-          <Button variant="secondary" leftIcon={<PlayCircle size={18} aria-hidden />} disabled={!tour} onClick={() => tour?.openOffer()}>
-            Show me around
-          </Button>
-        </div>
-        <div className="plx-actionrow">
-          <div>
-            <b>Answer the setup questions again</b>
-            <span>Change your goal, your colours or your style. Your sites stay as they are.</span>
-          </div>
-          <ButtonLink href="/welcome/setup?again=1" variant="secondary" leftIcon={<RotateCcw size={18} aria-hidden />}>
-            Personalise again
-          </ButtonLink>
-        </div>
-      </Card>
-    </>
+      </Panel>
+    </SettingsPageShell>
   );
 }

@@ -3,7 +3,7 @@
  * one site at a time with a switcher; intermediate/pro see them all together — SPEC "After
  * You're live"). Pure.
  */
-export type SiteKindLabel = "Website" | "Online store" | "Blog" | "Course" | "App with sign-in" | "Server app" | "Uploaded app" | "Link page";
+export type SiteKindLabel = "Website" | "Online store" | "Blog" | "Course" | "App with sign-in" | "Server app" | "Uploaded app" | "Uploaded page" | "Link page";
 
 export type SiteSummary = {
   id: string;
@@ -13,6 +13,8 @@ export type SiteSummary = {
   /** Where visitors see it, when it's live (e.g. "amaskitchen.plexopages.com"). */
   address?: string | null;
   updatedAt?: string | null;
+  /** The WordPress address this site was moved from, when it came from there. */
+  movedFrom?: string;
 };
 
 export const CURRENT_SITE_COOKIE = "plexo-site";
@@ -28,6 +30,7 @@ export function pickCurrentSite(sites: SiteSummary[], cookieValue?: string | nul
 export function siteKindOf(t: { sourceType?: string | null; isLmsFunnel?: boolean | null; hasStore?: boolean; hasBlog?: boolean }): SiteKindLabel {
   if (t.sourceType === "REACT_PROJECT") return "App with sign-in";
   if (t.isLmsFunnel) return "Course";
+  if (t.sourceType === "RAW_UPLOAD") return "Uploaded page";
   if (t.hasStore) return "Online store";
   if (t.hasBlog) return "Blog";
   return "Website";

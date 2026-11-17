@@ -93,21 +93,21 @@ export function VisitorDetailsModal({
     <>
       <div
         onClick={onClose}
-        style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(6px)", zIndex: 10000 }}
+        style={{ position: "fixed", inset: 0, background: "var(--plx-overlay, rgba(0,0,0,0.6))", backdropFilter: "blur(6px)", zIndex: 10000 }}
       />
       <div
         style={{
           position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)",
           width: "min(760px, 92vw)", maxHeight: "80vh", display: "flex", flexDirection: "column",
-          background: "rgba(22,20,44,0.97)", backdropFilter: "blur(20px)",
-          border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16,
+          background: "var(--plx-surface, rgba(22,20,44,0.97))", backdropFilter: "blur(20px)",
+          border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", borderRadius: 16,
           boxShadow: "0 20px 50px rgba(0,0,0,0.6)", zIndex: 10001, overflow: "hidden",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.25rem 1.5rem", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.25rem 1.5rem", borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" }}>
           <div>
-            <h3 style={{ fontSize: "1rem", fontWeight: 800, color: "#f0f2ff", margin: 0 }}>Visitor Details</h3>
-            <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.45)", margin: "0.2rem 0 0" }}>
+            <h3 style={{ fontSize: "1rem", fontWeight: 800, color: "var(--plx-text, #f0f2ff)", margin: 0 }}>Visitor Details</h3>
+            <p style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", margin: "0.2rem 0 0" }}>
               {total} visit{total === 1 ? "" : "s"} recorded
             </p>
           </div>
@@ -115,7 +115,7 @@ export function VisitorDetailsModal({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(240,242,255,0.5)", padding: "0.25rem", lineHeight: 1, display: "grid", placeItems: "center" }}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--plx-muted, rgba(240,242,255,0.5))", padding: "0.25rem", lineHeight: 1, display: "grid", placeItems: "center" }}
           >
             <IconClose />
           </button>
@@ -127,14 +127,14 @@ export function VisitorDetailsModal({
               <div className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
             </div>
           ) : visits.length === 0 ? (
-            <div style={{ padding: "3rem 1.5rem", textAlign: "center", color: "rgba(240,242,255,0.4)", fontSize: "0.85rem" }}>
+            <div style={{ padding: "3rem 1.5rem", textAlign: "center", color: "var(--plx-muted, rgba(240,242,255,0.4))", fontSize: "0.85rem" }}>
               No visits recorded yet.
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.8rem" }}>
                 <thead>
-                  <tr style={{ textAlign: "left", color: "rgba(240,242,255,0.35)", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  <tr style={{ textAlign: "left", color: "var(--plx-faint, rgba(240,242,255,0.35))", fontSize: "0.68rem", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
                     <th style={{ padding: "0.6rem 1.5rem" }}>Time</th>
                     <th style={{ padding: "0.6rem 0.75rem" }}>Page</th>
                     <th style={{ padding: "0.6rem 0.75rem" }}>Location</th>
@@ -144,8 +144,8 @@ export function VisitorDetailsModal({
                 </thead>
                 <tbody>
                   {visits.map((v) => (
-                    <tr key={v.id} style={{ borderTop: "1px solid rgba(255,255,255,0.05)", color: "rgba(240,242,255,0.8)" }}>
-                      <td style={{ padding: "0.65rem 1.5rem", whiteSpace: "nowrap", color: "rgba(240,242,255,0.55)" }}>
+                    <tr key={v.id} style={{ borderTop: "1px solid color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)", color: "var(--plx-text, rgba(240,242,255,0.8))" }}>
+                      <td style={{ padding: "0.65rem 1.5rem", whiteSpace: "nowrap", color: "var(--plx-muted, rgba(240,242,255,0.55))" }}>
                         {new Date(v.createdAt).toLocaleString()}
                       </td>
                       <td style={{ padding: "0.65rem 0.75rem" }}>{v.templateName || v.domain || "—"}</td>
@@ -162,8 +162,8 @@ export function VisitorDetailsModal({
           )}
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.85rem 1.5rem", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-          <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>Page {page} of {totalPages}</span>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.85rem 1.5rem", borderTop: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>Page {page} of {totalPages}</span>
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button
               type="button"
@@ -171,8 +171,8 @@ export function VisitorDetailsModal({
               onClick={() => setOffset((o) => Math.max(0, o - LIMIT))}
               style={{
                 padding: "0.4rem 0.85rem", borderRadius: 8, fontSize: "0.78rem", fontWeight: 650,
-                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-                color: offset === 0 ? "rgba(240,242,255,0.25)" : "rgba(240,242,255,0.8)",
+                background: "color-mix(in srgb, var(--plx-text, #fff) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
+                color: offset === 0 ? "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 25%, transparent)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 80%, transparent)",
                 cursor: offset === 0 ? "not-allowed" : "pointer",
               }}
             >
@@ -184,8 +184,8 @@ export function VisitorDetailsModal({
               onClick={() => setOffset((o) => o + LIMIT)}
               style={{
                 padding: "0.4rem 0.85rem", borderRadius: 8, fontSize: "0.78rem", fontWeight: 650,
-                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-                color: offset + LIMIT >= total ? "rgba(240,242,255,0.25)" : "rgba(240,242,255,0.8)",
+                background: "color-mix(in srgb, var(--plx-text, #fff) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
+                color: offset + LIMIT >= total ? "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 25%, transparent)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 80%, transparent)",
                 cursor: offset + LIMIT >= total ? "not-allowed" : "pointer",
               }}
             >

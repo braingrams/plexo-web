@@ -84,8 +84,8 @@ export function AiWriteAssistant({
         onClick={() => setOpen((v) => !v)}
         style={{
           display: "inline-flex", alignItems: "center", gap: "0.45rem",
-          padding: "0.5rem 0.9rem", borderRadius: 9, border: "1px solid rgba(var(--brand-rgb),0.3)",
-          background: "rgba(var(--brand-rgb),0.1)", color: "var(--brand)", cursor: "pointer",
+          padding: "0.5rem 0.9rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)",
+          background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--ed-accent-text)", cursor: "pointer",
           fontSize: "0.8rem", fontWeight: 700, fontFamily: "inherit",
         }}
       >
@@ -96,11 +96,11 @@ export function AiWriteAssistant({
       {open && (
         <div style={{
           marginTop: "0.6rem", padding: "1rem", borderRadius: 12,
-          border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.02)",
+          border: "1px solid var(--ed-w-080)", background: "var(--ed-w-020)",
         }}>
           {!preview && (
             <>
-              <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", marginBottom: "0.6rem" }}>
+              <p style={{ fontSize: "0.78rem", color: "var(--ed-t-500)", marginBottom: "0.6rem" }}>
                 What should this post be about? SOL writes the title, the post, a short summary, search
                 details, categories and tags, and a featured image. Uses AI credits.
               </p>
@@ -113,8 +113,8 @@ export function AiWriteAssistant({
                   placeholder="e.g. 5 ways to speed up your onboarding flow"
                   disabled={isGenerating}
                   style={{
-                    flex: 1, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-                    borderRadius: 9, color: "#f0f2ff", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
+                    flex: 1, background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)",
+                    borderRadius: 9, color: "var(--ed-text)", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
                     outline: "none", fontFamily: "inherit",
                   }}
                 />
@@ -124,7 +124,7 @@ export function AiWriteAssistant({
                   disabled={isGenerating}
                   style={{
                     padding: "0.55rem 1.1rem", borderRadius: 9, border: "none",
-                    background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff",
+                    background: "var(--ed-cta)", color: "var(--ed-on-brand)",
                     cursor: isGenerating ? "not-allowed" : "pointer", opacity: isGenerating ? 0.7 : 1,
                     fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap",
                   }}
@@ -140,32 +140,32 @@ export function AiWriteAssistant({
             </div>
           )}
           {error && (
-            <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.6rem" }} role="alert">
+            <p style={{ fontSize: "0.78rem", color: "var(--ed-danger)", marginTop: "0.6rem" }} role="alert">
               {error}
             </p>
           )}
 
           {preview && (
             <div>
-              <p style={{ fontSize: "0.7rem", fontWeight: 700, color: "rgba(240,242,255,0.4)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "0.5rem" }}>
+              <p style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--ed-t-400)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "0.5rem" }}>
                 Preview — topic: &quot;{topic}&quot;
               </p>
 
-              <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.3rem" }}>{preview.title}</h3>
-              <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.55)", marginBottom: "0.7rem", fontStyle: "italic" }}>{preview.excerpt}</p>
+              <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "0.3rem" }}>{preview.title}</h3>
+              <p style={{ fontSize: "0.8rem", color: "var(--ed-t-550)", marginBottom: "0.7rem", fontStyle: "italic" }}>{preview.excerpt}</p>
 
               <div
                 style={{
                   maxHeight: 260, overflowY: "auto", padding: "0.75rem 0.9rem", borderRadius: 8,
-                  background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)",
-                  fontSize: "0.82rem", lineHeight: 1.6, color: "rgba(240,242,255,0.85)", marginBottom: "0.7rem",
+                  background: "var(--ed-w-030)", border: "1px solid var(--ed-w-060)",
+                  fontSize: "0.82rem", lineHeight: 1.6, color: "var(--ed-t-850)", marginBottom: "0.7rem",
                 }}
                 className="ai-write-preview-content"
                 // eslint-disable-next-line react/no-danger
                 dangerouslySetInnerHTML={{ __html: preview.contentHtml }}
               />
               <style>{`
-                .ai-write-preview-content h2, .ai-write-preview-content h3 { color: #f0f2ff; font-weight: 800; line-height: 1.3; }
+                .ai-write-preview-content h2, .ai-write-preview-content h3 { color: var(--ed-text); font-weight: 800; line-height: 1.3; }
                 .ai-write-preview-content h2 { font-size: 1.25em; margin: 0.9em 0 0.4em; }
                 .ai-write-preview-content h3 { font-size: 1.08em; margin: 0.8em 0 0.35em; }
                 .ai-write-preview-content > *:first-child { margin-top: 0; }
@@ -173,25 +173,25 @@ export function AiWriteAssistant({
                 .ai-write-preview-content p { margin: 0 0 0.75em; }
                 .ai-write-preview-content ul, .ai-write-preview-content ol { margin: 0 0 0.75em; padding-left: 1.25em; }
                 .ai-write-preview-content li { margin-bottom: 0.3em; }
-                .ai-write-preview-content blockquote { margin: 0 0 0.75em; padding-left: 0.9em; border-left: 2px solid rgba(var(--brand-rgb),0.4); color: rgba(240,242,255,0.65); }
+                .ai-write-preview-content blockquote { margin: 0 0 0.75em; padding-left: 0.9em; border-left: 2px solid color-mix(in srgb, var(--brand) 40%, transparent); color: var(--ed-t-650); }
               `}</style>
 
               {(preview.categories.length > 0 || preview.tags.length > 0) && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginBottom: "0.5rem" }}>
                   {preview.categories.map((c) => (
-                    <span key={`cat-${c}`} style={{ padding: "0.15rem 0.55rem", borderRadius: 999, background: "rgba(var(--brand-rgb),0.15)", color: "var(--brand)", fontSize: "0.7rem", fontWeight: 600 }}>
+                    <span key={`cat-${c}`} style={{ padding: "0.15rem 0.55rem", borderRadius: 999, background: "color-mix(in srgb, var(--brand) 15%, transparent)", color: "var(--ed-accent-text)", fontSize: "0.7rem", fontWeight: 600 }}>
                       {c}
                     </span>
                   ))}
                   {preview.tags.map((t) => (
-                    <span key={`tag-${t}`} style={{ padding: "0.15rem 0.55rem", borderRadius: 999, background: "rgba(255,255,255,0.06)", color: "rgba(240,242,255,0.7)", fontSize: "0.7rem" }}>
+                    <span key={`tag-${t}`} style={{ padding: "0.15rem 0.55rem", borderRadius: 999, background: "var(--ed-w-060)", color: "var(--ed-t-700)", fontSize: "0.7rem" }}>
                       #{t}
                     </span>
                   ))}
                 </div>
               )}
 
-              <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginBottom: "0.9rem" }}>
+              <p style={{ fontSize: "0.72rem", color: "var(--ed-t-350)", marginBottom: "0.9rem" }}>
                 Featured image (generated on insert): {preview.imagePrompt}
               </p>
 
@@ -202,7 +202,7 @@ export function AiWriteAssistant({
                   disabled={isInserting || isGenerating}
                   style={{
                     flex: 1, padding: "0.55rem 1rem", borderRadius: 9, border: "none",
-                    background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff",
+                    background: "var(--ed-cta)", color: "var(--ed-on-brand)",
                     cursor: isInserting || isGenerating ? "not-allowed" : "pointer", opacity: isInserting || isGenerating ? 0.7 : 1,
                     fontSize: "0.82rem", fontWeight: 700, fontFamily: "inherit",
                   }}
@@ -214,8 +214,8 @@ export function AiWriteAssistant({
                   onClick={() => void runGenerate()}
                   disabled={isInserting || isGenerating}
                   style={{
-                    padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid rgba(var(--brand-rgb),0.3)",
-                    background: "rgba(var(--brand-rgb),0.08)", color: "var(--brand)", cursor: isInserting || isGenerating ? "not-allowed" : "pointer",
+                    padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)",
+                    background: "color-mix(in srgb, var(--brand) 8%, transparent)", color: "var(--ed-accent-text)", cursor: isInserting || isGenerating ? "not-allowed" : "pointer",
                     opacity: isInserting || isGenerating ? 0.7 : 1, fontSize: "0.82rem", fontWeight: 600, fontFamily: "inherit", whiteSpace: "nowrap",
                   }}
                 >
@@ -226,8 +226,8 @@ export function AiWriteAssistant({
                   onClick={handleDismiss}
                   disabled={isInserting || isGenerating}
                   style={{
-                    padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.12)",
-                    background: "transparent", color: "rgba(240,242,255,0.7)", cursor: isInserting || isGenerating ? "not-allowed" : "pointer",
+                    padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid var(--ed-w-120)",
+                    background: "transparent", color: "var(--ed-t-700)", cursor: isInserting || isGenerating ? "not-allowed" : "pointer",
                     fontSize: "0.82rem", fontWeight: 600, fontFamily: "inherit",
                   }}
                 >

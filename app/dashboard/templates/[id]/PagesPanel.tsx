@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSitesListHref } from "../../_components/EditorTheme";
 import { getTierFeatures } from "@/lib/subscription";
 import { SiteImportPanel } from "./site-import/SiteImportPanel";
 
@@ -237,8 +238,8 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 				justifyContent: "space-between",
 				gap: "0.75rem",
 				padding: "0.55rem 1.1rem",
-				borderBottom: "1px solid rgba(255,255,255,0.08)",
-				background: "rgba(255,255,255,0.02)",
+				borderBottom: "1px solid var(--ed-w-080)",
+				background: "var(--ed-w-020)",
 				flexShrink: 0,
 				flexWrap: "wrap",
 			}}
@@ -249,9 +250,9 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 					const isLast = idx === breadcrumb.length - 1;
 					return (
 						<span key={node.id} style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}>
-							{idx > 0 && <span style={{ color: "rgba(240,242,255,0.25)", fontSize: "0.75rem" }}>/</span>}
+							{idx > 0 && <span style={{ color: "var(--ed-t-250)", fontSize: "0.75rem" }}>/</span>}
 							{isLast ? (
-								<span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#f0f2ff", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+								<span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--ed-text)", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
 									{idx === 0 && <IconHome />}{node.name}
 								</span>
 							) : (
@@ -259,7 +260,7 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 									type="button"
 									onClick={() => onNavigate(node.id)}
 									style={{
-										fontSize: "0.78rem", fontWeight: 500, color: "rgba(240,242,255,0.55)",
+										fontSize: "0.78rem", fontWeight: 500, color: "var(--ed-t-550)",
 										background: "none", border: "none", cursor: "pointer", padding: 0, fontFamily: "inherit",
 										display: "inline-flex", alignItems: "center", gap: "0.25rem",
 									}}
@@ -271,7 +272,7 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 					);
 				})}
 				{domainPreview && (
-					<span style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.3)", marginLeft: "0.4rem" }}>
+					<span style={{ fontSize: "0.7rem", color: "var(--ed-t-300)", marginLeft: "0.4rem" }}>
 						{domainPreview}{pathFor(templateId, byId)}
 					</span>
 				)}
@@ -282,7 +283,7 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 				{subPageCount === 0 && !nudgeDismissed && (
 					<span style={{
 						display: "inline-flex", alignItems: "center", gap: "0.4rem",
-						fontSize: "0.72rem", color: "var(--brand)", fontWeight: 600,
+						fontSize: "0.72rem", color: "var(--ed-accent-text)", fontWeight: 600,
 						background: "var(--brand-subtle)", padding: "0.3rem 0.6rem", borderRadius: 999,
 					}}>
 						Turn this into a multi-page site <IconArrowRight />
@@ -302,8 +303,8 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 					style={{
 						display: "inline-flex", alignItems: "center", gap: "0.4rem",
 						padding: "0.4rem 0.75rem", borderRadius: 8,
-						border: "1px solid rgba(255,255,255,0.1)", background: "transparent",
-						color: "rgba(240,242,255,0.75)", cursor: "pointer", fontFamily: "inherit",
+						border: "1px solid var(--ed-w-100)", background: "transparent",
+						color: "var(--ed-t-750)", cursor: "pointer", fontFamily: "inherit",
 						fontSize: "0.78rem", fontWeight: 600,
 					}}
 				>
@@ -328,7 +329,7 @@ export function PagesPanel({ templateId, subscriptionPlan, onNavigate }: Props) 
 			)}
 
 			{loadError && (
-				<span style={{ fontSize: "0.72rem", color: "#f87171" }}>{loadError}</span>
+				<span style={{ fontSize: "0.72rem", color: "var(--ed-danger)" }}>{loadError}</span>
 			)}
 		</div>
 	);
@@ -380,6 +381,7 @@ function ManagePagesModal({
 	const [importOpen, setImportOpen] = useState(false);
 	const uploadInputRef = useRef<HTMLInputElement | null>(null);
 	const router = useRouter();
+	const sitesHref = useSitesListHref();
 
 	async function createPage(parentId: string) {
 		const name = newPageName.trim();
@@ -551,7 +553,7 @@ function ManagePagesModal({
 				// there's nothing left here to reload or navigate to within the tree.
 				// Refresh first so the prefetch-cached Templates list doesn't still show it.
 				router.refresh();
-				router.push("/dashboard/templates");
+				router.push(sitesHref);
 				return;
 			}
 			if (wasCurrent && parentId) {
@@ -660,9 +662,9 @@ function ManagePagesModal({
 						padding: "0.45rem 0.6rem",
 						marginLeft: depth * 20,
 						borderRadius: 8,
-						background: isCurrent ? "var(--brand-subtle)" : isDropTarget && dropTarget?.zone === "inside" ? "rgba(129,140,248,0.15)" : "transparent",
-						borderTop: isDropTarget && dropTarget?.zone === "before" ? "2px solid #818cf8" : "2px solid transparent",
-						borderBottom: isDropTarget && dropTarget?.zone === "after" ? "2px solid #818cf8" : "2px solid transparent",
+						background: isCurrent ? "var(--brand-subtle)" : isDropTarget && dropTarget?.zone === "inside" ? "color-mix(in srgb, var(--ed-lavender) 15%, transparent)" : "transparent",
+						borderTop: isDropTarget && dropTarget?.zone === "before" ? "2px solid var(--ed-lavender)" : "2px solid transparent",
+						borderBottom: isDropTarget && dropTarget?.zone === "after" ? "2px solid var(--ed-lavender)" : "2px solid transparent",
 						cursor: isHome ? "default" : "grab",
 						opacity: dragId === node.id ? 0.4 : 1,
 					}}
@@ -671,7 +673,7 @@ function ManagePagesModal({
 						<button
 							type="button"
 							onClick={() => toggleCollapsed(node.id)}
-							style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", cursor: "pointer", display: "flex", padding: 0 }}
+							style={{ background: "none", border: "none", color: "var(--ed-t-500)", cursor: "pointer", display: "flex", padding: 0 }}
 						>
 							<IconChevron open={!isCollapsed} />
 						</button>
@@ -692,7 +694,7 @@ function ManagePagesModal({
 									value={renameSlug}
 									onChange={(e) => setRenameSlug(e.target.value)}
 									placeholder="url-segment"
-									style={{ ...inputStyle, maxWidth: 130, color: "rgba(240,242,255,0.6)" }}
+									style={{ ...inputStyle, maxWidth: 130, color: "var(--ed-t-600)" }}
 								/>
 							)}
 							<button type="button" onClick={() => void submitRename(node.id)} disabled={busy} style={smallBtnPrimary}>Save</button>
@@ -708,12 +710,12 @@ function ManagePagesModal({
 									fontFamily: "inherit", padding: "0.1rem 0",
 								}}
 							>
-								<span style={{ fontSize: "0.85rem", fontWeight: isCurrent ? 700 : 500, color: "#f0f2ff", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
+								<span style={{ fontSize: "0.85rem", fontWeight: isCurrent ? 700 : 500, color: "var(--ed-text)", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
 									{isHome && <IconHome />}{node.name}
 									{node.sourceType === "RAW_UPLOAD" && (
 										<span style={{
 											marginLeft: "0.4rem", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em",
-											textTransform: "uppercase", color: "#818cf8", background: "rgba(99,102,241,0.1)",
+											textTransform: "uppercase", color: "var(--ed-lavender)", background: "color-mix(in srgb, var(--ed-violet) 10%, transparent)",
 											padding: "0.1rem 0.4rem", borderRadius: 4, verticalAlign: "middle",
 										}}>
 											HTML
@@ -724,7 +726,7 @@ function ManagePagesModal({
 											title={homeOnly || node.archivedByPlan ? "Draft: saved, not published. Upgrade to publish it" : "Draft: saved, not published"}
 											style={{
 												marginLeft: "0.4rem", fontSize: "0.6rem", fontWeight: 700, letterSpacing: "0.04em",
-												textTransform: "uppercase", color: "#fbbf24", background: "rgba(245,183,74,0.1)",
+												textTransform: "uppercase", color: "var(--ed-warning)", background: "color-mix(in srgb, var(--ed-warning) 10%, transparent)",
 												padding: "0.1rem 0.4rem", borderRadius: 4, verticalAlign: "middle",
 											}}
 										>
@@ -732,7 +734,7 @@ function ManagePagesModal({
 										</span>
 									)}
 								</span>
-								<span style={{ display: "block", fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>
+								<span style={{ display: "block", fontSize: "0.7rem", color: "var(--ed-t-350)" }}>
 									{domainPreview ? `${domainPreview}${pathFor(node.id, byId)}` : pathFor(node.id, byId)}
 								</span>
 							</button>
@@ -785,7 +787,7 @@ function ManagePagesModal({
 								>
 									<IconEdit />
 								</button>
-								<button type="button" title="Delete" onClick={() => setDeleteTarget(node)} style={{ ...iconBtn, color: "#f87171" }}>
+								<button type="button" title="Delete" onClick={() => setDeleteTarget(node)} style={{ ...iconBtn, color: "var(--ed-danger)" }}>
 									<IconTrash />
 								</button>
 							</div>
@@ -819,7 +821,7 @@ function ManagePagesModal({
 									<button
 										type="button"
 										onClick={() => setImportOpen(true)}
-										style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", marginTop: "0.5rem", background: "none", border: "none", padding: 0, color: "var(--brand)", fontSize: "0.74rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
+										style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem", marginTop: "0.5rem", background: "none", border: "none", padding: 0, color: "var(--ed-accent-text)", fontSize: "0.74rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}
 									>
 										<IconGlobe /> or import a website instead
 									</button>
@@ -841,10 +843,10 @@ function ManagePagesModal({
 		<div
 			role="dialog"
 			aria-modal="true"
-			style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", padding: "1rem" }}
+			style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "var(--plx-overlay, rgba(0,0,0,0.7))", backdropFilter: "blur(6px)", padding: "1rem" }}
 			onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
 		>
-			<div style={{ width: "min(100%,560px)", maxHeight: "80vh", display: "flex", flexDirection: "column", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 18, boxShadow: "0 30px 100px rgba(0,0,0,0.7)" }}>
+			<div style={{ width: "min(100%,560px)", maxHeight: "80vh", display: "flex", flexDirection: "column", background: "var(--ed-bg)", border: "1px solid var(--ed-w-120)", borderRadius: 18, boxShadow: "0 30px 100px rgba(0,0,0,0.7)" }}>
 				<input
 					ref={uploadInputRef}
 					type="file"
@@ -852,19 +854,19 @@ function ManagePagesModal({
 					onChange={(e) => void handleUploadFile(e)}
 					style={{ display: "none" }}
 				/>
-				<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.1rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+				<div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1.1rem 1.25rem", borderBottom: "1px solid var(--ed-w-080)" }}>
 					<div>
-						<p style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.2rem" }}>Site structure</p>
-						<h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "#f0f2ff" }}>Manage pages</h2>
+						<p style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--ed-accent-text)", marginBottom: "0.2rem" }}>Site structure</p>
+						<h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "var(--ed-text)" }}>Manage pages</h2>
 					</div>
-					<button type="button" onClick={onClose} aria-label="Close" style={{ background: "rgba(255,255,255,0.06)", border: "none", borderRadius: 8, padding: "0.4rem", color: "rgba(240,242,255,0.5)", cursor: "pointer", display: "flex" }}>
+					<button type="button" onClick={onClose} aria-label="Close" style={{ background: "var(--ed-w-060)", border: "none", borderRadius: 8, padding: "0.4rem", color: "var(--ed-t-500)", cursor: "pointer", display: "flex" }}>
 						<IconX />
 					</button>
 				</div>
 
 				<div style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
 					{homeOnly && (
-						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.25)", fontSize: "0.8rem", color: "rgba(240,242,255,0.8)" }}>
+						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid color-mix(in srgb, var(--brand) 25%, transparent)", fontSize: "0.8rem", color: "var(--ed-t-800)" }}>
 							Build and preview as many pages as you like. On the Free plan only your <strong>home page</strong> goes live for visitors — upgrade to <strong>Starter</strong> to publish the rest.
 						</div>
 					)}
@@ -872,7 +874,7 @@ function ManagePagesModal({
 				</div>
 
 				{error && (
-					<p style={{ padding: "0 1.25rem", fontSize: "0.78rem", color: "#f87171" }}>{error}</p>
+					<p style={{ padding: "0 1.25rem", fontSize: "0.78rem", color: "var(--ed-danger)" }}>{error}</p>
 				)}
 
 					<div style={{ padding: "0.6rem 1.25rem 1rem", display: "flex", flexDirection: "column", gap: "0.5rem" }}>
@@ -888,14 +890,14 @@ function ManagePagesModal({
 
 			{deleteTarget && (
 				<div
-					style={{ position: "fixed", inset: 0, zIndex: 70, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.6)", padding: "1rem" }}
+					style={{ position: "fixed", inset: 0, zIndex: 70, display: "grid", placeItems: "center", background: "var(--plx-overlay, rgba(0,0,0,0.6))", padding: "1rem" }}
 					onClick={(e) => { if (e.target === e.currentTarget) setDeleteTarget(null); }}
 				>
-					<div style={{ width: "min(100%,400px)", background: "#0d0f1a", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 16, padding: "1.5rem" }}>
-						<h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.6rem" }}>
+					<div style={{ width: "min(100%,400px)", background: "var(--ed-bg)", border: "1px solid color-mix(in srgb, var(--ed-danger) 30%, transparent)", borderRadius: 16, padding: "1.5rem" }}>
+						<h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "0.6rem" }}>
 							{deleteTarget.parentId === null ? "Delete this site's home page?" : `Delete "${deleteTarget.name}"?`}
 						</h3>
-						<p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginBottom: "1.25rem", lineHeight: 1.5 }}>
+						<p style={{ fontSize: "0.85rem", color: "var(--ed-t-600)", marginBottom: "1.25rem", lineHeight: 1.5 }}>
 							{deleteTarget.parentId === null
 								? "This removes the whole site, including every page nested under it and its published domain link. This can't be undone."
 								: descendantCount > 0
@@ -904,7 +906,7 @@ function ManagePagesModal({
 						</p>
 						<div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
 							<button type="button" onClick={() => setDeleteTarget(null)} style={smallBtn}>Cancel</button>
-							<button type="button" onClick={() => void confirmDelete()} disabled={busy} style={{ ...smallBtnPrimary, background: "#dc2626" }}>
+							<button type="button" onClick={() => void confirmDelete()} disabled={busy} style={{ ...smallBtnPrimary, background: "var(--ed-danger-fill)" }}>
 								Delete{busy ? "…" : ""}
 							</button>
 						</div>
@@ -914,20 +916,20 @@ function ManagePagesModal({
 
 			{resetTarget && (
 				<div
-					style={{ position: "fixed", inset: 0, zIndex: 70, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.6)", padding: "1rem" }}
+					style={{ position: "fixed", inset: 0, zIndex: 70, display: "grid", placeItems: "center", background: "var(--plx-overlay, rgba(0,0,0,0.6))", padding: "1rem" }}
 					onClick={(e) => { if (e.target === e.currentTarget) setResetTarget(null); }}
 				>
-					<div style={{ width: "min(100%,400px)", background: "#0d0f1a", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 16, padding: "1.5rem" }}>
-						<h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.6rem" }}>
+					<div style={{ width: "min(100%,400px)", background: "var(--ed-bg)", border: "1px solid color-mix(in srgb, var(--ed-danger) 30%, transparent)", borderRadius: 16, padding: "1.5rem" }}>
+						<h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "0.6rem" }}>
 							Switch &quot;{resetTarget.name}&quot; to the DnD builder?
 						</h3>
-						<p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginBottom: "1.25rem", lineHeight: 1.5 }}>
+						<p style={{ fontSize: "0.85rem", color: "var(--ed-t-600)", marginBottom: "1.25rem", lineHeight: 1.5 }}>
 							There's no way to convert uploaded HTML into DnD blocks, so this discards the uploaded files
 							entirely and starts the page from a blank canvas instead. This can't be undone.
 						</p>
 						<div style={{ display: "flex", gap: "0.6rem", justifyContent: "flex-end" }}>
 							<button type="button" onClick={() => setResetTarget(null)} style={smallBtn}>Cancel</button>
-							<button type="button" onClick={() => void confirmResetToBuilder()} disabled={busy} style={{ ...smallBtnPrimary, background: "#dc2626" }}>
+							<button type="button" onClick={() => void confirmResetToBuilder()} disabled={busy} style={{ ...smallBtnPrimary, background: "var(--ed-danger-fill)" }}>
 								Switch{busy ? "…" : ""}
 							</button>
 						</div>
@@ -937,18 +939,18 @@ function ManagePagesModal({
 
 			{aupPending && (
 				<div
-					style={{ position: "fixed", inset: 0, zIndex: 70, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.6)", padding: "1rem" }}
+					style={{ position: "fixed", inset: 0, zIndex: 70, display: "grid", placeItems: "center", background: "var(--plx-overlay, rgba(0,0,0,0.6))", padding: "1rem" }}
 					onClick={(e) => { if (e.target === e.currentTarget) setAupPending(null); }}
 				>
-					<div style={{ width: "min(100%,440px)", background: "#0d0f1a", border: "1px solid rgba(var(--brand-rgb),0.3)", borderRadius: 16, padding: "1.5rem" }}>
-						<h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.6rem" }}>
+					<div style={{ width: "min(100%,440px)", background: "var(--ed-bg)", border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)", borderRadius: 16, padding: "1.5rem" }}>
+						<h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.05rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "0.6rem" }}>
 							Accept the Acceptable Use Policy
 						</h3>
-						<p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.6)", marginBottom: "1.25rem", lineHeight: 1.5 }}>
+						<p style={{ fontSize: "0.85rem", color: "var(--ed-t-600)", marginBottom: "1.25rem", lineHeight: 1.5 }}>
 							Raw HTML uploads are published exactly as uploaded, with no content sanitization — you're
 							responsible for what &quot;{aupPending.file.name}&quot; contains, including any script it runs.
 							Required once per account, before your first raw upload.{" "}
-							<a href="/legal/acceptable-use" target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>
+							<a href="/legal/acceptable-use" target="_blank" rel="noopener noreferrer" style={{ color: "var(--ed-accent-text)" }}>
 								Read the policy
 							</a>.
 						</p>
@@ -966,23 +968,23 @@ function ManagePagesModal({
 }
 
 const inputStyle: React.CSSProperties = {
-	flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)",
-	borderRadius: 7, color: "#f0f2ff", padding: "0.4rem 0.6rem", fontSize: "0.82rem", outline: "none", fontFamily: "inherit",
+	flex: 1, background: "var(--ed-w-050)", border: "1px solid var(--ed-w-120)",
+	borderRadius: 7, color: "var(--ed-text)", padding: "0.4rem 0.6rem", fontSize: "0.82rem", outline: "none", fontFamily: "inherit",
 };
 
 const smallBtn: React.CSSProperties = {
 	display: "inline-flex", alignItems: "center", gap: "0.35rem",
-	padding: "0.35rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)",
-	background: "transparent", color: "rgba(240,242,255,0.7)", cursor: "pointer", fontFamily: "inherit",
+	padding: "0.35rem 0.7rem", borderRadius: 7, border: "1px solid var(--ed-w-100)",
+	background: "transparent", color: "var(--ed-t-700)", cursor: "pointer", fontFamily: "inherit",
 	fontSize: "0.76rem", fontWeight: 600,
 };
 
 const smallBtnPrimary: React.CSSProperties = {
-	...smallBtn, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff",
+	...smallBtn, border: "none", background: "var(--ed-cta)", color: "var(--ed-on-brand)",
 };
 
 const iconBtn: React.CSSProperties = {
 	display: "flex", alignItems: "center", justifyContent: "center",
 	width: 24, height: 24, borderRadius: 6, border: "none", background: "transparent",
-	color: "rgba(240,242,255,0.45)", cursor: "pointer", fontSize: "0.8rem",
+	color: "var(--ed-t-450)", cursor: "pointer", fontSize: "0.8rem",
 };

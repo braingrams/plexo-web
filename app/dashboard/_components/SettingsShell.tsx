@@ -58,7 +58,7 @@ function SettingsNav() {
           display: "flex",
           gap: "0.3rem",
           overflowX: "auto",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 7%, transparent)",
           paddingBottom: 1,
           marginBottom: "1.1rem",
         }}
@@ -73,7 +73,7 @@ function SettingsNav() {
                 padding: "0.55rem 0.85rem",
                 fontSize: "0.83rem",
                 fontWeight: isActive ? 600 : 500,
-                color: isActive ? "#fff" : "rgba(240,242,255,0.5)",
+                color: isActive ? "#fff" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 50%, transparent)",
                 borderBottom: `2px solid ${isActive ? "var(--brand, var(--brand))" : "transparent"}`,
                 whiteSpace: "nowrap",
                 flexShrink: 0,
