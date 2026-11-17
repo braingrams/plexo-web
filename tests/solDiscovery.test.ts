@@ -93,7 +93,7 @@ describe("prompt assembly", () => {
     for (const needle of ["Crumb & Co", "#C2410C", "hello@crumbandco.com", "+233 24 123 4567", "Fresh from our oven to your Saturday.", "GHS 45", "wordmark", "Fraunces"]) expect(p.text).toContain(needle);
   });
   it("brand facts from the site flow through and are not asked", () => {
-    const p = prompt("make me a landing page for our cake subscription", { brand: { name: "Ama's Bakery" }, currentSite: { id: "s1", brand: { colors: ["#1F6F4A"], logoUrl: "https://cdn.example/l.png" } } });
+    const p = prompt("make me a landing page for our cake subscription", { brand: { name: "Ama's Bakery" }, sites: [{ id: "s1", name: "Ama's Bakery", brand: { colors: ["#1F6F4A"], logoUrl: "https://cdn.example/l.png" } }] });
     expect(p.text).toContain("Ama's Bakery");
     expect(p.text).toContain("#1F6F4A");
     expect(p.text).toContain("from their site's brand");

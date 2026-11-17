@@ -22,7 +22,6 @@ import { reconcileFunnelSlotsForOrg } from "@/lib/lms/funnelSlots";
 import { mapStripeStatus, sendPaymentDeclinedEmail, syncPlanLifecycle } from "@/lib/plan/lifecycle";
 import { isSettled, recordStripeCharge, sendReceiptEmail } from "@/lib/billing/payments";
 import { retireSupersededPlanSubscriptions } from "@/lib/billing/planChange";
-import { reconcileOnePriceMove } from "@/lib/billing/priceMoveLive";
 
 // DynamoDB-stack port of this file — Plexo's own SaaS-billing Stripe webhook (distinct
 // from app/api/webhooks/stripe/commerce/route.ts, which handles Plexo-hosted Commerce
@@ -295,10 +294,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       const interval = item?.price?.recurring?.interval === "year" ? "yearly" : "monthly";
       // A plan move booked for the renewal (scripts/billing/migrate-plans.ts) is done once the
       // subscription is on that plan's new price (metadata planVersion 2).
-      // What each renewal charges now. While a price move is booked (nextAmountAt in the future) the
-      // item already shows the NEW price but the current period was paid at the old one — leave the record alone.
-      const priceMoveBooked = !!userBeforeUpdate.nextAmountAt && Date.parse(userBeforeUpdate.nextAmountAt) > Date.now();
-      const chargedMinor = item?.price?.unit_amount;
       const scheduledDone = !!userBeforeUpdate.scheduledPlan && subscription.metadata?.planVersion === "2";
       await User.patch({ id: plexoUserId })
         .set({
@@ -314,9 +309,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           ...(subscription.start_date ? { subscriptionStartedAt: new Date(subscription.start_date * 1000).toISOString() } : {}),
           subscriptionCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
           ...(periodEnd ? { subscriptionPeriodEnd: new Date(periodEnd * 1000).toISOString() } : {}),
-          ...(!priceMoveBooked && typeof chargedMinor === "number" ? { subscriptionAmountMinor: chargedMinor } : {}),
         })
-        .remove(["pendingPlan", "planAccessUntil", "planAccessSource", "planAccessReminderSentAt", ...(priceMoveBooked ? [] : (["nextAmountMinor", "nextAmountAt"] as const)), ...(scheduledDone ? (["scheduledPlan", "scheduledPlanAt"] as const) : [])])
+        .remove(["pendingPlan", "planAccessUntil", "planAccessSource", "planAccessReminderSentAt", ...(scheduledDone ? (["scheduledPlan", "scheduledPlanAt"] as const) : [])])
         .go();
 
       // The subscriptionPlan patch above alone left the AI credit allowance untouched —
@@ -371,24 +365,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         });
       } catch (err) {
         console.error("declined-payment email failed", err); // best effort — never fail the webhook after claiming the event
-      }
-      break;
-    }
-
-    // Stripe's "your renewal is coming" heads-up (a few days before the invoice). If a price change is
-    // due for this subscriber, move them now — idempotent, never throws, and the hourly-ish job is the backstop.
-    case "invoice.upcoming": {
-      try {
-        const invoice = event.data.object as unknown as { subscription?: string | { id: string } | null; parent?: { subscription_details?: { subscription?: string | { id: string } | null } | null } | null };
-        const ref = invoice.subscription ?? invoice.parent?.subscription_details?.subscription;
-        const subscriptionId = typeof ref === "string" ? ref : ref?.id;
-        if (!subscriptionId) break;
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const plexoUserId = subscription.metadata?.plexoUserId;
-        if (!plexoUserId || !planFromStripeSubscription(subscription)) break;
-        await reconcileOnePriceMove(plexoUserId);
-      } catch (err) {
-        console.error("price move on invoice.upcoming failed", err); // the scheduled job retries
       }
       break;
     }

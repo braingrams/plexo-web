@@ -858,14 +858,11 @@ export function buildPlanRenewalSoonEmail(input: {
   renewsAt: string;
   amountMinor?: number | null;
   currency?: string | null;
-  /** Set when this renewal is the first at a new price: what they paid before. */
-  previousAmountMinor?: number | null;
   manageUrl: string;
 }): { subject: string; html: string } {
   const plan = PLAN_NAME(input.plan);
   const date = utcDate(input.renewsAt);
   const amount = planMoney(input.amountMinor, input.currency);
-  const before = input.previousAmountMinor ? planMoney(input.previousAmountMinor, input.currency) : null;
   const headline = `Your ${plan} plan renews on ${date}`;
   const html = emailShell({
     title: headline,
@@ -874,7 +871,6 @@ export function buildPlanRenewalSoonEmail(input: {
       <p style="margin:0 0 12px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">
         Your monthly ${plan} subscription renews on <strong>${date}</strong>${amount ? ` and we'll charge <strong>${amount}</strong> to your card on file` : ""}. There's nothing you need to do if your card is ready.
       </p>
-      ${before && amount ? `<p style="margin:0 0 12px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">Heads-up: this is a new price. Your ${plan} plan was ${before}; from this renewal it is <strong>${amount}</strong>. You're never charged the new price before this date.</p>` : ""}
       <p style="margin:0 0 20px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">
         If your card has changed, expired or may be short on funds, update it now so your sites stay fully live. If a payment can't be taken,
         your account moves to Free — one site stays live with just its homepage — until it's paid. Nothing is ever deleted.

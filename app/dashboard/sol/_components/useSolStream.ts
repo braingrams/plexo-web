@@ -262,9 +262,9 @@ export function useSolStream() {
   );
 
   const sendMessage = useCallback(
-    (conversationId: string, text: string, attachments: ChatAttachment[], modelTier: ModelTier) => {
+    (conversationId: string, text: string, attachments: ChatAttachment[], modelTier: ModelTier, site?: { siteId?: string; siteChosen?: boolean; siteHintId?: string }) => {
       reset();
-      return runStream(`/api/v1/sol/chat/conversations/${conversationId}/messages`, { text, attachments, modelTier });
+      return runStream(`/api/v1/sol/chat/conversations/${conversationId}/messages`, { text, attachments, modelTier, ...(site ?? {}) });
     },
     [reset, runStream],
   );

@@ -9,7 +9,7 @@ import { stripePlanMetadata } from "@/lib/billing/stripePlans";
 import { startPaystackPlanCheckout, startPaystackTopupCheckout } from "@/lib/billing/paystackBilling";
 import { PLAN_LABELS, type PaidPlanId } from "@/lib/plan/plans";
 import { storedPlan } from "@/lib/plan/entitlement";
-import { yearlyOffered, type BillingInterval } from "@/lib/billing/pricing";
+import type { BillingInterval } from "@/lib/billing/pricing";
 import { getStripe } from "@/lib/stripe";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
@@ -106,9 +106,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (body.kind === "subscription") {
       const plan: PaidPlanId = body.plan === "ULTRA" ? "PRO" : body.plan;
       const interval: BillingInterval = body.interval ?? "monthly";
-      if (interval === "yearly" && !yearlyOffered(region, plan)) {
-        return NextResponse.json({ error: `The ${PLAN_LABELS[plan]} plan is only available monthly. Please choose monthly billing.` }, { status: 400 });
-      }
 
       if (usesPaystack) {
         // Local currency: Paystack plan billing. Changing plan starts the new subscription and

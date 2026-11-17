@@ -17,8 +17,9 @@ export type SolBuildProfile = {
     colors?: string[];
     logoUrl?: string;
   };
-  /** The site the owner is working on (loaded for SOL's intake, lib/ai/solSiteContext.ts): its own brand, so SOL never asks for what it knows. */
-  currentSite?: { id: string; name?: string; brand?: { colors?: string[]; logoUrl?: string; noLogo?: boolean } };
+  /** The owner's sites and which one (if any) was chosen (lib/ai/solSiteContext.ts): the intake never guesses a site. */
+  sites?: Array<{ id: string; name?: string; updatedAt?: string; brand?: { colors?: string[]; logoUrl?: string; noLogo?: boolean } }>;
+  siteSignal?: { explicitSiteId?: string; boundSiteId?: string; hintSiteId?: string };
 };
 
 const GOAL_LABEL: Record<SolBuildGoal, string> = {

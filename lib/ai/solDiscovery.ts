@@ -3,8 +3,10 @@
 // block added to SOL's system prompt for a new build. The model fills in the specific words; this
 // fixes the structure, the quality bar and the facts it must not lose.
 
-import { askArgsFor, parseBrief, planQuestions, type Brief, type BriefAttachment, type KnownBrand, type PageGoal, type QuestionPlan } from "./solBrief";
+import { askArgsFor, parseBrief, planQuestions, type Brief, type BriefAttachment, type KnownBrand, type PageGoal, type PlannedQuestion, type QuestionPlan } from "./solBrief";
 import type { SolBuildProfile } from "./solBuildContext";
+import { NEW_SITE_LABEL, SITE_QUESTION, SITE_TOUCH_RE, addToLabel, displayName, newOrAddQuestion, resolveSite, type OwnerSite, type SiteResolution } from "./solSiteResolution";
+import { extractName } from "./solBrief";
 
 type Palette = { name: string; primary: string; secondary: string; background: string; surface: string; text: string; accent: string };
 
@@ -185,10 +187,16 @@ export const QUALITY_BAR = `## The quality bar for anything you build
 
 A new page is a designed, finished page, not a skeleton: 6 to 9 purposeful sections (hero with a clear promise and ONE primary button; proof near the top; how it works or the offer; benefits; pricing or products where it fits; FAQ; a final call to action; a footer with real contact details), strong hierarchy, the brand's colours and logo (or a clean wordmark), pictures that suit the industry, readable on a phone, accessible contrast, a search title and description, and a working form wherever people are asked to get in touch or book.
 
+Make it distinctive, not templated: pick a layout and mood that suits THIS industry (a bakery is warm and photographic, a law firm is quiet and typographic, a SaaS is crisp and product-led); one strong typographic hierarchy (a big confident headline, calm body text, 2 fonts at most); generous whitespace and one steady section spacing; social proof with structure (a number, a quote, a name and place); motion kept to one or two gentle effects. When the owner gave a structure (sections in an order), follow it exactly, in their order, with their words.
+
 Bland vs. good:
 - Bland: headline "Welcome to Our Website", "We offer quality services", three cards titled "Service 1/2/3", "Contact us" as the only button.
 - Good: "Cakes baked fresh for your Saturday, delivered across Accra", cards named after real products with a price and one line each, a button that says "Order a cake for this weekend", a FAQ answering "How early should I order?".
-Never lorem ipsum, never "Your brand", never a hero that is just the name. When the owner gave copy, prices, links or contact details, use them word for word.`;
+Never lorem ipsum, never "Your brand", never a hero that is just the name. When the owner gave copy, prices, links or contact details, use them word for word.
+
+## The quality check (enforced, not optional)
+
+Every time you build or edit a page, the result comes back with a "qualityCheck" note. It lists MUST FIX items (placeholder or sample wording, an empty grey image slot, unreadable text colours, dead links, a missing h1, no call to action, a form with nowhere to go, no search description, the owner's brand not applied ...). Fix every MUST item with page_edit (or site_create content) right away; the page is checked again after each change, up to 3 rounds. You will not be allowed to finish while a MUST item is open. Never tell the owner the checks exist or quote scores. When it passes: say in a few plain lines what you built (the feel, colours, pages and what each section is for), then offer 2 or 3 meaningful next improvements (for example: add their real photos, publish it, add a booking form). If something genuinely can't be fixed, say so in one plain sentence.`;
 
 function factLines(b: Brief): string[] {
   const out: string[] = [];
@@ -225,18 +233,18 @@ function factLines(b: Brief): string[] {
  * The block added to the system prompt for a NEW build (empty for changes to existing pages).
  * It either hands SOL the exact intake card to show, or the creative direction to build with.
  */
-export function discoveryPrompt(b: Brief, plan: QuestionPlan): string {
-  if (!b.isNewBuild) return "";
+export function discoveryPrompt(b: Brief, plan: QuestionPlan, site?: SiteResolution): string {
+  const siteBlock = site ? siteResolutionPrompt(site, plan) : "";
+  if (!b.isNewBuild) return plan.mode === "ask" && siteBlock ? `${siteBlock}\n\n${askBlock(plan)}` : siteBlock;
   const facts = factLines(b);
   const parts: string[] = ["## This request: what you know and what to do first"];
   parts.push(`How much they told you: ${b.richness.level} (${b.richness.score}/10).`);
   if (facts.length) parts.push(`What you already know (never ask for these; use every one):\n${facts.join("\n")}`);
   if (plan.understood) parts.push(`Open with this one line, in your own words: "${plan.understood}"`);
 
+  if (siteBlock) parts.splice(1, 0, siteBlock);
   if (plan.mode === "ask") {
-    parts.push(
-      `Your FIRST action is one ask_user_question call with exactly these questions, in this order, nothing added or removed (the card already offers typing their own answer, "Skip, you choose" and "Just build it"). Do not write a plan or build anything until they answer:\n\`\`\`json\n${JSON.stringify(askArgsFor(plan))}\n\`\`\`\nAnything in those answers that says "Skip, you choose" or "Just build it" means: decide it yourself. Do not ask a second round.`,
-    );
+    parts.push(askBlock(plan));
     parts.push("When the answers arrive, go straight on: show the creative direction below in a few plain lines, then build in the same turn.");
   } else {
     const why = plan.reason === "skip" ? "They told you to just build it" : plan.reason === "already-asked" ? "You already asked your questions" : "They told you enough";
@@ -257,12 +265,34 @@ export function discoveryPrompt(b: Brief, plan: QuestionPlan): string {
 export const SAVE_BRAND_GUIDE =
   "When you learn colours or a logo choice in chat that the site's brand doesn't hold yet, and you've built or are about to build with them, ask once with ask_user_question: \"Want me to save these as your brand for every page on this site?\" (Yes, save them / Not now). On yes, call site_save_look with the site's id, the colours and (if they said they have none) noLogo true, or the public logo address. Then tell them in one line it's saved and applied. Don't ask again if they decline.";
 
-// ---------------------------------------------------------------- from the conversation
 
+function askBlock(plan: QuestionPlan): string {
+  return `Your FIRST action is one ask_user_question call with exactly these questions, in this order, nothing added or removed (the card already offers typing their own answer, "Skip, you choose" and "Just build it"). Do not write a plan, look at any site, or build anything until they answer. If the card can't be shown, ask the same questions in one short plain message instead:\n\`\`\`json\n${JSON.stringify(askArgsFor(plan))}\n\`\`\`\nAnything in those answers that says "Skip, you choose" or "Just build it" means: decide it yourself. Do not ask a second round.`;
+}
+
+/** Which site this is about, in words the model obeys. Never guesses, never borrows another site's brand. */
+export function siteResolutionPrompt(site: SiteResolution, plan: QuestionPlan): string {
+  const head = "## Which site this is about";
+  switch (site.kind) {
+    case "none":
+      return `${head}\nThe owner has no site yet: this is a new one. Don't edit anything that exists.`;
+    case "new":
+      return `${head}\nThis is a NEW website. Don't edit, describe or take colours, logo or wording from any of their existing sites.`;
+    case "use":
+      return `${head}\nWork on the site "${displayName(site.site)}" (site id ${site.site.id}); pass that id to the page and site tools. ${site.announce ? `Start by saying "I'll work on ${displayName(site.site)}." in your own words, once. ` : ""}Use only this site's own brand; never another site's colours, logo or wording.`;
+    case "ask-which":
+      return `${head}\nThe owner has ${site.options.length - 1} websites and hasn't said which one this is about, so you don't know. Do not guess and do not use the most recent one. ${plan.mode === "ask" ? "" : "Ask: "}"${SITE_QUESTION}" with their sites by name and "${NEW_SITE_LABEL}" as the choices (in the card). Until they answer, don't read, change or take brand details from any site. After they answer, say "I'll work on <site>." once. Never ask again in this conversation.`;
+    case "ask-new-or-add":
+      return `${head}\nThey're working on "${displayName(site.site)}" but this request looks like a different business. Don't assume: ask "${newOrAddQuestion(displayName(site.site))}" (${NEW_SITE_LABEL} / ${addToLabel(displayName(site.site))}) first. For a new website use nothing from "${displayName(site.site)}"'s brand.`;
+    case "unresolved":
+      return `${head}\nThey answered which site, but it doesn't match one of their sites. Say in one plain sentence which site you understood and check it before changing anything. Don't take any site's brand until it's clear.`;
+  }
+}
+
+// ---------------------------------------------------------------- from the conversation
 
 type HistoryLike = { role: "user" | "assistant"; content: any };
 const BUILD_TOOLS = new Set(["site_create", "page_create_from_template", "create_landing_page", "create_raw_landing_page", "create_site_from_template", "create_app", "create_funnel"]);
-const GENERIC_SITE_NAMES = /^(untitled|untitled site|home|home page|landing page|new page|my site|my website)$/i;
 
 const blocksOf = (content: unknown): any[] => (Array.isArray(content) ? content : typeof content === "string" ? [{ type: "text", text: content }] : []);
 
@@ -275,7 +305,14 @@ function parseAnswers(content: string): Array<{ question: string; answer: string
   return out;
 }
 
-/** The brief and question plan for the conversation so far (what SOL's system prompt is built from). */
+const siteQuestionFor = (res: SiteResolution): PlannedQuestion | undefined =>
+  res.kind === "ask-which"
+    ? { key: "site", header: "Your website", question: SITE_QUESTION, options: res.options }
+    : res.kind === "ask-new-or-add"
+      ? { key: "site", header: "New or existing", question: newOrAddQuestion(displayName(res.site)), options: [{ label: NEW_SITE_LABEL }, { label: addToLabel(displayName(res.site)) }] }
+      : undefined;
+
+/** The brief, which site it is about, and the question plan for the conversation so far (what SOL's system prompt is built from). */
 export function briefFromConversation(history: HistoryLike[], profile?: SolBuildProfile) {
   const userTexts: string[] = [];
   const answers: Array<{ question: string; answer: string }> = [];
@@ -294,11 +331,25 @@ export function briefFromConversation(history: HistoryLike[], profile?: SolBuild
     }
   }
   const text = userTexts[userTexts.length - 1] ?? "";
-  const site = profile?.currentSite;
-  const siteName = site?.name && !GENERIC_SITE_NAMES.test(site.name.trim()) ? site.name.trim() : undefined;
+  const sites: OwnerSite[] = profile?.sites ?? [];
   const account: KnownBrand & { goal?: string } = { ...(profile?.brand ?? {}), goal: profile?.goal };
-  const siteBrand: KnownBrand | undefined = site?.brand ? { ...site.brand, ...(siteName ? { name: siteName } : {}) } : undefined;
+
+  // First pass without any site brand: is this a new build, and which business does the message name?
+  const probe = parseBrief({ text, priorUserTexts: userTexts.slice(0, -1), answers, account, attachments, alreadyBuilt, alreadyAsked });
+  const named = extractName(text) ?? extractName(userTexts.join("\n"));
+  const resolution = resolveSite({ sites, signal: profile?.siteSignal, answers, touchesExisting: !probe.isNewBuild || SITE_TOUCH_RE.test(text), namedBusiness: named, isNewBuild: probe.isNewBuild });
+
+  // Only the chosen site's own brand ever reaches the brief.
+  const used = resolution.kind === "use" ? resolution.site : undefined;
+  const siteName = used?.name && displayName(used) !== "Untitled site" ? used.name.trim() : undefined;
+  const siteBrand: KnownBrand | undefined = used?.brand || siteName ? { ...(used?.brand ?? {}), ...(siteName ? { name: siteName } : {}) } : undefined;
   const input = { text, priorUserTexts: userTexts.slice(0, -1), answers, account, site: siteBrand, attachments, alreadyBuilt, alreadyAsked };
   const brief = parseBrief(input);
-  return { brief, plan: planQuestions(brief, input), siteId: site?.id };
+  let plan = planQuestions(brief, input);
+
+  const siteQ = siteQuestionFor(resolution);
+  if (siteQ) {
+    plan = brief.isNewBuild && plan.mode === "ask" ? { ...plan, questions: [siteQ, ...plan.questions] } : { ...plan, mode: "ask", questions: [siteQ], reason: "ask" };
+  }
+  return { brief, plan, resolution, siteId: used?.id };
 }

@@ -14,8 +14,7 @@ import { dueReminder } from "./reminders";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { getStripe } from "@/lib/stripe";
 import { planFields } from "./plans";
-import { planPriceMinor, regionById, regionForCurrency, yearlyOffered } from "@/lib/billing/pricing";
-import { ownerNextPrice } from "@/lib/billing/ownerNextPrice";
+import { planPriceMinor, regionById, regionForCurrency } from "@/lib/billing/pricing";
 import { loadPriceBook } from "@/lib/billing/priceBook";
 import {
   TRIAL_DAYS,
@@ -361,23 +360,14 @@ export async function sendAccessEndingReminder(user: UserItem, now: Date = new D
 }
 
 /** What the next renewal will charge — best effort; the email simply leaves the amount out if it can't be worked out. */
-async function currentSubscriptionPrice(user: UserItem): Promise<{ amountMinor?: number; currency?: string; previousAmountMinor?: number }> {
-  // The pure rule first: what the NEXT renewal charges, including a price change that reaches this
-  // subscriber (lib/billing/priceChanges.ts). Same answer as Settings > Plan shows.
-  if (!user.scheduledPlan) {
-    const next = await ownerNextPrice(user as never);
-    if (next.nextAmountMinor && next.currency) {
-      return { amountMinor: next.nextAmountMinor, currency: next.currency.toLowerCase(), ...(next.changes && next.currentAmountMinor ? { previousAmountMinor: next.currentAmountMinor } : {}) };
-    }
-  }
+async function currentSubscriptionPrice(user: UserItem): Promise<{ amountMinor?: number; currency?: string }> {
   const nextPlan = user.scheduledPlan ?? storedPlan(user);
   if (user.subscriptionProvider === "PAYSTACK" || user.scheduledPlan) {
     // Paystack amounts (and a booked plan move) come straight from the price list.
     const book = await loadPriceBook();
     const region = regionById(book, user.billingRegion) ?? regionForCurrency(book, user.billingCurrency ?? "USD");
-    const interval = user.subscriptionInterval ?? "monthly";
-    if (nextPlan === "FREE" || !region || !yearlyOfferedFor(region, nextPlan, interval)) return {};
-    return { amountMinor: planPriceMinor(region, nextPlan, interval), currency: region.currency.toLowerCase() };
+    if (nextPlan === "FREE" || !region) return {};
+    return { amountMinor: planPriceMinor(region, nextPlan, user.subscriptionInterval ?? "monthly"), currency: region.currency.toLowerCase() };
   }
   const subscriptionId = user.stripeSubscriptionId;
   if (!subscriptionId || !process.env.STRIPE_SECRET_KEY) return {};
@@ -388,8 +378,6 @@ async function currentSubscriptionPrice(user: UserItem): Promise<{ amountMinor?:
     return {};
   }
 }
-
-const yearlyOfferedFor = (region: Parameters<typeof yearlyOffered>[0], plan: string, interval: string): boolean => interval !== "yearly" || yearlyOffered(region, plan as never);
 
 /** A renewal charge was declined (Stripe webhook). Plan and sites stay fully active while Stripe retries. */
 export async function sendPaymentDeclinedEmail(

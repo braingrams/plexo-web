@@ -512,7 +512,7 @@ function richness(b: Brief): { score: number; level: "simple" | "medium" | "rich
 // ---------------------------------------------------------------- questions
 
 export type PlannedQuestion = {
-  key: QuestionKey;
+  key: QuestionKey | "site";
   header: string;
   question: string;
   options: Array<{ label: string; description?: string }>;

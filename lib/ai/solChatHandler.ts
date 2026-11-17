@@ -23,7 +23,7 @@ import {
 } from "./solAgent";
 import { ASK_USER_QUESTION_TOOL_NAME } from "./solToolSchema";
 import { loadBuildProfile } from "./solBuildContext";
-import { withCurrentSite } from "./solSiteContext";
+import { withSites } from "./solSiteContext";
 import { maybeExtractMemoryFact } from "./memoryExtraction";
 import { maybeGenerateConversationTitle } from "./titleGeneration";
 import { recordSolUsageEvent, type SolToolCallRecord } from "@/lib/solAnalytics";
@@ -531,7 +531,7 @@ export async function prepareMessagesTurn(
   resolved: ResolvedUser,
   body: unknown,
 ): Promise<PreparedTurn> {
-  const parsed = body as { text?: string; attachments?: Array<{ type?: string; url?: string; filename?: string }>; modelTier?: string };
+  const parsed = body as { text?: string; attachments?: Array<{ type?: string; url?: string; filename?: string }>; modelTier?: string; siteId?: string; siteChosen?: boolean; siteHintId?: string };
   const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
   let modelTier = parsed.modelTier as ModelTier;
   const hasAttachments = Array.isArray(parsed.attachments) && parsed.attachments.some((a) => a?.url);
@@ -563,7 +563,13 @@ export async function prepareMessagesTurn(
   }
 
   const { memoryEnabled, facts: memoryFacts, preferences } = await loadMemoryContext(resolved.userId);
-  const buildProfile = await withCurrentSite(await loadBuildProfile(resolved.userId), resolved.organizationId);
+  const explicitSiteId = parsed.siteChosen === true && typeof parsed.siteId === "string" ? parsed.siteId : undefined;
+  const hintSiteId = typeof parsed.siteHintId === "string" ? parsed.siteHintId : undefined;
+  const buildProfile = await withSites(await loadBuildProfile(resolved.userId), resolved.organizationId, { explicitSiteId, boundSiteId: conversation.siteId ?? undefined, hintSiteId });
+  // A site the owner chose in this chat sticks to it, so later turns never ask again (only a real site of theirs counts).
+  if (explicitSiteId && explicitSiteId !== conversation.siteId && buildProfile?.sites?.some((s) => s.id === explicitSiteId)) {
+    await bumpConversationActivity(resolved.userId, conversationId, { siteId: explicitSiteId }).catch((err) => console.error("binding the chat to a site failed", err));
+  }
   const turnStartedAt = new Date().toISOString();
   // Started here, immediately, NOT inside `run` below — this needs to begin running in
   // parallel with the main turn as early as possible, using only `text` (the user's own
@@ -711,7 +717,7 @@ export async function prepareConfirmTurn(
   const modelTier = tierFor(routing.route, routing.plan, ((conversation.modelTier as ModelTier) ?? "BASIC") as ConcreteTier) as ModelTier;
   await ensureCreditPeriod(resolved.userId);
   const { memoryEnabled, facts: memoryFacts, preferences } = await loadMemoryContext(resolved.userId);
-  const buildProfile = await withCurrentSite(await loadBuildProfile(resolved.userId), resolved.organizationId);
+  const buildProfile = await withSites(await loadBuildProfile(resolved.userId), resolved.organizationId, { boundSiteId: conversation.siteId ?? undefined });
   const userTextForMemory = findPrecedingUserText(messages, pendingMessage.createdAt);
   const turnStartedAt = new Date().toISOString();
   // Almost always a no-op by the time a resume happens — the first turn's own

@@ -1,4 +1,3 @@
-import { ownerNextPrice } from "@/lib/billing/ownerNextPrice";
 import { redirectIfV3 } from "@/lib/dashboardV3/settingsContext";
 import { redirect } from "next/navigation";
 
@@ -92,7 +91,6 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
         interval={user.subscriptionInterval ?? null}
         cancelAtPeriodEnd={!!user.subscriptionCancelAtPeriodEnd}
         scheduled={scheduled}
-        priceNotice={paying && !user.subscriptionCancelAtPeriodEnd ? (await ownerNextPrice(user as never)).notice : null}
         allowanceBalance={balance.allowanceBalance}
         topupBalance={balance.topupBalance}
         allowanceResetAt={balance.allowanceResetAt}

@@ -5,6 +5,8 @@
  *
  *   npx tsx scripts/sol-eval.ts > eval-after.json
  *
+ * It also scores the gate fixtures (a bland kit page vs a finished page) under `gateFixtures`.
+ *
  * Add --live to also send each prompt to the model with SOL's real system prompt and record its first reply
  * (the questions it actually asks). That path needs ANTHROPIC_API_KEY and spends credits, so it is never run in CI:
  *
@@ -12,6 +14,8 @@
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { checkPage } from "../lib/ai/solQuality";
+import { blandDocument, pristineDocument } from "../tests/fixtures/solQualityFixtures";
 import { briefFromConversation, creativeDirection, directionSummary, discoveryPrompt } from "../lib/ai/solDiscovery";
 
 type Case = { id: string; industry: string; text: string; alreadyBuilt?: boolean };
@@ -62,6 +66,13 @@ async function main() {
     }
     out.push(row);
   }
-  console.log(JSON.stringify(out, null, 2));
+  // The quality gate on the fixture pages: the kit's untouched starter page (what a bare prompt used to produce) and a finished one.
+  const gate = Object.fromEntries(
+    Object.entries({ bland: blandDocument(), pristine: pristineDocument() }).map(([k, html]) => {
+      const r = checkPage({ html });
+      return [k, { score: r.score, passed: r.passed, must: r.findings.filter((f) => f.severity === "must").map((f) => f.id), should: r.findings.filter((f) => f.severity === "should").map((f) => f.id), stats: r.stats }];
+    }),
+  );
+  console.log(JSON.stringify({ prompts: out, gateFixtures: gate }, null, 2));
 }
 main();

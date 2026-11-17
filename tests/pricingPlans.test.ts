@@ -138,9 +138,6 @@ describe("region resolution", () => {
     // A pre-regional Stripe subscriber stays on USD even from Nigeria.
     expect(billingRegionFor(book, { stripeSubscriptionId: "sub_1", subscriptionStatus: "ACTIVE" }, h).currency).toBe("USD");
     expect(pricingViewFor(book, null, h).currency).toBe("NGN");
-    // No "pay in USD instead": a saved USD preference is ignored unless a subscription is running in it, and no switch is offered.
-    expect(billingRegionFor(book, { country: "NG", billingCurrency: "USD" }, h).currency).toBe("NGN");
-    expect(pricingViewFor(book, { country: "NG", billingCurrency: "USD" }, h).currencyChoice).toBeNull();
   });
   it("an owner's country decides prices, but a running subscription keeps its paid currency", () => {
     const h = new Headers({ "cloudfront-viewer-country": "US" });

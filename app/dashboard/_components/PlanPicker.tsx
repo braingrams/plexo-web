@@ -76,9 +76,36 @@ export function priceLine(pricing: PricingView | null, plan: PlanId, interval: B
   if (!pricing) return { main: "…", sub: null };
   const p = pricing.plans[plan as PaidPlanId];
   const from = p.isFromPrice ? "from " : "";
-  // Monthly-only plan (no yearly price): always show the monthly price.
-  if (interval === "yearly" && p.yearlyLabel && p.yearlyPerMonthLabel) return { main: `${from}${p.yearlyLabel}/yr`, sub: `${p.yearlyPerMonthLabel}/mo, billed yearly` };
+  if (interval === "yearly") return { main: `${from}${p.yearlyLabel}/yr`, sub: `${p.yearlyPerMonthLabel}/mo, billed yearly` };
   return { main: `${from}${p.monthlyLabel}/mo`, sub: null };
+}
+
+export function CurrencySwitch({ pricing, onSwitch }: { pricing: PricingView | null; onSwitch: (to: "USD" | "LOCAL") => Promise<string | null> }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!pricing?.currencyChoice) return null;
+  const { payingInUsd, localCurrency } = pricing.currencyChoice;
+  return (
+    <span style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.5))" }}>
+      Prices in {currencyName(pricing.currency)} ·{" "}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          setError(null);
+          void onSwitch(payingInUsd ? "LOCAL" : "USD").then((err) => {
+            setError(err);
+            setBusy(false);
+          });
+        }}
+        style={{ background: "none", border: "none", padding: 0, color: "var(--plx-link, var(--brand))", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", textDecoration: "underline" }}
+      >
+        {busy ? "Switching…" : payingInUsd ? `Pay in ${currencyName(localCurrency)} instead` : "Pay in USD instead"}
+      </button>
+      {error && <span style={{ color: "var(--plx-danger, #f87171)", marginLeft: 6 }}>{error}</span>}
+    </span>
+  );
 }
 
 export function PlanPicker({
@@ -100,23 +127,15 @@ export function PlanPicker({
   /** A payment finished, changed the plan, failed… — the parent shows the message. */
   onResult?: (result: CheckoutResult) => void;
 }) {
-  const { pricing } = usePricing();
+  const { pricing, switchCurrency } = usePricing();
   const [interval, setInterval] = useState<BillingInterval>(currentInterval ?? "monthly");
   const [busy, setBusy] = useState<string | null>(null);
   const [clientSecret, setClientSecret] = useState<string | null>(null);
-  // Yearly is optional per plan: no switch at all when nothing is offered yearly, and the saving is only ever
-  // stated when there is one (information, never assumed).
-  const yearlyAvailable = pricing ? pricing.yearlyAvailable : false;
-  const bestSaving = pricing ? Math.max(...(["STARTER", "PRO", "ENTERPRISE"] as const).map((p) => pricing.plans[p].yearlySavingPercent)) : 0;
-  const effectiveInterval: BillingInterval = yearlyAvailable ? interval : "monthly";
-
-  // A plan with no yearly price is always bought monthly, even while "Yearly" is selected.
-  const intervalFor = (plan: PlanId): BillingInterval =>
-    effectiveInterval === "yearly" && (plan === "FREE" || (pricing?.plans[plan as PaidPlanId]?.yearly ?? null) !== null) ? "yearly" : "monthly";
+  const monthsFree = pricing?.plans.STARTER.yearlyMonthsFree ?? 2;
 
   async function upgrade(plan: PaidPlanId): Promise<void> {
     setBusy(plan);
-    const result = await startCheckout({ kind: "subscription", plan, interval: intervalFor(plan), ...(returnTo ? { returnTo } : {}) });
+    const result = await startCheckout({ kind: "subscription", plan, interval, ...(returnTo ? { returnTo } : {}) });
     setBusy(null);
     if (result.kind === "stripe") setClientSecret(result.clientSecret);
     else onResult?.(result);
@@ -133,7 +152,6 @@ export function PlanPicker({
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.6rem", marginBottom: "0.8rem" }}>
-        {yearlyAvailable ? (
         <div role="group" aria-label="Billing period" style={{ display: "inline-flex", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)", borderRadius: 9, overflow: "hidden" }}>
           {(["monthly", "yearly"] as const).map((i) => (
             <button
@@ -152,17 +170,17 @@ export function PlanPicker({
                 color: interval === i ? "var(--plx-text, #f0f2ff)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 55%, transparent)",
               }}
             >
-              {i === "monthly" ? "Monthly" : bestSaving > 0 ? `Yearly · save up to ${bestSaving}%` : "Yearly"}
+              {i === "monthly" ? "Monthly" : `Yearly · ${monthsFree} months free`}
             </button>
           ))}
         </div>
-        ) : <span />}
+        <CurrencySwitch pricing={pricing} onSwitch={switchCurrency} />
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
         {PLANS.map((plan) => {
-          const isCurrent = plan === currentPlan && (plan === "FREE" || paying) && (plan === "FREE" || !currentInterval || currentInterval === intervalFor(plan));
-          const price = priceLine(pricing, plan, intervalFor(plan));
+          const isCurrent = plan === currentPlan && (plan === "FREE" || paying) && (plan === "FREE" || !currentInterval || currentInterval === interval);
+          const price = priceLine(pricing, plan, interval);
           const higher = PLAN_RANK[plan] > PLAN_RANK[currentPlan];
           const canTrial = trialAvailable && currentPlan === "FREE" && (plan === "STARTER" || plan === "PRO");
           return (
@@ -210,7 +228,7 @@ export function PlanPicker({
                       ? "Opening…"
                       : plan === currentPlan
                         ? paying
-                          ? `Switch to ${intervalFor(plan)}`
+                          ? `Switch to ${interval}`
                           : `Keep ${PLAN_LABELS[plan]}`
                         : higher || !paying
                           ? `Upgrade to ${PLAN_LABELS[plan]}`

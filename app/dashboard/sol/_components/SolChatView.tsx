@@ -10,12 +10,13 @@ import { CreditOverdraftNotice } from "./CreditOverdraftNotice";
 import { AskUserQuestionOverlay } from "./AskUserQuestionCard";
 import { pausingCall } from "./pausingCall";
 import { ArtifactCanvas, ArtifactCard, type ActiveArtifact } from "./ArtifactCanvas";
+import { readCurrentSiteCookie } from "@/lib/dashboardV3/siteCookie";
 import { useSolStream } from "./useSolStream";
 import { useSolSidebar } from "./SolSidebarContext";
 import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
 import { SolChatFrame } from "../../_v3/sol/Chat";
 import { useSolV3 } from "../../_v3/sol/SolV3Context";
-import { withSiteContext, type SiteContext } from "../../_v3/sol/logic";
+import { type SiteContext } from "../../_v3/sol/logic";
 import {
   ASK_USER_QUESTION_TOOL_NAME,
   SOL_LAST_CONVERSATION_COOKIE,
@@ -456,9 +457,10 @@ export function SolChatView({
     // A host can pick the tier for this message (the app wizard's Standard / Advanced choice); a locked plan stays locked.
     const tier = lockedModelTier ? lockedModelTier.tier : (tierOverride ?? modelTier);
     if (tier !== modelTier) handleModelTierChange(tier);
-    let text = embedded?.transformOutgoing ? embedded.transformOutgoing(typed) : typed;
-    // The first message of a chat tells SOL which site the owner is working on (the bubble still shows only what they typed).
-    if (v3 && !embedded && messages.length === 0) text = withSiteContext(text, v3.site);
+    const text = embedded?.transformOutgoing ? embedded.transformOutgoing(typed) : typed;
+    // Which site this is about: the one the owner picked in this chat is sent as a choice (it sticks to the conversation);
+    // the dashboard's current site is only a hint, so SOL still asks when it has more than one site and none was chosen.
+    const site = v3 && !embedded ? { ...(v3.site ? { siteId: v3.site.id, siteChosen: true } : {}), siteHintId: readCurrentSiteCookie() } : undefined;
     setInlineError(null);
     // "" (not undefined) actually empties the box: a message put back after running out of
     // credits and then resent from the top-up card otherwise stayed in it after sending.
@@ -475,7 +477,7 @@ export function SolChatView({
       { id: optimisticId, role: "user", content: [{ type: "text", text: typed }, ...mediaBlocks], createdAt: new Date().toISOString() },
     ]);
 
-    void stream.sendMessage(target.id, text, attachments, tier);
+    void stream.sendMessage(target.id, text, attachments, tier, site);
   }
 
   // Embedded hosts can send on the person's behalf; always the latest handleSend.

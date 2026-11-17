@@ -18,6 +18,7 @@ import type { AiProvider, ConcreteTier } from "@/lib/ai/types";
 import { SolMessage } from "@/lib/db/solEntities";
 import { trimOldToolWork } from "@/lib/ai/solHistoryTrim";
 import { solBuildProfilePrompt, type SolBuildProfile } from "@/lib/ai/solBuildContext";
+import { applyQualityGate, newGateState, pageLoaderFor, unfinishedNote } from "@/lib/ai/solQualityRun";
 import { QUALITY_BAR, SAVE_BRAND_GUIDE, briefFromConversation, discoveryPrompt } from "@/lib/ai/solDiscovery";
 import { createAttachmentResolver, publishAttachedImage, PRIVATE_ATTACHMENT_PATH } from "@/lib/ai/solAttachments";
 
@@ -487,7 +488,7 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   const model = resolveModel(ctx.provider, ctx.modelTier);
   const generateWithTools = TOOL_CAPABLE_PROVIDERS[ctx.provider];
   const intake = ctx.boundAppId ? undefined : briefFromConversation(ctx.history, ctx.buildProfile);
-  const systemPrompt = buildSolSystemPrompt(ctx.memoryFacts, ctx.appContext, { preferences: ctx.preferences, profile: ctx.buildProfile, discovery: intake ? discoveryPrompt(intake.brief, intake.plan) : undefined });
+  const systemPrompt = buildSolSystemPrompt(ctx.memoryFacts, ctx.appContext, { preferences: ctx.preferences, profile: ctx.buildProfile, discovery: intake ? discoveryPrompt(intake.brief, intake.plan, intake.resolution) : undefined });
 
   // Stored attachment blocks point at private uploads; the model needs their bytes inline.
   const resolveAttachments = createAttachmentResolver(ctx.resolvedUser.userId);
@@ -497,6 +498,9 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
   const fixedInputChars = systemPrompt.length + JSON.stringify(tools).length;
   let lastRound: TokenUsage | null = null;
   const guard: TurnGuard = { boundAppId: ctx.boundAppId, counts: new Map() };
+  // The quality gate: pages built or edited this turn are checked in code and SOL can't finish while a must-fix item is open.
+  const gate = newGateState();
+  const loadPage = pageLoaderFor(ctx.resolvedUser);
 
   // Building an app takes many rounds (write → build → fix → screenshot); once a turn is
   // working on an app it gets the larger allowance. Every round is still balance-checked.
@@ -548,6 +552,18 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
       ctx.history.push({ role: "assistant", content: finishedText.length ? finishedText : [{ type: "text", text: "(My last answer was too long and got cut off.)" }] });
       ctx.history.push({ role: "user", content: [{ type: "text", text: ANSWER_CUT_OFF_NOTE }] });
       continue;
+    }
+
+    if ((result.stopReason !== "tool_use" || toolUseBlocks.length === 0) && iteration < iterationLimit - 1) {
+      // SOL is about to say it's done: not while the quality check still has must-fix items open (bounded by MAX_GATE_ROUNDS).
+      const unfinished = unfinishedNote(gate);
+      if (unfinished) {
+        gate.rounds += 1;
+        const said = (Array.isArray(result.content) ? result.content : []).filter((b) => b?.type === "text" && String(b.text ?? "").trim());
+        ctx.history.push({ role: "assistant", content: said.length ? said : [{ type: "text", text: "(Checking my work.)" }] });
+        ctx.history.push({ role: "user", content: [{ type: "text", text: unfinished }] });
+        continue;
+      }
     }
 
     if (result.stopReason !== "tool_use" || toolUseBlocks.length === 0) {
@@ -621,7 +637,8 @@ async function continueLoop(ctx: LoopContext): Promise<RunAgentTurnResult> {
     for (const block of toolUseBlocks) {
       ctx.onToolCallStart({ id: block.id, name: block.name, args: block.input });
       try {
-        const toolResult = await runSolTool(block.name, block.input, ctx.resolvedUser, ctx.history, guard);
+        const rawResult = await runSolTool(block.name, block.input, ctx.resolvedUser, ctx.history, guard);
+        const toolResult = await applyQualityGate(block.name, rawResult, intake?.brief, gate, loadPage);
         ctx.onToolCallResult({ id: block.id, name: block.name, status: "success", result: toolResult });
         resultBlocks.push(buildToolResultBlock(block.id, toolResult, false));
       } catch (err) {

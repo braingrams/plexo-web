@@ -65,20 +65,6 @@ export const User = new Entity(
       // price). Shown on the billing page; cleared once the renewal goes through.
       scheduledPlan: { type: ["STARTER", "PRO", "ENTERPRISE"] as const },
       scheduledPlanAt: { type: "string" },
-      // Price changes for people who already subscribe (lib/billing/priceChanges.ts, priceMove.ts).
-      // What each renewal charges now, in minor units (kept up to date by the provider webhooks and
-      // the move job); the last change already applied (effective date#version); when we moved them;
-      // and, for Paystack, the old subscription still to be switched off after a move.
-      subscriptionAmountMinor: { type: "number" },
-      priceChangeKey: { type: "string" },
-      priceMovedAt: { type: "string" },
-      // After a move, before the renewal that charges it: the new amount (minor units) and that renewal's date.
-      nextAmountMinor: { type: "number" },
-      nextAmountAt: { type: "string" },
-      paystackRetireCode: { type: "string" },
-      paystackRetireToken: { type: "string" },
-      // The change whose heads-up email this person already got (one email per change).
-      priceNoticeKey: { type: "string" },
       allowanceBalance: { type: "number", default: 0 },
       topupBalance: { type: "number", default: 0 },
       allowanceResetAt: { type: "string", default: () => new Date().toISOString() },
@@ -770,36 +756,6 @@ export const PromoAudit = new Entity(
       primary: {
         pk: { field: "pk", composite: [], template: "PROMOAUDIT" },
         sk: { field: "sk", composite: ["changedAt", "id"], template: "AUDIT#${changedAt}#${id}" },
-      },
-    },
-  },
-  { table, client: docClient },
-);
-
-// One row per price-book save that changed an amount: the old and new price per plan, interval
-// and price list, and when people who already subscribe move to it (see lib/billing/priceChanges.ts).
-// Written by plexo-admin in the same transaction as the PriceBookRecord save; plexo-web's move job
-// sets startedAt on the first move. Admin may change effectiveFrom or cancel only while startedAt is unset.
-export const PriceChange = new Entity(
-  {
-    model: { entity: "priceChange", version: "1", service: "plexoCore" },
-    attributes: {
-      id: { type: "string", required: true },
-      version: { type: "number", required: true },
-      createdAt: { type: "string", required: true },
-      createdByEmail: { type: "string" },
-      existingSubscribers: { type: "any", required: true },
-      effectiveFrom: { type: "string", required: true },
-      status: { type: ["scheduled", "cancelled"] as const, default: "scheduled" },
-      startedAt: { type: "string" },
-      cancelledAt: { type: "string" },
-      entries: { type: "any", required: true },
-      moveRemovedYearlyToMonthly: { type: "boolean" },
-    },
-    indexes: {
-      primary: {
-        pk: { field: "pk", composite: [], template: "PRICECHANGE" },
-        sk: { field: "sk", composite: ["createdAt", "id"], template: "CHANGE#${createdAt}#${id}" },
       },
     },
   },
