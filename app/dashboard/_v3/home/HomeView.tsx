@@ -29,18 +29,20 @@ export function HomeView(props: HomeProps) {
   const { mode, site, all, brand, experience, firstName, baseDomain, newSiteHref, demo, tuneHref } = props;
   const [celebrate, setCelebrate] = useState(false);
 
-  if (mode === "none" || !site) {
-    return (
-      <Page eyebrow="Welcome to Plexo" title="Look around. Your site is ready when you are.">
-        <SkippedHome setupHref={newSiteHref} />
-      </Page>
-    );
-  }
-
+  // "all" lists every site and deliberately carries no single `site`, so it must be decided BEFORE the "no site" check
+  // (checking `!site` first showed "Set up your first site" to people with many sites).
   if (mode === "all") {
     return (
       <Page tuneHref={tuneHref} eyebrow={`${greeting()}, ${firstName}`} title={experience === "pro" ? "Everything you're building" : "Your websites"}>
         <AllSites rows={all} dense={experience === "pro"} newSiteHref={newSiteHref} />
+      </Page>
+    );
+  }
+
+  if (mode === "none" || !site) {
+    return (
+      <Page eyebrow="Welcome to Plexo" title="Look around. Your site is ready when you are.">
+        <SkippedHome setupHref={newSiteHref} />
       </Page>
     );
   }

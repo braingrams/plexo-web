@@ -34,3 +34,29 @@ export function OpenSiteButton({ site, size, variant = "secondary", style, class
     </Button>
   );
 }
+
+/** Compact, icon-only "Preview" (private look at the working copy), for cards where text buttons would crowd the card. */
+export function PreviewIconButton({ site }: { site: SiteLike }) {
+  return (
+    <ButtonLink href={previewHref(site.id)} target="_blank" rel="noopener noreferrer" variant="secondary" iconOnly title="Preview (private look at what you have so far)" aria-label="Preview this site" className="plx-siteicon">
+      <Eye size={18} aria-hidden />
+    </ButtonLink>
+  );
+}
+
+/** Compact, icon-only "Open my site" (the live address, new tab). Disabled with the plain hint until the site is online. */
+export function OpenSiteIconButton({ site }: { site: SiteLike }) {
+  const href = liveHref(site);
+  if (href) {
+    return (
+      <ButtonLink href={href} target="_blank" rel="noopener noreferrer" variant="secondary" iconOnly title="Open my site (live)" aria-label="Open my site in a new tab" className="plx-siteicon">
+        <ExternalLink size={18} aria-hidden />
+      </ButtonLink>
+    );
+  }
+  return (
+    <Button variant="secondary" iconOnly disabled title={OPEN_SITE_HINT} aria-label={`Open my site. ${OPEN_SITE_HINT}.`} className="plx-siteicon">
+      <ExternalLink size={18} aria-hidden />
+    </Button>
+  );
+}

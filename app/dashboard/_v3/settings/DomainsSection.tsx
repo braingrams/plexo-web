@@ -177,7 +177,7 @@ export function DomainsSection({ addresses: a0, sites, canUseOwn, mock = false }
         <div className="plx-addrrow">
           <span className="plx-tile"><Globe size={20} aria-hidden /></span>
           <div className="plx-addrrow__main">
-            <a href={`https://${row.domain}`} target="_blank" rel="noreferrer">{row.domain} <ExternalLink size={14} aria-hidden /></a>
+            <a href={`https://${row.domain}`} target="_blank" rel="noreferrer"><ExternalLink size={14} aria-hidden />{row.domain}</a>
             <span className="plx-addrrow__sub">
               <Badge tone={status === "online" ? "success" : "warning"} dot={status === "online"}>{row.pausedByPlan ? "Paused by your plan" : STATUS_LABEL[status]}</Badge>
               {row.type === "SUBDOMAIN" ? "Free address from Plexo" : row.bought ? "Bought through Plexo" : "Your own address"}

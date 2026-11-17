@@ -36,7 +36,7 @@ export function AdvancedArea({ site, sections, current, data }: AdvancedAreaProp
   const kind = advancedKind(site.features);
   const id = site.id;
   return (
-    <AdvancedFrame siteId={id} sections={sections} current={current}>
+    <AdvancedFrame siteId={id} sections={sections} current={current} danger={sections.some((s) => s.id === "danger") ? <DangerSection siteId={id} siteName={site.name} app={kind === "app"} /> : null}>
       <Body kind={kind} section={current} site={site} data={data} />
     </AdvancedFrame>
   );
@@ -44,7 +44,7 @@ export function AdvancedArea({ site, sections, current, data }: AdvancedAreaProp
 
 function Body({ kind, section, site, data }: { kind: ReturnType<typeof advancedKind>; section: AdvancedSectionId; site: AdvancedAreaProps["site"]; data: AdvancedData }) {
   const id = site.id;
-  if (section === "danger") return <DangerSection siteId={id} siteName={site.name} app={kind === "app"} />;
+  if (section === "danger") return null;
   if (kind === "app") return <AppSection section={section} appId={id} />;
   switch (section) {
     case "seo":

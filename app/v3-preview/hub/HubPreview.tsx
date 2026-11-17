@@ -1,7 +1,9 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { RouteLoading, type RouteLoadingShape } from "@/app/dashboard/_v3/shell/RouteLoading";
+import { startNavProgress } from "@/app/dashboard/_v3/shell/NavProgress";
 import { HubFrame } from "@/app/dashboard/_v3/hub/HubFrame";
 import { PagesTab } from "@/app/dashboard/_v3/hub/PagesTab";
 import { ProductsTab } from "@/app/dashboard/_v3/hub/ProductsTab";
@@ -122,6 +124,11 @@ export function HubPreview() {
   const exp = parseExperience(q.get("exp")) ?? "beginner";
   const features: HubFeatures = { ...NO_FEATURES, store: kind === "store", blog: kind === "blog", course: kind === "course", app: kind === "app", deployed: kind === "server" ? "server" : kind === "static" ? "static" : null };
   const site: HubSite = { id: "s1", name: kind === "course" ? "Cooking with Ama" : "Ama's Kitchen", kind: hubKindLabel(features), status: kind === "blog" ? "draft" : "live", address: kind === "blog" ? null : "amaskitchen.plexopages.com", features, sourceType: kind === "app" ? "REACT_PROJECT" : "BUILDER", designFormat: "v2", domains: [], currency: "NGN", deployed: features.deployed ?? null, app: features.deployed ? { kind: features.deployed, isLive: true, framework: "Next.js" } : null, editHref: "#" };
+  const ldg = q.get("ldg") as RouteLoadingShape | null;
+  const navp = q.get("navp");
+  // Preview only: see the loading skeletons (?ldg=hub|settings|list|cards) and the top bar (?navp=1).
+  useEffect(() => { if (!navp) return; const t = setTimeout(startNavProgress, 800); return () => clearTimeout(t); }, [navp]);
+  if (ldg) return <RouteLoading shape={ldg} />;
   const tab = resolveHubTab(q.get("tab"), features, exp);
   const pages = kind === "store" ? PAGES : PAGES.slice(0, 3);
   if (q.get("list")) {

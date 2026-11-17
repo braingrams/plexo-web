@@ -112,8 +112,8 @@ export function AddMoreCards({ siteId, siteName, features }: { siteId: string; s
               <span>{c.body}</span>
             </span>
             <span className="plx-ao__foot">
-              <span className="plx-ao__time"><Clock size={13} aria-hidden /> About a minute</span>
-              <span className="plx-ao__go">{c.action}<ArrowRight size={16} aria-hidden /></span>
+              <span className="plx-ao__time"><Clock size={13} aria-hidden /> 1 min</span>
+              <span className="plx-ao__go" title={c.action}><span className="plx-ao__golabel">{c.action}</span><ArrowRight size={16} aria-hidden /></span>
             </span>
           </button>
         ))}

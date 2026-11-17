@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useId, useRef, useState } from "react";
 import { cx } from "./cx";
+import { LinkPending } from "./LinkPending";
 
 export type TabItem = { id: string; label: React.ReactNode; icon?: React.ReactNode; content: React.ReactNode };
 
@@ -60,13 +61,14 @@ export function Tabs({ items, value, defaultValue, onChange, label, className }:
 }
 
 /** Tabs that are pages (e.g. a site's Pages · Products · Orders): real links, the current one marked. */
-export function TabLinks({ items, current, label, className }: { items: { href: string; label: React.ReactNode; icon?: React.ReactNode; tour?: string }[]; current: string; label: string; className?: string }) {
+export function TabLinks({ items, current, label, className, prefetch }: { items: { href: string; label: React.ReactNode; icon?: React.ReactNode; tour?: string }[]; current: string; label: string; className?: string; prefetch?: boolean }) {
   return (
     <nav aria-label={label} className={cx("plx-tabs__list", className)}>
       {items.map((t) => (
-        <Link key={t.href} href={t.href} className="plx-tabs__tab" aria-current={t.href === current ? "page" : undefined} data-tour={t.tour}>
+        <Link key={t.href} href={t.href} prefetch={prefetch} className="plx-tabs__tab" aria-current={t.href === current ? "page" : undefined} data-tour={t.tour}>
           {t.icon}
           {t.label}
+          <LinkPending />
         </Link>
       ))}
     </nav>

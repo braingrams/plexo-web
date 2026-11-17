@@ -95,7 +95,7 @@ const ADD_ONS: AddOn[] = [
   { id: "blog", title: "A blog", body: "Share news and stories. We set up a place for your posts.", action: "Add a blog" },
   { id: "course", title: "A course", body: "Teach lessons to people who sign up.", action: "Add a course" },
   { id: "bookings", title: "Bookings", body: "Let people book a time with you and pay for it.", action: "Take bookings" },
-  { id: "newsletter", title: "Email sign-up", body: "Collect emails so you can reach people later.", action: "Add a sign-up form" },
+  { id: "newsletter", title: "Email sign-up", body: "Collect emails so you can reach people later.", action: "Add sign-up form" },
 ];
 
 /** Cards for things this site doesn't have yet. Apps manage their own features through SOL, so they get none. */

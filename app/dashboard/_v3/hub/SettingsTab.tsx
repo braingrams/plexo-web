@@ -9,6 +9,7 @@ import { builderLabel } from "./HubFrame";
 import type { HubFrameSite } from "./HubFrame";
 import type { HubFeatures } from "@/lib/dashboardV3/hubTabs";
 import { TabBar } from "./HubFrame";
+import { LinkPending } from "../ui/LinkPending";
 import { errMsg, hubApi } from "./hubApi";
 import { advancedHref, advancedKind } from "@/lib/dashboardV3/hubAdvanced";
 
@@ -66,23 +67,10 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
     { href: advancedHref(site.id), icon: SlidersHorizontal, title: "Advanced settings", desc: `Search, code, servers, GitHub and more for ${builderLabel(site)}.` },
     { href: "/dashboard/apps", icon: AppWindow, title: "My apps", desc: "See every app you have built." },
   ];
-  const sections = [
-    { id: "set-general", label: "General" },
-    ...(shopLinks.length ? [{ id: "set-more", label: "Shop, blog and course" }] : []),
-    { id: "set-pages", label: "Pages and visitors" },
-    ...(pro ? [{ id: "set-advanced", label: "Advanced" }] : []),
-    { id: "set-danger", label: "Delete" },
-  ];
-
   return (
     <>
       <TabBar title="Settings" sub="Everything about this site, in one place." />
-      <div className="plx-hs" data-tour="hub-settings">
-        <nav className="plx-hs__nav" aria-label="Settings sections">
-          {sections.map((x) => (
-            <a key={x.id} href={`#${x.id}`}>{x.label}</a>
-          ))}
-        </nav>
+      <div className="plx-hs plx-hs--solo" data-tour="hub-settings">
         <div className="plx-hs__body">
           <section id="set-general" className="plx-hs__sec">
             <h3 className="plx-hs__h">General</h3>
@@ -119,7 +107,7 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
             </section>
           ) : null}
 
-          <section id="set-danger" className="plx-hs__sec">
+          <section id="set-danger" className="plx-hs__sec plx-hs__sec--danger">
             <h3 className="plx-hs__h">Delete</h3>
             <Card padding="none" className="plx-hs__danger">
               <div className="plx-hs__row">
@@ -152,6 +140,7 @@ function LinkTiles({ rows }: { rows: Row[] }) {
             <span>{desc}</span>
           </span>
           <ChevronRight size={18} className="plx-hs__go" aria-hidden />
+          <LinkPending />
         </Link>
       ))}
     </div>

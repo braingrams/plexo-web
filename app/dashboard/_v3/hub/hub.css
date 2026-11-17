@@ -117,7 +117,12 @@ button.plx-hrow:hover, a.plx-hrow:hover { background: var(--plx-elevated); }
 .plx-sitecard { display: flex; flex-direction: column; gap: 14px; height: 100%; }
 .plx-sitecard__top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .plx-sitecard__name { margin: 0; font-size: 18px; font-weight: 800; overflow-wrap: anywhere; }
-.plx-sitecard__foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; gap: 10px; flex-wrap: wrap; }
+.plx-sitecard__visits { display: inline-flex; gap: 6px; align-items: center; }
+.plx-sitecard__foot { display: flex; align-items: center; justify-content: space-between; margin-top: auto; gap: 10px; }
+.plx-sitecard__manage { display: inline-flex; align-items: center; gap: 6px; color: var(--plx-link); font-weight: 800; font-size: 14px; transition: gap .18s ease; }
+.plx-sitecard:hover .plx-sitecard__manage, .plx-allcard:hover .plx-sitecard__manage { gap: 10px; }
+.plx-sitecard__icons { display: inline-flex; gap: 8px; position: relative; z-index: 1; }
+.plx-siteicon { width: 44px; height: 44px; }
 .plx-inlinemsg { display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; border-radius: 14px; background: var(--plx-tint); color: var(--plx-text); font-size: 14px; line-height: 1.5; }
 .plx-inlinemsg--warn { background: var(--plx-warning-subtle); }
 .plx-inlinemsg--bad { background: var(--plx-danger-subtle); }
@@ -214,8 +219,10 @@ button.plx-linklike { font: inherit; color: inherit; background: none; border: 0
 .plx-ao__txt b { font-size: 17px; font-weight: 800; }
 .plx-ao__txt span { color: var(--plx-muted); font-size: 14px; line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .plx-ao__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 8px; margin-top: auto; }
-.plx-ao__time { display: inline-flex; align-items: center; gap: 5px; color: var(--plx-faint); font-size: 12.5px; font-weight: 600; }
-.plx-ao__go { display: inline-flex; align-items: center; gap: 6px; color: var(--plx-link); font-weight: 800; font-size: 14px; transition: gap .18s ease; }
+.plx-ao__time { display: inline-flex; align-items: center; gap: 5px; flex: none; white-space: nowrap; color: var(--plx-faint); font-size: 12.5px; font-weight: 600; }
+.plx-ao__go { display: inline-flex; align-items: center; gap: 6px; min-width: 0; color: var(--plx-link); font-weight: 800; font-size: 14px; transition: gap .18s ease; }
+.plx-ao__go svg { flex: none; }
+.plx-ao__golabel { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plx-ao:hover .plx-ao__go { gap: 10px; }
 
 /* the little pictures */
@@ -267,6 +274,7 @@ button.plx-linklike { font: inherit; color: inherit; background: none; border: 0
 .plx-pagecard__shot { position: absolute; top: 0; left: 0; border: 0; transform-origin: top left; pointer-events: none; background: var(--plx-surface); }
 /* Settings tab: section list on the left, full-width rows on the right */
 .plx-hs { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 40px; align-items: start; }
+.plx-hs--solo { grid-template-columns: minmax(0, 1fr); }
 .plx-hs__nav { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 2px; }
 .plx-hs__nav a { padding: 10px 14px; border-radius: 10px; color: var(--plx-muted); font-size: 15px; font-weight: 700; text-decoration: none; }
 .plx-hs__nav a:hover { background: var(--plx-ghost-hover); color: var(--plx-text); }
@@ -281,6 +289,11 @@ button.plx-linklike { font: inherit; color: inherit; background: none; border: 0
 .plx-hs__ctl > :first-child { flex: 1; min-width: 0; }
 .plx-hs__ctl--end { justify-content: flex-end; flex: 0 0 auto; }
 .plx-hs__danger { border-color: var(--plx-danger); }
+.plx-hs__sec--danger { margin-top: 12px; padding-top: 28px; border-top: 1px solid var(--plx-border); }
+.plx-hs__tile { position: relative; }
+.plx-hs__tile:has([data-on="true"]) .plx-hs__go { opacity: 0; }
+.plx-hs__tile:has([data-on="true"]) { border-color: var(--plx-border-strong); }
+.plx-hs__nav a:has([data-on="true"]) { box-shadow: inset 3px 0 0 var(--plx-deep); }
 .plx-hs__tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 12px; }
 .plx-hs__tile { display: flex; align-items: center; gap: 14px; padding: 16px 18px; min-height: 76px; border: 1px solid var(--plx-border); border-radius: var(--plx-radius-card); background: var(--plx-surface); color: var(--plx-text); text-decoration: none; transition: border-color .15s ease, background-color .15s ease; }
 .plx-hs__tile:hover { border-color: var(--plx-border-strong); background: var(--plx-tint); }
@@ -293,12 +306,17 @@ button.plx-linklike { font: inherit; color: inherit; background: none; border: 0
   .plx-hs { grid-template-columns: minmax(0, 1fr); gap: 20px; }
   .plx-hs__nav { position: static; flex-direction: row; overflow-x: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; }
   .plx-hs__nav a { white-space: nowrap; }
+  .plx-hs .plx-adv__nav .plx-adv__nav-del { display: none; }
 }
 
 /* Advanced area (pros): section list on the left, the chosen section on the right. */
-.plx-adv__nav a { min-height: 44px; display: flex; align-items: center; }
-.plx-adv__nav a[aria-current="page"] { background: var(--plx-tint); color: var(--plx-text); }
-.plx-adv__nav .plx-adv__nav--danger { color: var(--plx-danger); }
+/* Full-strength text for every section name (never faded); the chosen one is tinted and bold-marked. */
+.plx-hs .plx-adv__nav a { min-height: 44px; display: flex; align-items: center; position: relative; padding-right: 32px; color: var(--plx-text); opacity: 1; }
+.plx-hs .plx-adv__nav a:hover { background: var(--plx-ghost-hover); }
+.plx-hs .plx-adv__nav a[aria-current="page"] { background: var(--plx-tint); color: var(--plx-text); box-shadow: inset 3px 0 0 var(--plx-deep); }
+/* Delete: last in the list on a computer, set apart by a line, never inline with the section tabs. */
+.plx-hs .plx-adv__nav .plx-adv__nav-del { margin-top: 12px; border-top: 1px solid var(--plx-border); border-radius: 0 0 10px 10px; padding-top: 4px; min-height: 52px; color: var(--plx-danger); }
+.plx-adv__danger { margin-top: 24px; padding-top: 28px; border-top: 1px solid var(--plx-border); }
 .plx-adv__body { gap: 20px; }
 .plx-adv__head { display: flex; flex-direction: column; gap: 2px; }
 .plx-adv__head .plx-h3 { margin: 0; }

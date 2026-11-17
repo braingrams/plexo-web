@@ -11,6 +11,8 @@ export { Checklist, TaskCard, type TaskCardProps, type TaskState } from "./Check
 export { ToastProvider, useToast, type ToastInput, type ToastTone } from "./Toast";
 export { Skeleton, SkeletonText } from "./Skeleton";
 export { Avatar, initialsOf } from "./Avatar";
+export { ScrollRail } from "./ScrollRail";
+export { LinkPending } from "./LinkPending";
 export { Tooltip } from "./Tooltip";
 export { SegmentedControl, type SegmentOption } from "./SegmentedControl";
 export { HelpMedia, HelpMediaPlayer, HelpVideoLink } from "./HelpMedia";

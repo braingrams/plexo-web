@@ -3,7 +3,7 @@
 import "./hub.css";
 import Link from "next/link";
 import { ArrowLeft, ExternalLink, Pencil, Upload } from "lucide-react";
-import { Badge, ButtonLink, HelpMedia, StatusPill, TabLinks } from "../ui";
+import { Badge, ButtonLink, HelpMedia, ScrollRail, StatusPill, TabLinks } from "../ui";
 import { OpenSiteButton, PreviewButton } from "../home/SiteButtons";
 import { hubTabHref, type HubTab, type HubTabId } from "@/lib/dashboardV3/hubTabs";
 import type { Experience } from "@/lib/dashboardV3/nav";
@@ -78,9 +78,9 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
         </div>
       </header>
 
-      <div data-tour="site-tabs" className="plx-hub__tabs">
-        <TabLinks label="This site" current={currentHref} items={tabs.map((t) => ({ href: hubTabHref(site.id, t.id), label: t.label, tour: t.tour }))} />
-      </div>
+      <div data-tour="site-tabs"><ScrollRail className="plx-hub__tabs" activeKey={currentHref} label="Site tabs">
+        <TabLinks prefetch label="This site" current={currentHref} items={tabs.map((t) => ({ href: hubTabHref(site.id, t.id), label: t.label, tour: t.tour }))} />
+      </ScrollRail></div>
 
       <div className="plx-hub__body">
         {experience === "beginner" ? <HelpMedia title={HELP[current]} caption="A short clip that shows exactly this step." /> : null}

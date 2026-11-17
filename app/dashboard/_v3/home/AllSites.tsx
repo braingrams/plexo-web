@@ -1,9 +1,10 @@
 "use client";
 
-import { Pencil, Plus } from "lucide-react";
+import { ArrowRight, Pencil, Plus } from "lucide-react";
+import Link from "next/link";
 import type { HomeSiteRow } from "./homeTypes";
 import { Card, ButtonLink, StatusPill } from "../ui";
-import { OpenSiteButton, PreviewButton } from "./SiteButtons";
+import { OpenSiteButton, OpenSiteIconButton, PreviewButton, PreviewIconButton } from "./SiteButtons";
 
 function statLine(r: HomeSiteRow) {
   return r.stats.stats.map((s) => `${s.value} ${s.label.toLowerCase()}`).join(" · ");
@@ -66,10 +67,15 @@ export function AllSites({ rows, dense, newSiteHref }: { rows: HomeSiteRow[]; de
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))", gap: 16 }}>
           {rows.map((r) => {
             return (
-              <Card key={r.site.id} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <Card key={r.site.id} interactive className="plx-allcard" style={{ display: "flex", flexDirection: "column", gap: 14, position: "relative" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 }}>
                   <div style={{ minWidth: 0 }}>
-                    <div className="plx-h3" style={{ overflowWrap: "anywhere" }}>{r.site.name}</div>
+                    <div className="plx-h3" style={{ overflowWrap: "anywhere" }}>
+                      <Link href={`/dashboard/sites/${r.site.id}`} style={{ color: "inherit", textDecoration: "none" }}>
+                        <span style={{ position: "absolute", inset: 0, zIndex: 0 }} aria-hidden />
+                        {r.site.name}
+                      </Link>
+                    </div>
                     <div className="plx-small" style={{ overflowWrap: "anywhere" }}>{r.site.kind} · {r.site.address ?? (r.site.movedFrom ? `Moved from ${hostOf(r.site.movedFrom)}` : "No web address yet")}</div>
                   </div>
                   <StatusPill status={r.site.status} label={r.site.status === "live" ? "Online" : "Not online yet"} />
@@ -82,12 +88,13 @@ export function AllSites({ rows, dense, newSiteHref }: { rows: HomeSiteRow[]; de
                     </div>
                   ))}
                 </div>
-                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <ButtonLink href={`/dashboard/sites/${r.site.id}`} variant="strong" leftIcon={<Pencil size={16} aria-hidden />}>Edit site</ButtonLink>
-                  <PreviewButton site={r.site} />
-                  <OpenSiteButton site={r.site} />
+                <div className="plx-sitecard__foot" style={{ position: "relative", zIndex: 1 }}>
+                  <span className="plx-sitecard__manage">Manage <ArrowRight size={16} aria-hidden /></span>
+                  <span className="plx-sitecard__icons">
+                    <PreviewIconButton site={r.site} />
+                    <OpenSiteIconButton site={r.site} />
+                  </span>
                 </div>
-                {r.site.status !== "live" || !r.site.address ? <span className="plx-small">Put your site online first to open it for visitors. Preview shows what you have so far.</span> : null}
               </Card>
             );
           })}

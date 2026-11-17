@@ -40,6 +40,8 @@ import { Avatar } from "../ui/Avatar";
 import { Modal } from "../ui/Modal";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { MenuPanel, useMenu } from "./Menu";
+import { NavProgress } from "./NavProgress";
+import { LinkPending } from "../ui/LinkPending";
 import { SiteSwitcher } from "./SiteSwitcher";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { WorkspaceList, WorkspaceSwitcher, type Workspace } from "./WorkspaceSwitcher";
@@ -147,7 +149,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
     }
   };
 
-  if (isChromeless(pathname)) return <div className="plx-shell" data-chrome="none">{children}</div>;
+  if (isChromeless(pathname)) return <div className="plx-shell" data-chrome="none"><NavProgress />{children}</div>;
 
   const brand = <Brand orgBranding={orgBranding} />;
   const switcher = beginner ? <SiteSwitcher sites={sites} currentSiteId={currentSiteId} onSelect={onSiteSelect} /> : null;
@@ -160,6 +162,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
 
   return (
     <div className="plx-shell">
+      <NavProgress />
       <aside className="plx-sidebar" aria-label={view === "chats" ? "Your conversations" : "Main"} data-mode={mode} data-view={view}>
         <Link href="/dashboard" className="plx-sidebar__brand" aria-label={`${orgBranding?.name ?? "Plexo"} home`}>
           {brand}
@@ -189,6 +192,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
                   <Link key={item.id} href={item.href} className="plx-nav__link" aria-current={active === item.id ? "page" : undefined}>
                     <Icon size={20} aria-hidden />
                     {item.label}
+                    <LinkPending />
                   </Link>
                 );
               })}
@@ -232,6 +236,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
                 <Icon size={21} aria-hidden />
               </span>
               {item.label}
+              <LinkPending />
             </Link>
           );
         })}
