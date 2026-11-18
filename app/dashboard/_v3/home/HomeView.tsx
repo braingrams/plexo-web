@@ -9,6 +9,7 @@ import { ActivityCard, StatGrid, VisitsCard } from "./LiveDashboard";
 import { AllSites } from "./AllSites";
 import { AskSolCard, CopyLinkButton, OtherActionsCard, SitePreviewCard } from "./SideCards";
 import { SkippedHome } from "./SkippedHome";
+import { ProViewNudge } from "./ProViewNudge";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -53,7 +54,7 @@ export function HomeView(props: HomeProps) {
   if (showGuide) {
     const title = progress.allDone ? `${site.site.name} is online` : `Let's get ${site.site.name} online`;
     return (
-      <Page tuneHref={tuneHref} eyebrow={`${greeting()}, ${firstName}`} title={title}>
+      <Page tuneHref={tuneHref} experience={experience} demo={demo} eyebrow={`${greeting()}, ${firstName}`} title={title}>
         <div className="plx-page__grid">
           <section data-tour="home-main" style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
             {celebrate && progress.allDone ? (
@@ -99,7 +100,7 @@ export function HomeView(props: HomeProps) {
   // Live: this site's dashboard. Stats across the top, then activity and visits on the left with a slim rail on the right.
   const stats = site.stats;
   return (
-    <Page tuneHref={tuneHref} eyebrow={`${greeting()}, ${firstName}`} title={site.site.name}>
+    <Page tuneHref={tuneHref} experience={experience} demo={demo} eyebrow={`${greeting()}, ${firstName}`} title={site.site.name}>
       {stats ? <StatGrid stats={stats.stats} /> : null}
       <div className="plx-home__body">
         <section data-tour="home-main" className="plx-home__main">
@@ -115,7 +116,7 @@ export function HomeView(props: HomeProps) {
   );
 }
 
-function Page({ eyebrow, title, tuneHref, children }: { eyebrow: string; title: string; tuneHref?: string; children: React.ReactNode }) {
+function Page({ eyebrow, title, tuneHref, experience, demo, children }: { eyebrow: string; title: string; tuneHref?: string; experience?: HomeProps["experience"]; demo?: boolean; children: React.ReactNode }) {
   return (
     <div className="plx-page">
       <div>
@@ -123,6 +124,7 @@ function Page({ eyebrow, title, tuneHref, children }: { eyebrow: string; title: 
         <h1 className="plx-h1">{title}</h1>
       </div>
       {tuneHref ? <FineTuneCard href={tuneHref} /> : null}
+      {experience ? <ProViewNudge experience={experience} demo={demo} /> : null}
       {children}
     </div>
   );
