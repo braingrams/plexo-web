@@ -17,61 +17,57 @@
  */
 import "dotenv/config";
 
-import { Template, PublishedDomain } from "../lib/db/contentEntities";
-import { rawDocClient } from "../lib/db/client";
+import { rawDocClient, TABLES } from "../lib/db/client";
 
 const apply = process.argv.includes("--apply");
 
-async function stamp(key: Record<string, unknown>, tableName: string, pk: string, sk: string): Promise<boolean> {
-  try {
-    await rawDocClient.update({
-      TableName: tableName,
-      Key: key,
-      UpdateExpression: "SET GSI3PK = :pk, GSI3SK = :sk",
-      ConditionExpression: "attribute_exists(pk)",
-      ExpressionAttributeValues: { ":pk": pk, ":sk": sk },
-    });
-    return true;
-  } catch (err) {
-    if ((err as { name?: string }).name === "ConditionalCheckFailedException") return false;
-    throw err;
-  }
-}
-
+// Raw, projected Scan on purpose: going through Template.scan would re-load every template's
+// large design body from S3 just to read two ids. Only keys + owner are read here.
 async function main() {
   console.log(apply ? "APPLYING — writing GSI3 keys" : "DRY RUN — nothing is written (pass --apply)");
+  const table = TABLES.content;
   let templates = 0;
   let domains = 0;
+  let skipped = 0;
 
-  let cursor: string | null | undefined = undefined;
+  let startKey: Record<string, unknown> | undefined;
   do {
-    const page: { data: { id: string; userId: string }[]; cursor: string | null } = await Template.scan.go({ cursor });
-    for (const t of page.data) {
-      if (!t.userId) continue;
-      templates++;
-      if (apply) {
-        const p = Template.get({ id: t.id }).params() as { TableName: string; Key: Record<string, unknown> };
-        await stamp(p.Key, p.TableName, `USER#${t.userId}`, `TEMPLATE#${t.id}`);
+    const page = await rawDocClient.scan({
+      TableName: table,
+      ExclusiveStartKey: startKey,
+      FilterExpression: "#e IN (:t, :d)",
+      ProjectionExpression: "pk, sk, #e, #id, userId",
+      ExpressionAttributeNames: { "#e": "__edb_e__", "#id": "id" },
+      ExpressionAttributeValues: { ":t": "template", ":d": "publishedDomain" },
+    });
+    for (const row of page.Items ?? []) {
+      const isTemplate = row.__edb_e__ === "template";
+      if (!row.userId || !row.id) {
+        skipped++;
+        continue;
+      }
+      if (isTemplate) templates++;
+      else domains++;
+      if (!apply) continue;
+      try {
+        await rawDocClient.update({
+          TableName: table,
+          Key: { pk: row.pk, sk: row.sk },
+          UpdateExpression: "SET GSI3PK = :pk, GSI3SK = :sk",
+          ConditionExpression: "attribute_exists(pk)",
+          ExpressionAttributeValues: {
+            ":pk": `USER#${row.userId}`,
+            ":sk": `${isTemplate ? "TEMPLATE" : "DOMAIN"}#${row.id}`,
+          },
+        });
+      } catch (err) {
+        if ((err as { name?: string }).name !== "ConditionalCheckFailedException") throw err; // deleted mid-run
       }
     }
-    cursor = page.cursor;
-  } while (cursor);
+    startKey = page.LastEvaluatedKey;
+  } while (startKey);
 
-  cursor = undefined;
-  do {
-    const page: { data: { id: string; userId: string; templateId: string }[]; cursor: string | null } = await PublishedDomain.scan.go({ cursor });
-    for (const d of page.data) {
-      if (!d.userId) continue;
-      domains++;
-      if (apply) {
-        const p = PublishedDomain.get({ templateId: d.templateId, id: d.id }).params() as { TableName: string; Key: Record<string, unknown> };
-        await stamp(p.Key, p.TableName, `USER#${d.userId}`, `DOMAIN#${d.id}`);
-      }
-    }
-    cursor = page.cursor;
-  } while (cursor);
-
-  console.log(`${apply ? "Stamped" : "Would stamp"} ${templates} template(s) and ${domains} published domain(s).`);
+  console.log(`${apply ? "Stamped" : "Would stamp"} ${templates} template(s) and ${domains} published domain(s)${skipped ? `; ${skipped} had no owner and were skipped` : ""}.`);
 }
 
 main().catch((err) => {
