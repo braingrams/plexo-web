@@ -12,7 +12,7 @@ import { SolOutOfCredits } from "../../_components/sol/SolTopUp";
 import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { emailsListHref } from "@/lib/dashboardV3/emails";
-import { useEditorBackHref, useEditorColors, useEditorV3 } from "../../_components/EditorTheme";
+import { useEditorBackHref, useEditorBeginner, useEditorColors, useEditorV3 } from "../../_components/EditorTheme";
 import {
   PlexoBuilder,
   type PlexoBuilderRef,
@@ -404,8 +404,11 @@ function EditorHeaderRight({
   onToggleAutoSave,
   autoSaveNotification,
   compact,
+  beginner,
 }: {
   compact?: boolean;
+  /** The simple screen has its own status and "Make it live"; only comments and problems are shown here, in the editor's own button style. */
+  beginner?: boolean;
   saveMessage: string | null;
   saveError: string | null;
   subscriptionPlan: string;
@@ -422,6 +425,18 @@ function EditorHeaderRight({
   onToggleAutoSave: () => void;
   autoSaveNotification: string | null;
 }) {
+  if (beginner) {
+    const problem = publishError ?? saveError;
+    return (
+      <>
+        {problem && <span role="alert" style={{ fontSize: "0.75rem", color: "var(--ed-danger)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={problem}>{problem}</span>}
+        <button type="button" onClick={onToggleComments} aria-pressed={commentsOpen}>
+          <IconComment />
+          Comments
+        </button>
+      </>
+    );
+  }
   return (
     <div
       style={{
@@ -706,6 +721,7 @@ export function TemplateEditorClient({
 }: Props) {
   const router = useRouter();
   const v3 = useEditorV3();
+  const beginner = useEditorBeginner();
   const backToSiteHref = useEditorBackHref(rootTemplateId);
   const editorColors = useEditorColors();
   const isV2 = designFormat === "v2" && !!initialV2Design;
@@ -1105,6 +1121,7 @@ export function TemplateEditorClient({
   const headerRightNode = (
     <EditorHeaderRight
       compact={isV2}
+      beginner={beginner && isV2}
       saveMessage={saveMessage}
       saveError={saveError}
       subscriptionPlan={subscriptionPlan}
@@ -1200,6 +1217,7 @@ export function TemplateEditorClient({
             stockKeys={{ unsplash: unsplashKey, pexels: pexelsKey, pixabay: pixabayKey }}
             kind={templateKind}
             headerRight={headerRightNode}
+            beginner={beginner}
             onPublish={handlePublish}
             onBack={() => router.push(exitHref)}
             onSaved={() => {

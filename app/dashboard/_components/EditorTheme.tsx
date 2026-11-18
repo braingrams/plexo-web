@@ -8,16 +8,16 @@ import { createContext, useContext, useEffect, useState, type CSSProperties, typ
 import { appBackHref, editorBackHref, editorColorsFromTokens, sitesListHref, type EditorColors } from "@/lib/dashboardV3/editorChrome";
 import { useV3ThemeOptional } from "../_v3/theme/ThemeContext";
 
-const Ctx = createContext<{ v3: boolean }>({ v3: false });
+const Ctx = createContext<{ v3: boolean; beginner: boolean }>({ v3: false, beginner: false });
 
 /**
  * Wraps every site editor. For people on the new dashboard it switches the editors to Plexo's own
  * brand (colours, font) through the tokens in editor-theme.css, and makes "back" go to the site's
  * hub. Everyone else keeps the old look and the old links. It adds no box of its own.
  */
-export function EditorFrame({ v3, children }: { v3: boolean; children: ReactNode }) {
+export function EditorFrame({ v3, beginner = false, children }: { v3: boolean; /** The owner chose "beginner" on the new dashboard: page editors open the simple screen. Never true on the old dashboard. */ beginner?: boolean; children: ReactNode }) {
   return (
-    <Ctx.Provider value={{ v3 }}>
+    <Ctx.Provider value={{ v3, beginner: v3 && beginner }}>
       <div data-editor-theme="" data-editor-v3={v3 ? "" : undefined} style={{ display: "contents" }}>
         {children}
       </div>
@@ -27,6 +27,11 @@ export function EditorFrame({ v3, children }: { v3: boolean; children: ReactNode
 
 export function useEditorV3(): boolean {
   return useContext(Ctx).v3;
+}
+
+/** Whether the page editor should show the simple screen made for people who have never built a site. */
+export function useEditorBeginner(): boolean {
+  return useContext(Ctx).beginner;
 }
 
 /** Where "back" goes from a site's editor. */
