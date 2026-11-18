@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isPrPreviewHost } from "@/lib/isPrPreviewHost";
+import { TENANT_HEADER } from "@/lib/tenantHeader";
 import { legacyMarketplaceRedirect } from "@/lib/dashboardV3/legacyMarketplace";
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
@@ -202,8 +203,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // trailing slash so the page serve route can apply the page's own URL style.
     if (hasTrailingSlash && (pathname === "/blog/" || pathname.startsWith("/blog/"))) return stripTrailingSlash();
 
-    // Rewrite path to /pub/${lookupDomain}${pathname}
-    return NextResponse.rewrite(new URL(`/pub/${lookupDomain}${pathname}${request.nextUrl.search}`, request.url));
+    // Rewrite path to /pub/${lookupDomain}${pathname}. The header marks the request as a customer
+    // site so the root layout leaves Plexo's own tags (GTM, Clarity) out of it.
+    const tenantHeaders = new Headers(request.headers);
+    tenantHeaders.set(TENANT_HEADER, "1");
+    return NextResponse.rewrite(new URL(`/pub/${lookupDomain}${pathname}${request.nextUrl.search}`, request.url), { request: { headers: tenantHeaders } });
   }
 
   // The marketplace has no public pages any more: old links go to the dashboard copy (the query,

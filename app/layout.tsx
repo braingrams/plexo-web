@@ -5,7 +5,7 @@ import { ThemeProvider } from "next-themes";
 
 import "./globals.css";
 import { themeCss } from "@/lib/theme";
-import { GtmHeadScript, GtmNoScript } from "./gtm";
+import { ClarityScript, GtmHeadScript, GtmNoScript } from "./gtm";
 
 // Figtree is the site's typeface (headings and body); Geist Mono stays for code. globals.css
 // maps --font-figtree/--font-geist-mono onto the --font-heading/--font-body/--font-mono
@@ -56,17 +56,7 @@ export default function RootLayout({
         <GtmHeadScript />
         {/* Every colour variable the site uses, generated from lib/theme.ts: change the theme there and it changes everywhere. */}
         <style id="plexo-theme" dangerouslySetInnerHTML={{ __html: themeCss() }} />
-        {/* Microsoft Clarity (For the app) */}
-        <script
-          type="text/javascript"
-          dangerouslySetInnerHTML={{
-            __html: `(function(c,l,a,r,i,t,y){
-        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
-        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
-        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
-    })(window, document, "clarity", "script", "zawu6g4f6x");`,
-          }}
-        />
+        <ClarityScript />
       </head>
       <body>
         <GtmNoScript />
