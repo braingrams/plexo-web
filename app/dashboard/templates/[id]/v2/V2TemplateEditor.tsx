@@ -44,6 +44,8 @@ type Props = {
   stockKeys: { unsplash?: string; pexels?: string; pixabay?: string };
   /** The page's own Comments / Publish buttons (the parent owns publishing). */
   headerRight: ReactNode;
+  /** Show the simple screen (new dashboard, owner chose "beginner"). Pages and emails only. */
+  beginner?: boolean;
   /** Puts the page live (saves what is on the canvas first). Rejects when it fails, so the editor's Save menu can say so. */
   onPublish: () => Promise<void>;
   onBack: () => void;
@@ -438,6 +440,9 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
               />
             }
             headerRight={props.headerRight}
+            // The simple screen keeps saving by itself and has one "Make it live" button; the buttons passed in headerRight match the editor's own.
+            experience={props.beginner ? "beginner" : undefined}
+            headerSlotStyle={props.beginner ? "editor" : undefined}
           />
         </div>
       </div>
