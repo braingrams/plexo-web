@@ -1,5 +1,5 @@
-import { PLAN } from "@/lib/plan/plans";
 "use client";
+import { PLAN } from "@/lib/plan/plans";
 
 import "./learners.css";
 import { useState } from "react";

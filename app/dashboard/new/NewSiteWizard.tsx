@@ -1,5 +1,5 @@
-import { PLAN } from "@/lib/plan/plans";
 "use client";
+import { PLAN } from "@/lib/plan/plans";
 
 import { getTierFeatures } from "@/lib/subscription";
 import type { PlanId } from "@/lib/plan/plans";
