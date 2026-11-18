@@ -7,6 +7,8 @@ import { pickPrimaryDomain } from "@/lib/domains/primaryDomain";
 import { PageContainer } from "../../_components/PageContainer";
 import { CommerceSiteHeader, type CommerceSiteInfo } from "../_components/CommerceSiteHeader";
 import { CommerceTabs } from "../_components/CommerceTabs";
+import { V3CommerceFrame } from "../_components/V3CommerceFrame";
+import { currentUserOnNewDashboard } from "@/lib/dashboardV3/hubRedirect";
 
 /** Shell for every /dashboard/commerce/[templateId]/* route: validates the site in the
  * URL actually belongs to the caller's active org (parentId: null — a "site" is always a
@@ -65,6 +67,14 @@ export default async function CommerceSiteLayout({
 
   const currentSite = sites.find((s) => s.id === templateId) ?? { id: templateId, name: site.name, domain: null, enabled: false, storefrontSlug: null };
   const otherSites = sites.filter((s) => s.id !== templateId);
+
+  if (await currentUserOnNewDashboard(session.user.id)) {
+    return (
+      <V3CommerceFrame currentSite={currentSite} otherSites={otherSites}>
+        {children}
+      </V3CommerceFrame>
+    );
+  }
 
   return (
     <PageContainer>

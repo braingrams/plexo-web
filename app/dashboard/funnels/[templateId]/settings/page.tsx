@@ -1,3 +1,4 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/v3Redirect";
 import { auth } from "@/server/authDynamo";
 import { LmsFunnel } from "@/lib/db/contentEntities";
 import { CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
@@ -7,6 +8,7 @@ import { SettingsClient } from "./SettingsClient";
 
 export default async function FunnelSettingsPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
+  await redirectIfV3(`/dashboard/learners/${templateId}/settings`);
   const session = await auth();
 
   const [{ data: funnel }, { data: user }, { data: products }, { data: commerceSettings }] = await Promise.all([

@@ -17,17 +17,17 @@ export type DeliveryMethodSummary = {
 };
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
+  width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+  borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
 function FieldLabel({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>{label}</span>
+      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.35rem" }}>{label}</span>
       {children}
-      {hint && <span style={{ display: "block", fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginTop: "0.3rem" }}>{hint}</span>}
+      {hint && <span style={{ display: "block", fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.35))", marginTop: "0.3rem" }}>{hint}</span>}
     </label>
   );
 }
@@ -40,14 +40,14 @@ function scopeLabel(m: Pick<DeliveryMethodSummary, "countries" | "states">): str
 
 function IconPickup() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--brand-light)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cmx-accent, var(--brand-light))" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" />
     </svg>
   );
 }
 function IconCourier() {
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--cmx-info, #60a5fa)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
       <rect x="1" y="7" width="13" height="9" rx="1" /><path d="M14 10h4l4 3.5V16h-8z" /><circle cx="6" cy="18.5" r="1.7" /><circle cx="17.5" cy="18.5" r="1.7" />
     </svg>
   );
@@ -108,13 +108,13 @@ function FulfillmentCard({ templateId, initial, hasCourierMethods }: { templateI
 
   const rowStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" };
   return (
-    <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.2rem 1.3rem", marginBottom: "1.25rem", display: "grid", gap: "1.1rem" }}>
+    <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.2rem 1.3rem", marginBottom: "1.25rem", display: "grid", gap: "1.1rem" }}>
       <div style={rowStyle}>
         <div style={{ display: "flex", gap: "0.8rem" }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: "rgba(96,165,250,0.14)", display: "grid", placeItems: "center" }}><IconCourier /></div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: "color-mix(in srgb, var(--cmx-info, rgb(96,165,250)) 14%, transparent)", display: "grid", placeItems: "center" }}><IconCourier /></div>
           <div>
-            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#f0f2ff" }}>Delivery</div>
-            <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", marginTop: 2, lineHeight: 1.45 }}>
+            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)" }}>Delivery</div>
+            <div style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", marginTop: 2, lineHeight: 1.45 }}>
               {deliveryEnabled
                 ? hasCourierMethods
                   ? "Customers can have orders shipped using your shipping methods below."
@@ -126,14 +126,14 @@ function FulfillmentCard({ templateId, initial, hasCourierMethods }: { templateI
         <Toggle checked={deliveryEnabled} disabled={deliveryEnabled && !pickupEnabled} onChange={setDeliveryEnabled} label="Offer delivery" />
       </div>
 
-      <div style={{ height: 1, background: "rgba(255,255,255,0.06)" }} />
+      <div style={{ height: 1, background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)" }} />
 
       <div style={rowStyle}>
         <div style={{ display: "flex", gap: "0.8rem" }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: "rgba(var(--brand-rgb),0.14)", display: "grid", placeItems: "center" }}><IconPickup /></div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, flexShrink: 0, background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 14%, transparent)", display: "grid", placeItems: "center" }}><IconPickup /></div>
           <div>
-            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#f0f2ff" }}>Store pickup <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "#34d399", marginLeft: 6 }}>FREE</span></div>
-            <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)", marginTop: 2, lineHeight: 1.45 }}>
+            <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)" }}>Store pickup <span style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--cmx-success, #34d399)", marginLeft: 6 }}>FREE</span></div>
+            <div style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", marginTop: 2, lineHeight: 1.45 }}>
               Customers can choose to collect their order from you. You&apos;ll let them know when it&apos;s ready.
             </div>
           </div>
@@ -144,7 +144,7 @@ function FulfillmentCard({ templateId, initial, hasCourierMethods }: { templateI
       {pickupEnabled && (
         <div style={{ display: "grid", gap: "0.8rem", paddingLeft: "calc(36px + 0.8rem)" }}>
           {!pickupLocation.trim() && (
-            <div style={{ fontSize: "0.78rem", color: "#fbbf24", background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 9, padding: "0.55rem 0.75rem" }}>
+            <div style={{ fontSize: "0.78rem", color: "var(--cmx-warning, #fbbf24)", background: "color-mix(in srgb, var(--cmx-warning, rgb(251,191,36)) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-warning, rgb(251,191,36)) 25%, transparent)", borderRadius: 9, padding: "0.55rem 0.75rem" }}>
               Add your store&apos;s address so customers can see where to pick up before they order.
             </div>
           )}
@@ -158,14 +158,14 @@ function FulfillmentCard({ templateId, initial, hasCourierMethods }: { templateI
       )}
 
       {!deliveryEnabled || !pickupEnabled ? (
-        <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", margin: 0 }}>At least one of delivery or pickup must stay on so customers can receive physical products.</p>
+        <p style={{ fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.35))", margin: 0 }}>At least one of delivery or pickup must stay on so customers can receive physical products.</p>
       ) : null}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.8rem" }}>
-        {message && <span style={{ fontSize: "0.8rem", color: message.kind === "success" ? "#34d399" : "#f87171", marginRight: "auto" }}>{message.text}</span>}
+        {message && <span style={{ fontSize: "0.8rem", color: message.kind === "success" ? "var(--cmx-success, #34d399)" : "var(--cmx-danger, #f87171)", marginRight: "auto" }}>{message.text}</span>}
         <button
           type="button" onClick={() => void save()} disabled={saving}
-          style={{ padding: "0.55rem 1.1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 700 }}
+          style={{ padding: "0.55rem 1.1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.82rem", fontWeight: 700 }}
         >
           {saving ? "Saving…" : "Save"}
         </button>
@@ -298,55 +298,55 @@ export function DeliveryClient({
       <FulfillmentCard templateId={templateId} initial={initialFulfillment} hasCourierMethods={methods.some((m) => m.type === "COURIER" && m.status === "ACTIVE")} />
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", marginBottom: "1.25rem" }}>
-        <span style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)" }}>{methods.length} delivery method{methods.length === 1 ? "" : "s"}</span>
+        <span style={{ fontSize: "0.85rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))" }}>{methods.length} delivery method{methods.length === 1 ? "" : "s"}</span>
         <button
           type="button" onClick={openCreate}
-          style={{ padding: "0.6rem 1.1rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff" }}
+          style={{ padding: "0.6rem 1.1rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)" }}
         >
           + Add method
         </button>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "rgba(var(--brand-rgb),0.08)", border: "1px solid rgba(var(--brand-rgb),0.2)", borderRadius: 12, padding: "0.7rem 1rem", marginBottom: "1.25rem", fontSize: "0.82rem", color: "#c4b5fd" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 20%, transparent)", borderRadius: 12, padding: "0.7rem 1rem", marginBottom: "1.25rem", fontSize: "0.82rem", color: "var(--cmx-violet, #c4b5fd)" }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4M12 8h.01" /></svg>
         A customer only sees the shipping methods that match their delivery address — set each one&apos;s country and state coverage below. Pickup options are shown to everyone.
       </div>
 
       {methods.length === 0 ? (
-        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "rgba(240,242,255,0.45)", fontSize: "0.85rem" }}>
+        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", color: "var(--cmx-muted, rgba(240,242,255,0.45))", fontSize: "0.85rem" }}>
           {initialFulfillment.pickupEnabled
             ? "No extra delivery methods yet — customers can still choose Store pickup. Add a shipping method to deliver to their address."
             : "No delivery methods yet — add one so checkout has something to offer customers."}
         </div>
       ) : (
         methods.map((m) => (
-          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "0.9rem", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1rem 1.2rem", marginBottom: "0.7rem" }}>
-            <div style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, background: m.type === "PICKUP" ? "rgba(var(--brand-rgb),0.14)" : "rgba(96,165,250,0.14)", display: "grid", placeItems: "center" }}>
+          <div key={m.id} style={{ display: "flex", alignItems: "center", gap: "0.9rem", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1rem 1.2rem", marginBottom: "0.7rem" }}>
+            <div style={{ width: 40, height: 40, borderRadius: 10, flexShrink: 0, background: m.type === "PICKUP" ? "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 14%, transparent)" : "color-mix(in srgb, var(--cmx-info, rgb(96,165,250)) 14%, transparent)", display: "grid", placeItems: "center" }}>
               {m.type === "PICKUP" ? <IconPickup /> : <IconCourier />}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "#f0f2ff" }}>{m.name}</div>
+              <div style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)" }}>{m.name}</div>
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginTop: 3, flexWrap: "wrap" }}>
-                <span style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.5)", background: "rgba(255,255,255,0.05)", borderRadius: 999, padding: "0.15rem 0.55rem" }}>{m.type === "PICKUP" ? m.description || "No pickup address yet — edit to add one" : scopeLabel(m)}</span>
-                {m.estimatedTimeLabel && <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)" }}>{m.estimatedTimeLabel}</span>}
+                <span style={{ fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", borderRadius: 999, padding: "0.15rem 0.55rem" }}>{m.type === "PICKUP" ? m.description || "No pickup address yet — edit to add one" : scopeLabel(m)}</span>
+                {m.estimatedTimeLabel && <span style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))" }}>{m.estimatedTimeLabel}</span>}
               </div>
             </div>
             <div style={{ textAlign: "right", flexShrink: 0 }}>
-              <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "#f0f2ff", fontFamily: "ui-monospace, monospace" }}>
+              <div style={{ fontSize: "0.92rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", fontFamily: "ui-monospace, monospace" }}>
                 {m.feeMinor === 0 ? "Free" : formatMoney(m.feeMinor, currency)}
               </div>
               <button
                 type="button" onClick={() => void toggleStatus(m)}
-                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase", color: m.status === "ACTIVE" ? "#34d399" : "rgba(240,242,255,0.4)", fontFamily: "inherit", padding: 0 }}
+                style={{ background: "none", border: "none", cursor: "pointer", fontSize: "0.66rem", fontWeight: 700, letterSpacing: "0.03em", textTransform: "uppercase", color: m.status === "ACTIVE" ? "var(--cmx-success, #34d399)" : "var(--cmx-muted, rgba(240,242,255,0.4))", fontFamily: "inherit", padding: 0 }}
               >
                 {m.status === "ACTIVE" ? "Active" : "Draft"}
               </button>
             </div>
             <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-              <button type="button" onClick={() => openEdit(m)} style={{ padding: "0.5rem 0.85rem", borderRadius: 9, fontSize: "0.8rem", fontWeight: 600, color: "rgba(240,242,255,0.7)", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer", fontFamily: "inherit" }}>
+              <button type="button" onClick={() => openEdit(m)} style={{ padding: "0.5rem 0.85rem", borderRadius: 9, fontSize: "0.8rem", fontWeight: 600, color: "var(--cmx-text, rgba(240,242,255,0.7))", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", cursor: "pointer", fontFamily: "inherit" }}>
                 Edit
               </button>
-              <button type="button" onClick={() => void handleDelete(m)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>
+              <button type="button" onClick={() => void handleDelete(m)} style={{ background: "none", border: "none", color: "var(--cmx-danger, #f87171)", cursor: "pointer", fontSize: "0.8rem", fontFamily: "inherit" }}>
                 Delete
               </button>
             </div>
@@ -360,8 +360,8 @@ export function DeliveryClient({
           style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.7)", padding: "1rem" }}
           onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false); }}
         >
-          <div style={{ width: "min(100%,460px)", maxHeight: "88vh", overflowY: "auto", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "1.75rem" }}>
-            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "1.25rem" }}>
+          <div style={{ width: "min(100%,460px)", maxHeight: "88vh", overflowY: "auto", background: "var(--cmx-surface, #0d0f1a)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", borderRadius: 20, padding: "1.75rem" }}>
+            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "var(--cmx-text, #f0f2ff)", marginBottom: "1.25rem" }}>
               {form.id ? "Edit delivery method" : "New delivery method"}
             </h2>
 
@@ -376,9 +376,9 @@ export function DeliveryClient({
                     key={t} type="button" onClick={() => setForm((p) => ({ ...p, type: t }))}
                     style={{
                       flex: 1, padding: "0.55rem", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
-                      border: form.type === t ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
-                      background: form.type === t ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
-                      color: form.type === t ? "var(--brand)" : "rgba(240,242,255,0.6)", fontWeight: 600, fontSize: "0.82rem",
+                      border: form.type === t ? "1.5px solid var(--cmx-brand, var(--brand))" : "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                      background: form.type === t ? "var(--cmx-brand-subtle, var(--brand-subtle))" : "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
+                      color: form.type === t ? "var(--cmx-accent, var(--brand))" : "var(--cmx-muted, rgba(240,242,255,0.6))", fontWeight: 600, fontSize: "0.82rem",
                     }}
                   >
                     {t === "PICKUP" ? "Pickup" : "Shipping"}
@@ -389,7 +389,7 @@ export function DeliveryClient({
               <div>
                 <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: form.free ? 0 : "0.6rem", cursor: "pointer" }}>
                   <input type="checkbox" checked={form.free} onChange={(e) => setForm((p) => ({ ...p, free: e.target.checked }))} style={{ width: 16, height: 16 }} />
-                  <span style={{ fontSize: "0.82rem", color: "#f0f2ff" }}>Free</span>
+                  <span style={{ fontSize: "0.82rem", color: "var(--cmx-text, #f0f2ff)" }}>Free</span>
                 </label>
                 {!form.free && (
                   <FieldLabel label={`Cost`}>
@@ -419,19 +419,19 @@ export function DeliveryClient({
               </FieldLabel>
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: "0.82rem", color: "#f0f2ff" }}>Active</span>
+                <span style={{ fontSize: "0.82rem", color: "var(--cmx-text, #f0f2ff)" }}>Active</span>
                 <Toggle checked={form.status === "ACTIVE"} onChange={(v) => setForm((p) => ({ ...p, status: v ? "ACTIVE" : "INACTIVE" }))} />
               </div>
 
-              {error && <p style={{ fontSize: "0.82rem", color: "#f87171" }}>{error}</p>}
+              {error && <p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)" }}>{error}</p>}
 
               <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-                <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.65)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>
+                <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "transparent", color: "var(--cmx-muted, rgba(240,242,255,0.65))", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>
                   Cancel
                 </button>
                 <button
                   type="button" onClick={() => void handleSave()} disabled={saving}
-                  style={{ padding: "0.6rem 1.4rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 700 }}
+                  style={{ padding: "0.6rem 1.4rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 700 }}
                 >
                   {saving ? "Saving…" : form.id ? "Save changes" : "Add method"}
                 </button>

@@ -1,5 +1,6 @@
 import { creditUsdValue } from "./pricing";
 import type { SubscriptionPlan } from "@/lib/subscription";
+import { toPlanId } from "@/lib/plan/plans";
 
 /**
  * How much AI each plan and each credit purchase is worth — THE reference for every credit
@@ -16,31 +17,28 @@ import type { SubscriptionPlan } from "@/lib/subscription";
  *
  * Monthly allowance (granted each 30-day period, not rolled over — lib/db/ledgerOperations.ts):
  *
- *   Plan    AI value / month   Credits / month (at $0.001)
- *   FREE    $0.20              0.20 ÷ 0.001 =   200
- *   PRO     $2.00              2.00 ÷ 0.001 = 2,000
- *   ULTRA   $3.00              3.00 ÷ 0.001 = 3,000
+ *   Plan        AI value / month   Credits / month (at $0.001)
+ *   FREE        $0.20                200
+ *   STARTER     $1.00              1,000
+ *   PRO         $2.00              2,000
+ *   ENTERPRISE  $3.00              3,000
  *
- * Credit top-ups (add-ons): half of what the customer pays becomes AI value.
+ * The free trial adds no AI credits: a trial account keeps the Free allowance.
  *
- *   credits = (amount paid in USD × 0.5) ÷ CREDIT_USD_VALUE
- *   e.g. $20 paid → $10 of AI → 10 ÷ 0.001 = 10,000 credits
- *        $5 paid  → $2.50     →  2,500 credits
- *
- * The amount paid is what Stripe actually charged for the pack, before tax (so a discount
- * lowers the credits proportionally and tax never inflates them) — see creditsForTopupPayment.
+ * Credit top-ups (add-ons) are a flat rate: $1 per 1,000 credits (₦1,500 per 1,000 in
+ * Nigeria; each region's rate is in lib/billing/pricing.ts topupPer1000Credits). The credits
+ * granted come from what was actually paid before tax (creditsForTopupAmount), so a discount
+ * lowers them proportionally and tax never inflates them.
  *
  * Changing a value here changes what every new period and every new purchase grants; it never
  * alters credits already granted.
  */
 export const PLAN_MONTHLY_AI_USD: Record<SubscriptionPlan, number> = {
   FREE: 0.2,
+  STARTER: 1,
   PRO: 2,
-  ULTRA: 3,
+  ENTERPRISE: 3,
 };
-
-/** Share of a top-up's price that becomes AI credits. */
-export const TOPUP_AI_SHARE = 0.5;
 
 /** Whole credits for a dollar amount. Rounded (not ceiled like usage charges) so float noise
  *  (e.g. 0.05 / 0.001 = 50.000000000000004) never adds a stray credit. */
@@ -48,12 +46,7 @@ function grantCreditsForUsd(usd: number): number {
   return Math.max(0, Math.round(usd / creditUsdValue()));
 }
 
-/** Credits a plan grants each month: its AI dollar value at the current credit rate. */
-export function planMonthlyCredits(plan: SubscriptionPlan): number {
-  return grantCreditsForUsd(PLAN_MONTHLY_AI_USD[plan] ?? PLAN_MONTHLY_AI_USD.FREE);
-}
-
-/** Credits a top-up grants for what was paid (USD, before tax): half of it, at the current rate. */
-export function creditsForTopupPayment(amountPaidUsd: number): number {
-  return grantCreditsForUsd(amountPaidUsd * TOPUP_AI_SHARE);
+/** Credits a plan grants each month: its AI dollar value at the current credit rate. Accepts the retired ULTRA (= PRO). */
+export function planMonthlyCredits(plan: SubscriptionPlan | string | null | undefined): number {
+  return grantCreditsForUsd(PLAN_MONTHLY_AI_USD[toPlanId(plan)]);
 }

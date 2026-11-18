@@ -55,16 +55,16 @@ export function syncVariantRows(options: OptionDraft[], rows: VariantDraft[], de
 
 const cell: React.CSSProperties = {
   width: "100%",
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
   borderRadius: 7,
-  color: "#f0f2ff",
+  color: "var(--cmx-text, #f0f2ff)",
   padding: "0.4rem 0.5rem",
   fontSize: "0.8rem",
   outline: "none",
   fontFamily: "inherit",
 };
-const muted: React.CSSProperties = { fontSize: "0.74rem", color: "#8a92b6", lineHeight: 1.5 };
+const muted: React.CSSProperties = { fontSize: "0.74rem", color: "var(--cmx-muted, #8a92b6)", lineHeight: 1.5 };
 
 export function VariantsEditor({
   enabled,
@@ -87,10 +87,10 @@ export function VariantsEditor({
   const setRow = (i: number, patch: Partial<VariantDraft>) => onChange(options, rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
 
   return (
-    <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "0.8rem 0.9rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+    <div style={{ border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 12, padding: "0.8rem 0.9rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
       <label style={{ display: "flex", alignItems: "center", gap: "0.55rem", cursor: "pointer" }}>
         <input type="checkbox" checked={enabled} onChange={(e) => onToggle(e.target.checked)} />
-        <span style={{ fontSize: "0.84rem", fontWeight: 600, color: "#f0f2ff" }}>This product comes in options (size, colour…)</span>
+        <span style={{ fontSize: "0.84rem", fontWeight: 600, color: "var(--cmx-text, #f0f2ff)" }}>This product comes in options (size, colour…)</span>
       </label>
       {!enabled ? (
         <span style={muted}>Turn on to sell e.g. a T-shirt in several sizes and colours, each with its own price, stock and SKU.</span>
@@ -106,7 +106,7 @@ export function VariantsEditor({
             </div>
           ))}
           {options.length < MAX_OPTIONS && (
-            <button type="button" onClick={() => setOptions([...options, { name: "", values: "" }])} style={{ ...cell, width: "fit-content", cursor: "pointer", color: "#a5b4fc" }}>
+            <button type="button" onClick={() => setOptions([...options, { name: "", values: "" }])} style={{ ...cell, width: "fit-content", cursor: "pointer", color: "var(--cmx-info, #a5b4fc)" }}>
               + Add option
             </button>
           )}
@@ -116,7 +116,7 @@ export function VariantsEditor({
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 6px", fontSize: "0.78rem" }}>
                 <thead>
-                  <tr style={{ color: "#8a92b6", textAlign: "left" }}>
+                  <tr style={{ color: "var(--cmx-muted, #8a92b6)", textAlign: "left" }}>
                     <th style={{ fontWeight: 600 }}>Variant</th>
                     <th style={{ fontWeight: 600 }}>Price ({currencySymbol})</th>
                     <th style={{ fontWeight: 600 }}>Was ({currencySymbol})</th>
@@ -128,7 +128,7 @@ export function VariantsEditor({
                 <tbody>
                   {rows.map((r, i) => (
                     <tr key={Object.values(r.options).join("/")} style={{ opacity: r.active ? 1 : 0.5 }}>
-                      <td style={{ color: "#f0f2ff", paddingRight: 8, whiteSpace: "nowrap" }}>{Object.values(r.options).join(" / ")}</td>
+                      <td style={{ color: "var(--cmx-text, #f0f2ff)", paddingRight: 8, whiteSpace: "nowrap" }}>{Object.values(r.options).join(" / ")}</td>
                       <td style={{ paddingRight: 6 }}><input style={cell} type="number" min="0" value={r.price} onChange={(e) => setRow(i, { price: e.target.value })} /></td>
                       <td style={{ paddingRight: 6 }}><input style={cell} type="number" min="0" value={r.compareAt} placeholder="—" onChange={(e) => setRow(i, { compareAt: e.target.value })} /></td>
                       <td style={{ paddingRight: 6 }}><input style={cell} type="number" min="0" value={r.stock} placeholder="∞" onChange={(e) => setRow(i, { stock: e.target.value })} /></td>

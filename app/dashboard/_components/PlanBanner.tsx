@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Archive, CalendarClock, Clock, CreditCard } from "lucide-react";
 import { DashboardNotice, type NoticeAction } from "./DashboardNotice";
 import { startTrial } from "./trial";
+import { PLAN_LABELS, type PaidPlanId } from "@/lib/plan/plans";
 
 // One quiet notice above dashboard pages about where the account's plan stands: a trial's
 // days left, a card that needs updating, or — after a downgrade — that nothing was deleted
@@ -12,12 +13,12 @@ import { startTrial } from "./trial";
 // notice instead (SitePlanNotice), so this stays out of their way.
 
 export type PlanBannerState =
-  | { kind: "trial"; plan: "PRO" | "ULTRA"; daysLeft: number; trialDays: number }
-  | { kind: "grant"; plan: "PRO" | "ULTRA"; daysLeft: number }
-  | { kind: "past_due"; plan: "PRO" | "ULTRA" }
-  | { kind: "downgraded"; previousPlan: "PRO" | "ULTRA"; since: string; reason: string | null; trialAvailable: boolean };
+  | { kind: "trial"; plan: PaidPlanId; daysLeft: number; trialDays: number }
+  | { kind: "grant"; plan: PaidPlanId; daysLeft: number }
+  | { kind: "past_due"; plan: PaidPlanId }
+  | { kind: "downgraded"; previousPlan: PaidPlanId; since: string; reason: string | null; trialAvailable: boolean };
 
-const NAME = { PRO: "Pro", ULTRA: "Ultra" } as const;
+const NAME = PLAN_LABELS;
 
 function stateKey(state: PlanBannerState): string {
   if (state.kind === "downgraded") return `downgraded:${state.since}`;
@@ -43,7 +44,7 @@ export function PlanBanner({ state }: { state: PlanBannerState }) {
   }, [key]);
 
   const inEditor = /^\/dashboard\/(templates\/[^/]+$|apps\/[^/]+)/.test(pathname);
-  const onBillingPage = pathname.startsWith("/dashboard/settings/subscription");
+  const onBillingPage = (pathname.startsWith("/dashboard/settings/subscription") || pathname.startsWith("/dashboard/settings/plan"));
   // A failing card is never hidden: it's the one thing that will cost the owner their plan.
   if (inEditor || onBillingPage || (dismissed && state.kind !== "past_due")) return null;
 
@@ -67,7 +68,11 @@ export function PlanBanner({ state }: { state: PlanBannerState }) {
         tone={state.daysLeft <= 3 ? "warning" : "brand"}
         icon={state.kind === "trial" ? Clock : CalendarClock}
         title={state.kind === "trial" ? `${name} trial · ${left}` : `${name} access · ${left}`}
-        detail="Everything's unlocked. Keep it by choosing a plan — nothing is ever deleted either way."
+        detail={
+          state.kind === "trial"
+            ? "Everything's unlocked except custom domains, taking real payments and your own branding — those start once you pay. Nothing is ever deleted either way."
+            : "Everything's unlocked. Keep it by choosing a plan — nothing is ever deleted either way."
+        }
         progress={state.kind === "trial" ? 1 - state.daysLeft / state.trialDays : undefined}
         actions={[{ label: `Keep ${name}`, href: `/dashboard/settings/subscription?upgrade=${state.plan}` }]}
         onDismiss={dismiss}
@@ -88,14 +93,16 @@ export function PlanBanner({ state }: { state: PlanBannerState }) {
   }
 
   const name = NAME[state.previousPlan];
+  // Enterprise isn't trialled — the trial offered after it is Pro's.
+  const trialPlan: "STARTER" | "PRO" = state.previousPlan === "STARTER" ? "STARTER" : "PRO";
   const actions: NoticeAction[] = state.trialAvailable
     ? [
         {
-          label: `Try ${name} free for 14 days`,
+          label: `Try ${NAME[trialPlan]} free for 14 days`,
           busy,
           onClick: () => {
             setBusy(true);
-            void startTrial(state.previousPlan).catch(() => setBusy(false));
+            void startTrial(trialPlan).catch(() => setBusy(false));
           },
         },
         { label: "See plans", href: "/dashboard/settings/subscription", variant: "quiet" },

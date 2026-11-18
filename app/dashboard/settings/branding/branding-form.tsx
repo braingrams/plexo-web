@@ -16,10 +16,10 @@ const DISPLAY_MODE_OPTIONS: Array<{ value: BrandDisplayMode; label: string; desc
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  background: "color-mix(in srgb, var(--plx-text, #fff) 4%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
   borderRadius: 10,
-  color: "#f0f2ff",
+  color: "var(--plx-text, #f0f2ff)",
   padding: "0.75rem 1rem",
   fontSize: "0.9rem",
   outline: "none",
@@ -30,7 +30,7 @@ const labelStyle: React.CSSProperties = {
   display: "block",
   fontSize: "0.8rem",
   fontWeight: 600,
-  color: "#c5cbe8",
+  color: "var(--plx-muted, #c5cbe8)",
   marginBottom: "0.4rem",
 };
 
@@ -134,15 +134,15 @@ export function BrandingForm({
             marginBottom: "1.5rem",
             padding: "1rem 1.25rem",
             borderRadius: 10,
-            background: "rgba(var(--brand-rgb),0.08)",
-            border: "1px solid rgba(var(--brand-rgb),0.25)",
+            background: "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 8%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)",
             color: "#e2e8f0",
             fontSize: "0.85rem",
             lineHeight: 1.5,
           }}
         >
-          Custom branding is a Pro/Ultra feature. Upgrade the organization owner's plan to
-          replace the Plexo name, logo, and color shown here.
+          Your own branding (white-label) is part of the Enterprise plan, and starts once it&apos;s
+          paid for. Upgrade the workspace owner&apos;s plan to replace the Plexo name, logo, and color shown here.
         </div>
       )}
       {planAllowsWhiteLabel && !canManage && (
@@ -151,9 +151,9 @@ export function BrandingForm({
             marginBottom: "1.5rem",
             padding: "1rem 1.25rem",
             borderRadius: 10,
-            background: "rgba(255,255,255,0.03)",
-            border: "1px solid rgba(255,255,255,0.08)",
-            color: "rgba(240,242,255,0.6)",
+            background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
+            color: "var(--plx-muted, rgba(240,242,255,0.6))",
             fontSize: "0.85rem",
           }}
         >
@@ -170,17 +170,17 @@ export function BrandingForm({
           marginBottom: "1.5rem",
           padding: "1rem 1.25rem",
           borderRadius: 10,
-          background: "rgba(255,255,255,0.03)",
-          border: "1px solid rgba(255,255,255,0.08)",
+          background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
         }}
       >
         <div>
-          <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#f0f2ff", margin: 0 }}>
+          <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)", margin: 0 }}>
             Enable custom branding
           </p>
-          <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", marginTop: "0.25rem", maxWidth: 460 }}>
+          <p style={{ fontSize: "0.78rem", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginTop: "0.25rem", maxWidth: 460 }}>
             Turn this on to replace "Plexo" with your name, logo, and color across the dashboard,
-            emails, and published pages. Off by default even on Pro/Ultra.
+            emails, and published pages. Off by default, even on Enterprise.
           </p>
         </div>
         <button
@@ -195,8 +195,8 @@ export function BrandingForm({
             width: 44,
             height: 24,
             borderRadius: 999,
-            background: whiteLabelOn ? "var(--brand)" : "rgba(255,255,255,0.1)",
-            border: whiteLabelOn ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.12)",
+            background: whiteLabelOn ? "var(--brand)" : "color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
+            border: whiteLabelOn ? "1px solid var(--brand)" : "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
             cursor: disabled ? "default" : "pointer",
             opacity: disabled ? 0.5 : 1,
             transition: "background 0.2s, border-color 0.2s",
@@ -261,9 +261,9 @@ export function BrandingForm({
                 flexShrink: 0,
                 padding: "0 1.1rem",
                 borderRadius: 10,
-                border: "1px solid rgba(255,255,255,0.12)",
-                background: "rgba(255,255,255,0.05)",
-                color: "#f0f2ff",
+                border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
+                background: "color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)",
+                color: "var(--plx-text, #f0f2ff)",
                 fontSize: "0.85rem",
                 fontWeight: 600,
                 cursor: disabled || uploading ? "not-allowed" : "pointer",
@@ -273,7 +273,7 @@ export function BrandingForm({
               {uploading ? "Uploading…" : "Upload"}
             </button>
           </div>
-          <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginTop: "0.4rem" }}>
+          <p style={{ fontSize: "0.72rem", color: "var(--plx-faint, rgba(240,242,255,0.35))", marginTop: "0.4rem" }}>
             Paste a link or upload an image — uploading a new one replaces whatever was there before.
           </p>
         </div>
@@ -293,9 +293,9 @@ export function BrandingForm({
                   style={{
                     padding: "0.65rem 0.75rem",
                     borderRadius: 9,
-                    border: active ? "1.5px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.08)",
-                    background: active ? "rgba(var(--brand-rgb),0.1)" : "rgba(255,255,255,0.03)",
-                    color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
+                    border: active ? "1.5px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 40%, transparent)" : "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
+                    background: active ? "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 10%, transparent)" : "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
+                    color: active ? "var(--plx-violet, #c4b5fd)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 55%, transparent)",
                     cursor: optionDisabled ? "not-allowed" : "pointer",
                     opacity: optionDisabled && !active ? 0.4 : 1,
                     fontFamily: "inherit",
@@ -304,7 +304,7 @@ export function BrandingForm({
                   }}
                 >
                   <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600, margin: 0 }}>{option.label}</p>
-                  <p style={{ fontSize: "0.68rem", color: active ? "rgba(196,181,253,0.7)" : "rgba(240,242,255,0.3)", margin: "0.15rem 0 0" }}>
+                  <p style={{ fontSize: "0.68rem", color: active ? "color-mix(in srgb, var(--plx-violet, rgb(196 181 253)) 70%, transparent)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 30%, transparent)", margin: "0.15rem 0 0" }}>
                     {option.description}
                   </p>
                 </button>
@@ -312,7 +312,7 @@ export function BrandingForm({
             })}
           </div>
           {!logo && displayMode !== "NAME_ONLY" && (
-            <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginTop: "0.4rem" }}>
+            <p style={{ fontSize: "0.72rem", color: "var(--plx-faint, rgba(240,242,255,0.35))", marginTop: "0.4rem" }}>
               Add a logo above to enable the logo-only option.
             </p>
           )}
@@ -333,7 +333,7 @@ export function BrandingForm({
               value={brandColor}
               onChange={(e) => setBrandColor(e.target.value)}
               disabled={disabled}
-              placeholder="#4f46e5"
+              placeholder="var(--plx-violet, #4f46e5)"
               style={{ ...inputStyle, flex: 1 }}
             />
           </div>
@@ -348,8 +348,8 @@ export function BrandingForm({
                 alignItems: "center",
                 gap: "0.6rem",
                 padding: "0.75rem 1rem",
-                background: "rgba(255,255,255,0.03)",
-                border: "1px solid rgba(255,255,255,0.08)",
+                background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
                 borderRadius: 10,
               }}
             >
@@ -363,21 +363,21 @@ export function BrandingForm({
                   }}
                 />
               )}
-              {showName && <span style={{ fontWeight: 700, color: "#f0f2ff" }}>{name || "Your Brand"}</span>}
+              {showName && <span style={{ fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>{name || "Your Brand"}</span>}
             </div>
           </div>
         )}
 
-        {error && <p style={{ color: "#f87171", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
-        {saved && !error && <p style={{ color: "#34d399", fontSize: "0.85rem", margin: 0 }}>Saved.</p>}
+        {error && <p style={{ color: "var(--plx-danger, #f87171)", fontSize: "0.85rem", margin: 0 }}>{error}</p>}
+        {saved && !error && <p style={{ color: "var(--plx-success, #34d399)", fontSize: "0.85rem", margin: 0 }}>Saved.</p>}
 
         <div>
           <button
             type="submit"
             disabled={disabled || saving}
             style={{
-              background: disabled ? "rgba(255,255,255,0.08)" : "linear-gradient(135deg, var(--brand), var(--brand-deep))",
-              color: "#fff",
+              background: disabled ? "color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)" : "var(--plx-brand, linear-gradient(135deg, var(--brand), var(--brand-deep)))",
+              color: "var(--plx-text, #fff)",
               border: "none",
               borderRadius: 10,
               padding: "0.75rem 1.5rem",

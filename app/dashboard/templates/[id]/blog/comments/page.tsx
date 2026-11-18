@@ -1,6 +1,7 @@
 import { BlogPost, BlogComment } from "@/lib/db/contentEntities";
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
 import { CommentsModerationClient } from "./CommentsModerationClient";
+import { SiteToolBack } from "@/app/dashboard/_v3/page/SiteToolBack";
 
 export default async function BlogCommentsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -17,6 +18,8 @@ export default async function BlogCommentsPage({ params }: { params: Promise<{ i
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
   return (
+    <>
+    <SiteToolBack siteId={access.templateId} tab="blog" label="Back to your blog" />
     <CommentsModerationClient
       templateId={access.templateId}
       initialComments={comments.map((c) => {
@@ -33,5 +36,6 @@ export default async function BlogCommentsPage({ params }: { params: Promise<{ i
         };
       })}
     />
+    </>
   );
 }

@@ -7,6 +7,7 @@ import { PageContainer } from "../../../_components/PageContainer";
 import { Card } from "../../../_components/Card";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { SiteAppearancePanel } from "./SiteAppearancePanel";
+import { SiteBrandPanel } from "./SiteBrandPanel";
 import { DeployPanel } from "./DeployPanel";
 import { ServerSettingsPanel } from "./ServerSettingsPanel";
 import { SsrDeployPanel } from "./SsrDeployPanel";
@@ -92,7 +93,7 @@ type Props = {
 const CARD_TITLE: React.CSSProperties = {
   fontSize: "0.95rem",
   fontWeight: 700,
-  color: "#f0f2ff",
+  color: "var(--plx-text, #f0f2ff)",
   margin: 0,
 };
 const CARD_HEADER: React.CSSProperties = {
@@ -110,22 +111,22 @@ const ROW: React.CSSProperties = {
   flexWrap: "wrap",
   gap: "0.5rem 1rem",
   padding: "0.7rem 0",
-  borderBottom: "1px solid rgba(255,255,255,0.06)",
+  borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)",
 };
 const LABEL: React.CSSProperties = {
   fontSize: "0.82rem",
-  color: "rgba(240,242,255,0.5)",
+  color: "var(--plx-muted, rgba(240,242,255,0.5))",
 };
 const VALUE: React.CSSProperties = {
   fontSize: "0.82rem",
-  color: "#f0f2ff",
+  color: "var(--plx-text, #f0f2ff)",
   fontWeight: 600,
 };
 const LINK_BTN: React.CSSProperties = {
   padding: "0.4rem 0.8rem",
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.12)",
-  color: "rgba(240,242,255,0.85)",
+  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
+  color: "var(--plx-text, rgba(240,242,255,0.85))",
   fontSize: "0.78rem",
   fontWeight: 600,
   textDecoration: "none",
@@ -238,8 +239,8 @@ function Chip({
         borderRadius: 999,
         fontSize: "0.72rem",
         fontWeight: 700,
-        background: on ? "rgba(74,222,128,0.12)" : "rgba(255,255,255,0.06)",
-        color: on ? "#4ade80" : "rgba(240,242,255,0.4)",
+        background: on ? "color-mix(in srgb, var(--plx-success, rgb(74 222 128)) 12%, transparent)" : "color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)",
+        color: on ? "var(--plx-success, #4ade80)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 40%, transparent)",
       }}
     >
       <span
@@ -632,7 +633,7 @@ export function DetailClient({
       ? [
           { id: "domain" as const, label: "Domain & traffic" },
           { id: "modules" as const, label: "Site modules" },
-          // A server app is ULTRA-only. A static site's deploy tab is open to every plan.
+          // A server app needs Pro or above (ssrEnabled). A static site's deploy tab is open to every plan.
           ...(!siteData.deployedApp?.ssr || siteData.ssrEnabled ? [{ id: "server" as const, label: siteData.deployedApp?.ssr ? "Server app" : "Deploy" }] : []),
           ...(siteData.ssrEnabled ? [{ id: "variables" as const, label: "Variables & secrets" }] : []),
         ]
@@ -649,7 +650,7 @@ export function DetailClient({
           gap: "0.4rem",
           fontSize: "0.8rem",
           fontWeight: 600,
-          color: "rgba(240,242,255,0.5)",
+          color: "var(--plx-muted, rgba(240,242,255,0.5))",
           textDecoration: "none",
           marginBottom: "1.5rem",
         }}
@@ -690,8 +691,8 @@ export function DetailClient({
                 textTransform: "uppercase",
                 background: isEmail
                   ? "var(--brand-subtle)"
-                  : "rgba(129,140,248,0.1)",
-                color: isEmail ? "var(--brand)" : "#818cf8",
+                  : "color-mix(in srgb, var(--plx-violet, rgb(129 140 248)) 10%, transparent)",
+                color: isEmail ? "var(--brand)" : "var(--plx-violet, #818cf8)",
               }}
             >
               {isEmail ? "Email" : "Page"}
@@ -707,8 +708,8 @@ export function DetailClient({
                 fontWeight: 700,
                 letterSpacing: "0.06em",
                 textTransform: "uppercase",
-                background: "rgba(255,255,255,0.06)",
-                color: "rgba(240,242,255,0.55)",
+                background: "color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)",
+                color: "var(--plx-muted, rgba(240,242,255,0.55))",
               }}
             >
               {isRawUpload ? "Raw Upload" : "Drag & Drop"}
@@ -729,7 +730,7 @@ export function DetailClient({
               fontFamily: "var(--font-heading), sans-serif",
               fontSize: "1.9rem",
               fontWeight: 800,
-              color: "#f0f2ff",
+              color: "var(--plx-text, #f0f2ff)",
               background: "transparent",
               border: "1px solid transparent",
               borderRadius: 8,
@@ -739,14 +740,14 @@ export function DetailClient({
               maxWidth: 560,
             }}
             onFocus={(e) =>
-              (e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)")
+              (e.currentTarget.style.borderColor = "color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)")
             }
           />
           {nameError && (
             <p
               style={{
                 fontSize: "0.75rem",
-                color: "#f87171",
+                color: "var(--plx-danger, #f87171)",
                 marginTop: "0.3rem",
               }}
             >
@@ -756,7 +757,7 @@ export function DetailClient({
           <p
             style={{
               fontSize: "0.8rem",
-              color: "rgba(240,242,255,0.4)",
+              color: "var(--plx-muted, rgba(240,242,255,0.4))",
               marginTop: "0.35rem",
             }}
           >
@@ -777,7 +778,7 @@ export function DetailClient({
             fontSize: "0.92rem",
             fontWeight: 700,
             background: "var(--brand)",
-            color: "#fff",
+            color: "var(--plx-text, #fff)",
             fontFamily: "inherit",
             whiteSpace: "nowrap",
           }}
@@ -813,7 +814,7 @@ export function DetailClient({
                 <p
                   style={{
                     fontSize: "0.78rem",
-                    color: "rgba(240,242,255,0.4)",
+                    color: "var(--plx-muted, rgba(240,242,255,0.4))",
                     margin: "0.25rem 0 0",
                   }}
                 >
@@ -834,7 +835,7 @@ export function DetailClient({
             </div>
             <div
               style={{
-                border: "1px solid rgba(255,255,255,0.08)",
+                border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
                 borderRadius: 10,
                 overflow: "hidden",
                 background: "#fff",
@@ -846,11 +847,11 @@ export function DetailClient({
                   alignItems: "center",
                   gap: "0.4rem",
                   padding: "0.55rem 0.75rem",
-                  background: "#12172a",
-                  borderBottom: "1px solid rgba(255,255,255,0.08)",
+                  background: "var(--plx-surface, #12172a)",
+                  borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
                 }}
               >
-                {["#f87171", "#fbbf24", "#4ade80"].map((c) => (
+                {["var(--plx-danger, #f87171)", "var(--plx-warning, #fbbf24)", "var(--plx-success, #4ade80)"].map((c) => (
                   <span
                     key={c}
                     style={{
@@ -874,7 +875,7 @@ export function DetailClient({
                       inset: 0,
                       display: "grid",
                       placeItems: "center",
-                      background: "rgba(255,255,255,0.6)",
+                      background: "color-mix(in srgb, var(--plx-text, #fff) 60%, transparent)",
                     }}
                   >
                     <div
@@ -944,7 +945,7 @@ export function DetailClient({
                       gap: "0.35rem",
                       fontSize: "0.75rem",
                       fontWeight: 600,
-                      color: "#fbbf24",
+                      color: "var(--plx-warning, #fbbf24)",
                     }}
                   >
                     <span
@@ -952,7 +953,7 @@ export function DetailClient({
                         width: 6,
                         height: 6,
                         borderRadius: "50%",
-                        background: "#fbbf24",
+                        background: "var(--plx-warning, #fbbf24)",
                       }}
                     />
                     Unpublished changes
@@ -970,10 +971,10 @@ export function DetailClient({
                     border: "none",
                     background: hasUnpublishedChanges
                       ? "var(--brand)"
-                      : "rgba(255,255,255,0.06)",
+                      : "color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)",
                     color: hasUnpublishedChanges
                       ? "#fff"
-                      : "rgba(240,242,255,0.35)",
+                      : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 35%, transparent)",
                     fontSize: "0.75rem",
                     fontWeight: 700,
                     cursor:
@@ -990,7 +991,7 @@ export function DetailClient({
               <p
                 style={{
                   fontSize: "0.75rem",
-                  color: "#f87171",
+                  color: "var(--plx-danger, #f87171)",
                   margin: "0.4rem 0 0",
                   display: "flex",
                   alignItems: "center",
@@ -1013,9 +1014,9 @@ export function DetailClient({
                 style={{
                   padding: "0.3rem 0.7rem",
                   borderRadius: 7,
-                  border: "1px solid rgba(255,255,255,0.12)",
+                  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
                   background: "transparent",
-                  color: "rgba(240,242,255,0.75)",
+                  color: "var(--plx-text, rgba(240,242,255,0.75))",
                   fontSize: "0.75rem",
                   fontWeight: 600,
                   cursor: "pointer",
@@ -1033,9 +1034,9 @@ export function DetailClient({
                   style={{
                     padding: "0.3rem 0.7rem",
                     borderRadius: 7,
-                    border: "1px solid rgba(255,255,255,0.12)",
+                    border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
                     background: "transparent",
-                    color: "rgba(240,242,255,0.75)",
+                    color: "var(--plx-text, rgba(240,242,255,0.75))",
                     fontSize: "0.75rem",
                     fontWeight: 600,
                     cursor: "pointer",
@@ -1077,7 +1078,7 @@ export function DetailClient({
                       style={{
                         fontSize: "1.3rem",
                         fontWeight: 800,
-                        color: "#f0f2ff",
+                        color: "var(--plx-text, #f0f2ff)",
                       }}
                     >
                       {siteData.pageViews30d.toLocaleString()}
@@ -1268,7 +1269,7 @@ export function DetailClient({
                     }}
                   >
                     {duplicateError && (
-                      <span style={{ fontSize: "0.75rem", color: "#f87171" }}>
+                      <span style={{ fontSize: "0.75rem", color: "var(--plx-danger, #f87171)" }}>
                         {duplicateError}
                       </span>
                     )}
@@ -1313,6 +1314,7 @@ export function DetailClient({
           }}
         >
           <Pane active={tab === "properties"}>
+          {siteData && <SiteBrandPanel templateId={templateId} sourceType={sourceType} />}
           {siteData && <SiteAppearancePanel templateId={templateId} />}
           </Pane>
 
@@ -1342,7 +1344,7 @@ export function DetailClient({
                 <p
                   style={{
                     fontSize: "0.78rem",
-                    color: "rgba(240,242,255,0.4)",
+                    color: "var(--plx-muted, rgba(240,242,255,0.4))",
                     margin: "0.25rem 0 0",
                   }}
                 >
@@ -1350,7 +1352,7 @@ export function DetailClient({
                   {isEmail ? "email" : "page"}.
                 </p>
               </div>
-              <span style={{ color: "rgba(240,242,255,0.5)", flexShrink: 0 }}>
+              <span style={{ color: "var(--plx-muted, rgba(240,242,255,0.5))", flexShrink: 0 }}>
                 <IconChevronDown open={showSource} />
               </span>
             </button>
@@ -1386,7 +1388,7 @@ export function DetailClient({
                         color:
                           sourceTab === tab
                             ? "var(--brand)"
-                            : "rgba(240,242,255,0.5)",
+                            : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 50%, transparent)",
                       }}
                     >
                       {tab === "text" ? "Plain text" : tab}
@@ -1398,9 +1400,9 @@ export function DetailClient({
                     style={{
                       padding: "0.3rem 0.7rem",
                       borderRadius: 7,
-                      border: "1px solid rgba(255,255,255,0.1)",
+                      border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
                       background: "transparent",
-                      color: "rgba(240,242,255,0.6)",
+                      color: "var(--plx-muted, rgba(240,242,255,0.6))",
                       fontSize: "0.72rem",
                       fontWeight: 600,
                       cursor: "pointer",
@@ -1415,9 +1417,9 @@ export function DetailClient({
                     overflow: "auto",
                     fontSize: "0.72rem",
                     lineHeight: 1.5,
-                    color: "rgba(240,242,255,0.75)",
+                    color: "var(--plx-text, rgba(240,242,255,0.75))",
                     background: "rgba(0,0,0,0.25)",
-                    border: "1px solid rgba(255,255,255,0.06)",
+                    border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)",
                     borderRadius: 8,
                     padding: "0.9rem",
                     whiteSpace: "pre-wrap",
@@ -1433,11 +1435,11 @@ export function DetailClient({
 
           <Pane active={tab === "properties"}>
           {/* Danger zone. */}
-          <Card style={{ border: "1px solid rgba(239,68,68,0.2)" }}>
+          <Card style={{ border: "1px solid color-mix(in srgb, var(--plx-danger, rgb(239 68 68)) 20%, transparent)" }}>
             <h2
               style={{
                 ...CARD_TITLE,
-                color: "#f87171",
+                color: "var(--plx-danger, #f87171)",
                 marginBottom: "0.9rem",
               }}
             >
@@ -1456,9 +1458,9 @@ export function DetailClient({
                 style={{
                   padding: "0.5rem 1rem",
                   borderRadius: 8,
-                  border: "1px solid rgba(239,68,68,0.25)",
-                  background: "rgba(239,68,68,0.08)",
-                  color: "#f87171",
+                  border: "1px solid color-mix(in srgb, var(--plx-danger, rgb(239 68 68)) 25%, transparent)",
+                  background: "color-mix(in srgb, var(--plx-danger, rgb(239 68 68)) 8%, transparent)",
+                  color: "var(--plx-danger, #f87171)",
                   fontSize: "0.8rem",
                   fontWeight: 700,
                   cursor: "pointer",
@@ -1479,7 +1481,7 @@ export function DetailClient({
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(3, 7, 18, 0.85)",
+            background: "var(--plx-overlay, rgba(3, 7, 18, 0.85))",
             zIndex: 100,
             display: "grid",
             placeItems: "center",
@@ -1488,8 +1490,8 @@ export function DetailClient({
         >
           <div
             style={{
-              background: "#0d1324",
-              border: "1px solid rgba(255,255,255,0.08)",
+              background: "var(--plx-surface, #0d1324)",
+              border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
               borderRadius: 16,
               width: "90%",
               maxWidth: 480,
@@ -1512,7 +1514,7 @@ export function DetailClient({
                 style={{
                   fontSize: "1.2rem",
                   fontWeight: 800,
-                  color: "#f0f2ff",
+                  color: "var(--plx-text, #f0f2ff)",
                   fontFamily: "var(--font-heading)",
                 }}
               >
@@ -1523,7 +1525,7 @@ export function DetailClient({
                 style={{
                   background: "none",
                   border: "none",
-                  color: "rgba(240,242,255,0.4)",
+                  color: "var(--plx-muted, rgba(240,242,255,0.4))",
                   cursor: "pointer",
                   display: "flex",
                 }}
@@ -1534,7 +1536,7 @@ export function DetailClient({
             <p
               style={{
                 fontSize: "0.82rem",
-                color: "rgba(240,242,255,0.6)",
+                color: "var(--plx-muted, rgba(240,242,255,0.6))",
                 lineHeight: 1.5,
                 marginBottom: "1.1rem",
               }}
@@ -1546,7 +1548,7 @@ export function DetailClient({
               <p
                 style={{
                   fontSize: "0.78rem",
-                  color: "#f87171",
+                  color: "var(--plx-danger, #f87171)",
                   margin: "0 0 1rem",
                   display: "flex",
                   alignItems: "center",
@@ -1560,7 +1562,7 @@ export function DetailClient({
               <p
                 style={{
                   fontSize: "0.78rem",
-                  color: "#f87171",
+                  color: "var(--plx-danger, #f87171)",
                   margin: "0 0 1rem",
                   display: "flex",
                   alignItems: "center",
@@ -1586,7 +1588,7 @@ export function DetailClient({
                 </div>
               )}
               {!revisionsLoading && revisionsError && (
-                <p style={{ fontSize: "0.82rem", color: "#f87171" }}>
+                <p style={{ fontSize: "0.82rem", color: "var(--plx-danger, #f87171)" }}>
                   {revisionsError}
                 </p>
               )}
@@ -1597,7 +1599,7 @@ export function DetailClient({
                   <p
                     style={{
                       fontSize: "0.82rem",
-                      color: "rgba(240,242,255,0.5)",
+                      color: "var(--plx-muted, rgba(240,242,255,0.5))",
                     }}
                   >
                     No published versions yet — history starts building the next
@@ -1638,8 +1640,8 @@ export function DetailClient({
                               fontWeight: 700,
                               letterSpacing: "0.04em",
                               textTransform: "uppercase",
-                              background: "rgba(74,222,128,0.12)",
-                              color: "#4ade80",
+                              background: "color-mix(in srgb, var(--plx-success, rgb(74 222 128)) 12%, transparent)",
+                              color: "var(--plx-success, #4ade80)",
                             }}
                           >
                             <span
@@ -1657,7 +1659,7 @@ export function DetailClient({
                       <span
                         style={{
                           fontSize: "0.74rem",
-                          color: "rgba(240,242,255,0.45)",
+                          color: "var(--plx-muted, rgba(240,242,255,0.45))",
                         }}
                       >
                         by {rev.authorName}
@@ -1678,9 +1680,9 @@ export function DetailClient({
                         style={{
                           padding: "0.35rem 0.8rem",
                           borderRadius: 7,
-                          border: "1px solid rgba(255,255,255,0.12)",
+                          border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
                           background: "transparent",
-                          color: "rgba(240,242,255,0.85)",
+                          color: "var(--plx-text, rgba(240,242,255,0.85))",
                           fontSize: "0.75rem",
                           fontWeight: 600,
                           cursor:
@@ -1712,9 +1714,9 @@ export function DetailClient({
                         style={{
                           padding: "0.35rem 0.6rem",
                           borderRadius: 7,
-                          border: "1px solid rgba(239,68,68,0.2)",
-                          background: "rgba(239,68,68,0.06)",
-                          color: "#f87171",
+                          border: "1px solid color-mix(in srgb, var(--plx-danger, rgb(239 68 68)) 20%, transparent)",
+                          background: "color-mix(in srgb, var(--plx-danger, rgb(239 68 68)) 6%, transparent)",
+                          color: "var(--plx-danger, #f87171)",
                           fontSize: "0.75rem",
                           fontWeight: 600,
                           cursor:
@@ -1745,7 +1747,7 @@ export function DetailClient({
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(3, 7, 18, 0.85)",
+            background: "var(--plx-overlay, rgba(3, 7, 18, 0.85))",
             zIndex: 100,
             display: "grid",
             placeItems: "center",
@@ -1754,8 +1756,8 @@ export function DetailClient({
         >
           <div
             style={{
-              background: "#0d1324",
-              border: "1px solid rgba(255,255,255,0.08)",
+              background: "var(--plx-surface, #0d1324)",
+              border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
               borderRadius: 16,
               width: "90%",
               maxWidth: 460,
@@ -1775,7 +1777,7 @@ export function DetailClient({
                 style={{
                   fontSize: "1.2rem",
                   fontWeight: 800,
-                  color: "#f0f2ff",
+                  color: "var(--plx-text, #f0f2ff)",
                   fontFamily: "var(--font-heading)",
                 }}
               >
@@ -1786,7 +1788,7 @@ export function DetailClient({
                 style={{
                   background: "none",
                   border: "none",
-                  color: "rgba(240,242,255,0.4)",
+                  color: "var(--plx-muted, rgba(240,242,255,0.4))",
                   cursor: "pointer",
                   display: "flex",
                 }}
@@ -1797,7 +1799,7 @@ export function DetailClient({
             <p
               style={{
                 fontSize: "0.82rem",
-                color: "rgba(240,242,255,0.6)",
+                color: "var(--plx-muted, rgba(240,242,255,0.6))",
                 lineHeight: 1.5,
                 marginBottom: "1.25rem",
               }}
@@ -1810,7 +1812,7 @@ export function DetailClient({
               <p
                 style={{
                   fontSize: "0.78rem",
-                  color: "#f87171",
+                  color: "var(--plx-danger, #f87171)",
                   margin: "0 0 1rem",
                   display: "flex",
                   alignItems: "center",
@@ -1828,9 +1830,9 @@ export function DetailClient({
                   flex: 1,
                   padding: "0.6rem",
                   borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.12)",
+                  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
                   background: "transparent",
-                  color: "rgba(240,242,255,0.8)",
+                  color: "var(--plx-text, rgba(240,242,255,0.8))",
                   fontSize: "0.85rem",
                   fontWeight: 600,
                   cursor: "pointer",
@@ -1848,7 +1850,7 @@ export function DetailClient({
                   borderRadius: 8,
                   border: "none",
                   background: "var(--brand)",
-                  color: "#fff",
+                  color: "var(--plx-text, #fff)",
                   fontSize: "0.85rem",
                   fontWeight: 700,
                   cursor: "pointer",
@@ -1867,7 +1869,7 @@ export function DetailClient({
           style={{
             position: "fixed",
             inset: 0,
-            background: "rgba(3, 7, 18, 0.85)",
+            background: "var(--plx-overlay, rgba(3, 7, 18, 0.85))",
             zIndex: 100,
             display: "grid",
             placeItems: "center",
@@ -1876,8 +1878,8 @@ export function DetailClient({
         >
           <div
             style={{
-              background: "#0d1324",
-              border: "1px solid rgba(255,255,255,0.08)",
+              background: "var(--plx-surface, #0d1324)",
+              border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
               borderRadius: 16,
               width: "90%",
               maxWidth: 420,
@@ -1889,7 +1891,7 @@ export function DetailClient({
               style={{
                 fontSize: "1.15rem",
                 fontWeight: 800,
-                color: "#f0f2ff",
+                color: "var(--plx-text, #f0f2ff)",
                 fontFamily: "var(--font-heading)",
                 marginBottom: "0.75rem",
               }}
@@ -1899,7 +1901,7 @@ export function DetailClient({
             <p
               style={{
                 fontSize: "0.82rem",
-                color: "rgba(240,242,255,0.6)",
+                color: "var(--plx-muted, rgba(240,242,255,0.6))",
                 lineHeight: 1.5,
                 marginBottom: "1.25rem",
               }}
@@ -1912,7 +1914,7 @@ export function DetailClient({
               <p
                 style={{
                   fontSize: "0.78rem",
-                  color: "#f87171",
+                  color: "var(--plx-danger, #f87171)",
                   margin: "0 0 1rem",
                   display: "flex",
                   alignItems: "center",
@@ -1930,9 +1932,9 @@ export function DetailClient({
                   flex: 1,
                   padding: "0.6rem",
                   borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.12)",
+                  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
                   background: "transparent",
-                  color: "rgba(240,242,255,0.8)",
+                  color: "var(--plx-text, rgba(240,242,255,0.8))",
                   fontSize: "0.85rem",
                   fontWeight: 600,
                   cursor: "pointer",
@@ -1949,8 +1951,8 @@ export function DetailClient({
                   padding: "0.6rem",
                   borderRadius: 8,
                   border: "none",
-                  background: "#dc2626",
-                  color: "#fff",
+                  background: "var(--plx-danger, #dc2626)",
+                  color: "var(--plx-text, #fff)",
                   fontSize: "0.85rem",
                   fontWeight: 700,
                   cursor: "pointer",
@@ -1984,19 +1986,19 @@ export function DetailClient({
           border: none;
           border-radius: 10px;
           padding: 0.6rem 0.85rem;
-          color: rgba(240, 242, 255, 0.5);
+          color: var(--plx-muted, rgba(240, 242, 255, 0.5));
           font: inherit;
           font-size: 0.9rem;
           font-weight: 600;
           cursor: pointer;
         }
         .detail-nav-item:hover {
-          color: #f0f2ff;
-          background: rgba(255, 255, 255, 0.04);
+          color: var(--plx-text, #f0f2ff);
+          background: color-mix(in srgb, var(--plx-text, #fff) 4%, transparent);
         }
         .detail-nav-item[data-active="true"] {
-          color: #f0f2ff;
-          background: rgba(255, 255, 255, 0.08);
+          color: var(--plx-text, #f0f2ff);
+          background: color-mix(in srgb, var(--plx-text, #fff) 8%, transparent);
         }
         .detail-content {
           flex: 1;

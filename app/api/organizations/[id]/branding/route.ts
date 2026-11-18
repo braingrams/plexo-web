@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/server/authDynamo";
 import { Member, Organization } from "@/lib/db/coreEntities";
 import { requirePermission } from "@/server/requirePermissionDynamo";
-import { canWhiteLabel } from "@/lib/subscription";
-import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
+import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { isValidHexColor } from "@/lib/color";
 import { deleteObjects, isOwnedStorageUrl } from "@/lib/storage";
 import type { OrgRole } from "@/server/accessControl";
@@ -30,7 +29,7 @@ async function getMembership(organizationId: string): Promise<{ userId: string; 
  *  - app/pub/[domain]/[[...slug]]/route.ts (published-page favicon)
  *  - app/api/v1/validate-key (embedded SDK splash)
  *
- * Gated to Pro/Ultra via canWhiteLabel(getOrganizationOwnerPlanDynamo(id)) — see
+ * Gated to Enterprise via orgCanWhiteLabelDynamo(id) — see
  * lib/subscription.ts for why plan is resolved via the owning Member rather than a column
  * on Organization itself (billing still lives entirely on User).
  */
@@ -49,13 +48,13 @@ export async function GET(
     return NextResponse.json({ error: "Organization not found" }, { status: 404 });
   }
 
-  const plan = await getOrganizationOwnerPlanDynamo(id);
+  const allowed = await orgCanWhiteLabelDynamo(id);
   return NextResponse.json({
     name: org.name,
     logo: org.logo,
     brandColor: org.brandColor,
     brandDisplayMode: org.brandDisplayMode ?? "BOTH",
-    planAllowsWhiteLabel: canWhiteLabel(plan),
+    planAllowsWhiteLabel: allowed,
     whiteLabelEnabled: org.whiteLabelEnabled,
   });
 }
@@ -73,10 +72,9 @@ export async function PATCH(
   const permissionError = requirePermission(membership.role, { organization: ["update"] });
   if (permissionError) return permissionError;
 
-  const plan = await getOrganizationOwnerPlanDynamo(id);
-  if (!canWhiteLabel(plan)) {
+  if (!(await orgCanWhiteLabelDynamo(id))) {
     return NextResponse.json(
-      { error: "White-labeling requires the organization owner to be on a Pro or Ultra plan." },
+      { error: "White-label is part of the Enterprise plan (and starts once the plan is paid for, not during a trial)." },
       { status: 403 },
     );
   }

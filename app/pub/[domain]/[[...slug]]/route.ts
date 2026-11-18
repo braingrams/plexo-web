@@ -1,9 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
+import { workspaceOwner } from "@/lib/plan/workspacePlan";
+import { effectivePlan } from "@/lib/plan/entitlement";
 import { NextRequest, NextResponse } from "next/server";
 import type { EntityItem } from "electrodb";
 import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
-import { resolveHideBranding, canWhiteLabel, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
-import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
+import { resolveHideBranding, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
+import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
 import { fillLatestPostLists } from "@/lib/pub/livePostQueries";
@@ -19,6 +21,7 @@ import { FormSettings, PageView } from "@/lib/db/opsEntities";
 import { recordPageViewRollup } from "@/lib/analyticsRollup";
 import { renderContentBlocks } from "@/lib/customContent/render";
 import { applyActiveNav } from "@/lib/pub/activeNav";
+import { applySiteBrandToCss, applySiteBrandToHtml } from "@/lib/brand/inject";
 import { CONTENT_MARKER_ATTR, escapeHtmlAttr, injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
 import { serveProject } from "@/lib/projects/serve";
 import { resolvePreviewHost } from "@/lib/projects/previewHost";
@@ -374,11 +377,14 @@ async function findChildBySlug(parentId: string, slug: string): Promise<Template
 async function servePreviewHost(request: NextRequest, host: string, templateId: string, slugSegments: string[]): Promise<NextResponse> {
   const { data: template } = await Template.get({ id: templateId }).go();
   if (!template) return notFoundResponse();
-  const [{ data: user }, { data: organization }] = await Promise.all([
-    User.get({ id: template.userId }).go(),
+  // Served on the workspace's plan (its owner's), like every published site.
+  const [ownerRow, { data: organization }] = await Promise.all([
+    workspaceOwner(template.organizationId),
     Organization.get({ id: template.organizationId }).go(),
   ]);
-  // An SSR app's preview: its preview function, on the owner's plan (ULTRA only).
+  const ownerUser = ownerRow ?? (await User.get({ id: template.userId }).go()).data;
+  const user = ownerUser ? { ...ownerUser, subscriptionPlan: effectivePlan(ownerUser) } : null;
+  // An SSR app's preview: its preview function, on the owner's plan (Pro and above).
   const { data: deployed } = await DeployedApp.get({ templateId }).go();
   if (deployed?.previewFunctionUrl) {
     const features = getTierFeatures(user?.subscriptionPlan);
@@ -527,7 +533,7 @@ async function serveSite(
     });
   }
   if (deployedApp?.type === "SSR") {
-    // SSR is ULTRA-only for now: a downgraded or ineligible owner's app stops serving.
+    // Server apps are Pro and above: a downgraded or ineligible owner's app stops serving.
     const features = getTierFeatures(published.user.subscriptionPlan);
     if (!features.ssrEnabled) return notFoundResponse();
     return serveDeployedSsr(request, deployedApp, slugSegments, {
@@ -692,6 +698,9 @@ async function serveSite(
       siteName: published.template.name || rawDomain,
     });
     html = optimizeImages(html);
+    // The site's brand (lib/brand): the hosted brand sheet, so a brand published in Strata shows on every page without a
+    // rebuild; raw-HTML/WordPress pages also get their own colours and fonts pointed at it when the owner turned that on.
+    html = await applySiteBrandToHtml(html, published.templateId, cursor.sourceType === "RAW_UPLOAD" ? "raw" : cursor.designFormat === "v2" ? "v2" : "classic");
     // The menu link for the page the visitor is on is marked (and underlined in the editor's own menus).
     html = applyActiveNav(html, new URL(request.url).pathname, rawDomain);
     // New-editor (V2) pages have their custom script baked into compiledHtml at compile time
@@ -711,15 +720,14 @@ async function serveSite(
       html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
     }
 
-    // White-label favicon — only for orgs entitled to custom branding (Pro/Ultra owner
+    // White-label favicon — only for orgs entitled to custom branding (Enterprise owner
     // plan, same gate as the dashboard chrome/emails/SDK splash) that have explicitly turned
     // white-labeling on (Organization.whiteLabelEnabled — plan eligibility alone isn't
     // enough) and have actually set a logo. BUILDER and RAW_UPLOAD both get this (unlike the
     // branding bar above, this is a single <link> tag in <head>, not a </body> splice, so
     // RAW_UPLOAD's "arbitrary uploaded HTML" safety concern doesn't apply).
     if (published.organization.logo && published.organization.whiteLabelEnabled) {
-      const ownerPlan = await getOrganizationOwnerPlanDynamo(published.organization.id);
-      if (canWhiteLabel(ownerPlan)) {
+      if (await orgCanWhiteLabelDynamo(published.organization.id)) {
         html = injectFavicon(html, published.organization.logo);
       }
     }
@@ -845,6 +853,7 @@ async function serveSite(
             siteName: published.template.name || rawDomain,
           });
           html = optimizeImages(html);
+          html = await applySiteBrandToHtml(html, published.templateId, productDetailTemplate.designFormat === "v2" ? "v2" : "classic");
           html = injectCommerceScript(
             html,
             (await getStorefrontPath(published.templateId)) ?? `/${DEFAULT_STOREFRONT_SLUG}`,
@@ -965,6 +974,7 @@ async function serveSite(
   // page, so its contact form works and says thank you.
   if (/^text\/html/i.test(asset.contentType)) {
     let html = applyActiveNav(await assetRes.text(), new URL(request.url).pathname, rawDomain);
+    html = await applySiteBrandToHtml(html, published.templateId, "raw");
     if (html.includes(CONTENT_MARKER_ATTR)) {
       html = await renderContentBlocks(html, published.templateId, `https://${rawDomain}`);
       html = injectContentScript(html);
@@ -974,6 +984,16 @@ async function serveSite(
     }
     headers.set("Cache-Control", "public, max-age=0, s-maxage=30, must-revalidate");
     return new NextResponse(html, { headers });
+  }
+  // A site's own stylesheet, with its colours and fonts pointed at the brand when "Use my brand on this site" is on. The
+  // stored file is never changed, so switching it off serves the original again within the minute above.
+  if (/^text\/css/i.test(asset.contentType) || /\.css$/i.test(asset.path)) {
+    const original = await assetRes.text();
+    const css = await applySiteBrandToCss(original, published.templateId);
+    if (css !== original) return new NextResponse(css, { headers });
+    const etagCss = assetRes.headers.get("etag");
+    if (etagCss) headers.set("ETag", etagCss);
+    return new NextResponse(original, { headers });
   }
   const etag = assetRes.headers.get("etag");
   if (etag) headers.set("ETag", etag);

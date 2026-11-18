@@ -121,7 +121,7 @@ export function FindSiteStep(props: {
           {props.error}
           {props.upgradeNeeded && (
             <div style={{ marginTop: 10 }}>
-              <Link href="/dashboard/settings/subscription?upgrade=ULTRA&returnTo=/dashboard/migrate/wordpress" style={{ ...secondaryButtonStyle, padding: "8px 14px" }}>See plans →</Link>
+              <Link href="/dashboard/settings/subscription?upgrade=STARTER&returnTo=/dashboard/migrate/wordpress" style={{ ...secondaryButtonStyle, padding: "8px 14px" }}>See plans →</Link>
             </div>
           )}
         </Callout>

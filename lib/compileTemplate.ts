@@ -5,6 +5,27 @@ import { compileDesignJsonForKind } from "@/lib/compileForKind";
 import { compileV2Design, compileV2Email, type V2LayoutSections } from "@/lib/v2/compile";
 import { designFormatOf } from "@/lib/v2/design";
 
+/**
+ * A site with a brand linked from Strata (lib/brand/siteBrand.ts): its pages are built with THAT brand's tokens and components,
+ * so the values written into the page match the hosted brand sheet (which overrides them live anyway) and a component change
+ * in Strata reaches the page on the rebuild the sync starts. The page's own Plexo-only settings (density, uploaded fonts) stay.
+ * Best effort: if the brand can't be read, the page is built with its own design system and the sheet still applies.
+ */
+async function withSiteBrand(designJson: unknown, siteId: string): Promise<unknown> {
+  if (!siteId || !designJson || typeof designJson !== "object") return designJson;
+  try {
+    const { linkedDesignSystem } = await import("@/lib/brand/siteBrand");
+    const brand = await linkedDesignSystem(siteId);
+    if (!brand) return designJson;
+    const design = designJson as { designSystem?: Record<string, unknown> };
+    const own = design.designSystem ?? {};
+    return { ...design, designSystem: { ...own, ...brand, options: own.options ?? brand.options, fonts: (brand.fonts ?? own.fonts) } };
+  } catch (err) {
+    console.warn(`[site-brand] ${siteId}: building without the linked brand`, err);
+    return designJson;
+  }
+}
+
 /** Whatever carries a design: a Template row, or a payload about to become one. */
 export type CompilableTemplate = {
   designFormat?: string | null;
@@ -33,8 +54,9 @@ export type CompileTemplateContext = {
 export async function compileTemplate(template: CompilableTemplate, ctx: CompileTemplateContext = {}): Promise<string> {
   if (designFormatOf(template) === "v2") {
     // A big brand is kept in storage and the row holds a reference: bring it back before compiling.
-    const designJson = await resolveDesignSystem(template.designJson);
+    let designJson = await resolveDesignSystem(template.designJson);
     if (template.kind === "EMAIL") return compileV2Email(designJson, { name: template.name ?? "" });
+    designJson = await withSiteBrand(designJson, ctx.rootTemplateId ?? template.id ?? "");
     return compileV2Design(designJson, {
       rootTemplateId: ctx.rootTemplateId ?? template.id ?? "",
       pageTemplateId: template.id ?? "",

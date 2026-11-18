@@ -21,7 +21,7 @@ function isToolResult(block: ContentBlock): block is { type: "tool_result"; tool
  * onto the tool_use block they answer, then drops the now-empty tool-role rows from the
  * render list so history reads identically to a freshly-streamed turn.
  */
-function mergeToolResults(messages: SolMessage[]): SolMessage[] {
+export function mergeToolResults(messages: SolMessage[]): SolMessage[] {
   const resultsByToolUseId = new Map<string, { content: unknown; isError?: boolean }>();
   for (const message of messages) {
     if (message.role !== "tool") continue;
@@ -222,7 +222,7 @@ export function MessageList({
 
 /** Changes whenever anything new arrives in the turn, so the note below can tell how long
  *  SOL has been quiet. */
-function activityMark(blocks: ContentBlock[] | null): string {
+export function activityMark(blocks: ContentBlock[] | null): string {
   if (!blocks?.length) return "0";
   const last = blocks[blocks.length - 1] as { type?: string; text?: string; characters?: number; status?: string };
   return `${blocks.length}:${last.text?.length ?? 0}:${last.characters ?? 0}:${last.status ?? ""}`;
@@ -245,7 +245,7 @@ function QuietNote({ activity }: { activity: string }) {
   );
 }
 
-function lastBlockShowsActivity(blocks: ContentBlock[] | null): boolean {
+export function lastBlockShowsActivity(blocks: ContentBlock[] | null): boolean {
   const last = blocks?.[blocks.length - 1] as { type?: string; status?: string } | undefined;
   return last?.type === "tool_use" && (last.status === "preparing" || last.status === "running" || last.status === "awaiting_confirmation");
 }

@@ -37,9 +37,10 @@ describe("SSR monthly budget", () => {
 });
 
 describe("SSR plan access", () => {
-  it("only ULTRA can use SSR, with a $6 monthly budget", () => {
+  it("Pro (and Enterprise) can use SSR; Starter cannot", () => {
     expect(getTierFeatures("FREE")).toMatchObject({ ssrEnabled: false, ssrMonthlyBudgetUsd: 0 });
-    expect(getTierFeatures("PRO")).toMatchObject({ ssrEnabled: false, ssrMonthlyBudgetUsd: 0 });
+    expect(getTierFeatures("STARTER")).toMatchObject({ ssrEnabled: false, ssrMonthlyBudgetUsd: 0 });
+    expect(getTierFeatures("PRO")).toMatchObject({ ssrEnabled: true, ssrMonthlyBudgetUsd: 6 });
     expect(getTierFeatures("ULTRA")).toMatchObject({ ssrEnabled: true, ssrMonthlyBudgetUsd: 6 });
   });
   it("treats an unknown plan as FREE", () => {

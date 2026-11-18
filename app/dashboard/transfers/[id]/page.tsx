@@ -6,6 +6,8 @@ import { Template } from "@/lib/db/contentEntities";
 import { Organization, User } from "@/lib/db/coreEntities";
 import { SettingsShell } from "../../_components/SettingsShell";
 import { TransferDetailClient } from "./TransferDetailClient";
+import { currentUserOnNewDashboard } from "@/lib/dashboardV3/hubRedirect";
+import { TransferOffer } from "../../_v3/transfers/TransferOffer";
 
 export default async function TransferDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -24,6 +26,21 @@ export default async function TransferDetailPage({ params }: { params: Promise<{
   ]);
 
   const isRecipient = transfer.toEmail === session.user.email.toLowerCase();
+
+  const offer = {
+    id: transfer.id,
+    siteName: template?.name ?? "Untitled site",
+    fromName: fromUser?.name ?? "Someone",
+    fromEmail: fromUser?.email ?? "",
+    fromOrgName: fromOrganization?.name ?? "their workspace",
+    toEmail: transfer.toEmail,
+    status: transfer.status ?? "PENDING",
+    createdAt: transfer.createdAt ?? "",
+    expiresAt: transfer.expiresAt,
+    isRecipient,
+    sessionEmail: session.user.email,
+  };
+  if (await currentUserOnNewDashboard(session.user.id)) return <TransferOffer {...offer} />;
 
   return (
     <SettingsShell>

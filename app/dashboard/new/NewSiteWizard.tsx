@@ -1,5 +1,7 @@
 "use client";
 
+import { getTierFeatures } from "@/lib/subscription";
+import type { PlanId } from "@/lib/plan/plans";
 import { ZipDropzone } from "../_components/ZipDropzone";
 import { ServerBuildProgress } from "./ServerBuildProgress";
 import { stripEnvFilesInBrowser } from "@/lib/projects/clientSsrUpload";
@@ -11,8 +13,8 @@ import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { MarketplaceListItem } from "@/lib/marketplace";
-import { MarketplaceRowExpandGrid } from "@/app/marketplace/MarketplaceRowExpandGrid";
-import { MarketplaceSkeletonGrid } from "@/app/marketplace/MarketplaceBrowse";
+import { MarketplaceRowExpandGrid } from "@/app/dashboard/marketplace/_shared/MarketplaceRowExpandGrid";
+import { MarketplaceSkeletonGrid } from "@/app/dashboard/marketplace/_shared/MarketplaceBrowse";
 import { CustomSelect } from "../../_components/CustomSelect";
 import { trackProjectCreated, templateNameFor } from "@/lib/analytics";
 
@@ -41,8 +43,8 @@ type MarketplaceItem = MarketplaceListItem;
 
 type CreatedTemplate = { id: string; name: string };
 
-const hairline = "rgba(255,255,255,0.09)";
-const hairlineSoft = "rgba(255,255,255,0.055)";
+const hairline = "color-mix(in srgb, var(--plx-text, var(--text-main)) 9%, transparent)";
+const hairlineSoft = "color-mix(in srgb, var(--plx-text, var(--text-main)) 5.5%, transparent)";
 
 const SUBDOMAIN_REGEX = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
 
@@ -59,7 +61,7 @@ function slugify(input: string): string {
 
 function IconCheck() {
   return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--on-brand-fill, #fff)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="20 6 9 17 4 12" />
     </svg>
   );
@@ -113,8 +115,8 @@ function StepBadge({ n, active, done }: { n: number; active: boolean; done: bool
         fontFamily: "var(--font-mono)",
         fontSize: "12.5px",
         fontWeight: 700,
-        background: active || done ? "var(--brand)" : "rgba(255,255,255,0.05)",
-        color: active || done ? "#fff" : "var(--text-faint)",
+        background: active || done ? "var(--brand-fill, var(--brand))" : "color-mix(in srgb, var(--plx-text, var(--text-main)) 5%, transparent)",
+        color: active || done ? "var(--on-brand-fill, #fff)" : "var(--text-faint)",
         border: active || done ? "none" : `1px solid ${hairline}`,
         boxShadow: active ? "0 0 0 4px var(--brand-subtle)" : "none",
         transition: "background 0.2s, box-shadow 0.2s",
@@ -136,7 +138,7 @@ function stepLabelStyle(active: boolean, done: boolean) {
 function inputStyle() {
   return {
     width: "100%",
-    background: "rgba(255,255,255,0.045)",
+    background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 4.5%, transparent)",
     border: `1px solid ${hairline}`,
     borderRadius: 9,
     color: "var(--text-main)",
@@ -177,7 +179,7 @@ function primaryButtonStyle(enabled: boolean) {
  * (NewSiteProvider), where `onClose` is set and the page header is hidden.
  * `plan` decides whether the Server app tab is usable.
  */
-export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void; plan?: "FREE" | "PRO" | "ULTRA" } = {}) {
+export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void; plan?: PlanId } = {}) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [startTab, setStartTab] = useState<"marketplace" | "blank" | "ai" | "upload" | "server" | "wordpress">("marketplace");
   const [creatingBlank, setCreatingBlank] = useState(false);
@@ -687,12 +689,12 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
             <StepBadge n={1} active={step === 1} done={step > 1} />
             <span style={stepLabelStyle(step === 1, step > 1)}>Start</span>
           </div>
-          <div style={{ flex: 1, height: 2, borderRadius: 2, background: step > 1 ? "var(--brand)" : hairline, margin: "0 16px", transition: "background 0.2s" }} />
+          <div style={{ flex: 1, height: 2, borderRadius: 2, background: step > 1 ? "var(--brand-fill, var(--brand))" : hairline, margin: "0 16px", transition: "background 0.2s" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <StepBadge n={2} active={step === 2} done={step > 2} />
             <span style={stepLabelStyle(step === 2, step > 2)}>Connect</span>
           </div>
-          <div style={{ flex: 1, height: 2, borderRadius: 2, background: step > 2 ? "var(--brand)" : hairline, margin: "0 16px", transition: "background 0.2s" }} />
+          <div style={{ flex: 1, height: 2, borderRadius: 2, background: step > 2 ? "var(--brand-fill, var(--brand))" : hairline, margin: "0 16px", transition: "background 0.2s" }} />
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
             <StepBadge n={3} active={step === 3} done={false} />
             <span style={stepLabelStyle(step === 3, false)}>Publish</span>
@@ -706,7 +708,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
             border: `1px solid var(--surface-border)`,
             borderRadius: 20,
             padding: step === 1 ? "36px 40px" : "40px 44px",
-            boxShadow: "0 24px 60px -30px rgba(0,0,0,0.6)",
+            boxShadow: "var(--plx-shadow-overlay, 0 24px 60px -30px rgba(0,0,0,0.6))",
           }}
         >
           {outOfCredits && (
@@ -720,7 +722,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
               role="alert"
               style={{
                 display: "flex", gap: 10, alignItems: "flex-start", margin: "0 0 18px", padding: "12px 14px", borderRadius: 10,
-                border: "1px solid rgba(248,113,113,0.45)", background: "rgba(248,113,113,0.08)", color: "#fca5a5", fontSize: "13px", lineHeight: 1.5,
+                border: "1px solid color-mix(in srgb, var(--plx-danger, #f87171) 45%, transparent)", background: "color-mix(in srgb, var(--plx-danger, #f87171) 8%, transparent)", color: "var(--plx-danger, #fca5a5)", fontSize: "13px", lineHeight: 1.5,
               }}
             >
               <span aria-hidden="true" style={{ fontWeight: 800 }}>!</span>
@@ -744,7 +746,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                   marginBottom: 24,
                   padding: 3,
                   borderRadius: 999,
-                  background: "rgba(255,255,255,0.04)",
+                  background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 4%, transparent)",
                   border: `1px solid ${hairline}`,
                   width: "fit-content",
                 }}
@@ -759,8 +761,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                     borderRadius: 999,
                     border: "none",
                     cursor: "pointer",
-                    background: startTab === "marketplace" ? "var(--brand)" : "transparent",
-                    color: startTab === "marketplace" ? "#fff" : "var(--text-muted)",
+                    background: startTab === "marketplace" ? "var(--brand-fill, var(--brand))" : "transparent",
+                    color: startTab === "marketplace" ? "var(--on-brand-fill, #fff)" : "var(--text-muted)",
                     transition: "background 0.15s, color 0.15s",
                   }}
                 >
@@ -776,8 +778,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                     borderRadius: 999,
                     border: "none",
                     cursor: "pointer",
-                    background: startTab === "blank" ? "var(--brand)" : "transparent",
-                    color: startTab === "blank" ? "#fff" : "var(--text-muted)",
+                    background: startTab === "blank" ? "var(--brand-fill, var(--brand))" : "transparent",
+                    color: startTab === "blank" ? "var(--on-brand-fill, #fff)" : "var(--text-muted)",
                     transition: "background 0.15s, color 0.15s",
                   }}
                 >
@@ -793,8 +795,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                     borderRadius: 999,
                     border: "none",
                     cursor: "pointer",
-                    background: startTab === "ai" ? "var(--brand)" : "transparent",
-                    color: startTab === "ai" ? "#fff" : "var(--text-muted)",
+                    background: startTab === "ai" ? "var(--brand-fill, var(--brand))" : "transparent",
+                    color: startTab === "ai" ? "var(--on-brand-fill, #fff)" : "var(--text-muted)",
                     transition: "background 0.15s, color 0.15s",
                   }}
                 >
@@ -810,14 +812,14 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                     borderRadius: 999,
                     border: "none",
                     cursor: "pointer",
-                    background: startTab === "upload" ? "var(--brand)" : "transparent",
-                    color: startTab === "upload" ? "#fff" : "var(--text-muted)",
+                    background: startTab === "upload" ? "var(--brand-fill, var(--brand))" : "transparent",
+                    color: startTab === "upload" ? "var(--on-brand-fill, #fff)" : "var(--text-muted)",
                     transition: "background 0.15s, color 0.15s",
                   }}
                 >
                   Upload your own
                 </button>
-                {plan === "ULTRA" && (
+                {getTierFeatures(plan).ssrEnabled && (
                   <button
                     type="button"
                     onClick={() => setStartTab("server")}
@@ -828,8 +830,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                       borderRadius: 999,
                       border: "none",
                       cursor: "pointer",
-                      background: startTab === "server" ? "var(--brand)" : "transparent",
-                      color: startTab === "server" ? "#fff" : "var(--text-muted)",
+                      background: startTab === "server" ? "var(--brand-fill, var(--brand))" : "transparent",
+                      color: startTab === "server" ? "var(--on-brand-fill, #fff)" : "var(--text-muted)",
                       transition: "background 0.15s, color 0.15s",
                     }}
                   >
@@ -846,8 +848,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                     borderRadius: 999,
                     border: "none",
                     cursor: "pointer",
-                    background: startTab === "wordpress" ? "var(--brand)" : "transparent",
-                    color: startTab === "wordpress" ? "#fff" : "var(--text-muted)",
+                    background: startTab === "wordpress" ? "var(--brand-fill, var(--brand))" : "transparent",
+                    color: startTab === "wordpress" ? "var(--on-brand-fill, #fff)" : "var(--text-muted)",
                     transition: "background 0.15s, color 0.15s",
                   }}
                 >
@@ -906,7 +908,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                       style={{
                         borderRadius: 12,
                         border: `1px solid ${hairline}`,
-                        background: "rgba(255,255,255,0.02)",
+                        background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 2%, transparent)",
                         padding: "18px 20px",
                         display: "flex",
                         flexDirection: "column",
@@ -983,8 +985,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                       </button>
                       {aiGenerating && aiStage === "writing" && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 420 }} aria-live="polite">
-                          <div style={{ height: 4, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden" }}>
-                            <div className="plexo-ai-progress" style={{ height: "100%", width: "40%", borderRadius: 999, background: "var(--brand)" }} />
+                          <div style={{ height: 4, borderRadius: 999, background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 8%, transparent)", overflow: "hidden" }}>
+                            <div className="plexo-ai-progress" style={{ height: "100%", width: "40%", borderRadius: 999, background: "var(--brand-fill, var(--brand))" }} />
                           </div>
                           <p style={{ fontSize: "11.5px", color: "var(--text-faint)", margin: 0 }}>
                             {!aiProgress || aiProgress.characters === 0
@@ -1024,7 +1026,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                       aria-selected={serverSource === source}
                       onClick={() => setServerSource(source)}
                       disabled={serverBusy}
-                      style={{ padding: "8px 14px", borderRadius: 9, border: "none", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", background: serverSource === source ? "var(--brand)" : "transparent", color: serverSource === source ? "#fff" : "var(--text-muted)" }}
+                      style={{ padding: "8px 14px", borderRadius: 9, border: "none", fontFamily: "inherit", fontSize: 13, fontWeight: 600, cursor: "pointer", background: serverSource === source ? "var(--brand-fill, var(--brand))" : "transparent", color: serverSource === source ? "var(--on-brand-fill, #fff)" : "var(--text-muted)" }}
                     >
                       {source === "zip" ? "Upload a .zip" : "Connect GitHub repository"}
                     </button>
@@ -1038,7 +1040,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                         value={serverName}
                         onChange={(e) => setServerName(e.target.value)}
                         placeholder="My app"
-                        style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                        style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 3%, transparent)", color: "var(--text-main)", fontFamily: "inherit" }}
                       />
                     </label>
                     <div style={{ display: "grid", gap: 6, fontSize: "13px", fontWeight: 600 }}>
@@ -1073,7 +1075,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                         value={serverName}
                         onChange={(e) => setServerName(e.target.value)}
                         placeholder="My app"
-                        style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                        style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 3%, transparent)", color: "var(--text-main)", fontFamily: "inherit" }}
                       />
                     </label>
                     {!ghConn ? (
@@ -1106,7 +1108,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                             <select
                               value={ghInstallation ?? ""}
                               onChange={(e) => setGhInstallation(Number(e.target.value))}
-                              style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                              style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 3%, transparent)", color: "var(--text-main)", fontFamily: "inherit" }}
                             >
                               {ghConn.installations.map((i) => (
                                 <option key={i.id} value={i.id}>{i.account}</option>
@@ -1120,7 +1122,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                             value={ghFilter}
                             onChange={(e) => setGhFilter(e.target.value)}
                             placeholder="Search repositories"
-                            style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                            style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 3%, transparent)", color: "var(--text-main)", fontFamily: "inherit" }}
                           />
                           <select
                             value={ghRepo}
@@ -1130,7 +1132,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                               setGhRepo(e.target.value);
                               setGhBranch(picked?.defaultBranch ?? "");
                             }}
-                            style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                            style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 3%, transparent)", color: "var(--text-main)", fontFamily: "inherit" }}
                           >
                             <option value="">{ghRepoLoading ? "Loading repositories…" : "Choose a repository"}</option>
                             {ghRepos
@@ -1149,7 +1151,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                             onChange={(e) => setGhBranch(e.target.value)}
                             placeholder="main"
                             disabled={!ghRepo}
-                            style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit" }}
+                            style={{ padding: "10px 12px", borderRadius: 10, border: `1px solid ${hairline}`, background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 3%, transparent)", color: "var(--text-main)", fontFamily: "inherit" }}
                           />
                         </label>
                       </>
@@ -1234,8 +1236,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                   padding: "10px 14px",
                   marginBottom: 24,
                   borderRadius: 10,
-                  background: "rgba(52,211,153,0.08)",
-                  border: "1px solid rgba(52,211,153,0.2)",
+                  background: "color-mix(in srgb, var(--plx-success, #34d399) 8%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--plx-success, #34d399) 20%, transparent)",
                 }}
               >
                 <span style={{ fontSize: "12.5px", color: "var(--success)" }}>
@@ -1255,7 +1257,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  background: "rgba(255,255,255,0.045)",
+                  background: "color-mix(in srgb, var(--plx-text, var(--text-main)) 4.5%, transparent)",
                   border: `1px solid ${slugValid || slug.length === 0 ? hairline : "var(--warning)"}`,
                   borderRadius: 10,
                   padding: "4px 4px 4px 14px",
@@ -1338,7 +1340,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
 
                   <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderTop: `1px solid ${hairlineSoft}`, borderBottom: `1px solid ${hairlineSoft}` }}>
                     <IconTemplate />
-                    <span style={{ fontSize: "12.5px", color: "var(--text-muted)", flexShrink: 0 }}>Template</span>
+                    <span style={{ fontSize: "12.5px", color: "var(--text-muted)", flexShrink: 0 }}>Design</span>
                     <span style={{ fontSize: "13px", fontWeight: 650, marginLeft: "auto" }}>{template.name}</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: `1px solid ${hairlineSoft}` }}>
@@ -1364,8 +1366,8 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
                       style={{
                         fontSize: "13px",
                         fontWeight: 650,
-                        color: "#fff",
-                        background: "linear-gradient(135deg, var(--brand), var(--brand-deep))",
+                        color: "var(--on-brand-fill, #fff)",
+                        background: "linear-gradient(135deg, var(--brand-fill, var(--brand)), var(--brand-fill-deep, var(--brand-deep)))",
                         padding: "10px 22px",
                         borderRadius: 9,
                         border: "none",

@@ -1,0 +1,62 @@
+/* Emails library. Tokens only (--plx-*). */
+.plx-em { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.plx-em__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.plx-em__note { display: flex; gap: 12px; align-items: flex-start; padding: 14px 18px; border-radius: 16px; background: var(--plx-info-subtle); color: var(--plx-text); font-size: 15px; line-height: 1.5; }
+.plx-em__note svg { flex: none; margin-top: 2px; color: var(--plx-info); }
+
+.plx-emmeter { display: flex; flex-direction: column; gap: 10px; padding: 16px 20px; border-radius: var(--plx-radius-card); background: var(--plx-surface); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-card); min-width: 0; flex: 1 1 320px; max-width: 520px; }
+.plx-emmeter__top { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.plx-emmeter__top b { font-size: 16px; font-weight: 800; }
+.plx-emmeter__top span { font-size: 13px; color: var(--plx-muted); }
+.plx-emmeter__track { height: 10px; border-radius: 999px; background: var(--plx-elevated); overflow: hidden; }
+.plx-emmeter__fill { height: 100%; border-radius: 999px; background: var(--plx-brand); }
+.plx-emmeter[data-state="near"] .plx-emmeter__fill { background: var(--plx-warning); }
+.plx-emmeter[data-state="full"] .plx-emmeter__fill { background: var(--plx-danger); }
+.plx-em__bar { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; }
+.plx-nudge { display: flex; align-items: center; gap: 16px; justify-content: space-between; flex-wrap: wrap; padding: 16px 20px; border-radius: var(--plx-radius-card); background: var(--plx-warning-subtle); border: 1px solid var(--plx-border); }
+.plx-nudge p { margin: 0; font-size: 15px; line-height: 1.45; flex: 1 1 260px; }
+.plx-nudge b { font-weight: 800; }
+
+.plx-egrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 20px; }
+@media (max-width: 560px) { .plx-egrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; } }
+@media (max-width: 380px) { .plx-egrid { grid-template-columns: 1fr; } }
+.plx-ecard { display: flex; flex-direction: column; overflow: hidden; border-radius: var(--plx-radius-card-lg); background: var(--plx-surface); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-card); min-width: 0; }
+.plx-ecard__thumb { position: relative; aspect-ratio: 4 / 5; overflow: hidden; background: var(--plx-elevated); border-bottom: 1px solid var(--plx-border); display: block; color: inherit; text-decoration: none; }
+.plx-ecard__frame { position: absolute; top: 0; left: 0; width: 640px; height: 800px; border: 0; transform-origin: top left; pointer-events: none; background: var(--plx-surface); }
+.plx-ecard__ph { position: absolute; inset: 0; display: grid; place-items: center; color: var(--plx-faint); }
+.plx-ecard__body { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px 6px; min-width: 0; }
+.plx-ecard__name { font-weight: 800; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plx-ecard__meta { font-size: 13px; color: var(--plx-muted); }
+.plx-ecard__acts { display: flex; gap: 6px; padding: 8px 12px 14px 12px; align-items: center; flex-wrap: wrap; }
+.plx-ecard__acts .plx-grow { flex: 1; }
+.plx-ecard__use { padding: 0 16px 14px; font-size: 13px; color: var(--plx-muted); line-height: 1.4; }
+
+.plx-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr)); gap: 14px; }
+.plx-pick { display: flex; flex-direction: column; text-align: left; font: inherit; color: inherit; padding: 0; border-radius: 16px; border: 2px solid var(--plx-border); background: var(--plx-surface); overflow: hidden; cursor: pointer; min-width: 0; }
+.plx-pick:hover { border-color: var(--plx-border-strong); }
+.plx-pick[aria-checked="true"] { border-color: var(--plx-focus); background: var(--plx-tint); }
+.plx-pick__art { aspect-ratio: 4 / 3; display: grid; place-items: center; background: var(--plx-elevated); color: var(--plx-deep); }
+.plx-pick__t { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 2px; }
+.plx-pick__t b { font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+.plx-pick__t span { font-size: 12px; color: var(--plx-muted); }
+.plx-newem { display: flex; flex-direction: column; gap: 20px; }
+
+/* Three big ways to start an email (dialog and empty page). */
+.plx-echoices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) { .plx-echoices { grid-template-columns: 1fr; } }
+.plx-echoice { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; font: inherit; color: inherit; text-decoration: none; padding: 22px; border-radius: var(--plx-radius-card-lg); border: 2px solid var(--plx-border); background: var(--plx-surface); box-shadow: var(--plx-shadow-card); cursor: pointer; min-width: 0; }
+.plx-echoice:hover { border-color: var(--plx-focus); background: var(--plx-tint); }
+.plx-echoice:focus-visible { outline: 3px solid var(--plx-focus); outline-offset: 2px; }
+.plx-echoice b { font-size: 17px; font-weight: 800; line-height: 1.25; }
+.plx-echoice span:last-child { font-size: 14px; line-height: 1.45; color: var(--plx-muted); }
+.plx-echoice__icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: var(--plx-tint); color: var(--plx-deep); }
+.plx-pick__art--mail { position: relative; overflow: hidden; aspect-ratio: 4 / 5; }
+.plx-pick__art--mail .plx-ecard__frame { position: absolute; top: 0; left: 0; }
+.plx-em__first { display: flex; flex-direction: column; gap: 18px; padding: 28px; border-radius: var(--plx-radius-card-lg); background: var(--plx-surface); border: 1px solid var(--plx-border); }
+.plx-em__first h2 { margin: 0; }
+/* The search box is shared with other pages; repeated here so the emails page never depends on them being loaded. */
+.plx-emsearch { position: relative; flex: 1 1 260px; min-width: 0; }
+.plx-emsearch svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--plx-faint); pointer-events: none; z-index: 1; }
+.plx-emsearch .plx-input { padding-left: 42px; }
+.plx-pick__t > :last-child { align-self: flex-start; margin-top: 4px; }
+.plx-newem .plx-emsearch { flex: none; max-width: none; }

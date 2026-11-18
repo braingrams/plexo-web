@@ -153,7 +153,7 @@ describe("a push to a server app's linked branch", () => {
     expect(mocks.downloadRepoZip).not.toHaveBeenCalled();
     expect(mocks.queueSsrBuildFromZip).not.toHaveBeenCalled();
     expect(lastStatus()).toMatchObject({ status: "ERROR" });
-    expect(lastStatus()?.statusMessage).toContain("ULTRA plan");
+    expect(lastStatus()?.statusMessage).toContain("Pro plan");
   });
 });
 

@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe-js";
+import { startCheckout as beginCheckout } from "@/lib/billing/clientCheckout";
 import { CircleAlert, X } from "lucide-react";
 import { getStripePromise } from "@/lib/stripeClientPromise";
 import type { CreditInfo } from "./types";
 import { useTopupPacks, packLabel } from "../../_components/useTopupPacks";
 
-// Credits per pack come from its real price (half of it as AI value — lib/credits/value.ts).
+// Credits per pack, and their price in the person's currency, come from the price list (lib/billing/pricing.ts).
 const TOPUP_PACKS: Array<{ pack: "SMALL" | "MEDIUM" | "LARGE"; sub: string }> = [
   { pack: "SMALL", sub: "Small top-up" },
   { pack: "MEDIUM", sub: "Medium top-up" },
@@ -30,24 +31,20 @@ export function CreditExhaustedModal({
   const packInfo = useTopupPacks();
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState<string | null>(null);
 
+  // Stripe (US dollars) shows its card form here; Paystack (local currency) opens its popup and
+  // the credits are added straight away — then we go back to the chat.
   async function startCheckout(pack: "SMALL" | "MEDIUM" | "LARGE") {
     setBusyPack(pack);
     setError(null);
-    try {
-      const res = await fetch("/api/billing/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kind: "topup", pack, returnTo }),
-      });
-      const data = (await res.json()) as { clientSecret?: string; error?: string };
-      if (!res.ok || !data.clientSecret) throw new Error(data.error ?? "Could not start checkout.");
-      setCheckoutSecret(data.clientSecret);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start checkout.");
-    } finally {
-      setBusyPack(null);
-    }
+    const result = await beginCheckout({ kind: "topup", pack, returnTo });
+    setBusyPack(null);
+    if (result.kind === "stripe") setCheckoutSecret(result.clientSecret);
+    else if (result.kind === "paid" || result.kind === "processing") {
+      setDone(result.message);
+      setTimeout(() => (window.location.href = returnTo), 1500);
+    } else if (result.kind === "error") setError(result.message);
   }
 
   return (
@@ -165,6 +162,7 @@ export function CreditExhaustedModal({
             </div>
 
             {error && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{error}</p>}
+            {done && <p style={{ fontSize: "0.78rem", color: "#4ade80", marginTop: "0.75rem" }}>{done}</p>}
 
             <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)", marginTop: "1rem" }}>
               You'll land back on this conversation once payment is confirmed.

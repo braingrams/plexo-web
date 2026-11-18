@@ -29,17 +29,17 @@ type InitialPaymentsSettings = {
 };
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
+  width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+  borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
 function FieldLabel({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>{label}</span>
+      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.35rem" }}>{label}</span>
       {children}
-      {hint && <span style={{ display: "block", fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginTop: "0.3rem" }}>{hint}</span>}
+      {hint && <span style={{ display: "block", fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.35))", marginTop: "0.3rem" }}>{hint}</span>}
     </label>
   );
 }
@@ -60,19 +60,19 @@ function ProviderCard({
         cursor: "pointer",
         borderRadius: 11,
         padding: "0.85rem",
-        border: selected ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
-        background: selected ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
+        border: selected ? "1.5px solid var(--cmx-brand, var(--brand))" : "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+        background: selected ? "var(--cmx-brand-subtle, var(--brand-subtle))" : "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
       }}
     >
       {selected && (
-        <span style={{ position: "absolute", top: "0.6rem", right: "0.6rem", width: 16, height: 16, borderRadius: "50%", background: "var(--brand)", display: "grid", placeItems: "center" }}>
-          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+        <span style={{ position: "absolute", top: "0.6rem", right: "0.6rem", width: 16, height: 16, borderRadius: "50%", background: "var(--cmx-brand, var(--brand))", display: "grid", placeItems: "center" }}>
+          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="var(--cmx-on-brand, #fff)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
           </svg>
         </span>
       )}
-      <div style={{ fontSize: "0.83rem", fontWeight: 700, color: "#f0f2ff", marginBottom: 2, paddingRight: "1rem" }}>{label}</div>
-      <div style={{ fontSize: "0.74rem", color: "rgba(240,242,255,0.45)", lineHeight: 1.4 }}>{hint}</div>
+      <div style={{ fontSize: "0.83rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", marginBottom: 2, paddingRight: "1rem" }}>{label}</div>
+      <div style={{ fontSize: "0.74rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", lineHeight: 1.4 }}>{hint}</div>
     </div>
   );
 }
@@ -93,14 +93,14 @@ function ProcessorGroup({
     // every stacked card to a fixed ~280px tall box regardless of its actual content,
     // leaving a block of dead space under the two provider options. `stacked` picks the
     // axis-appropriate value instead of assuming row.
-    <div style={{ flex: stacked ? "0 0 auto" : "1 1 280px", minWidth: stacked ? undefined : 260, border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "1rem" }}>
+    <div style={{ flex: stacked ? "0 0 auto" : "1 1 280px", minWidth: stacked ? undefined : 260, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 12, padding: "1rem" }}>
       <div style={{ display: "flex", alignItems: "center", gap: "0.55rem", marginBottom: "0.75rem" }}>
-        <div style={{ width: 26, height: 26, borderRadius: 7, background: iconBg, display: "grid", placeItems: "center", fontSize: "0.72rem", fontWeight: 800, color: "#fff", flexShrink: 0 }}>
+        <div style={{ width: 26, height: 26, borderRadius: 7, background: iconBg, display: "grid", placeItems: "center", fontSize: "0.72rem", fontWeight: 800, color: "var(--cmx-on-brand, #fff)", flexShrink: 0 }}>
           {iconLabel}
         </div>
-        <span style={{ fontSize: "0.86rem", fontWeight: 700, color: "#f0f2ff" }}>{name}</span>
+        <span style={{ fontSize: "0.86rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)" }}>{name}</span>
       </div>
-      <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", margin: "0 0 0.7rem" }}>{currencyNote}</p>
+      <p style={{ fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", margin: "0 0 0.7rem" }}>{currencyNote}</p>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0,1fr))", gap: "0.6rem" }}>{children}</div>
     </div>
   );
@@ -116,9 +116,9 @@ function ModeToggle({ mode, onChange, activeColor }: { mode: "TEST" | "LIVE"; on
           onClick={() => onChange(m)}
           style={{
             flex: 1, padding: "0.55rem", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
-            border: mode === m ? `1.5px solid ${activeColor}` : "1px solid rgba(255,255,255,0.1)",
-            background: mode === m ? `${activeColor}1a` : "rgba(255,255,255,0.03)",
-            color: mode === m ? activeColor : "rgba(240,242,255,0.6)",
+            border: mode === m ? `1.5px solid ${activeColor}` : "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+            background: mode === m ? `color-mix(in srgb, ${activeColor} 10%, transparent)` : "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
+            color: mode === m ? activeColor : "var(--cmx-muted, rgba(240,242,255,0.6))",
             fontWeight: 600, fontSize: "0.82rem",
           }}
         >
@@ -152,7 +152,7 @@ function KeyPairFields({
     <div style={{ border: `1px solid ${activeColor}`, borderRadius: 10, padding: "0.9rem", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.7rem" }}>
       <div style={{ gridColumn: "1 / -1", display: "flex", alignItems: "center", gap: "0.5rem" }}>
         <span style={{ fontSize: "0.8rem", fontWeight: 700, color: activeColor }}>{label}</span>
-        <span style={{ fontSize: "0.68rem", fontWeight: 700, color: activeColor, background: `${activeColor}1a`, borderRadius: 999, padding: "0.1rem 0.55rem" }}>
+        <span style={{ fontSize: "0.68rem", fontWeight: 700, color: activeColor, background: `color-mix(in srgb, ${activeColor} 10%, transparent)`, borderRadius: 999, padding: "0.1rem 0.55rem" }}>
           ACTIVE
         </span>
       </div>
@@ -188,11 +188,11 @@ function WebhookUrlField({ url }: { url: string }) {
   return (
     <FieldLabel label="Webhook URL">
       <div style={{ display: "flex", gap: "0.5rem" }}>
-        <input type="text" readOnly value={url} style={{ ...inputStyle, color: "rgba(240,242,255,0.6)" }} />
+        <input type="text" readOnly value={url} style={{ ...inputStyle, color: "var(--cmx-muted, rgba(240,242,255,0.6))" }} />
         <button
           type="button"
           onClick={() => { void navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); }}
-          style={{ padding: "0 0.9rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem", whiteSpace: "nowrap" }}
+          style={{ padding: "0 0.9rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", color: "var(--cmx-text, #f0f2ff)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem", whiteSpace: "nowrap" }}
         >
           {copied ? "Copied" : "Copy"}
         </button>
@@ -242,26 +242,26 @@ function StripeAccessControl() {
   }
 
   return (
-    <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem", display: "grid", gap: "0.7rem" }}>
-      {status === "LOADING" && <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", margin: 0 }}>Checking access…</p>}
+    <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem", display: "grid", gap: "0.7rem" }}>
+      {status === "LOADING" && <p style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", margin: 0 }}>Checking access…</p>}
       {status === "APPROVED" && (
-        <p style={{ fontSize: "0.78rem", color: "#4ade80", margin: 0 }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--cmx-success, #4ade80)", margin: 0 }}>
           Plexo-hosted Stripe is approved for your organization — save to switch this site over.
         </p>
       )}
       {status === "PENDING" && (
-        <p style={{ fontSize: "0.78rem", color: "#f59e0b", margin: 0 }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--cmx-warning, #f59e0b)", margin: 0 }}>
           Your request is pending review. You'll be able to switch this site to Plexo-hosted Stripe once it's approved.
         </p>
       )}
       {(status === "NONE" || status === "REJECTED") && (
         <>
           {status === "REJECTED" && (
-            <p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>
+            <p style={{ fontSize: "0.78rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>
               Your previous request was rejected{rejectionReason ? `: ${rejectionReason}` : "."}
             </p>
           )}
-          <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", margin: 0 }}>
+          <p style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", margin: 0 }}>
             Plexo-hosted Stripe routes checkout through Plexo's own Stripe account — no keys to manage. Request access and our team will review it.
           </p>
           <FieldLabel label="Why do you need this? (optional)">
@@ -270,12 +270,12 @@ function StripeAccessControl() {
           <FieldLabel label="Expected monthly volume (optional)">
             <input type="text" value={expectedVolume} onChange={(e) => setExpectedVolume(e.target.value)} placeholder="e.g. $500-2000/mo" style={inputStyle} />
           </FieldLabel>
-          {error && <p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>{error}</p>}
+          {error && <p style={{ fontSize: "0.78rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p>}
           <button
             type="button"
             onClick={() => void handleRequest()}
             disabled={busy}
-            style={{ padding: "0.55rem 0.9rem", borderRadius: 8, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit", justifySelf: "start" }}
+            style={{ padding: "0.55rem 0.9rem", borderRadius: 8, border: "none", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)", fontSize: "0.8rem", fontWeight: 700, cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit", justifySelf: "start" }}
           >
             {busy ? "Requesting…" : "Request access"}
           </button>
@@ -293,11 +293,11 @@ type BankTransferState = { enabled: boolean; bankName: string; accountName: stri
 function BankTransferCard({ value, onChange }: { value: BankTransferState; onChange: (next: BankTransferState) => void }) {
   const set = (patch: Partial<BankTransferState>) => onChange({ ...value, ...patch });
   return (
-    <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem" }}>
+    <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem" }}>
         <div>
-          <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>Bank transfer</h2>
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 0", maxWidth: 560, lineHeight: 1.5 }}>
+          <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>Bank transfer</h2>
+          <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", margin: "0.3rem 0 0", maxWidth: 560, lineHeight: 1.5 }}>
             Let customers pay straight into your bank account. They&apos;ll see these details at checkout, transfer the money, then place their order.
             We&apos;ll email you to confirm the payment arrived — the order only goes ahead once you do.
           </p>
@@ -405,14 +405,14 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
   const isPlatform = provider === "PLATFORM_PAYSTACK" || provider === "PLATFORM_STRIPE";
 
   const providerCard = (
-    <div style={{ flex: isPlatform ? undefined : "1 1 320px", minWidth: isPlatform ? undefined : 300, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem" }}>
-      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>Payment provider</h2>
-      <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1.1rem" }}>
+    <div style={{ flex: isPlatform ? undefined : "1 1 320px", minWidth: isPlatform ? undefined : 300, background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem" }}>
+      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>Payment provider</h2>
+      <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", margin: "0.3rem 0 1.1rem" }}>
         Pick a processor, then whether it runs on your own account or Plexo's.
       </p>
 
       <div style={{ display: "flex", flexDirection: isPlatform ? "row" : "column", gap: "1rem", flexWrap: "wrap" }}>
-        <ProcessorGroup stacked={!isPlatform} iconLabel="P" iconBg="linear-gradient(135deg,#12b3a8,#0c8a82)" name="Paystack" currencyNote="Supports NGN, GHS, ZAR, KES and USD, depending on your account.">
+        <ProcessorGroup stacked={!isPlatform} iconLabel="P" iconBg="linear-gradient(135deg,var(--cmx-info, #12b3a8),var(--cmx-info, #0c8a82))" name="Paystack" currencyNote="Supports NGN, GHS, ZAR, KES and USD, depending on your account.">
           <ProviderCard
             label="Use your own keys"
             hint="Money lands directly in your Paystack account."
@@ -452,7 +452,7 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
           <div style={{ marginBottom: "1.25rem" }}>{providerCard}</div>
           <div style={{ marginBottom: "1.25rem" }}>
             {provider === "PLATFORM_PAYSTACK" ? (
-              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.25)", borderRadius: 12, padding: "0.9rem 1.1rem", fontSize: "0.83rem", color: "#4ade80" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", background: "color-mix(in srgb, var(--cmx-success, rgb(52,211,153)) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-success, rgb(52,211,153)) 25%, transparent)", borderRadius: 12, padding: "0.9rem 1.1rem", fontSize: "0.83rem", color: "var(--cmx-success, #4ade80)" }}>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9 12l2 2 4-4" /></svg>
                 No keys to manage — proceeds settle straight to your Commerce wallet, withdrawable any time.
               </div>
@@ -466,19 +466,19 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
           {providerCard}
           <div style={{ flex: "1.3 1 380px", minWidth: 320 }}>
             {provider === "BYO_PAYSTACK" && (
-              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem" }}>
-                <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>Paystack keys</h2>
-                <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1rem" }}>
+              <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem" }}>
+                <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>Paystack keys</h2>
+                <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", margin: "0.3rem 0 1rem" }}>
                   Test and live keys are stored separately — the toggle below picks which pair actually gets charged at checkout.
                 </p>
-                <ModeToggle mode={paystackMode} onChange={setPaystackMode} activeColor="#12b3a8" />
+                <ModeToggle mode={paystackMode} onChange={setPaystackMode} activeColor="var(--cmx-info, #12b3a8)" />
                 <div style={{ marginBottom: "1rem" }}>
                   <WebhookUrlField url={webhookUrl} />
                 </div>
                 {paystackMode === "TEST" ? (
                   <KeyPairFields
                     label="Test keys"
-                    activeColor="#12b3a8"
+                    activeColor="var(--cmx-info, #12b3a8)"
                     publicKey={paystackTestPublicKey}
                     onPublicKeyChange={setPaystackTestPublicKey}
                     publicFieldLabel="Public key"
@@ -491,7 +491,7 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
                 ) : (
                   <KeyPairFields
                     label="Live keys"
-                    activeColor="#12b3a8"
+                    activeColor="var(--cmx-info, #12b3a8)"
                     publicKey={paystackLivePublicKey}
                     onPublicKeyChange={setPaystackLivePublicKey}
                     publicFieldLabel="Public key"
@@ -506,22 +506,22 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
             )}
 
             {provider === "BYO_STRIPE" && (
-              <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem" }}>
-                <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>Stripe keys</h2>
-                <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1rem" }}>
+              <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem" }}>
+                <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>Stripe keys</h2>
+                <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", margin: "0.3rem 0 1rem" }}>
                   Create a webhook endpoint in your own Stripe Dashboard → Developers → Webhooks, pointing at the URL below,
                   subscribed to <code>checkout.session.completed</code>, <code>invoice.paid</code>, <code>invoice.payment_failed</code> and{" "}
                   <code>customer.subscription.deleted</code> (the last three keep monthly donations recorded). Do this once for Test mode and once for Live mode —
                   Stripe shows a signing secret starting with <code>whsec_</code> for each; paste it into the matching field below.
                 </p>
-                <ModeToggle mode={stripeMode} onChange={setStripeMode} activeColor="#8f89ff" />
+                <ModeToggle mode={stripeMode} onChange={setStripeMode} activeColor="var(--cmx-violet, #8f89ff)" />
                 <div style={{ marginBottom: "1rem" }}>
                   <WebhookUrlField url={stripeWebhookUrl} />
                 </div>
                 {stripeMode === "TEST" ? (
                   <KeyPairFields
                     label="Test keys"
-                    activeColor="#8f89ff"
+                    activeColor="var(--cmx-violet, #8f89ff)"
                     publicKey={stripeTestPublishableKey}
                     onPublicKeyChange={setStripeTestPublishableKey}
                     publicFieldLabel="Publishable key"
@@ -537,7 +537,7 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
                 ) : (
                   <KeyPairFields
                     label="Live keys"
-                    activeColor="#8f89ff"
+                    activeColor="var(--cmx-violet, #8f89ff)"
                     publicKey={stripeLivePublishableKey}
                     onPublicKeyChange={setStripeLivePublishableKey}
                     publicFieldLabel="Publishable key"

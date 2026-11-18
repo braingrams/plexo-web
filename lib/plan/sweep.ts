@@ -3,6 +3,7 @@ import type { EntityItem } from "electrodb";
 import { User } from "@/lib/db/coreEntities";
 import { isPaidPlan, planSyncAction } from "./entitlement";
 import { sendAccessEndingReminder, syncPlanLifecycle, verifyStripeSubscription } from "./lifecycle";
+import { verifyPaystackSubscription } from "@/lib/billing/paystackBilling";
 
 type UserItem = EntityItem<typeof User>;
 
@@ -48,6 +49,10 @@ export async function runPlanSweep(opts: { now?: Date; budgetMs?: number } = {})
 
 async function sweepUser(user: UserItem, now: Date, report: SweepReport): Promise<void> {
   try {
+    if (isPaidPlan(user.subscriptionPlan) && user.subscriptionProvider === "PAYSTACK") {
+      await verifyPaystackSubscription(user, now);
+      user = (await User.get({ id: user.id }).go()).data ?? user;
+    }
     if (isPaidPlan(user.subscriptionPlan) && user.stripeSubscriptionId && !user.subscriptionStatus) {
       await verifyStripeSubscription(user, now);
       report.verified++;

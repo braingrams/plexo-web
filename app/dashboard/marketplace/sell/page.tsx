@@ -7,6 +7,10 @@ import { PlatformSettings } from "@/lib/db/coreEntities";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 import { SellTemplateForm } from "./SellTemplateForm";
+import { currentUserOnNewDashboard } from "@/lib/dashboardV3/hubRedirect";
+import { feeSplit } from "@/lib/dashboardV3/designs";
+import { DesignsFrame } from "../../_v3/designs/DesignsFrame";
+import { SellDesignForm } from "../../_v3/designs/SellDesignForm";
 
 export default async function SellTemplatePage() {
   const session = await auth();
@@ -34,6 +38,25 @@ export default async function SellTemplatePage() {
   const feeBps = platformSettings?.marketplaceFeeBps ?? 2000;
   const feePercent = (feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2);
   const keepPercent = ((10_000 - feeBps) / 100).toFixed(feeBps % 100 === 0 ? 0 : 2);
+
+  if (await currentUserOnNewDashboard(session.user.id)) {
+    const split = feeSplit(feeBps);
+    return (
+      <DesignsFrame
+        tab="sell"
+        title="Sell a design"
+        intro={autoPublish ? "Share one of your pages or emails. It goes on sale straight away." : "Share one of your pages or emails. We take a quick look first, then it goes on sale."}
+        hideSell
+      >
+        <SellDesignForm
+          options={templates.map((t) => ({ id: t.id, name: t.name, kind: t.kind, hasContent: !!t.compiledHtml.trim() }))}
+          autoPublish={autoPublish}
+          fee={split.fee}
+          keep={split.keep}
+        />
+      </DesignsFrame>
+    );
+  }
 
   return (
     <PageContainer>

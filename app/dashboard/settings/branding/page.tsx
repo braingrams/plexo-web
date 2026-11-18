@@ -2,11 +2,14 @@ import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
 import { Organization } from "@/lib/db/coreEntities";
-import { ensureActiveOrganization, getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
-import { canWhiteLabel } from "@/lib/subscription";
+import { ensureActiveOrganization, getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
+import { getTierFeatures } from "@/lib/subscription";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { SettingsShell } from "@/app/dashboard/_components/SettingsShell";
 import { BrandingForm } from "./branding-form";
+import { getV3SettingsContext } from "@/lib/dashboardV3/settingsContext";
+import { SettingsPage } from "../../_v3/settings/SettingsPage";
+import { BrandingSection } from "../../_v3/settings/BrandingSection";
 
 export default async function BrandingSettingsPage() {
   const session = await auth();
@@ -19,11 +22,25 @@ export default async function BrandingSettingsPage() {
     redirect("/choose-org");
   }
 
-  const [{ data: org }, plan] = await Promise.all([
+  const [{ data: org }, workspace] = await Promise.all([
     Organization.get({ id: orgResolution.organizationId }).go(),
-    getOrganizationOwnerPlanDynamo(orgResolution.organizationId),
+    getOrganizationOwnerEntitlementDynamo(orgResolution.organizationId),
   ]);
   if (!org) throw new Error(`Organization ${orgResolution.organizationId} not found`);
+
+  const v3 = await getV3SettingsContext("/dashboard/settings/branding");
+  if (v3) {
+    return (
+      <SettingsPage current="brand" experience={v3.experience}>
+        <BrandingSection
+          organizationId={orgResolution.organizationId}
+          canManage={orgResolution.role === "owner"}
+          planAllowsWhiteLabel={getTierFeatures(workspace.subscriptionPlan, { trial: workspace.onTrial }).whiteLabelEnabled}
+          initial={{ name: org.name, logo: org.logo ?? "", color: org.brandColor ?? "", mode: (org.brandDisplayMode ?? "BOTH") as "BOTH" | "LOGO_ONLY" | "NAME_ONLY", on: org.whiteLabelEnabled ?? false }}
+        />
+      </SettingsPage>
+    );
+  }
 
   return (
     <SettingsShell>
@@ -35,7 +52,7 @@ export default async function BrandingSettingsPage() {
       <BrandingForm
         organizationId={orgResolution.organizationId}
         canManage={orgResolution.role === "owner"}
-        planAllowsWhiteLabel={canWhiteLabel(plan)}
+        planAllowsWhiteLabel={getTierFeatures(workspace.subscriptionPlan, { trial: workspace.onTrial }).whiteLabelEnabled}
         initialWhiteLabelEnabled={org.whiteLabelEnabled ?? false}
         initialName={org.name}
         initialLogo={org.logo ?? null}

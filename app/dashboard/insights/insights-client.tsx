@@ -21,7 +21,7 @@ type TemplateItem = {
   name: string;
 };
 
-export function InsightsClient() {
+export function InsightsClient({ v3 = false }: { v3?: boolean }) {
   const searchParams = useSearchParams();
 
   // Analytics Filter States. Deep-linked from a site's own Detail page ("View full
@@ -72,7 +72,7 @@ export function InsightsClient() {
   }, [filterType, selectedTemplateId]);
 
   const templateOptions = useMemo(() => {
-    const list = [{ label: "All Templates", value: "all" }];
+    const list = [{ label: v3 ? "All my sites" : "All Templates", value: "all" }];
     templates.forEach((t) => {
       list.push({ label: t.name, value: t.id });
     });
@@ -82,9 +82,9 @@ export function InsightsClient() {
   return (
     <>
       <PageHeader
-        eyebrow="Workspace"
-        title="Insights"
-        subtitle="Traffic and engagement across your published landing pages."
+        eyebrow={v3 ? undefined : "Workspace"}
+        title={v3 ? "Visits" : "Insights"}
+        subtitle={v3 ? "How many people are looking at your sites, and when." : "Traffic and engagement across your published landing pages."}
       />
 
       <div
@@ -101,10 +101,10 @@ export function InsightsClient() {
         {isModern && (
           <Card style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
             <div>
-              <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
+              <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>
                 Activity by Time
               </h2>
-              <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
+              <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", margin: "0.25rem 0 0" }}>
                 When your visitors show up, over the last 7 days.
               </p>
             </div>
@@ -116,42 +116,42 @@ export function InsightsClient() {
       {/* Analytics Graph & Timeline Dashboard */}
       <Card style={{ marginBottom: "2rem" }}>
         {/* Filters and Header */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", borderBottom: "1px solid rgba(255,255,255,0.05)", paddingBottom: "1.25rem", flexWrap: "wrap", gap: "1rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1.5rem", borderBottom: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", paddingBottom: "1.25rem", flexWrap: "wrap", gap: "1rem" }}>
           <div>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>
-              Visitor Insights Graph
+            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>
+              {v3 ? "Visits day by day" : "Visitor Insights Graph"}
             </h2>
-            <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
-              Total views and unique visits mapped over the last 7 days.
+            <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", margin: "0.25rem 0 0" }}>
+              {v3 ? "Every look at your sites, and how many different people, over the last 7 days." : "Total views and unique visits mapped over the last 7 days."}
             </p>
           </div>
 
           {/* Filtering controls */}
           <div className="insights-filter-controls" style={{ display: "flex", gap: "0.75rem", alignItems: "center", flexWrap: "wrap" }}>
-            <div style={{ display: "flex", background: "rgba(255,255,255,0.03)", padding: 4, borderRadius: 10, border: "1px solid rgba(255,255,255,0.06)" }}>
+            <div style={{ display: "flex", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)", padding: 4, borderRadius: 10, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)" }}>
               <button
                 type="button"
                 onClick={() => { setFilterType("all"); setSelectedTemplateId("all"); }}
                 style={{
                   padding: "0.35rem 0.75rem", borderRadius: 8, fontSize: "0.78rem", border: "none", fontWeight: 650,
-                  background: filterType === "all" && selectedTemplateId === "all" ? "var(--brand)" : "transparent",
-                  color: filterType === "all" && selectedTemplateId === "all" ? "#fff" : "rgba(240,242,255,0.45)",
+                  background: filterType === "all" && selectedTemplateId === "all" ? "var(--cmx-brand, var(--brand))" : "transparent",
+                  color: filterType === "all" && selectedTemplateId === "all" ? "var(--cmx-on-brand, #fff)" : "var(--cmx-muted, rgba(240,242,255,0.45))",
                   cursor: "pointer", transition: "all 0.15s"
                 }}
               >
-                All Pages
+                {v3 ? "All my sites" : "All Pages"}
               </button>
               <button
                 type="button"
                 onClick={() => { setFilterType("published"); setSelectedTemplateId("all"); }}
                 style={{
                   padding: "0.35rem 0.75rem", borderRadius: 8, fontSize: "0.78rem", border: "none", fontWeight: 650,
-                  background: filterType === "published" && selectedTemplateId === "all" ? "var(--brand)" : "transparent",
-                  color: filterType === "published" && selectedTemplateId === "all" ? "#fff" : "rgba(240,242,255,0.45)",
+                  background: filterType === "published" && selectedTemplateId === "all" ? "var(--cmx-brand, var(--brand))" : "transparent",
+                  color: filterType === "published" && selectedTemplateId === "all" ? "var(--cmx-on-brand, #fff)" : "var(--cmx-muted, rgba(240,242,255,0.45))",
                   cursor: "pointer", transition: "all 0.15s"
                 }}
               >
-                Published Only
+                {v3 ? "Live sites only" : "Published Only"}
               </button>
             </div>
 
@@ -175,12 +175,12 @@ export function InsightsClient() {
               disabled={totalViews === 0}
               style={{
                 padding: "0.5rem 0.9rem", borderRadius: 10, fontSize: "0.78rem", fontWeight: 650,
-                background: "rgba(var(--brand-rgb),0.1)", border: "1px solid rgba(var(--brand-rgb),0.25)",
-                color: totalViews === 0 ? "rgba(240,242,255,0.25)" : "#c4b5fd",
+                background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 10%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 25%, transparent)",
+                color: totalViews === 0 ? "var(--cmx-muted, rgba(240,242,255,0.25))" : "var(--cmx-violet, #c4b5fd)",
                 cursor: totalViews === 0 ? "not-allowed" : "pointer", whiteSpace: "nowrap",
               }}
             >
-              View Details
+              {v3 ? "See who visited" : "View Details"}
             </button>
           </div>
         </div>
@@ -194,25 +194,25 @@ export function InsightsClient() {
             {/* Stat indicators card */}
             <div style={{ display: "flex", flexDirection: "column", gap: "1rem", justifyContent: "center" }}>
               <div style={{
-                background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)",
+                background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 1%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
                 borderRadius: 12, padding: "1.25rem"
               }}>
-                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "rgba(240,242,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  Total Page Views
+                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--cmx-muted, rgba(240,242,255,0.3))", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  {v3 ? "Times your sites were opened" : "Total Page Views"}
                 </span>
-                <h3 style={{ fontSize: "2rem", fontWeight: 800, color: "#f0f2ff", margin: "0.35rem 0 0" }}>
+                <h3 style={{ fontSize: "2rem", fontWeight: 800, color: "var(--cmx-text, #f0f2ff)", margin: "0.35rem 0 0" }}>
                   {totalViews}
                 </h3>
               </div>
 
               <div style={{
-                background: "rgba(255,255,255,0.01)", border: "1px solid rgba(255,255,255,0.04)",
+                background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 1%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
                 borderRadius: 12, padding: "1.25rem"
               }}>
-                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "rgba(240,242,255,0.3)", textTransform: "uppercase", letterSpacing: "0.08em" }}>
-                  Unique Visitors
+                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--cmx-muted, rgba(240,242,255,0.3))", textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                  {v3 ? "Different people" : "Unique Visitors"}
                 </span>
-                <h3 style={{ fontSize: "2rem", fontWeight: 800, color: "var(--brand)", margin: "0.35rem 0 0" }}>
+                <h3 style={{ fontSize: "2rem", fontWeight: 800, color: "var(--cmx-accent, var(--brand))", margin: "0.35rem 0 0" }}>
                   {totalUnique}
                 </h3>
               </div>
@@ -232,8 +232,8 @@ export function InsightsClient() {
 
       <style jsx>{`
         .spinner {
-          border: 2px solid rgba(255,255,255,0.06);
-          border-top-color: var(--brand);
+          border: 2px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent);
+          border-top-color: var(--cmx-brand, var(--brand));
           border-radius: 50%;
           animation: spin 0.65s linear infinite;
         }

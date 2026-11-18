@@ -26,7 +26,7 @@ import { SolConversation, SolMessage } from "./solEntities";
 // self-correcting: even if it's ever skipped for a given turn (an error, a race — see
 // below), the NEXT successful call re-derives the true count/last-activity time from the
 // source of truth instead of compounding drift.
-export async function bumpConversationActivity(userId: string, conversationId: string): Promise<void> {
+export async function bumpConversationActivity(userId: string, conversationId: string, opts: { siteId?: string } = {}): Promise<void> {
   const { data: conversations } = await SolConversation.query.primary({ userId }).go({ pages: "all" });
   const existing = conversations.find((c) => c.id === conversationId);
   // Conversation may have been renamed/archived/deleted concurrently, or (defensively)
@@ -58,6 +58,7 @@ export async function bumpConversationActivity(userId: string, conversationId: s
     // Every field carried over (appId included — dropping it unlinked an app's chat
     // from its app after the first turn); only what this write changes is set below.
     ...existing,
+    ...(opts.siteId ? { siteId: opts.siteId } : {}),
     lastMessageAt,
     messageCount,
     updatedAt,

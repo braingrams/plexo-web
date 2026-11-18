@@ -1,0 +1,31 @@
+import { NextRequest, NextResponse } from "next/server";
+import { sanitizeBuildProfile } from "@/lib/dashboardV3/profile";
+import { pickDesigns, rankDesigns, renderDesign } from "@/lib/onboarding/designs";
+
+/**
+ * Onboarding's designs, rendered in the owner's own brand. POST { profile, ids?, all? }:
+ *  - no ids: the 3 chosen for them (rendered) + the others (names only) for "See all designs";
+ *  - ids: those designs, rendered (the live preview asks for one; "See all" asks for the rest).
+ * Pure computation (no database), so it is also open in `next dev` for the preview route.
+ */
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  if (process.env.NODE_ENV !== "development") {
+    // Imported here so the open development path never loads the database layer.
+    const { resolveUser } = await import("@/lib/auth/resolveUser");
+    if (!(await resolveUser(request))) return NextResponse.json({ error: "Please sign in again to continue." }, { status: 401 });
+  }
+  let body: { profile?: unknown; ids?: unknown };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "We couldn't read that. Please try again." }, { status: 400 });
+  }
+  const parsed = sanitizeBuildProfile(body.profile ?? {});
+  if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+  const profile = parsed.value;
+  const ranked = rankDesigns(profile);
+  const ids = Array.isArray(body.ids) ? body.ids.filter((i): i is string => typeof i === "string").slice(0, 12) : null;
+  const wanted = ids ?? pickDesigns(profile).top.map((d) => d.id);
+  const designs = wanted.map((id) => renderDesign(profile, id)).filter((d) => d !== null);
+  return NextResponse.json({ designs, ...(ids ? {} : { others: pickDesigns(profile).others }), total: ranked.length });
+}

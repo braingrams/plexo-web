@@ -109,7 +109,7 @@ export function SsrGitHubConnection({
     await load();
   }
 
-  if (loadError) return <p style={{ margin: "14px 0 0", fontSize: 12.5, color: "#f87171" }}>GitHub: {loadError}</p>;
+  if (loadError) return <p style={{ margin: "14px 0 0", fontSize: 12.5, color: "var(--plx-danger, #f87171)" }}>GitHub: {loadError}</p>;
   if (!status || !status.configured) return null;
 
   const link = status.link;
@@ -118,7 +118,7 @@ export function SsrGitHubConnection({
   // account" link. Before that, an app with no account yet gets "Connect GitHub".
   const locked = Boolean(status.lockedRepo);
   const addAccount = status.installUrl && !locked ? (
-    <a href={status.installUrl} style={{ fontSize: 12.5, color: "var(--brand)", justifySelf: "start" }}>
+    <a href={status.installUrl} style={{ fontSize: 12.5, color: "var(--plx-link, var(--brand))", justifySelf: "start" }}>
       {hasAccount ? "Connect another GitHub account" : "Connect GitHub"}
     </a>
   ) : null;
@@ -192,11 +192,11 @@ export function SsrGitHubConnection({
             </select>
             <input value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" style={input} aria-label="Branch" />
           </div>
-          {reposError ? <p style={{ margin: 0, fontSize: 12.5, color: "#f87171" }}>Couldn&apos;t list repositories: {reposError}</p> : null}
+          {reposError ? <p style={{ margin: 0, fontSize: 12.5, color: "var(--plx-danger, #f87171)" }}>Couldn&apos;t list repositories: {reposError}</p> : null}
           {!reposLoading && !reposError && repos.length === 0 ? (
             <p style={hint}>
               No repositories are shared with Plexo on {status.installations.find((i) => i.id === installationId)?.account ?? "this account"}.{" "}
-              <a href={installationSettingsUrl(installationId, status.installations)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--brand)" }}>
+              <a href={installationSettingsUrl(installationId, status.installations)} target="_blank" rel="noopener noreferrer" style={{ color: "var(--plx-link, var(--brand))" }}>
                 Choose repositories on GitHub
               </a>
               , then reload this page.
@@ -219,7 +219,7 @@ export function SsrGitHubConnection({
       )}
 
       {notice ? <p style={{ margin: 0, fontSize: 12.5, color: "var(--text-muted)" }}>{notice}</p> : null}
-      {error ? <p style={{ margin: 0, fontSize: 12.5, color: "#f87171" }}>{error}</p> : null}
+      {error ? <p style={{ margin: 0, fontSize: 12.5, color: "var(--plx-danger, #f87171)" }}>{error}</p> : null}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { hashPassword } from "@better-auth/utils/password";
 
 import { EmailVerifyLink, User } from "@/lib/db/coreEntities";
 import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
+import { normalizeCountryCode } from "@/lib/countries";
 import { syncSignupToAlps } from "@/lib/alps";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildVerificationEmail } from "@/lib/mail/templates";
@@ -37,10 +38,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : email.split("@")[0] || "Plexo User";
-  const pendingPlan = body.pendingPlan === "PRO" || body.pendingPlan === "ULTRA" ? body.pendingPlan : undefined;
+  // ULTRA: a signup page loaded before the plan rename (today's Pro).
+  const pendingPlan: "STARTER" | "PRO" | "ENTERPRISE" | undefined =
+    body.pendingPlan === "ULTRA" ? "PRO" : body.pendingPlan === "STARTER" || body.pendingPlan === "PRO" || body.pendingPlan === "ENTERPRISE" ? body.pendingPlan : undefined;
 
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: { message: "Enter a valid email address." } }, { status: 400 });
+  }
+  const country = normalizeCountryCode(body.country);
+  if (!country) {
+    return NextResponse.json({ error: { message: "Choose the country you're based in." } }, { status: 400 });
   }
   const problem = passwordProblem(password, email);
   if (problem) {
@@ -55,7 +62,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const passwordHash = await hashPassword(password);
   const id = randomUUID();
   try {
-    await createUserWithEmailLock({ id, email, name, passwordHash, isConfirmed: false, pendingPlan });
+    await createUserWithEmailLock({ id, email, name, passwordHash, isConfirmed: false, pendingPlan, country, countrySetAt: new Date().toISOString() });
   } catch (err) {
     if (err instanceof EmailAlreadyInUseError) {
       // Lost the race the pre-check above couldn't catch (two concurrent submissions for

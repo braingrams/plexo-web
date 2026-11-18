@@ -1,3 +1,5 @@
+import { ownerNextPrice } from "@/lib/billing/ownerNextPrice";
+import { redirectIfV3 } from "@/lib/dashboardV3/settingsContext";
 import { redirect } from "next/navigation";
 
 import { ensureCreditPeriod } from "@/lib/db/ledgerOperations";
@@ -11,9 +13,13 @@ import { PageHeader } from "../../_components/PageHeader";
 import { BillingSection } from "../billing-section";
 import { PaymentHistory } from "../payment-history";
 import { listPaymentsForUser } from "@/lib/billing/payments";
-import { accessDaysLeft, canStartTrial, effectivePlan, paidAccess } from "@/lib/plan/entitlement";
+import { accessDaysLeft, canStartTrial, effectivePlan, paidAccess, storedPlan } from "@/lib/plan/entitlement";
+import { PLAN_LABELS } from "@/lib/plan/plans";
+import { loadPriceBook } from "@/lib/billing/priceBook";
+import { formatMoney, planPrice, regionById, regionForCurrency } from "@/lib/billing/pricing";
 
-export default async function SubscriptionPage() {
+export default async function SubscriptionPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await redirectIfV3("settings/subscription/page.tsx", "/dashboard/settings/plan", await searchParams);
   const session = await auth();
 
   if (!session?.user) {
@@ -40,7 +46,7 @@ export default async function SubscriptionPage() {
   const access = plan === "FREE" ? null : paidAccess(user);
   const paying = !!access?.entitled && (access.basis === "SUBSCRIPTION" || access.basis === "SUBSCRIPTION_UNVERIFIED");
   const daysLeft = accessDaysLeft(user);
-  const planName = plan === "ULTRA" ? "Ultra" : "Pro";
+  const planName = PLAN_LABELS[plan];
   let planNote: { text: string; tone: "info" | "warning" } | null = null;
   if (access?.entitled && access.basis === "ADMIN_KEPT") {
     planNote = { text: `Your ${planName} plan is provided by Plexo — there's nothing to pay.`, tone: "info" };
@@ -51,10 +57,27 @@ export default async function SubscriptionPage() {
       tone: daysLeft <= 3 ? "warning" : "info",
     };
   } else if (paying && user.subscriptionStatus === "PAST_DUE") {
-    planNote = { text: "We couldn't take your last payment. Your plan stays on while we retry — update your card under Manage subscription.", tone: "warning" };
+    planNote = { text: `We couldn't take your last payment. Your plan stays on while we retry — update your card under ${user.subscriptionProvider === "PAYSTACK" ? "Change card" : "Manage subscription"}.`, tone: "warning" };
+  } else if (paying && user.subscriptionCancelAtPeriodEnd && user.subscriptionPeriodEnd) {
+    const when = new Date(user.subscriptionPeriodEnd).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
+    planNote = { text: `Your ${planName} plan won't renew. Everything keeps working until ${when}; after that one site stays live with its homepage, and nothing is deleted.`, tone: "info" };
   } else if (plan === "FREE" && user.planDowngradedAt) {
-    const before = user.planBeforeDowngrade === "ULTRA" ? "Ultra" : "Pro";
+    const before = PLAN_LABELS[storedPlan({ subscriptionPlan: user.planBeforeDowngrade, planVersion: user.planVersion })];
     planNote = { text: `Your ${before} plan has ended. Your other pages, sites and custom domains are saved, not deleted — upgrade and they're all back straight away.`, tone: "warning" };
+  }
+
+  // The 2026 plan move booked for the next renewal: which plan, when, and at what price.
+  let scheduled: { plan: typeof plan; at: string | null; priceLabel: string | null } | null = null;
+  if (paying && user.scheduledPlan) {
+    const book = await loadPriceBook();
+    const region = regionById(book, user.billingRegion) ?? regionForCurrency(book, user.billingCurrency ?? "USD");
+    const interval = user.subscriptionInterval ?? "monthly";
+    const amount = region ? planPrice(region, user.scheduledPlan, interval) : null;
+    scheduled = {
+      plan: user.scheduledPlan,
+      at: user.subscriptionPeriodEnd ?? user.scheduledPlanAt ?? null,
+      priceLabel: region && amount ? `${formatMoney(amount, region.currency)}/${interval === "yearly" ? "year" : "month"}` : null,
+    };
   }
 
   return (
@@ -65,6 +88,11 @@ export default async function SubscriptionPage() {
         paying={paying}
         planNote={planNote}
         trialAvailable={canStartTrial(user)}
+        provider={user.subscriptionProvider ?? (user.stripeSubscriptionId ? "STRIPE" : null)}
+        interval={user.subscriptionInterval ?? null}
+        cancelAtPeriodEnd={!!user.subscriptionCancelAtPeriodEnd}
+        scheduled={scheduled}
+        priceNotice={paying && !user.subscriptionCancelAtPeriodEnd ? (await ownerNextPrice(user as never)).notice : null}
         allowanceBalance={balance.allowanceBalance}
         topupBalance={balance.topupBalance}
         allowanceResetAt={balance.allowanceResetAt}

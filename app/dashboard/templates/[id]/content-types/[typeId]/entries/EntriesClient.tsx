@@ -15,16 +15,16 @@ export type EntrySummary = {
 };
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
+  width: "100%", background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)",
+  borderRadius: 9, color: "var(--ed-text)", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
 function FieldLabel({ label, required, children }: { label: string; required?: boolean; children: React.ReactNode }) {
   return (
     <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>
-        {label}{required && <span style={{ color: "#f87171" }}> *</span>}
+      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--ed-t-800)", marginBottom: "0.35rem" }}>
+        {label}{required && <span style={{ color: "var(--ed-danger)" }}> *</span>}
       </span>
       {children}
     </label>
@@ -74,7 +74,7 @@ function ImageInput({ value, onChange }: { value: string; onChange: (value: unkn
         </label>
         <input type="text" value={value} onChange={(e) => onChange(e.target.value)} placeholder="…or paste an image link" style={inputStyle} />
       </div>
-      {err && <span style={{ display: "block", fontSize: "0.75rem", color: "#f87171", marginTop: "0.3rem" }}>{err}</span>}
+      {err && <span style={{ display: "block", fontSize: "0.75rem", color: "var(--ed-danger)", marginTop: "0.3rem" }}>{err}</span>}
     </div>
   );
 }
@@ -114,7 +114,7 @@ function FieldInput({
       );
     case "boolean":
       return (
-        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", color: "#e2e4f5" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.85rem", color: "var(--ed-text)" }}>
           <input type="checkbox" checked={value === true} onChange={(e) => onChange(e.target.checked)} />
           {value === true ? "Yes" : "No"}
         </label>
@@ -127,7 +127,7 @@ function FieldInput({
       return (
         <>
           <input type="text" value={typeof value === "string" ? value : ""} onChange={(e) => onChange(e.target.value)} placeholder="Paste a YouTube or Vimeo link" style={inputStyle} />
-          <span style={{ display: "block", fontSize: "0.72rem", color: "rgba(240,242,255,0.4)", marginTop: "0.3rem" }}>YouTube, Vimeo, or a direct video link.</span>
+          <span style={{ display: "block", fontSize: "0.72rem", color: "var(--ed-t-400)", marginTop: "0.3rem" }}>YouTube, Vimeo, or a direct video link.</span>
         </>
       );
     case "datetime":
@@ -220,16 +220,16 @@ export function EntriesClient({
     <PageContainer>
       <Link
         href={`/dashboard/templates/${templateId}/content-types`}
-        style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "rgba(240,242,255,0.5)", textDecoration: "none", marginBottom: "1.5rem" }}
+        style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "var(--ed-t-500)", textDecoration: "none", marginBottom: "1.5rem" }}
       >
         <IconArrowLeft /> {templateName} · Content Types
       </Link>
 
       <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
+        <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ed-accent-text)", marginBottom: "0.35rem" }}>
           {contentType.slug}
         </p>
-        <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.8rem", fontWeight: 800, color: "#f0f2ff", letterSpacing: "-0.02em" }}>
+        <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.8rem", fontWeight: 800, color: "var(--ed-text)", letterSpacing: "-0.02em" }}>
           {contentType.name} entries
         </h1>
       </div>
@@ -237,7 +237,7 @@ export function EntriesClient({
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: "1.5rem" }}>
         <button
           type="button" onClick={openCreate}
-          style={{ padding: "0.6rem 1.1rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff" }}
+          style={{ padding: "0.6rem 1.1rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "var(--ed-cta)", color: "var(--ed-on-brand)" }}
         >
           + New entry
         </button>
@@ -245,14 +245,14 @@ export function EntriesClient({
 
       {entries.length === 0 ? (
         <Card style={{ padding: "3rem 2rem", textAlign: "center" }}>
-          <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "rgba(240,242,255,0.7)" }}>No entries yet</p>
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", marginTop: "0.3rem" }}>Add one to start populating this content type.</p>
+          <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--ed-t-700)" }}>No entries yet</p>
+          <p style={{ fontSize: "0.8rem", color: "var(--ed-t-400)", marginTop: "0.3rem" }}>Add one to start populating this content type.</p>
         </Card>
       ) : (
-        <div style={{ overflowX: "auto", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14 }}>
+        <div style={{ overflowX: "auto", border: "1px solid var(--ed-w-080)", borderRadius: 14 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
             <thead>
-              <tr style={{ color: "rgba(240,242,255,0.4)", textAlign: "left", background: "rgba(255,255,255,0.02)" }}>
+              <tr style={{ color: "var(--ed-t-400)", textAlign: "left", background: "var(--ed-w-020)" }}>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Preview</th>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Status</th>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Updated</th>
@@ -261,19 +261,19 @@ export function EntriesClient({
             </thead>
             <tbody>
               {entries.map((entry) => (
-                <tr key={entry.id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "#e2e4f5" }}>
+                <tr key={entry.id} style={{ borderTop: "1px solid var(--ed-w-060)", color: "var(--ed-text)" }}>
                   <td style={{ padding: "0.7rem 1rem", maxWidth: 420, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.preview}</td>
                   <td style={{ padding: "0.7rem 1rem" }}>
-                    <span style={{ fontSize: "0.7rem", fontWeight: 700, color: entry.status === "PUBLISHED" ? "#34d399" : "rgba(240,242,255,0.4)", background: entry.status === "PUBLISHED" ? "rgba(52,211,153,0.12)" : "rgba(255,255,255,0.06)", padding: "2px 8px", borderRadius: 6 }}>
+                    <span style={{ fontSize: "0.7rem", fontWeight: 700, color: entry.status === "PUBLISHED" ? "var(--ed-success)" : "var(--ed-t-400)", background: entry.status === "PUBLISHED" ? "color-mix(in srgb, var(--ed-success) 12%, transparent)" : "var(--ed-w-060)", padding: "2px 8px", borderRadius: 6 }}>
                       {entry.status}
                     </span>
                   </td>
-                  <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.55)" }}>{new Date(entry.updatedAt).toLocaleDateString()}</td>
+                  <td style={{ padding: "0.7rem 1rem", color: "var(--ed-t-550)" }}>{new Date(entry.updatedAt).toLocaleDateString()}</td>
                   <td style={{ padding: "0.7rem 1rem", display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-                    <button type="button" onClick={() => openEdit(entry)} style={{ background: "none", border: "none", color: "var(--brand)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => openEdit(entry)} style={{ background: "none", border: "none", color: "var(--ed-accent-text)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
                       Edit
                     </button>
-                    <button type="button" onClick={() => void handleDelete(entry)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => void handleDelete(entry)} style={{ background: "none", border: "none", color: "var(--ed-danger)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
                       Delete
                     </button>
                   </td>
@@ -287,11 +287,11 @@ export function EntriesClient({
       {modalOpen && (
         <div
           role="dialog" aria-modal="true"
-          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.7)", padding: "1rem", overflowY: "auto" }}
+          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "var(--plx-overlay, rgba(0,0,0,0.7))", padding: "1rem", overflowY: "auto" }}
           onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false); }}
         >
-          <div style={{ width: "min(100%,520px)", maxHeight: "90vh", overflowY: "auto", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "1.75rem" }}>
-            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "1.25rem" }}>
+          <div style={{ width: "min(100%,520px)", maxHeight: "90vh", overflowY: "auto", background: "var(--ed-bg)", border: "1px solid var(--ed-w-120)", borderRadius: 20, padding: "1.75rem" }}>
+            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "1.25rem" }}>
               {editingId ? "Edit entry" : "New entry"}
             </h2>
 
@@ -307,16 +307,16 @@ export function EntriesClient({
               ))}
 
               <div>
-                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>Status</span>
+                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--ed-t-800)", marginBottom: "0.35rem" }}>Status</span>
                 <div style={{ display: "flex", gap: "0.5rem" }}>
                   {(["DRAFT", "PUBLISHED"] as const).map((s) => (
                     <button
                       key={s} type="button" onClick={() => setStatus(s)}
                       style={{
                         flex: 1, padding: "0.55rem", borderRadius: 9, cursor: "pointer", fontFamily: "inherit",
-                        border: status === s ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
-                        background: status === s ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
-                        color: status === s ? "var(--brand)" : "rgba(240,242,255,0.6)", fontWeight: 600, fontSize: "0.82rem",
+                        border: status === s ? "1.5px solid var(--brand)" : "1px solid var(--ed-w-100)",
+                        background: status === s ? "var(--brand-subtle)" : "var(--ed-w-030)",
+                        color: status === s ? "var(--ed-accent-text)" : "var(--ed-t-600)", fontWeight: 600, fontSize: "0.82rem",
                       }}
                     >
                       {s === "DRAFT" ? "Draft" : "Published"}
@@ -325,15 +325,15 @@ export function EntriesClient({
                 </div>
               </div>
 
-              {error && <p style={{ fontSize: "0.82rem", color: "#f87171" }}>{error}</p>}
+              {error && <p style={{ fontSize: "0.82rem", color: "var(--ed-danger)" }}>{error}</p>}
 
               <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-                <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.65)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>
+                <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-t-650)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>
                   Cancel
                 </button>
                 <button
                   type="button" onClick={() => void handleSave()} disabled={saving}
-                  style={{ padding: "0.6rem 1.4rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 700 }}
+                  style={{ padding: "0.6rem 1.4rem", borderRadius: 9, border: "none", background: "var(--ed-cta)", color: "var(--ed-on-brand)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 700 }}
                 >
                   {saving ? "Saving…" : editingId ? "Save changes" : "Create entry"}
                 </button>

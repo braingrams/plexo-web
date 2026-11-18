@@ -63,8 +63,8 @@ export function TrafficChart({ chartData, height = 240 }: { chartData: TimelineD
         <svg width="100%" height={height} viewBox={`0 0 ${width} ${height}`}>
           <defs>
             <linearGradient id="trafficChartAreaGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.18" />
-              <stop offset="100%" stopColor="var(--brand)" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="var(--cmx-brand, var(--brand))" stopOpacity="0.18" />
+              <stop offset="100%" stopColor="var(--cmx-brand, var(--brand))" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -78,11 +78,11 @@ export function TrafficChart({ chartData, height = 240 }: { chartData: TimelineD
                   y1={y}
                   x2={width - paddingRight}
                   y2={y}
-                  stroke="rgba(255,255,255,0.04)"
+                  stroke="color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)"
                   strokeWidth="1"
                   strokeDasharray="4 4"
                 />
-                <text x={paddingLeft - 10} y={y + 4} fill="rgba(240,242,255,0.25)" fontSize="10" fontFamily="monospace" textAnchor="end">
+                <text x={paddingLeft - 10} y={y + 4} fill="var(--cmx-muted, rgba(240,242,255,0.25))" fontSize="10" fontFamily="monospace" textAnchor="end">
                   {val}
                 </text>
               </g>
@@ -92,14 +92,14 @@ export function TrafficChart({ chartData, height = 240 }: { chartData: TimelineD
           {areaD && <path d={areaD} fill="url(#trafficChartAreaGrad)" />}
 
           {pathD && (
-            <path d={pathD} fill="none" stroke="var(--brand)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={pathD} fill="none" stroke="var(--cmx-accent, var(--brand))" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
           )}
 
           {visitorPathD && (
             <path
               d={visitorPathD}
               fill="none"
-              stroke="#10b981"
+              stroke="var(--cmx-success, #10b981)"
               strokeWidth="1.8"
               strokeDasharray="3 3"
               strokeLinecap="round"
@@ -109,11 +109,11 @@ export function TrafficChart({ chartData, height = 240 }: { chartData: TimelineD
 
           {points.map((p, idx) => (
             <g key={idx}>
-              <circle cx={p.x} cy={p.y} r="3.5" fill="#0b0f19" stroke="var(--brand)" strokeWidth="2.5" />
+              <circle cx={p.x} cy={p.y} r="3.5" fill="var(--cmx-surface, #0b0f19)" stroke="var(--cmx-accent, var(--brand))" strokeWidth="2.5" />
               <text
                 x={p.x}
                 y={p.y - 8}
-                fill="#f0f2ff"
+                fill="var(--cmx-text, #f0f2ff)"
                 fontSize="9"
                 fontWeight="700"
                 fontFamily="monospace"
@@ -128,7 +128,7 @@ export function TrafficChart({ chartData, height = 240 }: { chartData: TimelineD
           {chartData.map((day, index) => {
             const x = paddingLeft + (index / (chartData.length - 1)) * graphWidth;
             return (
-              <text key={index} x={x} y={height - 15} fill="rgba(240,242,255,0.3)" fontSize="10.5" fontWeight={550} textAnchor="middle">
+              <text key={index} x={x} y={height - 15} fill="var(--cmx-muted, rgba(240,242,255,0.3))" fontSize="10.5" fontWeight={550} textAnchor="middle">
                 {day.date}
               </text>
             );
@@ -137,12 +137,12 @@ export function TrafficChart({ chartData, height = 240 }: { chartData: TimelineD
 
         <div style={{ display: "flex", gap: "1.5rem", justifyContent: "center", marginTop: "0.25rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem" }}>
-            <div style={{ width: 12, height: 3, background: "var(--brand)", borderRadius: 2 }} />
-            <span style={{ color: "rgba(240,242,255,0.55)" }}>Total Page Views</span>
+            <div style={{ width: 12, height: 3, background: "var(--cmx-accent, var(--brand))", borderRadius: 2 }} />
+            <span style={{ color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>Total Page Views</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.78rem" }}>
-            <div style={{ width: 12, height: 3, borderTop: "2px dashed #10b981" }} />
-            <span style={{ color: "rgba(240,242,255,0.55)" }}>Unique Visitors</span>
+            <div style={{ width: 12, height: 3, borderTop: "2px dashed var(--cmx-success, #10b981)" }} />
+            <span style={{ color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>Unique Visitors</span>
           </div>
         </div>
       </div>

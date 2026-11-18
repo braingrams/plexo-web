@@ -5,7 +5,8 @@ import Link from "next/link";
 import { slugify } from "@/lib/slugUtils";
 import { contentSnippet } from "@/lib/customContent/embed";
 import { CONTENT_PRESETS, type ContentPresetId } from "@/lib/customContent/presets-meta";
-import { PageContainer } from "../../../_components/PageContainer";
+import { PageContainer, useEmbeddedScreen } from "../../../_components/PageContainer";
+import { SiteBackLink } from "../../../_components/EditorTheme";
 import { Card } from "../../../_components/Card";
 
 export type CustomContentFieldType = "text" | "textarea" | "richtext" | "number" | "boolean" | "date" | "image_url" | "url" | "video" | "datetime";
@@ -60,15 +61,15 @@ function blankRow(): FieldRow {
 }
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
+  width: "100%", background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)",
+  borderRadius: 9, color: "var(--ed-text)", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
 function FieldLabel({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>{label}</span>
+      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--ed-t-800)", marginBottom: "0.35rem" }}>{label}</span>
       {children}
     </label>
   );
@@ -91,6 +92,7 @@ export function ContentTypesClient({
   templateName: string;
   initialContentTypes: ContentTypeSummary[];
 }) {
+  const embedded = useEmbeddedScreen();
   const [contentTypes, setContentTypes] = useState(initialContentTypes);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -244,48 +246,50 @@ export function ContentTypesClient({
 
   return (
     <PageContainer>
-      <Link
-        href={`/dashboard/templates/${templateId}/detail`}
-        style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "rgba(240,242,255,0.5)", textDecoration: "none", marginBottom: "1.5rem" }}
-      >
-        <IconArrowLeft /> {templateName}
-      </Link>
+      {!embedded && (
+      <SiteBackLink
+          siteId={templateId}
+          style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 600, color: "var(--ed-t-500)", textDecoration: "none", marginBottom: "1.5rem" }}
+        >
+          <IconArrowLeft /> {templateName}
+        </SiteBackLink>
+      )}
 
       <div style={{ marginBottom: "2rem" }}>
-        <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--brand)", marginBottom: "0.35rem" }}>
+        {!embedded && <p style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--ed-accent-text)", marginBottom: "0.35rem" }}>
           {templateName}
-        </p>
-        <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.8rem", fontWeight: 800, color: "#f0f2ff", letterSpacing: "-0.02em" }}>
+        </p>}
+        <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.8rem", fontWeight: 800, color: "var(--ed-text)", letterSpacing: "-0.02em" }}>
           Content Types
         </h1>
-        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.45)", marginTop: "0.4rem" }}>
+        <p style={{ fontSize: "0.85rem", color: "var(--ed-t-450)", marginTop: "0.4rem" }}>
           Post videos, stories, events and more. Add one below, fill it in, and show it on any page.
         </p>
       </div>
 
       <Card style={{ padding: "1.25rem 1.5rem", marginBottom: "1.5rem" }}>
-        <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.75rem" }}>Quick start</p>
+        <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--ed-text)", marginBottom: "0.75rem" }}>Quick start</p>
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.75rem" }}>
           {(Object.keys(CONTENT_PRESETS) as ContentPresetId[]).map((id) => {
             const done = contentTypes.some((c) => c.slug === CONTENT_PRESETS[id].slug);
             return (
               <button
                 key={id} type="button" disabled={done || adding !== null} onClick={() => void addPreset(id)}
-                style={{ textAlign: "left", flex: "1 1 200px", padding: "0.8rem 1rem", borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "#e2e4f5", cursor: done ? "default" : "pointer", opacity: done ? 0.5 : 1, fontFamily: "inherit" }}
+                style={{ textAlign: "left", flex: "1 1 200px", padding: "0.8rem 1rem", borderRadius: 12, border: "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", cursor: done ? "default" : "pointer", opacity: done ? 0.5 : 1, fontFamily: "inherit" }}
               >
                 <span style={{ display: "block", fontWeight: 700, fontSize: "0.85rem" }}>{done ? "✓ " : "+ "}{CONTENT_PRESETS[id].name}</span>
-                <span style={{ display: "block", fontSize: "0.75rem", color: "rgba(240,242,255,0.5)", marginTop: 2 }}>{CONTENT_PRESETS[id].blurb}</span>
+                <span style={{ display: "block", fontSize: "0.75rem", color: "var(--ed-t-500)", marginTop: 2 }}>{CONTENT_PRESETS[id].blurb}</span>
               </button>
             );
           })}
         </div>
-        {error && !modalOpen && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.6rem" }}>{error}</p>}
+        {error && !modalOpen && <p style={{ fontSize: "0.78rem", color: "var(--ed-danger)", marginTop: "0.6rem" }}>{error}</p>}
       </Card>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: "1.5rem" }}>
         <button
           type="button" onClick={openCreate}
-          style={{ padding: "0.6rem 1.1rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff" }}
+          style={{ padding: "0.6rem 1.1rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "var(--ed-cta)", color: "var(--ed-on-brand)" }}
         >
           + New content type
         </button>
@@ -293,16 +297,16 @@ export function ContentTypesClient({
 
       {contentTypes.length === 0 ? (
         <Card style={{ padding: "3rem 2rem", textAlign: "center" }}>
-          <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "rgba(240,242,255,0.7)" }}>No content types yet</p>
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", marginTop: "0.3rem" }}>
+          <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--ed-t-700)" }}>No content types yet</p>
+          <p style={{ fontSize: "0.8rem", color: "var(--ed-t-400)", marginTop: "0.3rem" }}>
             Create one to start defining structured content for this site — testimonials, team members, FAQs, anything with a repeatable shape.
           </p>
         </Card>
       ) : (
-        <div style={{ overflowX: "auto", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14 }}>
+        <div style={{ overflowX: "auto", border: "1px solid var(--ed-w-080)", borderRadius: 14 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
             <thead>
-              <tr style={{ color: "rgba(240,242,255,0.4)", textAlign: "left", background: "rgba(255,255,255,0.02)" }}>
+              <tr style={{ color: "var(--ed-t-400)", textAlign: "left", background: "var(--ed-w-020)" }}>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Name</th>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Slug</th>
                 <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Fields</th>
@@ -312,22 +316,22 @@ export function ContentTypesClient({
             </thead>
             <tbody>
               {contentTypes.map((ct) => (
-                <tr key={ct.id} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "#e2e4f5" }}>
+                <tr key={ct.id} style={{ borderTop: "1px solid var(--ed-w-060)", color: "var(--ed-text)" }}>
                   <td style={{ padding: "0.7rem 1rem", fontWeight: 700 }}>{ct.name}</td>
-                  <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace", color: "rgba(240,242,255,0.55)" }}>{ct.slug}</td>
-                  <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.55)" }}>{ct.fields.length}</td>
-                  <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.55)" }}>{ct.entryCount}</td>
+                  <td style={{ padding: "0.7rem 1rem", fontFamily: "ui-monospace, monospace", color: "var(--ed-t-550)" }}>{ct.slug}</td>
+                  <td style={{ padding: "0.7rem 1rem", color: "var(--ed-t-550)" }}>{ct.fields.length}</td>
+                  <td style={{ padding: "0.7rem 1rem", color: "var(--ed-t-550)" }}>{ct.entryCount}</td>
                   <td style={{ padding: "0.7rem 1rem", display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-                    <Link href={`/dashboard/templates/${templateId}/content-types/${ct.id}/entries`} style={{ color: "var(--brand)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}>
+                    <Link href={`/dashboard/templates/${templateId}/content-types/${ct.id}/entries`} style={{ color: "var(--ed-accent-text)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}>
                       Manage entries
                     </Link>
-                    <button type="button" onClick={() => void copySnippet(ct)} title="Paste this into an HTML block, a raw HTML page or a React project to show these on a page" style={{ background: "none", border: "none", color: "rgba(240,242,255,0.6)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => void copySnippet(ct)} title="Paste this into an HTML block, a raw HTML page or a React project to show these on a page" style={{ background: "none", border: "none", color: "var(--ed-t-600)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
                       {copiedId === ct.id ? "Copied!" : "Copy page code"}
                     </button>
-                    <button type="button" onClick={() => openEdit(ct)} style={{ background: "none", border: "none", color: "rgba(240,242,255,0.6)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => openEdit(ct)} style={{ background: "none", border: "none", color: "var(--ed-t-600)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
                       Edit
                     </button>
-                    <button type="button" onClick={() => void handleDelete(ct)} style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
+                    <button type="button" onClick={() => void handleDelete(ct)} style={{ background: "none", border: "none", color: "var(--ed-danger)", cursor: "pointer", fontSize: "0.78rem", fontFamily: "inherit" }}>
                       Delete
                     </button>
                   </td>
@@ -341,11 +345,11 @@ export function ContentTypesClient({
       {modalOpen && (
         <div
           role="dialog" aria-modal="true"
-          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.7)", padding: "1rem", overflowY: "auto" }}
+          style={{ position: "fixed", inset: 0, zIndex: 60, display: "grid", placeItems: "center", background: "var(--plx-overlay, rgba(0,0,0,0.7))", padding: "1rem", overflowY: "auto" }}
           onClick={(e) => { if (e.target === e.currentTarget) setModalOpen(false); }}
         >
-          <div style={{ width: "min(100%,620px)", maxHeight: "90vh", overflowY: "auto", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "1.75rem" }}>
-            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "1.25rem" }}>
+          <div style={{ width: "min(100%,620px)", maxHeight: "90vh", overflowY: "auto", background: "var(--ed-bg)", border: "1px solid var(--ed-w-120)", borderRadius: 20, padding: "1.75rem" }}>
+            <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "1.25rem" }}>
               {editingId ? "Edit content type" : "New content type"}
             </h2>
 
@@ -355,12 +359,12 @@ export function ContentTypesClient({
               </FieldLabel>
 
               <div>
-                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.5rem" }}>Fields</span>
+                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--ed-t-800)", marginBottom: "0.5rem" }}>Fields</span>
                 <div style={{ display: "grid", gap: "0.65rem" }}>
                   {rows.map((row) => (
                     <div
                       key={row.rowId}
-                      style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1.1fr auto auto", gap: "0.5rem", alignItems: "center", padding: "0.65rem", borderRadius: 10, background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)" }}
+                      style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1.1fr auto auto", gap: "0.5rem", alignItems: "center", padding: "0.65rem", borderRadius: 10, background: "var(--ed-w-020)", border: "1px solid var(--ed-w-060)" }}
                     >
                       <input
                         type="text" value={row.name} placeholder="Field name" style={inputStyle}
@@ -378,13 +382,13 @@ export function ContentTypesClient({
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
                       </select>
-                      <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.72rem", color: "rgba(240,242,255,0.6)", whiteSpace: "nowrap" }}>
+                      <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.72rem", color: "var(--ed-t-600)", whiteSpace: "nowrap" }}>
                         <input type="checkbox" checked={row.required} onChange={(e) => updateRow(row.rowId, { required: e.target.checked })} />
                         Required
                       </label>
                       <button
                         type="button" onClick={() => removeRow(row.rowId)} disabled={rows.length === 1}
-                        style={{ background: "none", border: "none", color: rows.length === 1 ? "rgba(240,242,255,0.2)" : "#f87171", cursor: rows.length === 1 ? "not-allowed" : "pointer", fontSize: "1.1rem", lineHeight: 1, padding: "0.2rem" }}
+                        style={{ background: "none", border: "none", color: rows.length === 1 ? "var(--ed-t-200)" : "var(--ed-danger)", cursor: rows.length === 1 ? "not-allowed" : "pointer", fontSize: "1.1rem", lineHeight: 1, padding: "0.2rem" }}
                         aria-label="Remove field"
                       >
                         ×
@@ -394,21 +398,21 @@ export function ContentTypesClient({
                 </div>
                 <button
                   type="button" onClick={addRow}
-                  style={{ marginTop: "0.65rem", padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px dashed rgba(255,255,255,0.15)", background: "transparent", color: "rgba(240,242,255,0.6)", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600, fontFamily: "inherit" }}
+                  style={{ marginTop: "0.65rem", padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px dashed var(--ed-w-150)", background: "transparent", color: "var(--ed-t-600)", cursor: "pointer", fontSize: "0.78rem", fontWeight: 600, fontFamily: "inherit" }}
                 >
                   + Add field
                 </button>
               </div>
 
-              {error && <p style={{ fontSize: "0.82rem", color: "#f87171" }}>{error}</p>}
+              {error && <p style={{ fontSize: "0.82rem", color: "var(--ed-danger)" }}>{error}</p>}
 
               <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-                <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.65)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>
+                <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-t-650)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>
                   Cancel
                 </button>
                 <button
                   type="button" onClick={() => void handleSave()} disabled={saving}
-                  style={{ padding: "0.6rem 1.4rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 700 }}
+                  style={{ padding: "0.6rem 1.4rem", borderRadius: 9, border: "none", background: "var(--ed-cta)", color: "var(--ed-on-brand)", cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.7 : 1, fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 700 }}
                 >
                   {saving ? "Saving…" : editingId ? "Save changes" : "Create content type"}
                 </button>

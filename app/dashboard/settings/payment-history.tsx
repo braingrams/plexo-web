@@ -29,11 +29,11 @@ export type BillingSummary = {
 const BRANDS: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "Amex", discover: "Discover", jcb: "JCB", diners: "Diners", unionpay: "UnionPay" };
 
 const STATUS: Record<PaymentRow["status"], { label: string; color: string; bg: string }> = {
-  PAID: { label: "Paid", color: "#4ade80", bg: "rgba(52,211,153,0.1)" },
-  PENDING: { label: "Pending", color: "#fbbf24", bg: "rgba(251,191,36,0.1)" },
-  FAILED: { label: "Failed", color: "#f87171", bg: "rgba(248,113,113,0.1)" },
-  REFUNDED: { label: "Refunded", color: "rgba(240,242,255,0.6)", bg: "rgba(255,255,255,0.06)" },
-  PARTIALLY_REFUNDED: { label: "Partly refunded", color: "#fbbf24", bg: "rgba(251,191,36,0.1)" },
+  PAID: { label: "Paid", color: "var(--plx-success, #4ade80)", bg: "color-mix(in srgb, var(--plx-success, rgb(52 211 153)) 10%, transparent)" },
+  PENDING: { label: "Pending", color: "var(--plx-warning, #fbbf24)", bg: "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 10%, transparent)" },
+  FAILED: { label: "Failed", color: "var(--plx-danger, #f87171)", bg: "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 10%, transparent)" },
+  REFUNDED: { label: "Refunded", color: "var(--plx-muted, rgba(240,242,255,0.6))", bg: "color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" },
+  PARTIALLY_REFUNDED: { label: "Partly refunded", color: "var(--plx-warning, #fbbf24)", bg: "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 10%, transparent)" },
 };
 
 function money(cents: number, currency: string): string {
@@ -51,9 +51,9 @@ const buttonStyle: React.CSSProperties = {
   borderRadius: 8,
   fontSize: "0.72rem",
   fontWeight: 600,
-  color: "#f0f2ff",
-  background: "rgba(255,255,255,0.05)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  color: "var(--plx-text, #f0f2ff)",
+  background: "color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
   cursor: "pointer",
   textDecoration: "none",
   whiteSpace: "nowrap",
@@ -77,7 +77,7 @@ function EmailButton({ paymentId }: { paymentId: string }) {
       <button type="button" onClick={() => void send()} disabled={state.kind === "sending"} style={{ ...buttonStyle, opacity: state.kind === "sending" ? 0.6 : 1 }}>
         {state.kind === "sending" ? "Sending…" : "Email me a copy"}
       </button>
-      {state.text && <span style={{ fontSize: "0.68rem", color: state.kind === "error" ? "#f87171" : "#4ade80" }}>{state.text}</span>}
+      {state.text && <span style={{ fontSize: "0.68rem", color: state.kind === "error" ? "var(--plx-danger, #f87171)" : "var(--plx-success, #4ade80)" }}>{state.text}</span>}
     </span>
   );
 }
@@ -85,59 +85,59 @@ function EmailButton({ paymentId }: { paymentId: string }) {
 export function PaymentHistory({ payments, summary }: { payments: PaymentRow[]; summary: BillingSummary }) {
   const hasCard = !!summary.cardLast4;
   return (
-    <div id="payments" style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, overflow: "hidden", marginTop: "1.5rem" }}>
-      <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>Payments &amp; receipts</h2>
-        <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)" }}>Every payment you've made to Plexo. Download a receipt as a PDF, or have it emailed to you again.</p>
+    <div id="payments" style={{ background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", borderRadius: 16, overflow: "hidden", marginTop: "1.5rem" }}>
+      <div style={{ padding: "1.25rem 1.5rem", borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" }}>
+        <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>Payments &amp; receipts</h2>
+        <p style={{ fontSize: "0.75rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>Every payment you've made to Plexo. Download a receipt as a PDF, or have it emailed to you again.</p>
       </div>
 
       {(hasCard || summary.renewsAt || summary.endsAt) && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", padding: "1rem 1.5rem", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", padding: "1rem 1.5rem", borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" }}>
           {hasCard && (
             <div>
-              <p style={{ fontSize: "0.68rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)" }}>Card on file</p>
-              <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "#f0f2ff" }}>
+              <p style={{ fontSize: "0.68rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>Card on file</p>
+              <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>
                 {BRANDS[summary.cardBrand ?? ""] ?? summary.cardBrand ?? "Card"} •••• {summary.cardLast4}
-                {summary.cardExpMonth && summary.cardExpYear ? <span style={{ fontWeight: 400, color: "rgba(240,242,255,0.4)" }}> · expires {String(summary.cardExpMonth).padStart(2, "0")}/{String(summary.cardExpYear).slice(-2)}</span> : null}
+                {summary.cardExpMonth && summary.cardExpYear ? <span style={{ fontWeight: 400, color: "var(--plx-muted, rgba(240,242,255,0.4))" }}> · expires {String(summary.cardExpMonth).padStart(2, "0")}/{String(summary.cardExpYear).slice(-2)}</span> : null}
               </p>
-              <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>Change it under "Manage subscription" above.</p>
+              <p style={{ fontSize: "0.7rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>Change it under "Manage subscription" above.</p>
             </div>
           )}
           {summary.endsAt ? (
             <div>
-              <p style={{ fontSize: "0.68rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)" }}>Subscription</p>
-              <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "#fbbf24" }}>Cancelled — access until {date(summary.endsAt)}</p>
+              <p style={{ fontSize: "0.68rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>Subscription</p>
+              <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--plx-warning, #fbbf24)" }}>Cancelled — access until {date(summary.endsAt)}</p>
             </div>
           ) : summary.renewsAt ? (
             <div>
-              <p style={{ fontSize: "0.68rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)" }}>Next payment</p>
-              <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "#f0f2ff" }}>{date(summary.renewsAt)}</p>
+              <p style={{ fontSize: "0.68rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>Next payment</p>
+              <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>{date(summary.renewsAt)}</p>
             </div>
           ) : null}
         </div>
       )}
 
       {payments.length === 0 ? (
-        <p style={{ padding: "1.25rem 1.5rem", fontSize: "0.82rem", color: "rgba(240,242,255,0.35)" }}>No payments yet. When you subscribe or buy credits, your receipts will appear here.</p>
+        <p style={{ padding: "1.25rem 1.5rem", fontSize: "0.82rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>No payments yet. When you subscribe or buy credits, your receipts will appear here.</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column" }}>
           {payments.map((p) => {
             const status = STATUS[p.status];
             const settled = p.status === "PAID" || p.status === "REFUNDED" || p.status === "PARTIALLY_REFUNDED";
             return (
-              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", padding: "0.9rem 1.5rem", borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+              <div key={p.id} style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", padding: "0.9rem 1.5rem", borderTop: "1px solid color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)" }}>
                 <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-                  <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff" }}>{p.description}</p>
-                  <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)" }}>
+                  <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>{p.description}</p>
+                  <p style={{ fontSize: "0.72rem", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>
                     {date(p.paidAt)}
                     {p.detail ? ` · ${p.detail}` : ""}
                     {p.cardLast4 ? ` · •••• ${p.cardLast4}` : ""}
                     {p.receiptNumber ? ` · ${p.receiptNumber}` : ""}
                   </p>
-                  {p.failureReason && <p style={{ fontSize: "0.72rem", color: "#f87171" }}>{p.failureReason}</p>}
+                  {p.failureReason && <p style={{ fontSize: "0.72rem", color: "var(--plx-danger, #f87171)" }}>{p.failureReason}</p>}
                 </div>
                 <div style={{ textAlign: "right" }}>
-                  <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "#f0f2ff" }}>{money(p.amountCents, p.currency)}</p>
+                  <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>{money(p.amountCents, p.currency)}</p>
                   <span style={{ display: "inline-block", fontSize: "0.65rem", fontWeight: 700, padding: "0.1rem 0.5rem", borderRadius: 999, color: status.color, background: status.bg }}>{status.label}</span>
                 </div>
                 <div style={{ display: "flex", gap: "0.4rem", alignItems: "flex-start", minWidth: 190, justifyContent: "flex-end" }}>
@@ -147,7 +147,7 @@ export function PaymentHistory({ payments, summary }: { payments: PaymentRow[]; 
                       <EmailButton paymentId={p.id} />
                     </>
                   ) : (
-                    <span style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.3)" }}>No receipt</span>
+                    <span style={{ fontSize: "0.7rem", color: "var(--plx-faint, rgba(240,242,255,0.3))" }}>No receipt</span>
                   )}
                 </div>
               </div>

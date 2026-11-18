@@ -45,7 +45,7 @@ function TemplateChecklist({
   onChange: (ids: string[]) => void;
 }) {
   if (templates.length === 0) {
-    return <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)" }}>No pages in this organization yet.</p>;
+    return <p style={{ fontSize: "0.72rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>No pages in this organization yet.</p>;
   }
 
   function toggle(id: string) {
@@ -56,12 +56,12 @@ function TemplateChecklist({
     <div
       style={{
         maxHeight: 160, overflowY: "auto", display: "flex", flexDirection: "column", gap: "0.35rem",
-        background: "#090d16", border: "1px solid rgba(255,255,255,0.09)", borderRadius: 10, padding: "0.5rem 0.7rem",
+        background: "var(--plx-surface, #090d16)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 9%, transparent)", borderRadius: 10, padding: "0.5rem 0.7rem",
         minWidth: 220,
       }}
     >
       {templates.map((t) => (
-        <label key={t.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", color: "#f0f2ff", cursor: "pointer" }}>
+        <label key={t.id} style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", color: "var(--plx-text, #f0f2ff)", cursor: "pointer" }}>
           <input type="checkbox" checked={selected.includes(t.id)} onChange={() => toggle(t.id)} />
           {t.name}
         </label>
@@ -93,7 +93,7 @@ function MemberScopeControl({
     return (
       <button
         onClick={() => setOpen(true)}
-        style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", fontSize: "0.72rem", cursor: "pointer", textDecoration: "underline" }}
+        style={{ background: "none", border: "none", color: "var(--plx-muted, rgba(240,242,255,0.5))", fontSize: "0.72rem", cursor: "pointer", textDecoration: "underline" }}
       >
         {scopedTemplateIds.length === 0 ? "All pages" : `${scopedTemplateIds.length} page${scopedTemplateIds.length === 1 ? "" : "s"} — edit`}
       </button>
@@ -109,7 +109,7 @@ function MemberScopeControl({
             onSave(draft);
             setOpen(false);
           }}
-          style={{ background: "var(--brand)", border: "none", borderRadius: 8, padding: "0.3rem 0.7rem", color: "#fff", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer" }}
+          style={{ background: "var(--brand)", border: "none", borderRadius: 8, padding: "0.3rem 0.7rem", color: "var(--plx-on-brand, #fff)", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer" }}
         >
           Save
         </button>
@@ -118,7 +118,7 @@ function MemberScopeControl({
             setDraft(scopedTemplateIds);
             setOpen(false);
           }}
-          style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", fontSize: "0.72rem", cursor: "pointer" }}
+          style={{ background: "none", border: "none", color: "var(--plx-muted, rgba(240,242,255,0.5))", fontSize: "0.72rem", cursor: "pointer" }}
         >
           Cancel
         </button>
@@ -270,7 +270,7 @@ export function TeamClient({
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
       {canManageMembers && (
         <Card>
-          <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.9rem" }}>
+          <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)", marginBottom: "0.9rem" }}>
             Invite a teammate
           </h2>
           <form onSubmit={handleInvite} style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
@@ -281,8 +281,8 @@ export function TeamClient({
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={{
-                flex: "1 1 240px", background: "#090d16", border: "1px solid rgba(255,255,255,0.09)",
-                borderRadius: 10, padding: "0.65rem 0.9rem", color: "#f0f2ff", fontSize: "0.85rem",
+                flex: "1 1 240px", background: "var(--plx-surface, #090d16)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 9%, transparent)",
+                borderRadius: 10, padding: "0.65rem 0.9rem", color: "var(--plx-text, #f0f2ff)", fontSize: "0.85rem",
               }}
             />
             <div style={{ minWidth: 160 }}>
@@ -300,42 +300,42 @@ export function TeamClient({
               disabled={inviting}
               style={{
                 background: "var(--brand)", border: "none", borderRadius: 10,
-                padding: "0.65rem 1.4rem", color: "#fff", fontWeight: 700, fontSize: "0.85rem",
+                padding: "0.65rem 1.4rem", color: "var(--plx-text, #fff)", fontWeight: 700, fontSize: "0.85rem",
                 cursor: inviting ? "not-allowed" : "pointer", opacity: inviting ? 0.6 : 1,
               }}
             >
               {inviting ? "Sending…" : "Send invite"}
             </button>
           </form>
-          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginTop: "0.6rem" }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginTop: "0.6rem" }}>
             {ROLE_DESCRIPTIONS[role]}
           </p>
           {role === "editor" && (
             <div style={{ marginTop: "0.6rem" }}>
-              <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.5)", marginBottom: "0.4rem" }}>
+              <p style={{ fontSize: "0.72rem", color: "var(--plx-muted, rgba(240,242,255,0.5))", marginBottom: "0.4rem" }}>
                 Restrict to specific pages (optional — leave empty for org-wide editor access)
               </p>
               <TemplateChecklist templates={templates} selected={inviteScopedTemplateIds} onChange={setInviteScopedTemplateIds} />
             </div>
           )}
-          {error && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.5rem" }}>{error}</p>}
+          {error && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)", marginTop: "0.5rem" }}>{error}</p>}
         </Card>
       )}
 
       {invitations.length > 0 && (
         <Card>
-          <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.9rem" }}>
+          <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)", marginBottom: "0.9rem" }}>
             Pending invitations
           </h2>
           <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
             {invitations.map((inv) => (
               <div key={inv.id} style={{
                 display: "flex", alignItems: "center", justifyContent: "space-between",
-                padding: "0.6rem 0.8rem", borderRadius: 10, background: "rgba(255,255,255,0.03)",
+                padding: "0.6rem 0.8rem", borderRadius: 10, background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
               }}>
                 <div>
-                  <p style={{ fontSize: "0.85rem", color: "#f0f2ff" }}>{inv.email}</p>
-                  <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)" }}>
+                  <p style={{ fontSize: "0.85rem", color: "var(--plx-text, #f0f2ff)" }}>{inv.email}</p>
+                  <p style={{ fontSize: "0.72rem", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>
                     {ROLE_LABELS[inv.role] ?? inv.role}
                     {inv.role === "editor" && inv.scopedTemplateIds.length > 0
                       ? ` · ${inv.scopedTemplateIds.length} page${inv.scopedTemplateIds.length === 1 ? "" : "s"}`
@@ -346,7 +346,7 @@ export function TeamClient({
                 {canManageMembers && (
                   <button
                     onClick={() => handleCancelInvite(inv.id)}
-                    style={{ background: "none", border: "none", color: "#f87171", fontSize: "0.78rem", cursor: "pointer" }}
+                    style={{ background: "none", border: "none", color: "var(--plx-danger, #f87171)", fontSize: "0.78rem", cursor: "pointer" }}
                   >
                     Cancel
                   </button>
@@ -358,22 +358,22 @@ export function TeamClient({
       )}
 
       <Card>
-        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.9rem" }}>
+        <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)", marginBottom: "0.9rem" }}>
           Members ({members.length})
         </h2>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
           {members.map((m) => (
             <div key={m.id} style={{
               display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem",
-              padding: "0.6rem 0.8rem", borderRadius: 10, background: "rgba(255,255,255,0.03)",
+              padding: "0.6rem 0.8rem", borderRadius: 10, background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
             }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", minWidth: 0 }}>
                 <Avatar name={m.name} email={m.email} size={32} />
                 <div style={{ minWidth: 0 }}>
-                  <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {m.name} {m.userId === currentUserId && <span style={{ color: "rgba(240,242,255,0.4)", fontWeight: 400 }}>(you)</span>}
+                  <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {m.name} {m.userId === currentUserId && <span style={{ color: "var(--plx-muted, rgba(240,242,255,0.4))", fontWeight: 400 }}>(you)</span>}
                   </p>
-                  <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.4)" }}>{m.email}</p>
+                  <p style={{ fontSize: "0.72rem", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>{m.email}</p>
                 </div>
               </div>
 
@@ -389,7 +389,7 @@ export function TeamClient({
                     </div>
                     <button
                       onClick={() => handleRemove(m.id)}
-                      style={{ background: "none", border: "none", color: "#f87171", fontSize: "0.78rem", cursor: "pointer" }}
+                      style={{ background: "none", border: "none", color: "var(--plx-danger, #f87171)", fontSize: "0.78rem", cursor: "pointer" }}
                     >
                       Remove
                     </button>
@@ -404,7 +404,7 @@ export function TeamClient({
                 </div>
               ) : (
                 <span style={{
-                  flexShrink: 0, fontSize: "0.72rem", fontWeight: 700, color: "var(--brand)",
+                  flexShrink: 0, fontSize: "0.72rem", fontWeight: 700, color: "var(--plx-link, var(--brand))",
                   background: "var(--brand-subtle)", padding: "0.3rem 0.7rem", borderRadius: 999,
                 }}>
                   {ROLE_LABELS[m.role] ?? m.role}

@@ -10,6 +10,8 @@ import { PageContainer } from "@/app/dashboard/_components/PageContainer";
 import { Pagination } from "@/app/dashboard/_components/Pagination";
 import { paginate, parsePageRequest } from "@/lib/pagination";
 import { WithdrawalForm } from "./WithdrawalForm";
+import { currentUserOnNewDashboard } from "@/lib/dashboardV3/hubRedirect";
+import { PayoutsView } from "../../_v3/designs/PayoutsView";
 
 const STATUS_COLOR: Record<string, string> = {
   PENDING: "#f59e0b",
@@ -37,6 +39,20 @@ export default async function PayoutsPage({ searchParams }: { searchParams: Prom
   const feeBps = platformSettings?.marketplaceFeeBps ?? 2000;
   const feePercent = (feeBps / 100).toFixed(feeBps % 100 === 0 ? 0 : 2);
   const keepPercent = ((10_000 - feeBps) / 100).toFixed(feeBps % 100 === 0 ? 0 : 2);
+
+  if (await currentUserOnNewDashboard(session.user.id)) {
+    return (
+      <PayoutsView
+        balanceCents={sellerBalanceCents}
+        feeBps={feeBps}
+        withdrawals={withdrawals.map((w) => ({ id: w.id, amountCents: w.amountCents, bankName: w.bankName, requestedAt: w.requestedAt, processedAt: w.processedAt ?? null, status: w.status ?? "PENDING", rejectionReason: w.rejectionReason ?? null }))}
+        ledger={sales.items.map((e) => ({ id: e.id, description: e.description ?? e.type, netAmountCents: e.netAmountCents }))}
+        ledgerTotal={sales.total}
+        page={sales.page}
+        pageSize={sales.pageSize}
+      />
+    );
+  }
 
   return (
     <PageContainer>

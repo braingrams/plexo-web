@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 
 export type TopupPackInfo = { pack: "SMALL" | "MEDIUM" | "LARGE"; credits: number; price: string };
 
-/** The credit packs with their real prices and the credits each grants (half the price as AI
- *  value — lib/credits/value.ts). Empty until loaded. */
+/** The credit packs with their price in the person's own currency and the credits each adds
+ *  (flat rate from the price list — lib/billing/pricing.ts). Empty until loaded. */
 export function useTopupPacks(): Record<string, TopupPackInfo> {
   const [packs, setPacks] = useState<Record<string, TopupPackInfo>>({});
   useEffect(() => {

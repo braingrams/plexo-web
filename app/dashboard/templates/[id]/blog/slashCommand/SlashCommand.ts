@@ -2,10 +2,9 @@ import { Extension } from "@tiptap/core";
 import Suggestion, { type SuggestionOptions } from "@tiptap/suggestion";
 import { buildSlashCommandItems, type SlashCommandItem } from "./items";
 
-import { BRAND } from "@/lib/theme";
 const MENU_STYLE: Partial<CSSStyleDeclaration> = {
-  background: "#161a26",
-  border: "1px solid rgba(255,255,255,0.12)",
+  background: "var(--ed-panel)",
+  border: "1px solid var(--ed-w-120)",
   borderRadius: "10px",
   boxShadow: "0 12px 32px rgba(0,0,0,0.45)",
   padding: "6px",
@@ -25,7 +24,7 @@ function renderMenu(items: SlashCommandItem[], selectedIndex: number, onPick: (i
     empty.textContent = "No matching blocks";
     empty.style.padding = "8px 10px";
     empty.style.fontSize = "0.8rem";
-    empty.style.color = "rgba(240,242,255,0.4)";
+    empty.style.color = "var(--ed-t-400)";
     el.appendChild(empty);
     return el;
   }
@@ -40,8 +39,8 @@ function renderMenu(items: SlashCommandItem[], selectedIndex: number, onPick: (i
     row.style.borderRadius = "6px";
     row.style.border = "none";
     row.style.cursor = "pointer";
-    row.style.background = i === selectedIndex ? "rgba(var(--brand-rgb),0.15)" : "transparent";
-    row.style.color = i === selectedIndex ? BRAND[400] : "#f0f2ff";
+    row.style.background = i === selectedIndex ? "color-mix(in srgb, var(--brand) 15%, transparent)" : "transparent";
+    row.style.color = i === selectedIndex ? "var(--brand-soft)" : "var(--ed-text)";
 
     const title = document.createElement("div");
     title.textContent = item.title;
@@ -52,7 +51,7 @@ function renderMenu(items: SlashCommandItem[], selectedIndex: number, onPick: (i
     const desc = document.createElement("div");
     desc.textContent = item.description;
     desc.style.fontSize = "0.72rem";
-    desc.style.color = "rgba(240,242,255,0.4)";
+    desc.style.color = "var(--ed-t-400)";
     row.appendChild(desc);
 
     row.addEventListener("mousedown", (e) => {

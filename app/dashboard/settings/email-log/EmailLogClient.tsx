@@ -22,8 +22,8 @@ const FILTERS: { value: Filter; label: string }[] = [
 ];
 
 const STATUS_COLORS: Record<"sent" | "failed", { bg: string; color: string }> = {
-  sent: { bg: "rgba(34,197,94,0.15)", color: "#4ade80" },
-  failed: { bg: "rgba(239,68,68,0.12)", color: "#f87171" },
+  sent: { bg: "color-mix(in srgb, var(--plx-success, rgb(34 197 94)) 15%, transparent)", color: "var(--plx-success, #4ade80)" },
+  failed: { bg: "color-mix(in srgb, var(--plx-danger, rgb(239 68 68)) 12%, transparent)", color: "var(--plx-danger, #f87171)" },
 };
 
 function formatContext(context: string): string {
@@ -53,10 +53,10 @@ export function EmailLogClient({ logs }: { logs: EmailLogRow[] }) {
             type="button"
             onClick={() => setFilter(f.value)}
             style={{
-              padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer",
+              padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)", cursor: "pointer",
               fontSize: "0.8rem", fontWeight: 700,
               background: filter === f.value ? "var(--brand-subtle)" : "transparent",
-              color: filter === f.value ? "var(--brand)" : "rgba(240,242,255,0.6)",
+              color: filter === f.value ? "var(--plx-link, var(--brand))" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 60%, transparent)",
             }}
           >
             {f.label}
@@ -67,8 +67,8 @@ export function EmailLogClient({ logs }: { logs: EmailLogRow[] }) {
 
       {visible.length === 0 ? (
         <Card style={{ padding: "3rem 2rem", textAlign: "center" }}>
-          <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "rgba(240,242,255,0.7)" }}>No email log entries</p>
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", marginTop: "0.3rem" }}>
+          <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--plx-muted, rgba(240,242,255,0.7))" }}>No email log entries</p>
+          <p style={{ fontSize: "0.8rem", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginTop: "0.3rem" }}>
             {filter === "ALL" ? "Nothing has been sent for this organization yet." : `No ${filter} sends yet.`}
           </p>
         </Card>
@@ -77,13 +77,13 @@ export function EmailLogClient({ logs }: { logs: EmailLogRow[] }) {
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
               <thead>
-                <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                <tr style={{ borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)" }}>
                   {["To", "Subject", "Context", "Status", "Sent At"].map((h) => (
                     <th
                       key={h}
                       style={{
                         textAlign: "left", padding: "0.8rem 1.1rem", fontSize: "0.68rem", fontWeight: 700,
-                        letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)",
+                        letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))",
                       }}
                     >
                       {h}
@@ -93,12 +93,12 @@ export function EmailLogClient({ logs }: { logs: EmailLogRow[] }) {
               </thead>
               <tbody>
                 {visible.map((log) => (
-                  <tr key={log.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
-                    <td style={{ padding: "0.75rem 1.1rem", color: "#f0f2ff", whiteSpace: "nowrap" }}>{log.to}</td>
-                    <td style={{ padding: "0.75rem 1.1rem", color: "rgba(240,242,255,0.75)", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={log.subject}>
+                  <tr key={log.id} style={{ borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)" }}>
+                    <td style={{ padding: "0.75rem 1.1rem", color: "var(--plx-text, #f0f2ff)", whiteSpace: "nowrap" }}>{log.to}</td>
+                    <td style={{ padding: "0.75rem 1.1rem", color: "var(--plx-text, rgba(240,242,255,0.75))", maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={log.subject}>
                       {log.subject}
                     </td>
-                    <td style={{ padding: "0.75rem 1.1rem", color: "rgba(240,242,255,0.55)", whiteSpace: "nowrap" }}>{formatContext(log.context)}</td>
+                    <td style={{ padding: "0.75rem 1.1rem", color: "var(--plx-muted, rgba(240,242,255,0.55))", whiteSpace: "nowrap" }}>{formatContext(log.context)}</td>
                     <td style={{ padding: "0.75rem 1.1rem", whiteSpace: "nowrap" }}>
                       <span
                         style={{
@@ -111,7 +111,7 @@ export function EmailLogClient({ logs }: { logs: EmailLogRow[] }) {
                         {log.status}
                       </span>
                     </td>
-                    <td style={{ padding: "0.75rem 1.1rem", color: "rgba(240,242,255,0.45)", whiteSpace: "nowrap" }}>{formatDateTime(log.createdAt)}</td>
+                    <td style={{ padding: "0.75rem 1.1rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", whiteSpace: "nowrap" }}>{formatDateTime(log.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>

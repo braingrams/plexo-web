@@ -4,8 +4,7 @@ import { getCharisolPartnerVerifier } from "@/server/charisolVerifier";
 import { resolveCharisolUser } from "@/server/charisolAccount";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { User } from "@/lib/db/coreEntities";
-import { effectivePlan } from "@/lib/plan/entitlement";
-import { resolveManageLandingPagePublishing } from "@/lib/subscription";
+import { workspacePlan } from "@/lib/plan/workspacePlan";
 
 type Resolved = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
 
@@ -43,9 +42,7 @@ export async function resolveStrataCaller(request: NextRequest): Promise<Resolve
       userId: user.id,
       organizationId: pick.organizationId,
       role: pick.role,
-      subscriptionPlan: effectivePlan(user),
-      customDomainLimit: user.customDomainLimit ?? null,
-      manageLandingPagePublishing: resolveManageLandingPagePublishing(effectivePlan(user), user.manageLandingPagePublishing ?? false),
+      ...(await workspacePlan(pick.organizationId, user, pick.role)),
     };
   }
   return resolveUser(request);

@@ -25,6 +25,8 @@ export const SolConversation = new Entity(
       // Set when the conversation is an app's builder chat (the app editor): SOL then works
       // on that app with its files and conventions in context (lib/projects/solAppContext.ts).
       appId: { type: "string" },
+      // The site the owner chose for this chat (the chip in the new SOL): later turns never re-ask which site.
+      siteId: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },

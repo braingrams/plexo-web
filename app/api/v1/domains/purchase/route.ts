@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { countLiveCustomDomains, customDomainError } from "@/lib/plan/domainGate";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { resolveUser as resolveUserDynamo } from "@/lib/auth/resolveUser";
@@ -61,8 +62,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // app/api/v1/domains/route.ts's own POST handler for the identical check. Client-side
   // gating in domains-client.tsx exists too, but a paid action always needs the real
   // enforcement here, not just a UI hint.
-  if (!getTierFeatures(resolved.subscriptionPlan).customDomainEnabled) {
-    return NextResponse.json({ error: "Buying a domain requires a Pro or Ultra plan. Upgrade in Settings → Billing." }, { status: 403 });
+  {
+    const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all", attributes: ["id", "parentId"] });
+    const batches = await Promise.all(orgTemplates.filter((t) => !t.parentId).map((t) => PublishedDomain.query.primary({ templateId: t.id }).go({ pages: "all" })));
+    const orgDomains = batches.flatMap((b) => b.data);
+    const customError = customDomainError(resolved, countLiveCustomDomains(orgDomains));
+    if (customError) return NextResponse.json({ error: customError, code: "PLAN_CUSTOM_DOMAIN_LIMIT", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
   }
 
   const body = await request.json().catch(() => ({}));

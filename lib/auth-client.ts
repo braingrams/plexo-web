@@ -80,7 +80,7 @@ export const authClient = {
     },
   },
   signUp: {
-    email(input: { name: string; email: string; password: string; callbackURL?: string; pendingPlan?: string }): Promise<AuthResult<{ id: string; email: string }>> {
+    email(input: { name: string; email: string; password: string; callbackURL?: string; pendingPlan?: string; country?: string }): Promise<AuthResult<{ id: string; email: string }>> {
       return postJson("/api/auth/register", input);
     },
   },

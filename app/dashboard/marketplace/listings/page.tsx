@@ -7,6 +7,8 @@ import { Template, TemplatePurchase } from "@/lib/db/contentEntities";
 import { PageHeader } from "@/app/dashboard/_components/PageHeader";
 import { Card } from "@/app/dashboard/_components/Card";
 import { PageContainer } from "@/app/dashboard/_components/PageContainer";
+import { currentUserOnNewDashboard } from "@/lib/dashboardV3/hubRedirect";
+import { ListingsView } from "../../_v3/designs/ListingsView";
 
 const STATUS_LABEL: Record<string, { label: string; color: string }> = {
   PENDING_REVIEW: { label: "Pending review", color: "#f59e0b" },
@@ -48,6 +50,8 @@ export default async function MyListingsPage() {
     priceCents: t.priceCents ?? 0,
     purchaseCount: purchaseCounts[i] ?? 0,
   }));
+
+  if (await currentUserOnNewDashboard(session.user.id)) return <ListingsView listings={listings} />;
 
   return (
     <PageContainer>

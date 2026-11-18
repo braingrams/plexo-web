@@ -30,10 +30,55 @@ export const User = new Entity(
       name: { type: "string", default: "Plexo User" },
       image: { type: "string" },
       email: { type: "string", required: true },
-      subscriptionPlan: { type: ["FREE", "PRO", "ULTRA"] as const, default: "FREE" },
+      // FREE | STARTER | PRO | ENTERPRISE. ULTRA is the retired top plan — still a valid stored
+      // value until scripts/billing/migrate-plans.ts rewrites it. Read it with planVersion
+      // (lib/plan/plans.ts normalizeStoredPlan): before the 2026 rename PRO meant today's STARTER.
+      subscriptionPlan: { type: ["FREE", "STARTER", "PRO", "ULTRA", "ENTERPRISE"] as const, default: "FREE" },
+      // Which meaning subscriptionPlan/pendingPlan/planBeforeDowngrade were written with.
+      // Missing = before the rename; 2 = today's plans. Always written via planFields().
+      planVersion: { type: "number", default: 2 },
       // Billing / credits
       stripeCustomerId: { type: "string" },
       stripeSubscriptionId: { type: "string" },
+      // Provider-agnostic plan subscription — Stripe (USD) or Paystack (NGN/GHS/KES/ZAR).
+      // subscriptionId is the Stripe subscription id or the Paystack subscription code. For
+      // Stripe it always equals stripeSubscriptionId (kept for the code that predates this).
+      subscriptionProvider: { type: ["STRIPE", "PAYSTACK"] as const },
+      subscriptionId: { type: "string" },
+      subscriptionInterval: { type: ["monthly", "yearly"] as const },
+      // Paystack: the customer, and the email token Paystack needs to cancel a subscription.
+      paystackCustomerCode: { type: "string" },
+      paystackEmailToken: { type: "string" },
+      // Where this account pays from (lib/billing/pricing.ts). Fixed at the first checkout so
+      // prices can't flip with a VPN or a trip; billingCurrency "USD" also records "pay in USD instead".
+      billingCountry: { type: "string" },
+      // The country the owner says they're based in (ISO-3166 alpha-2) — decides the price list
+      // they see (lib/billing/region.ts) ahead of billingCountry and the visitor's IP.
+      country: { type: "string" },
+      countrySetAt: { type: "string" },
+      // When we last asked an existing account for its country and they chose "Later".
+      countryAskedAt: { type: "string" },
+      billingCurrency: { type: ["USD", "NGN", "GHS", "KES", "ZAR"] as const },
+      billingRegion: { type: "string" },
+      billingRegionLockedAt: { type: "string" },
+      // A plan change already booked for the next renewal (the 2026 plan move: old Pro → Starter
+      // price). Shown on the billing page; cleared once the renewal goes through.
+      scheduledPlan: { type: ["STARTER", "PRO", "ENTERPRISE"] as const },
+      scheduledPlanAt: { type: "string" },
+      // Price changes for people who already subscribe (lib/billing/priceChanges.ts, priceMove.ts).
+      // What each renewal charges now, in minor units (kept up to date by the provider webhooks and
+      // the move job); the last change already applied (effective date#version); when we moved them;
+      // and, for Paystack, the old subscription still to be switched off after a move.
+      subscriptionAmountMinor: { type: "number" },
+      priceChangeKey: { type: "string" },
+      priceMovedAt: { type: "string" },
+      // After a move, before the renewal that charges it: the new amount (minor units) and that renewal's date.
+      nextAmountMinor: { type: "number" },
+      nextAmountAt: { type: "string" },
+      paystackRetireCode: { type: "string" },
+      paystackRetireToken: { type: "string" },
+      // The change whose heads-up email this person already got (one email per change).
+      priceNoticeKey: { type: "string" },
       allowanceBalance: { type: "number", default: 0 },
       topupBalance: { type: "number", default: 0 },
       allowanceResetAt: { type: "string", default: () => new Date().toISOString() },
@@ -60,7 +105,7 @@ export const User = new Entity(
       manageLandingPagePublishing: { type: "boolean", default: false },
       // Plan picked at signup before email verification completes — see server/auth.ts's
       // databaseHooks and app/auth/complete-subscription. Null once resolved.
-      pendingPlan: { type: ["PRO", "ULTRA"] as const },
+      pendingPlan: { type: ["STARTER", "PRO", "ULTRA", "ENTERPRISE"] as const },
       // Per-user override of the plan-default published-domain cap — null defers to
       // getDomainLimit()'s plan-based default (app/api/v1/domains/route.ts).
       customDomainLimit: { type: "number" },
@@ -134,7 +179,7 @@ export const User = new Entity(
       // explains, and what tells the lifecycle there's an archive to restore on upgrade.
       planDowngradedAt: { type: "string" },
       planDowngradeReason: { type: ["PAYMENT_ENDED", "TRIAL_ENDED", "GRANT_ENDED", "NO_PAYMENT", "ADMIN"] as const },
-      planBeforeDowngrade: { type: ["PRO", "ULTRA"] as const },
+      planBeforeDowngrade: { type: ["STARTER", "PRO", "ULTRA", "ENTERPRISE"] as const },
       // When Free's limits (one live site, homepage only, no custom domain) were last
       // applied to this account's sites. Cleared on upgrade, so a later downgrade re-applies.
       freeLimitsAppliedAt: { type: "string" },
@@ -153,6 +198,40 @@ export const User = new Entity(
       subscriptionStartedAt: { type: "string" },
       subscriptionPeriodEnd: { type: "string" },
       subscriptionCancelAtPeriodEnd: { type: "boolean" },
+      // ── Dashboard versions (docs/DASHBOARD_VERSIONS.md; lib/dashboardVersions) ──────
+      // Which dashboard they chose / were moved to (a registry id, e.g. "classic", "v3"). The
+      // LAST entry of the history is the truth; this mirrors it for fast reads.
+      dashboardVersion: { type: "string" },
+      // Admin-locked: they can't switch away (mandatory rollout needs no flag).
+      dashboardVersionLocked: { type: "boolean" },
+      // [{ at, from, to, by: "user"|"admin"|"rollout", adminId?, note? }], capped at 50.
+      dashboardVersionHistory: { type: "any" },
+      // The audience: { [versionId]: "optional" | "locked" } — added by an admin (SELECTED/OFFERED).
+      dashboardVersionAccess: { type: "any" },
+      // Offer answers: { [versionId]: { snoozeUntil?, never?, askedAt? } }.
+      dashboardOffers: { type: "any" },
+      // ── v3 dashboard (docs/redesign/SPEC.md; lib/dashboardV3) ───────────────────────
+      // Per-user override of the DASHBOARD_V3 env flag (staff/testing). Unset = follow the env.
+      dashboardV3: { type: "boolean" },
+      // "beginner" = guided view with fewer menu items; "pro" = everything, denser. Switchable
+      // in Settings and from Home. Unset reads as beginner (lib/dashboardV3/profile.ts).
+      experience: { type: ["beginner", "intermediate", "pro"] as const },
+      // What they're building, from onboarding — read by SOL (lib/ai/solBuildContext.ts
+      // loadBuildProfile) and by Home's guided tasks. Shape: SolBuildProfile, validated by
+      // lib/dashboardV3/profile.ts sanitizeBuildProfile before it's stored.
+      buildProfile: { type: "any" },
+      // 3 = finished the redesign's onboarding (/welcome/setup). Below 3 they see it once.
+      onboardingVersion: { type: "number" },
+      // "Continue later" on onboarding: Home then shows a "Set up your first site" card instead.
+      onboardingDeferredAt: { type: "string" },
+      // Light / Dark / System (default System when unset). Mirrored in the plexo-theme cookie.
+      themePreference: { type: ["light", "dark", "system"] as const },
+      // The product walkthrough (app/dashboard/_v3/tour): whether they've been asked, which tour
+      // and where they are in it, so it resumes across pages and devices. lib/dashboardV3/tour.ts.
+      tourState: { type: "any" },
+      // Promo banners (lib/promos) this person closed: { [promoId]: versionTheyClosed }. A promo
+      // the admin edits gets a new version, so an updated message is shown again.
+      dismissedPromos: { type: "any" },
     },
     indexes: {
       primary: {
@@ -294,6 +373,121 @@ export const StrataAutoUpdate = new Entity(
       primary: {
         pk: { field: "pk", composite: ["appId"], template: "APP#${appId}" },
         sk: { field: "sk", composite: [], template: "STRATAAUTOUPDATE" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// A site's brand, linked from Strata (lib/brand/siteBrand.ts): ONE Strata project per site
+// (siteId = the site's root Template id — builder, raw upload, WordPress-migrated, React app,
+// deployed static or server app alike). The brand itself is written as a hosted stylesheet
+// (/__plexo/brand/<siteId>.css) every page of the site links to, so a change in Strata reaches
+// every page without recompiling. Holds a read-only Strata integration key (scope
+// design-system:read, the one project only), stored ENCRYPTED and never sent to a browser, so the
+// webhook receiver and the scheduled sweep can pull the published design system with nobody
+// signed in. `revision` is the sheet's own version (what ?v= carries); `strataRevision` is the
+// Strata revision it was made from. runningAt is the per-site lock.
+//
+// byStrataProject (GSI1, no new index needed): "every site linked to this Strata project" — how a
+// webhook for one project finds the sites to update.
+export const SiteBrand = new Entity(
+  {
+    model: { entity: "siteBrand", version: "1", service: "plexoCore" },
+    attributes: {
+      siteId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      // Who linked it: their name goes on rebuilds the sync starts, and their Strata session is
+      // used (when still signed in) to tidy up in Strata on unlink.
+      userId: { type: "string", required: true },
+      strataProjectId: { type: "string", required: true },
+      projectName: { type: "string" },
+      // The project's logo address (https), read from Strata when linking, so every surface can show the brand's logo.
+      projectLogo: { type: "string" },
+      // The Strata asset id of that logo, so a logo replaced in Strata is noticed (asset id + address) on every sync.
+      projectLogoId: { type: "string" },
+      // Plexo made the Strata project from this site's brand (so it may retry publishing it), and nothing has been published in Strata yet.
+      plexoCreated: { type: "boolean" },
+      // A deployed server app: Plexo adds the brand link to the HTML pages it serves. Absent = off, so every site that was linked
+      // before this existed serves exactly what it did; only the owner's switch (or linking from now on) turns it on.
+      injectServerApp: { type: "boolean" },
+      awaitingPublish: { type: "boolean" },
+      keyId: { type: "string", required: true },
+      ciphertext: { type: "string", required: true },
+      // "Keep in sync with Strata": publishes in Strata go live on their own.
+      autoSync: { type: "boolean", default: true },
+      status: { type: ["active", "needs-reconnect"] as const, required: true, default: "active" },
+      revision: { type: "string" },
+      strataRevision: { type: "string" },
+      sheetUpdatedAt: { type: "string" },
+      lastCheckedAt: { type: "string" },
+      // "updated" | "up-to-date" | "needs-review" | "error" | "reconnect" — and the plain-language note.
+      lastResultKind: { type: "string" },
+      lastResult: { type: "string" },
+      lastSource: { type: ["webhook", "schedule", "owner"] as const },
+      runningAt: { type: "string" },
+      createdAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["siteId"], template: "SITE#${siteId}" },
+        sk: { field: "sk", composite: [], template: "SITEBRAND" },
+      },
+      byStrataProject: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["strataProjectId"], template: "STRATAPROJECT#${strataProjectId}", casing: "none" },
+        sk: { field: "GSI1SK", composite: ["siteId"], template: "SITEBRAND#${siteId}", casing: "none" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Plexo's webhook subscription in Strata for one project (shared by every site linked to it):
+// Strata signs each delivery with `secret` (HMAC-SHA256), stored ENCRYPTED. `createdWith` says
+// which credential made it — a person's session ("session") or a site's integration key (its
+// keyId): a key-made subscription stops when that key is revoked, so unlinking that site moves it.
+export const StrataProjectWebhook = new Entity(
+  {
+    model: { entity: "strataProjectWebhook", version: "1", service: "plexoCore" },
+    attributes: {
+      strataProjectId: { type: "string", required: true },
+      webhookId: { type: "string", required: true },
+      secretCiphertext: { type: "string", required: true },
+      createdWith: { type: "string", required: true },
+      createdAt: { type: "string", required: true },
+      lastDeliveryId: { type: "string" },
+      lastDeliveryAt: { type: "string" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["strataProjectId"], template: "STRATAPROJECT#${strataProjectId}", casing: "none" },
+        sk: { field: "sk", composite: [], template: "WEBHOOK" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// How a raw-HTML or WordPress-migrated site's own colours and fonts map onto brand variables
+// (lib/brand/mapping.ts). Worked out on import and on "Apply my brand"; applied at serve time
+// (the stored pages and files are never changed), so turning "Use my brand on this site" off puts
+// the original look straight back. `colors`: normalised literal -> token key; `fonts`: lower-case
+// family -> token key.
+export const SiteBrandMapping = new Entity(
+  {
+    model: { entity: "siteBrandMapping", version: "1", service: "plexoCore" },
+    attributes: {
+      siteId: { type: "string", required: true },
+      colors: { type: "any", required: true },
+      fonts: { type: "any", required: true },
+      enabled: { type: "boolean", default: true },
+      computedAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["siteId"], template: "SITE#${siteId}" },
+        sk: { field: "sk", composite: [], template: "BRANDMAPPING" },
       },
     },
   },
@@ -504,6 +698,150 @@ export const PlatformSettings = new Entity(
   { table, client: docClient },
 );
 
+// The price book (lib/billing/pricing.ts): country groups with currency, provider and prices,
+// edited in plexo-admin's Pricing page. One row — "current" — so a save is atomic and the app
+// reads it in one get (cached ~60s by lib/billing/priceBook.ts). `version` is bumped by every
+// save and checked on write, so two admins saving at once can't silently overwrite each other.
+// Missing row = the built-in defaults (DEFAULT_PRICE_BOOK).
+export const PriceBookRecord = new Entity(
+  {
+    model: { entity: "priceBook", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", default: "current", readOnly: true },
+      version: { type: "number", required: true },
+      defaultGroupId: { type: "string", required: true },
+      groups: { type: "any", required: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      updatedBy: { type: "string" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["id"], template: "PRICEBOOK#${id}" },
+        sk: { field: "sk", composite: [], template: "PRICEBOOK#METADATA" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Who changed the price book, when, and what (a short summary plus both versions in full).
+// Written by plexo-admin in the same transaction as the PriceBookRecord save. Newest first.
+export const PriceBookAudit = new Entity(
+  {
+    model: { entity: "priceBookAudit", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      changedAt: { type: "string", required: true },
+      changedById: { type: "string", required: true },
+      changedByEmail: { type: "string" },
+      version: { type: "number", required: true },
+      summary: { type: "list", items: { type: "string" } },
+      before: { type: "any" },
+      after: { type: "any" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "PRICEBOOKAUDIT" },
+        sk: { field: "sk", composite: ["changedAt", "id"], template: "AUDIT#${changedAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Promo banners: the slim "new thing" strip at the top of the dashboard (lib/promos, app/dashboard/_v3/promo).
+// plexo-admin writes these (editing never touches `clicks`, which the dashboard bumps), the dashboard
+// reads them through a ~60s cache. All rows live under one partition so a read is a single small query.
+// Missing rows = no banner. `version` bumps whenever the wording/link/image changes, so people who
+// closed the old message see the updated one.
+export const Promo = new Entity(
+  {
+    model: { entity: "promo", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      version: { type: "number", required: true },
+      enabled: { type: "boolean", required: true },
+      priority: { type: "number", required: true },
+      feature: { type: "string", required: true },
+      // "all" (default) or "developers" (shown only to developers, closed for good). lib/promos.
+      audience: { type: ["all", "developers"] as const, default: "all" },
+      headline: { type: "string", required: true },
+      body: { type: "string" },
+      buttonLabel: { type: "string", required: true },
+      href: { type: "string", required: true },
+      imageUrl: { type: "string" },
+      tone: { type: ["light", "dark", "brand"] as const, required: true },
+      startsAt: { type: "string" },
+      endsAt: { type: "string" },
+      clicks: { type: "number", default: 0 },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+      updatedBy: { type: "string" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "PROMOS" },
+        sk: { field: "sk", composite: ["id"], template: "PROMO#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Who changed a promo, when, and what. Written by plexo-admin with every promo save. Newest first.
+export const PromoAudit = new Entity(
+  {
+    model: { entity: "promoAudit", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      promoId: { type: "string", required: true },
+      changedAt: { type: "string", required: true },
+      changedById: { type: "string", required: true },
+      changedByEmail: { type: "string" },
+      summary: { type: "string" },
+      before: { type: "any" },
+      after: { type: "any" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "PROMOAUDIT" },
+        sk: { field: "sk", composite: ["changedAt", "id"], template: "AUDIT#${changedAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// One row per price-book save that changed an amount: the old and new price per plan, interval
+// and price list, and when people who already subscribe move to it (see lib/billing/priceChanges.ts).
+// Written by plexo-admin in the same transaction as the PriceBookRecord save; plexo-web's move job
+// sets startedAt on the first move. Admin may change effectiveFrom or cancel only while startedAt is unset.
+export const PriceChange = new Entity(
+  {
+    model: { entity: "priceChange", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      version: { type: "number", required: true },
+      createdAt: { type: "string", required: true },
+      createdByEmail: { type: "string" },
+      existingSubscribers: { type: "any", required: true },
+      effectiveFrom: { type: "string", required: true },
+      status: { type: ["scheduled", "cancelled"] as const, default: "scheduled" },
+      startedAt: { type: "string" },
+      cancelledAt: { type: "string" },
+      entries: { type: "any", required: true },
+      moveRemovedYearlyToMonthly: { type: "boolean" },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "PRICECHANGE" },
+        sk: { field: "sk", composite: ["createdAt", "id"], template: "CHANGE#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const Notification = new Entity(
   {
     model: { entity: "notification", version: "1", service: "plexoCore" },
@@ -620,6 +958,36 @@ export const plexoCoreService = new Service(
     Notification,
     NotificationPreferences,
     Invitation,
+  },
+  { table, client: docClient },
+);
+
+// The dashboard version registry (docs/DASHBOARD_VERSIONS.md): one row per dashboard version,
+// edited in plexo-admin ("Versions"), read by plexo-web (lib/dashboardVersions/store.ts). Rows
+// share one partition so the whole registry is a single cheap query. plexo-admin keeps a copy.
+export const DashboardVersion = new Entity(
+  {
+    model: { entity: "dashboardVersion", version: "1", service: "plexoCore" },
+    attributes: {
+      id: { type: "string", required: true },
+      label: { type: "string", required: true },
+      description: { type: "string" },
+      whatsNew: { type: "any" },
+      status: { type: ["beta", "stable", "retired"] as const, default: "beta" },
+      isDefault: { type: "boolean", default: false },
+      rolloutMode: { type: ["OFF", "SELECTED", "OFFERED", "MANDATORY"] as const, default: "OFF" },
+      offerAudience: { type: ["everyone", "selected"] as const, default: "everyone" },
+      remindAfterDays: { type: "number", default: 7 },
+      sortOrder: { type: "number", default: 0 },
+      updatedBy: { type: "string" },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "DASHBOARDVERSIONS" },
+        sk: { field: "sk", composite: ["id"], template: "VERSION#${id}" },
+      },
+    },
   },
   { table, client: docClient },
 );

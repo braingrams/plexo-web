@@ -47,7 +47,9 @@ export async function GET(
   // changed by page_edit waits in its working copy until it is published.
   const html = request.nextUrl.searchParams.get("draft") === "1" && template.draftHtml ? template.draftHtml : template.compiledHtml;
   const previewHtml = await buildLivePreviewHtml(html, assets.map((a) => ({ path: a.path, blobUrl: a.blobUrl })));
-  return NextResponse.json({ page: { id: template.id, name: template.name, kind: template.kind, compiledHtml: html, previewHtml } });
+  // ?include=design (the Advanced > Code view): also the page's design data, which can be large, so only on request.
+  const withDesign = request.nextUrl.searchParams.get("include") === "design";
+  return NextResponse.json({ page: { id: template.id, name: template.name, kind: template.kind, compiledHtml: html, previewHtml, ...(withDesign ? { designJson: template.designJson ?? null, sourceType: template.sourceType ?? "BUILDER" } : {}) } });
 }
 
 export async function PATCH(

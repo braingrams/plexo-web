@@ -1,3 +1,4 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/v3Redirect";
 import Link from "next/link";
 import { auth } from "@/server/authDynamo";
 import { LmsFunnel, LmsPage, LmsEnrollment } from "@/lib/db/contentEntities";
@@ -21,6 +22,7 @@ function StatTile({ label, value, tint, icon }: { label: string; value: string; 
 
 export default async function FunnelOverviewPage({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
+  await redirectIfV3(`/dashboard/learners?course=${templateId}`);
   const session = await auth();
 
   const [{ data: funnel }, { data: pages }, { data: enrollments }, { data: user }] = await Promise.all([

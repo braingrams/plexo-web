@@ -5,7 +5,9 @@ import Editor, { useMonaco, type Monaco, type OnMount } from "@monaco-editor/rea
 import { ChevronDown, ChevronRight, FilePlus, FileText, Folder, FolderOpen, PanelLeft, Pencil, Save, Search, Trash2, X } from "lucide-react";
 import { appsApi, ApiError, type FileEntry } from "./api";
 import { C, Button, Notice, Empty, inputStyle } from "./ui";
-import { ensureMonaco, languageFor, EDITOR_THEME } from "./monaco";
+import { ensureMonaco, languageFor } from "./monaco";
+import { useMonacoTheme } from "../../_components/EditorTheme";
+
 
 // Code Mode: hand-editing the app's working copy. Saving goes straight to the files API and
 // never spends AI credits; the parent rebuilds the preview via onSaved.
@@ -113,6 +115,7 @@ function buildTree(files: FileEntry[]): TreeNode[] {
 }
 
 export function CodePane(props: { appId: string; openRequest?: { path: string; line?: number; nonce: number } | null; refreshKey?: number; onSaved?: () => void; previewUpdating?: boolean }) {
+  const monacoTheme = useMonacoTheme();
   const { appId, openRequest, refreshKey, onSaved } = props;
   ensureMonaco();
   const monaco = useMonaco();
@@ -532,7 +535,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
             onClick={() => openFile(node.path)}
             title={node.path}
             aria-label={`Open ${node.path}`}
-            style={{ ...rowStyle, paddingLeft: pad + 17, background: isActive ? "rgba(var(--brand-rgb), 0.16)" : "transparent", color: isActive ? C.text : "rgba(240,242,255,0.8)", paddingRight: 56 }}
+            style={{ ...rowStyle, paddingLeft: pad + 17, background: isActive ? "color-mix(in srgb, var(--brand) 16%, transparent)" : "transparent", color: isActive ? C.text : "var(--ed-t-800)", paddingRight: 56 }}
           >
             <FileText size={13} color={C.faint} aria-hidden />
             <span style={nameStyle}>{node.name}</span>
@@ -571,7 +574,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
         .plx-tree-item .plx-row-actions { opacity: 0; transition: opacity 0.12s; }
         .plx-tree-item:hover .plx-row-actions, .plx-tree-item:focus-within .plx-row-actions { opacity: 1; }
         .plx-tree-item:hover .plx-size, .plx-tree-item:focus-within .plx-size { visibility: hidden; }
-        .plx-tree-row:hover, .plx-tree-item > button:hover { background: rgba(255,255,255,0.04) !important; }
+        .plx-tree-row:hover, .plx-tree-item > button:hover { background: var(--ed-w-040) !important; }
         .plx-code-pane button:focus-visible { outline: 2px solid ${C.brand}; outline-offset: -2px; }
       `}</style>
 
@@ -651,7 +654,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
 
         <section aria-label="Editor" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           {tabs.length > 0 && (
-            <div role="tablist" aria-label="Open files" style={{ display: "flex", overflowX: "auto", borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: "rgba(255,255,255,0.015)" }}>
+            <div role="tablist" aria-label="Open files" style={{ display: "flex", overflowX: "auto", borderBottom: `1px solid ${C.border}`, flexShrink: 0, background: "var(--ed-w-015)" }}>
               {tabs.map((t) => {
                 const selected = t.path === active;
                 const dirty = isDirty(t);
@@ -740,7 +743,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
             ) : (
               <Editor
                 height="100%"
-                theme={EDITOR_THEME}
+                theme={monacoTheme}
                 path={modelUri(activeTab.path)}
                 language={languageFor(activeTab.path)}
                 value={activeTab.value}
@@ -772,7 +775,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
           onMouseDown={(e) => {
             if (e.target === e.currentTarget && !dialog.busy) setDialog(null);
           }}
-          style={{ position: "absolute", inset: 0, zIndex: 20, background: "rgba(5,8,15,0.6)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "12%" }}
+          style={{ position: "absolute", inset: 0, zIndex: 20, background: "var(--ed-scrim)", display: "flex", alignItems: "flex-start", justifyContent: "center", paddingTop: "12%" }}
         >
           <form
             role="dialog"
@@ -834,7 +837,7 @@ function BinaryPreview({ tab }: { tab: Tab }) {
         <img
           src={`data:${tab.contentType};base64,${tab.base64}`}
           alt={tab.path}
-          style={{ maxWidth: "100%", maxHeight: "60vh", objectFit: "contain", borderRadius: 8, border: `1px solid ${C.border}`, background: "repeating-conic-gradient(#1a2036 0% 25%, #11162a 0% 50%) 50% / 16px 16px" }}
+          style={{ maxWidth: "100%", maxHeight: "60vh", objectFit: "contain", borderRadius: 8, border: `1px solid ${C.border}`, background: "repeating-conic-gradient(#1a2036 0% 25%, var(--ed-panel) 0% 50%) 50% / 16px 16px" }}
         />
       )}
     </div>
@@ -849,7 +852,7 @@ const rowStyle: CSSProperties = {
   width: "100%",
   border: "none",
   background: "transparent",
-  color: "rgba(240,242,255,0.8)",
+  color: "var(--ed-t-800)",
   fontSize: "0.76rem",
   padding: "0.26rem 0.5rem",
   cursor: "pointer",

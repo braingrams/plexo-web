@@ -19,7 +19,7 @@ type Ctx = { params: Promise<{ id: string }> };
  * DELETE                          → disconnects the repo. Pushes stop building the app; its files stay.
  *
  * Connecting, and changing the branch, go through POST /api/v1/templates/:id/ssr-deploy with a github source.
- * ULTRA plan only, like the other server app routes.
+ * Pro plan and above, like the other server app routes.
  */
 async function ownedServerApp(request: NextRequest, templateId: string) {
   const resolved = await resolveUser(request);
@@ -29,7 +29,7 @@ async function ownedServerApp(request: NextRequest, templateId: string) {
     return { error: NextResponse.json({ error: `No template found with id "${templateId}" for this account.` }, { status: 404 }) };
   }
   if (!getTierFeatures(resolved.subscriptionPlan).ssrEnabled) {
-    return { error: NextResponse.json({ error: "Server-rendered apps are available on the ULTRA plan." }, { status: 403 }) };
+    return { error: NextResponse.json({ error: "Server apps are part of the Pro plan. Upgrade in Settings → Billing to use them." }, { status: 403 }) };
   }
   return { resolved };
 }

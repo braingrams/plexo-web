@@ -3,15 +3,21 @@ import { ThemeProvider } from "next-themes";
 
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
-import { ensureActiveOrganization, getOrgBrandDynamo } from "@/server/orgDynamo";
+import { ensureActiveOrganization, getOrgBrandDynamo, getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
 import { DashboardShell } from "./dashboard-shell";
 import { AnalyticsIdentity } from "./_components/AnalyticsIdentity";
 import { analyticsPlan } from "@/lib/analytics";
 import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
 import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
+import { CountryPrompt } from "@/app/_components/country/CountryPrompt";
 import { AppLiveDialog } from "./_components/AppLiveDialog";
-import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction } from "@/lib/plan/entitlement";
+import { FeedbackNudge } from "./_components/FeedbackNudge";
+import { TRIAL_DAYS, accessDaysLeft, canStartTrial, effectivePlan, paidAccess, planSyncAction, storedPlan } from "@/lib/plan/entitlement";
 import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
+import { getDashboardVersionState } from "@/lib/dashboardVersions/state";
+import { VersionProvider } from "./_versions/VersionUi";
+import { ServerPromo } from "./_v3/promo/ServerPromo";
+import { V3DashboardLayout } from "./_v3/V3DashboardLayout";
 
 export default async function DashboardLayout({
   children,
@@ -37,8 +43,6 @@ export default async function DashboardLayout({
   }
   const initialLayoutMode = dbUser?.layoutMode ?? "CLASSIC";
   const planBanner = dbUser ? planBannerState(dbUser) : null;
-  // The plan decides which creation options are usable (the Server app tab is ULTRA-only).
-  const plan = effectivePlan(dbUser);
 
   // Org-scoped login: makes sure this session always has an active organization before
   // rendering the dashboard shell (auto-picks a single membership, restores/creates one
@@ -48,7 +52,36 @@ export default async function DashboardLayout({
     redirect("/choose-org");
   }
 
-  const orgBranding = await getOrgBrandDynamo(orgResolution.organizationId);
+  // The workspace's plan (its owner's — a teammate gets the same options as the owner) decides
+  // which creation options are usable (the Server app tab needs Pro or above).
+  const [orgBranding, workspace] = await Promise.all([
+    getOrgBrandDynamo(orgResolution.organizationId),
+    getOrganizationOwnerEntitlementDynamo(orgResolution.organizationId),
+  ]);
+  const plan = workspace.subscriptionPlan;
+
+  // Which dashboard this person sees (docs/DASHBOARD_VERSIONS.md): admin-controlled rollout,
+  // resolved once per request. A version with no shell of its own renders the classic one.
+  const version = dbUser ? await getDashboardVersionState(dbUser) : null;
+  const versionUi = version ? { currentLabel: version.label, targets: version.targets, offer: version.offer } : { currentLabel: "", targets: [], offer: null };
+  if (dbUser && version?.shell === "v3") {
+    return (
+      <V3DashboardLayout
+        versions={versionUi}
+        user={{ ...dbUser, name: userName, email: userEmail, image: dbUser.image ?? session.user.image ?? null }}
+        organizationId={orgResolution.organizationId}
+        orgBranding={orgBranding}
+        plan={plan}
+      >
+        <MigrationBanner />
+        {planBanner ? <PlanBanner state={planBanner} /> : null}
+        {/* Admin "what's new" strip: yields to the plan notice (and, in CSS, to the migration one). */}
+        <ServerPromo user={dbUser} yieldTo={!!planBanner} />
+        {children}
+        <AppLiveDialog />
+      </V3DashboardLayout>
+    );
+  }
 
   return (
     // The marketing site's new light/dark toggle (see app/landing-nav.tsx) is a single
@@ -58,6 +91,7 @@ export default async function DashboardLayout({
     // provider forces "dark" for this whole subtree regardless of what a visitor picked
     // on the homepage, which next-themes explicitly supports for exactly this case.
     <ThemeProvider forcedTheme="dark" attribute="class">
+      <VersionProvider data={versionUi}>
       <DashboardShell
         userName={userName}
         userEmail={userEmail}
@@ -73,7 +107,11 @@ export default async function DashboardLayout({
         {children}
         {/* "Your app is live", opened from any page once a server app goes live. */}
         <AppLiveDialog />
+        <FeedbackNudge userId={session.user.id} />
+        {/* One question for owners who haven't set their country yet (prices follow it). */}
+        <CountryPrompt />
       </DashboardShell>
+      </VersionProvider>
     </ThemeProvider>
   );
 }
@@ -97,7 +135,8 @@ function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngrad
     return null;
   }
   if (user.planDowngradedAt) {
-    return { kind: "downgraded", previousPlan: user.planBeforeDowngrade === "ULTRA" ? "ULTRA" : "PRO", since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
+    const before = storedPlan({ subscriptionPlan: user.planBeforeDowngrade, planVersion: user.planVersion });
+    return { kind: "downgraded", previousPlan: before === "FREE" ? "STARTER" : before, since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
   }
   return null;
 }

@@ -6,6 +6,8 @@ import { ChevronRight } from "lucide-react";
 
 import { Toggle } from "@/app/dashboard/_components/Toggle";
 import { CustomSelect } from "@/app/_components/CustomSelect";
+import { SolSettingsV3 } from "../../_v3/sol/SolSettingsV3";
+import { useSolV3 } from "../../_v3/sol/SolV3Context";
 import { SolSubpageHeader } from "../_components/SolSubpageHeader";
 import { WhatsAppConnect } from "./WhatsAppConnect";
 import type { SolPreferencesData, SolTonePreset, SolModelTier, SolResponseLength } from "./page";
@@ -117,7 +119,7 @@ function SaveStatus({ saving, notice, error }: { saving: boolean; notice: string
   );
 }
 
-export function SolSettingsPageClient({ initialPreferences }: { initialPreferences: SolPreferencesData }) {
+export function ClassicSolSettings({ initialPreferences }: { initialPreferences: SolPreferencesData }) {
   const [tonePreset, setTonePreset] = useState<SolTonePreset>(initialPreferences.tonePreset ?? "FRIENDLY");
   const [customInstructions, setCustomInstructions] = useState(initialPreferences.customInstructions);
   const [defaultModelTier, setDefaultModelTier] = useState<SolModelTier>(initialPreferences.defaultModelTier);
@@ -307,4 +309,10 @@ export function SolSettingsPageClient({ initialPreferences }: { initialPreferenc
       `}</style>
     </div>
   );
+}
+
+/** New dashboard: the new look (inside SolV3Shell). Old dashboard: the page above, untouched. */
+export function SolSettingsPageClient({ initialPreferences }: { initialPreferences: SolPreferencesData }) {
+  const v3 = useSolV3();
+  return v3 ? <SolSettingsV3 initialPreferences={initialPreferences} /> : <ClassicSolSettings initialPreferences={initialPreferences} />;
 }

@@ -39,16 +39,16 @@ type InitialWallet = {
 };
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
+  width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+  borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem", marginBottom: "1.25rem" }}>
-      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>{title}</h2>
-      {description && <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1rem" }}>{description}</p>}
+    <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem", marginBottom: "1.25rem" }}>
+      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>{title}</h2>
+      {description && <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", margin: "0.3rem 0 1rem" }}>{description}</p>}
       <div style={{ display: "grid", gap: "0.9rem", marginTop: description ? 0 : "1rem" }}>{children}</div>
     </div>
   );
@@ -157,26 +157,26 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
     return (
       <div>
         <div style={{ marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-          <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", margin: 0, maxWidth: 520 }}>
+          <p style={{ fontSize: "0.85rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", margin: 0, maxWidth: 520 }}>
             Proceeds from Platform Paystack / Platform Stripe sales. Balance-tracking only — withdrawals are processed manually by the Plexo team.
           </p>
           <a
             href="/dashboard/marketplace/payouts"
             style={{
-              flexShrink: 0, fontSize: "0.78rem", fontWeight: 600, color: "rgba(240,242,255,0.6)",
-              textDecoration: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
-              padding: "0.45rem 0.8rem", background: "rgba(255,255,255,0.03)",
+              flexShrink: 0, fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-muted, rgba(240,242,255,0.6))",
+              textDecoration: "none", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 8,
+              padding: "0.45rem 0.8rem", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
             }}
           >
             Template marketplace earnings →
           </a>
         </div>
 
-        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)" }}>
-          <p style={{ fontSize: "0.9rem", color: "rgba(240,242,255,0.6)", margin: "0 0 0.5rem", fontWeight: 600 }}>
+        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)" }}>
+          <p style={{ fontSize: "0.9rem", color: "var(--cmx-muted, rgba(240,242,255,0.6))", margin: "0 0 0.5rem", fontWeight: 600 }}>
             No wallet to show yet
           </p>
-          <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.4)", margin: "0 auto", maxWidth: 420, lineHeight: 1.6 }}>
+          <p style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", margin: "0 auto", maxWidth: 420, lineHeight: 1.6 }}>
             {!initial.commerceEnabled
               ? "Enable Commerce first, then use Plexo-hosted Paystack or Stripe in Settings → Payments — that's what settles into a wallet here."
               : "You're using your own Paystack or Stripe keys, so sales settle directly to your own account — there's nothing for Plexo to hold. Switch to Plexo-hosted payments in Settings → Payments to use a wallet instead."}
@@ -185,7 +185,7 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
             href={`/dashboard/commerce/${templateId}/settings/payments`}
             style={{
               display: "inline-block", marginTop: "1.1rem", padding: "0.55rem 1rem", borderRadius: 9,
-              border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff",
+              border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", color: "var(--cmx-text, #f0f2ff)",
               fontSize: "0.8rem", fontWeight: 600, textDecoration: "none", fontFamily: "inherit",
             }}
           >
@@ -199,7 +199,7 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
   return (
     <div>
       <div style={{ marginBottom: "1.5rem", display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
-        <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", margin: 0, maxWidth: 520 }}>
+        <p style={{ fontSize: "0.85rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", margin: 0, maxWidth: 520 }}>
           Proceeds from Platform Paystack / Platform Stripe sales. Balance-tracking only — withdrawals are processed manually by the Plexo team.
         </p>
         {/* Different wallet — template-marketplace earnings (per-account, not per-site)
@@ -209,9 +209,9 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
         <a
           href="/dashboard/marketplace/payouts"
           style={{
-            flexShrink: 0, fontSize: "0.78rem", fontWeight: 600, color: "rgba(240,242,255,0.6)",
-            textDecoration: "none", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8,
-            padding: "0.45rem 0.8rem", background: "rgba(255,255,255,0.03)",
+            flexShrink: 0, fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-muted, rgba(240,242,255,0.6))",
+            textDecoration: "none", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 8,
+            padding: "0.45rem 0.8rem", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
           }}
         >
           Template marketplace earnings →
@@ -221,17 +221,17 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
       <Section title="Balance">
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
           <div>
-            <div style={{ fontSize: "2rem", fontWeight: 800, color: "#f0f2ff", fontVariantNumeric: "tabular-nums" }}>
+            <div style={{ fontSize: "2rem", fontWeight: 800, color: "var(--cmx-text, #f0f2ff)", fontVariantNumeric: "tabular-nums" }}>
               {formatMoney(balanceCents, initial.currency)}
             </div>
-            <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", margin: "0.25rem 0 0" }}>
+            <p style={{ fontSize: "0.75rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", margin: "0.25rem 0 0" }}>
               {pooled ? "Pooled across every site in this organization." : "This site's own wallet."}
             </p>
           </div>
           <button
             type="button"
             onClick={() => setShowWithdrawForm((v) => !v)}
-            style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+            style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)", fontSize: "0.82rem", fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
           >
             Request withdrawal
           </button>
@@ -239,38 +239,38 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
 
         <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", cursor: togglingPooled ? "not-allowed" : "pointer", marginTop: "0.4rem" }}>
           <input type="checkbox" checked={pooled} disabled={togglingPooled} onChange={(e) => void handleTogglePooled(e.target.checked)} style={{ width: 16, height: 16 }} />
-          <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.55)" }}>
+          <span style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>
             Pool this organization's platform-hosted sales into one shared wallet, instead of a separate wallet per site.
           </span>
         </label>
 
         {message && (
-          <p style={{ fontSize: "0.82rem", margin: 0, color: message.kind === "success" ? "#34d399" : "#f87171" }}>{message.text}</p>
+          <p style={{ fontSize: "0.82rem", margin: 0, color: message.kind === "success" ? "var(--cmx-success, #34d399)" : "var(--cmx-danger, #f87171)" }}>{message.text}</p>
         )}
 
         {showWithdrawForm && (
-          <div style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 10, padding: "0.9rem", display: "grid", gap: "0.7rem" }}>
+          <div style={{ border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 10, padding: "0.9rem", display: "grid", gap: "0.7rem" }}>
             <label style={{ display: "block" }}>
-              <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>Amount ({initial.currency})</span>
+              <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.35rem" }}>Amount ({initial.currency})</span>
               <input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" style={inputStyle} />
             </label>
             <label style={{ display: "block" }}>
-              <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>Bank name</span>
+              <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.35rem" }}>Bank name</span>
               <input type="text" value={bankName} onChange={(e) => setBankName(e.target.value)} style={inputStyle} />
             </label>
             <label style={{ display: "block" }}>
-              <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>Account number</span>
+              <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.35rem" }}>Account number</span>
               <input type="text" value={accountNumber} onChange={(e) => setAccountNumber(e.target.value)} style={inputStyle} />
             </label>
             <label style={{ display: "block" }}>
-              <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>Account holder name</span>
+              <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.35rem" }}>Account holder name</span>
               <input type="text" value={accountHolderName} onChange={(e) => setAccountHolderName(e.target.value)} style={inputStyle} />
             </label>
             <button
               type="button"
               onClick={() => void handleWithdraw()}
               disabled={submitting}
-              style={{ padding: "0.6rem 1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", fontSize: "0.82rem", fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer", fontFamily: "inherit", justifySelf: "start" }}
+              style={{ padding: "0.6rem 1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)", fontSize: "0.82rem", fontWeight: 700, cursor: submitting ? "not-allowed" : "pointer", fontFamily: "inherit", justifySelf: "start" }}
             >
               {submitting ? "Submitting…" : "Submit request"}
             </button>
@@ -280,25 +280,25 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
 
       <Section title="Withdrawal requests">
         {withdrawals.length === 0 ? (
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: 0 }}>No withdrawal requests yet.</p>
+          <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", margin: 0 }}>No withdrawal requests yet.</p>
         ) : (
           <div style={{ display: "grid", gap: "0.5rem" }}>
             {withdrawals.map((w) => (
-              <div key={w.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "0.6rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <div key={w.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "0.6rem 0", borderBottom: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)" }}>
                 <div>
-                  <span style={{ fontSize: "0.82rem", color: "#f0f2ff", fontVariantNumeric: "tabular-nums" }}>{formatMoney(w.amountCents, initial.currency)}</span>
-                  <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginLeft: "0.5rem" }}>
+                  <span style={{ fontSize: "0.82rem", color: "var(--cmx-text, #f0f2ff)", fontVariantNumeric: "tabular-nums" }}>{formatMoney(w.amountCents, initial.currency)}</span>
+                  <span style={{ fontSize: "0.75rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", marginLeft: "0.5rem" }}>
                     {w.bankName} · {new Date(w.requestedAt).toLocaleDateString()}
                   </span>
                   {w.status === "REJECTED" && w.rejectionReason && (
-                    <div style={{ fontSize: "0.72rem", color: "#f87171", marginTop: 2 }}>{w.rejectionReason}</div>
+                    <div style={{ fontSize: "0.72rem", color: "var(--cmx-danger, #f87171)", marginTop: 2 }}>{w.rejectionReason}</div>
                   )}
                 </div>
                 <span
                   style={{
                     fontSize: "0.68rem", fontWeight: 700, borderRadius: 999, padding: "0.15rem 0.6rem", flexShrink: 0,
-                    color: w.status === "PROCESSED" ? "#4ade80" : w.status === "REJECTED" ? "#f87171" : "#f59e0b",
-                    background: w.status === "PROCESSED" ? "rgba(74,222,128,0.12)" : w.status === "REJECTED" ? "rgba(248,113,113,0.12)" : "rgba(245,158,11,0.12)",
+                    color: w.status === "PROCESSED" ? "var(--cmx-success, #4ade80)" : w.status === "REJECTED" ? "var(--cmx-danger, #f87171)" : "var(--cmx-warning, #f59e0b)",
+                    background: w.status === "PROCESSED" ? "color-mix(in srgb, var(--cmx-success, rgb(74,222,128)) 12%, transparent)" : w.status === "REJECTED" ? "color-mix(in srgb, var(--cmx-danger, rgb(248,113,113)) 12%, transparent)" : "color-mix(in srgb, var(--cmx-warning, rgb(245,158,11)) 12%, transparent)",
                   }}
                 >
                   {w.status}
@@ -311,18 +311,18 @@ export function WalletClient({ templateId, initial }: { templateId: string; init
 
       <Section title="Ledger">
         {ledger.length === 0 ? (
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.4)", margin: 0 }}>No activity yet.</p>
+          <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", margin: 0 }}>No activity yet.</p>
         ) : (
           <>
             <div style={{ display: "grid", gap: "0.5rem" }}>
               {ledger.map((entry) => (
-                <div key={entry.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "0.6rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <div key={entry.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", padding: "0.6rem 0", borderBottom: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)" }}>
                   <div>
-                    <span style={{ fontSize: "0.82rem", color: "#f0f2ff" }}>{LEDGER_LABEL[entry.type]}</span>
-                    {entry.description && <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginLeft: "0.5rem" }}>{entry.description}</span>}
-                    <div style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)" }}>{new Date(entry.createdAt).toLocaleString()}</div>
+                    <span style={{ fontSize: "0.82rem", color: "var(--cmx-text, #f0f2ff)" }}>{LEDGER_LABEL[entry.type]}</span>
+                    {entry.description && <span style={{ fontSize: "0.75rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", marginLeft: "0.5rem" }}>{entry.description}</span>}
+                    <div style={{ fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.35))" }}>{new Date(entry.createdAt).toLocaleString()}</div>
                   </div>
-                  <span style={{ fontSize: "0.82rem", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: entry.netAmountCents >= 0 ? "#4ade80" : "#f87171", flexShrink: 0 }}>
+                  <span style={{ fontSize: "0.82rem", fontWeight: 700, fontVariantNumeric: "tabular-nums", color: entry.netAmountCents >= 0 ? "var(--cmx-success, #4ade80)" : "var(--cmx-danger, #f87171)", flexShrink: 0 }}>
                     {entry.netAmountCents >= 0 ? "+" : ""}{formatMoney(entry.netAmountCents, initial.currency)}
                   </span>
                 </div>

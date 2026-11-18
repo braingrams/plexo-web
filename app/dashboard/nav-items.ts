@@ -1,4 +1,16 @@
-export type NavItem = { href: string; label: string; badge?: string };
+export type NavItem = {
+  href: string;
+  label: string;
+  badge?: string;
+  /** Highlight this item on this path when `href` carries a query string (e.g. Emails is /dashboard/templates?filter=EMAIL). */
+  activePath?: string;
+};
+
+/** Whether a nav item is the current page. */
+export function isNavItemActive(item: NavItem, pathname: string): boolean {
+  if (item.href === "/dashboard") return pathname === "/dashboard";
+  return pathname.startsWith(item.activePath ?? item.href);
+}
 
 // Flat, top-level nav — no collapsible groups/dropdowns. Everything that used to live in a
 // "Content"/"Grow"/"Developer"/"Account" group now lives inside that section's own shell
@@ -15,6 +27,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/blog", label: "Blog" },
   { href: "/dashboard/commerce", label: "Commerce", badge: "New" },
   { href: "/dashboard/funnels", label: "Funnels", badge: "New" },
+  // The classic Templates list, opened on emails: owners never need to know the word "template".
+  { href: "/dashboard/templates?filter=EMAIL", label: "Emails", activePath: "/dashboard/templates" },
   { href: "/dashboard/domains", label: "Domains" },
   { href: "/dashboard/profile", label: "Settings" },
 ];

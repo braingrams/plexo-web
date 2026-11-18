@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type CSSProperties, type FormEvent } from "react";
 
-// Settings for a server-rendered app (ULTRA). Two kinds, kept apart on purpose:
+// Settings for a server-rendered app (Pro and above). Two kinds, kept apart on purpose:
 //   Variables: visible settings. Their values are shown here. A variable marked "needed at build"
 //              (or named with a public prefix such as NEXT_PUBLIC_) is baked into the app, so visitors can read it.
 //   Secrets:   write-only. The value is never shown again, only a short hint. The server fetches
@@ -17,16 +17,16 @@ const PUBLIC_PREFIXES = ["NEXT_PUBLIC_", "NUXT_PUBLIC_", "VITE_", "PUBLIC_", "RE
 const SCOPE_LABEL: Record<Scope, string> = { all: "Preview and Live", dev: "Preview only", live: "Live only" };
 const NAME_RE = /^[A-Z][A-Z0-9_]{0,63}$/;
 
-const card: CSSProperties = { border: "1px solid rgba(255,255,255,0.09)", borderRadius: 14, padding: "20px 22px", marginBottom: 16 };
+const card: CSSProperties = { border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 9%, transparent)", borderRadius: 14, padding: "20px 22px", marginBottom: 16 };
 const heading: CSSProperties = { margin: "0 0 4px", fontSize: 15, fontWeight: 700 };
 const muted: CSSProperties = { margin: "0 0 14px", fontSize: 12.5, color: "var(--text-muted)", lineHeight: 1.5 };
-const input: CSSProperties = { padding: "9px 11px", borderRadius: 9, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)", color: "var(--text-main)", fontFamily: "inherit", fontSize: 13 };
+const input: CSSProperties = { padding: "9px 11px", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", color: "var(--text-main)", fontFamily: "inherit", fontSize: 13 };
 const button = (enabled: boolean): CSSProperties => ({
   padding: "8px 14px", borderRadius: 9, border: "none", fontWeight: 650, fontSize: 13,
-  cursor: enabled ? "pointer" : "not-allowed", background: enabled ? "var(--brand)" : "rgba(255,255,255,0.08)", color: enabled ? "#fff" : "var(--text-muted)",
+  cursor: enabled ? "pointer" : "not-allowed", background: enabled ? "var(--brand)" : "color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", color: enabled ? "#fff" : "var(--text-muted)",
 });
 const ghost: CSSProperties = { background: "none", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: 12.5, padding: 4 };
-const warn: CSSProperties = { margin: "8px 0 0", fontSize: 12.5, color: "#fbbf24" };
+const warn: CSSProperties = { margin: "8px 0 0", fontSize: 12.5, color: "var(--plx-warning, #fbbf24)" };
 
 async function call<T>(url: string, init?: RequestInit): Promise<{ ok: true; data: T } | { ok: false; status: number; error: string }> {
   const res = await fetch(url, { ...init, headers: { "content-type": "application/json", ...(init?.headers ?? {}) } });
@@ -132,8 +132,8 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
 
   return (
     <div>
-      {error ? <p style={{ ...warn, color: "#f87171", margin: "0 0 12px" }}>{error}</p> : null}
-      {notice ? <p style={{ ...warn, color: "var(--brand)", margin: "0 0 12px" }}>{notice}</p> : null}
+      {error ? <p style={{ ...warn, color: "var(--plx-danger, #f87171)", margin: "0 0 12px" }}>{error}</p> : null}
+      {notice ? <p style={{ ...warn, color: "var(--plx-link, var(--brand))", margin: "0 0 12px" }}>{notice}</p> : null}
 
       <div style={card}>
         <h3 style={heading}>Variables</h3>
@@ -149,7 +149,7 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
                 <span style={{ fontFamily: "var(--font-mono)" }}>{v.name}</span>
                 <span style={{ fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis" }}>{v.value}</span>
                 <span style={{ color: "var(--text-muted)" }}>{SCOPE_LABEL[v.scope]}</span>
-                <span style={{ fontSize: 12, color: v.buildTime || PUBLIC_PREFIXES.some((p) => v.name.startsWith(p)) ? "#fbbf24" : "var(--text-muted)" }}>
+                <span style={{ fontSize: 12, color: v.buildTime || PUBLIC_PREFIXES.some((p) => v.name.startsWith(p)) ? "var(--plx-warning, #fbbf24)" : "var(--text-muted)" }}>
                   {v.buildTime || PUBLIC_PREFIXES.some((p) => v.name.startsWith(p)) ? "Build" : "Runtime"}
                 </span>
                 <button type="button" onClick={() => void deleteVariable(v)} style={ghost}>Remove</button>
@@ -183,8 +183,8 @@ export function ServerSettingsPanel({ templateId }: { templateId: string }) {
           build. Anything the build needs goes in Variables, where it's visible.
         </p>
         {rebuild.needsRebuild ? (
-          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14, padding: "10px 12px", borderRadius: 10, background: "rgba(251,191,36,0.08)" }}>
-            <span style={{ fontSize: 13, color: "#fbbf24" }}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", marginBottom: 14, padding: "10px 12px", borderRadius: 10, background: "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 8%, transparent)" }}>
+            <span style={{ fontSize: 13, color: "var(--plx-warning, #fbbf24)" }}>
               {rebuild.hasSource ? "A secret changed. Rebuild to apply it." : "A secret changed. Upload the project to rebuild."}
             </span>
             {rebuild.hasSource ? (

@@ -38,15 +38,15 @@ afterEach(() => {
 
 describe("NewSiteProvider", () => {
   it("is closed until a button asks for it", () => {
-    act(() => root.render(<NewSiteProvider plan="ULTRA"><Opener /></NewSiteProvider>));
+    act(() => root.render(<NewSiteProvider plan="PRO"><Opener /></NewSiteProvider>));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
 
   it("opens the wizard in a modal and passes the plan through", () => {
-    act(() => root.render(<NewSiteProvider plan="ULTRA"><Opener /></NewSiteProvider>));
+    act(() => root.render(<NewSiteProvider plan="PRO"><Opener /></NewSiteProvider>));
     act(() => (document.getElementById("open") as HTMLButtonElement).click());
     expect(document.querySelector('[role="dialog"]')).not.toBeNull();
-    expect(wizardProps.last?.plan).toBe("ULTRA");
+    expect(wizardProps.last?.plan).toBe("PRO");
     expect(typeof wizardProps.last?.onClose).toBe("function");
   });
 

@@ -12,9 +12,9 @@ type Category = { id: string; name: string; slug: string };
 type Tag = { id: string; name: string; slug: string };
 type Author = { id: string; name: string };
 
-const FIELD_LABEL: React.CSSProperties = { fontSize: "0.75rem", fontWeight: 700, color: "rgba(240,242,255,0.5)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: "0.4rem" };
-const FIELD_INPUT: React.CSSProperties = { width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontSize: "0.85rem", fontFamily: "inherit" };
-const PANEL: React.CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem", background: "rgba(255,255,255,0.02)" };
+const FIELD_LABEL: React.CSSProperties = { fontSize: "0.75rem", fontWeight: 700, color: "var(--ed-t-500)", textTransform: "uppercase", letterSpacing: "0.04em", display: "block", marginBottom: "0.4rem" };
+const FIELD_INPUT: React.CSSProperties = { width: "100%", padding: "0.55rem 0.7rem", borderRadius: 8, border: "1px solid var(--ed-w-120)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontSize: "0.85rem", fontFamily: "inherit" };
+const PANEL: React.CSSProperties = { border: "1px solid var(--ed-w-080)", borderRadius: 12, padding: "1.25rem", marginBottom: "1.25rem", background: "var(--ed-w-020)" };
 
 function TaxonomyList({
   templateId,
@@ -38,7 +38,7 @@ function TaxonomyList({
   }
 
   if (items.length === 0) {
-    return <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.35)" }}>None yet.</p>;
+    return <p style={{ fontSize: "0.8rem", color: "var(--ed-t-350)" }}>None yet.</p>;
   }
 
   return (
@@ -48,7 +48,7 @@ function TaxonomyList({
           key={item.id}
           style={{
             display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.3rem 0.7rem", borderRadius: 999,
-            background: "rgba(255,255,255,0.06)", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem",
+            background: "var(--ed-w-060)", color: "var(--ed-t-800)", fontSize: "0.78rem",
           }}
         >
           {item.name}
@@ -56,7 +56,7 @@ function TaxonomyList({
             type="button"
             onClick={() => handleDelete(item.id)}
             disabled={busyId === item.id}
-            style={{ background: "none", border: "none", color: "#f87171", cursor: "pointer", fontWeight: 700, fontSize: "0.85rem" }}
+            style={{ background: "none", border: "none", color: "var(--ed-danger)", cursor: "pointer", fontWeight: 700, fontSize: "0.85rem" }}
           >
             ×
           </button>
@@ -148,11 +148,11 @@ function LayoutDesignRow({
   }
 
   return (
-    <div style={{ padding: "0.8rem 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+    <div style={{ padding: "0.8rem 0", borderBottom: "1px solid var(--ed-w-060)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div>
-          <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff", marginBottom: "0.2rem" }}>{label}</p>
-          <p style={{ fontSize: "0.75rem", color: layout ? (layout.ready ? "#4ade80" : "#f59e0b") : "rgba(240,242,255,0.4)" }}>
+          <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--ed-text)", marginBottom: "0.2rem" }}>{label}</p>
+          <p style={{ fontSize: "0.75rem", color: layout ? (layout.ready ? "var(--ed-success)" : "var(--ed-amber)") : "var(--ed-t-400)" }}>
             {!layout ? "Using the default theme" : layout.ready ? "Custom layout live" : "Draft — add the required block to go live"}
           </p>
         </div>
@@ -161,20 +161,20 @@ function LayoutDesignRow({
             <>
               <Link
                 href={`/dashboard/templates/${layout.templateId}`}
-                style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}
+                style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid var(--ed-w-120)", color: "var(--ed-t-800)", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}
               >
                 Edit
               </Link>
-              <button type="button" onClick={handleRemove} disabled={busy} style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.08)", color: "#f87171", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
+              <button type="button" onClick={handleRemove} disabled={busy} style={{ padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--ed-danger) 25%, transparent)", background: "color-mix(in srgb, var(--ed-danger) 8%, transparent)", color: "var(--ed-danger)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
                 Remove
               </button>
             </>
           ) : (
             <>
-              <button type="button" onClick={handleTogglePicker} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
+              <button type="button" onClick={handleTogglePicker} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid var(--ed-w-120)", background: "transparent", color: "var(--ed-t-800)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer" }}>
                 Use existing…
               </button>
-              <button type="button" onClick={handleDesignNew} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "none", background: "var(--brand)", color: "#fff", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}>
+              <button type="button" onClick={handleDesignNew} disabled={busy} style={{ padding: "0.4rem 0.9rem", borderRadius: 8, border: "none", background: "var(--brand)", color: "var(--ed-on-brand)", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}>
                 {busy ? "Working…" : "Design new"}
               </button>
             </>
@@ -183,25 +183,25 @@ function LayoutDesignRow({
       </div>
 
       {showPicker && !layout && (
-        <div style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: 8, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div style={{ marginTop: "0.75rem", padding: "0.75rem", borderRadius: 8, background: "var(--ed-w-030)", border: "1px solid var(--ed-w-080)" }}>
           {loadingCandidates ? (
-            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>Loading…</p>
+            <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)" }}>Loading…</p>
           ) : !candidates || candidates.length === 0 ? (
-            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>
+            <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)" }}>
               No other layouts of this kind yet — design one on another site first, or start new here.
             </p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {candidates.map((c) => (
                 <div key={c.layoutTemplateId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-                  <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.8)" }}>
-                    {c.layoutName} <span style={{ color: "rgba(240,242,255,0.4)" }}>— from {c.siteName} · updated {new Date(c.updatedAt).toLocaleDateString()}</span>
+                  <p style={{ fontSize: "0.8rem", color: "var(--ed-t-800)" }}>
+                    {c.layoutName} <span style={{ color: "var(--ed-t-400)" }}>— from {c.siteName} · updated {new Date(c.updatedAt).toLocaleDateString()}</span>
                   </p>
                   <button
                     type="button"
                     onClick={() => handleUseExisting(c.layoutTemplateId)}
                     disabled={busy}
-                    style={{ flexShrink: 0, padding: "0.35rem 0.7rem", borderRadius: 6, border: "none", background: "var(--brand)", color: "#fff", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer" }}
+                    style={{ flexShrink: 0, padding: "0.35rem 0.7rem", borderRadius: 6, border: "none", background: "var(--brand)", color: "var(--ed-on-brand)", fontSize: "0.75rem", fontWeight: 700, cursor: "pointer" }}
                   >
                     Use this
                   </button>
@@ -283,10 +283,10 @@ export function BlogSettingsClient({
 
   return (
     <PageContainer>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "1.5rem" }}>Blog Settings</h1>
+      <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "1.5rem" }}>Blog Settings</h1>
 
       <div style={PANEL}>
-        <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1rem", fontSize: "0.9rem", fontWeight: 600, color: "#f0f2ff" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1rem", fontSize: "0.9rem", fontWeight: 600, color: "var(--ed-text)" }}>
           <input type="checkbox" checked={site.enabled} onChange={(e) => setSite({ ...site, enabled: e.target.checked })} />
           Blog is live at /blog
         </label>
@@ -312,12 +312,12 @@ export function BlogSettingsClient({
           style={{ ...FIELD_INPUT, marginBottom: "0.9rem", maxWidth: 120 }}
         />
 
-        <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.7rem", fontSize: "0.85rem", color: "rgba(240,242,255,0.75)" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.7rem", fontSize: "0.85rem", color: "var(--ed-t-750)" }}>
           <input type="checkbox" checked={site.showOnHomepage} onChange={(e) => setSite({ ...site, showOnHomepage: e.target.checked })} />
           Use the blog as this site&apos;s homepage
         </label>
 
-        <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.1rem", fontSize: "0.85rem", color: "rgba(240,242,255,0.75)" }}>
+        <label style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "1.1rem", fontSize: "0.85rem", color: "var(--ed-t-750)" }}>
           <input type="checkbox" checked={site.commentsEnabled} onChange={(e) => setSite({ ...site, commentsEnabled: e.target.checked })} />
           Allow comments on posts
         </label>
@@ -326,16 +326,16 @@ export function BlogSettingsClient({
           type="button"
           onClick={handleSave}
           disabled={saving}
-          style={{ padding: "0.6rem 1.2rem", borderRadius: 8, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, background: "var(--brand)", color: "#fff" }}
+          style={{ padding: "0.6rem 1.2rem", borderRadius: 8, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, background: "var(--brand)", color: "var(--ed-on-brand)" }}
         >
           {saving ? "Saving…" : "Save Settings"}
         </button>
-        {savedAt && <span style={{ marginLeft: "0.8rem", fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>Saved {savedAt.toLocaleTimeString()}</span>}
+        {savedAt && <span style={{ marginLeft: "0.8rem", fontSize: "0.75rem", color: "var(--ed-t-400)" }}>Saved {savedAt.toLocaleTimeString()}</span>}
       </div>
 
       <div style={PANEL}>
         <label style={FIELD_LABEL}>Appearance</label>
-        <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", marginTop: "-0.2rem", marginBottom: "1rem" }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)", marginTop: "-0.2rem", marginBottom: "1rem" }}>
           Plexo's blog uses its own built-in layout rather than your old WordPress theme (themes aren't portable between
           platforms) — these let you approximate your old brand.
         </p>
@@ -347,7 +347,7 @@ export function BlogSettingsClient({
               type="color"
               value={site.accentColor || BRAND[700]}
               onChange={(e) => setSite({ ...site, accentColor: e.target.value })}
-              style={{ width: 56, height: 36, borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "transparent", cursor: "pointer" }}
+              style={{ width: 56, height: 36, borderRadius: 8, border: "1px solid var(--ed-w-120)", background: "transparent", cursor: "pointer" }}
             />
           </div>
           <div style={{ flex: 1, minWidth: 180 }}>
@@ -366,12 +366,12 @@ export function BlogSettingsClient({
             {site.logoUrl ? (
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                 <img src={site.logoUrl} alt="" style={{ maxHeight: 40, borderRadius: 6 }} />
-                <button type="button" onClick={() => setSite({ ...site, logoUrl: "" })} style={{ fontSize: "0.75rem", color: "#f87171", background: "none", border: "none", cursor: "pointer" }}>
+                <button type="button" onClick={() => setSite({ ...site, logoUrl: "" })} style={{ fontSize: "0.75rem", color: "var(--ed-danger)", background: "none", border: "none", cursor: "pointer" }}>
                   Remove
                 </button>
               </div>
             ) : (
-              <label style={{ display: "inline-block", padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px dashed rgba(255,255,255,0.2)", cursor: "pointer", fontSize: "0.78rem", color: "rgba(240,242,255,0.5)" }}>
+              <label style={{ display: "inline-block", padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px dashed var(--ed-w-200)", cursor: "pointer", fontSize: "0.78rem", color: "var(--ed-t-500)" }}>
                 {uploadingLogo ? "Uploading…" : "Upload logo"}
                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAndSet(f, "logoUrl", setUploadingLogo); }} />
               </label>
@@ -382,12 +382,12 @@ export function BlogSettingsClient({
             {site.headerImageUrl ? (
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
                 <img src={site.headerImageUrl} alt="" style={{ maxHeight: 40, borderRadius: 6 }} />
-                <button type="button" onClick={() => setSite({ ...site, headerImageUrl: "" })} style={{ fontSize: "0.75rem", color: "#f87171", background: "none", border: "none", cursor: "pointer" }}>
+                <button type="button" onClick={() => setSite({ ...site, headerImageUrl: "" })} style={{ fontSize: "0.75rem", color: "var(--ed-danger)", background: "none", border: "none", cursor: "pointer" }}>
                   Remove
                 </button>
               </div>
             ) : (
-              <label style={{ display: "inline-block", padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px dashed rgba(255,255,255,0.2)", cursor: "pointer", fontSize: "0.78rem", color: "rgba(240,242,255,0.5)" }}>
+              <label style={{ display: "inline-block", padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px dashed var(--ed-w-200)", cursor: "pointer", fontSize: "0.78rem", color: "var(--ed-t-500)" }}>
                 {uploadingHeader ? "Uploading…" : "Upload banner"}
                 <input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadAndSet(f, "headerImageUrl", setUploadingHeader); }} />
               </label>
@@ -398,7 +398,7 @@ export function BlogSettingsClient({
 
       <div style={PANEL}>
         <label style={FIELD_LABEL}>Custom Layouts</label>
-        <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)", marginTop: "-0.2rem", marginBottom: "0.5rem" }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)", marginTop: "-0.2rem", marginBottom: "0.5rem" }}>
           Design your own drag-and-drop layout with Plexo's builder — drop in the &quot;Blog&quot; blocks (Post Title, Post
           Content, Featured Image, etc.) wherever you want your content to appear, and your real posts flow into them
           automatically. Leave unset to use the built-in theme.

@@ -2,27 +2,32 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Rocket } from "lucide-react";
+import { AuthShell } from "@/app/auth/_kit/AuthShell";
+import { Alert, Button, PageHead } from "@/app/auth/_kit/ui";
+import { PLAN_LABELS, type PaidPlanId } from "@/lib/plan/plans";
+import { usePricing } from "@/app/dashboard/_components/usePricing";
 
 type Props = {
-  plan: "PRO" | "ULTRA";
+  plan: PaidPlanId;
   /** The account hasn't used its one free trial yet. */
   canTrial: boolean;
   trialDays: number;
 };
 
-const PLAN_LABEL: Record<Props["plan"], string> = { PRO: "Pro", ULTRA: "Ultra" };
+const PLAN_LABEL = PLAN_LABELS;
 
 export function CompleteSubscriptionClient({ plan, canTrial, trialDays }: Props) {
   const router = useRouter();
   const [loading, setLoading] = useState<"trial" | "pay" | "free" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { pricing } = usePricing();
+  const price = pricing ? pricing.plans[plan] : null;
+  const priceText = price ? `${price.isFromPrice ? "from " : ""}${price.monthlyLabel}/month` : null;
 
-  // Hands off to the Subscription settings page (?upgrade=PRO|ULTRA triggers the same
-  // startCheckout flow there automatically on arrival) rather than starting embedded
-  // Checkout here directly — this used to POST /api/billing/checkout itself and expect a
-  // `url` back to redirect to (the older hosted-Checkout response shape); that route now
-  // always creates an embedded-mode session and only ever returns `clientSecret`, so this
-  // unconditionally failed with "Could not start checkout."
+  // Hands off to the Subscription settings page (?upgrade=STARTER|PRO|ENTERPRISE starts the
+  // checkout there on arrival — Stripe's card form or Paystack's popup, whichever the
+  // person's region uses), which handles every outcome and then returns to the dashboard.
   function continueToPayment(): void {
     setLoading("pay");
     router.push(`/dashboard/settings/subscription?upgrade=${plan}&returnTo=${encodeURIComponent("/dashboard")}`);
@@ -70,55 +75,36 @@ export function CompleteSubscriptionClient({ plan, canTrial, trialDays }: Props)
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card">
-        <h1 className="auth-title">{canTrial ? `Try ${PLAN_LABEL[plan]} free for ${trialDays} days` : `Finish setting up ${PLAN_LABEL[plan]}`}</h1>
-        <p className="auth-subtitle">
+    <AuthShell layout="center">
+      <div className="ax-center-text">
+        <div className="ax-badge-icon ax-lime"><Rocket size={30} aria-hidden="true" /></div>
+        <PageHead title={canTrial ? `Try ${PLAN_LABEL[plan]} free for ${trialDays} days` : `Finish setting up ${PLAN_LABEL[plan]}`}>
           {canTrial
-            ? `Your account is ready. Start with every ${PLAN_LABEL[plan]} feature unlocked — no card needed. We'll remind you before the trial ends, and nothing you build is ever deleted.`
-            : `Your account is created — complete payment to activate your ${PLAN_LABEL[plan]} plan and unlock its features.`}
-        </p>
+            ? `Your account is ready. Start with ${PLAN_LABEL[plan]} unlocked — no card needed. Custom domains, taking real payments and your own branding switch on once you subscribe. We'll remind you before the trial ends, and nothing you build is ever deleted.`
+            : `Your account is created — complete payment to activate your ${PLAN_LABEL[plan]} plan${priceText ? ` (${priceText})` : ""} and unlock its features.`}
+        </PageHead>
 
-        {error ? (
-          <p className="auth-error" role="alert">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            {error}
-          </p>
-        ) : null}
+        <div className="ax-stack" style={{ textAlign: "left" }}>
+          {error ? <Alert tone="error">{error}</Alert> : null}
 
-        {canTrial ? (
-          <button className="auth-button" type="button" disabled={loading !== null} onClick={() => void startTrial()}>
-            {loading === "trial" ? <span className="auth-spinner" aria-hidden="true" /> : null}
-            {loading === "trial" ? "Starting your trial…" : `Start my free ${PLAN_LABEL[plan]} trial`}
-          </button>
-        ) : null}
+          {canTrial ? (
+            <Button type="button" loading={loading === "trial"} disabled={loading !== null} onClick={() => void startTrial()}>
+              {loading === "trial" ? "Starting your trial…" : `Start my free ${PLAN_LABEL[plan]} trial`}
+            </Button>
+          ) : null}
 
-        <button
-          className={canTrial ? "auth-button auth-button-secondary" : "auth-button"}
-          type="button"
-          disabled={loading !== null}
-          onClick={() => void continueToPayment()}
-          style={canTrial ? { marginTop: "0.75rem", background: "transparent", border: "1px solid var(--surface-border)", color: "var(--text-main)" } : undefined}
-        >
-          {loading === "pay" ? <span className="auth-spinner" aria-hidden="true" /> : null}
-          {loading === "pay" ? "Redirecting…" : canTrial ? `Pay now and skip the trial` : `Continue to payment for ${PLAN_LABEL[plan]}`}
-        </button>
+          <Button type="button" variant={canTrial ? "secondary" : "primary"} loading={loading === "pay"} disabled={loading !== null} onClick={() => void continueToPayment()}>
+            {loading === "pay" ? "Redirecting…" : canTrial ? `Pay now${priceText ? ` (${priceText})` : ""} and skip the trial` : `Continue to payment for ${PLAN_LABEL[plan]}`}
+          </Button>
+        </div>
 
-        <p className="auth-meta">
+        <p className="ax-foot">
           Changed your mind?{" "}
-          <button
-            type="button"
-            className="auth-link"
-            style={{ background: "none", border: "none", cursor: "pointer", padding: 0, font: "inherit" }}
-            disabled={loading !== null}
-            onClick={() => void continueOnFree()}
-          >
+          <button type="button" className="ax-link" disabled={loading !== null} onClick={() => void continueOnFree()}>
             {loading === "free" ? "Switching…" : "Continue on Free instead"}
           </button>
         </p>
-      </section>
-    </main>
+      </div>
+    </AuthShell>
   );
 }

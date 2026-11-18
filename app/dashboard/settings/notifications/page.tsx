@@ -1,3 +1,6 @@
+import { getV3SettingsContext } from "@/lib/dashboardV3/settingsContext";
+import { SettingsPage } from "../../_v3/settings/SettingsPage";
+import { NotificationsSection as V3Notifications } from "../../_v3/settings/NotificationsSection";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
@@ -15,6 +18,8 @@ export default async function NotificationsPage() {
     redirect("/auth/login?redirectTo=/dashboard/settings/notifications");
   }
 
+  const v3 = await getV3SettingsContext("/dashboard/settings/notifications");
+
   const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
@@ -23,6 +28,23 @@ export default async function NotificationsPage() {
   const { data: notificationPreferences } = await NotificationPreferences.get({
     organizationId: orgResolution.organizationId,
   }).go();
+
+  if (v3) {
+    return (
+      <SettingsPage current="notifications" experience={v3.experience}>
+        <V3Notifications
+          accountEmail={v3.email}
+          initial={{
+            formSubmissions: notificationPreferences?.formSubmissions ?? false,
+            blogComments: notificationPreferences?.blogComments ?? true,
+            payments: notificationPreferences?.payments ?? true,
+            commentMentions: notificationPreferences?.commentMentions ?? true,
+            notificationEmail: notificationPreferences?.notificationEmail ?? null,
+          }}
+        />
+      </SettingsPage>
+    );
+  }
 
   return (
     <SettingsShell>

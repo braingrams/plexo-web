@@ -7,7 +7,7 @@ vi.mock("@/server/charisolVerifier", () => ({ getCharisolPartnerVerifier: () => 
 vi.mock("@/server/charisolAccount", () => ({ resolveCharisolUser: async (c: any) => (c.email_verified ? { id: "u1", email: c.email, name: "Ada", image: null } : null) }));
 vi.mock("@/server/orgDynamo", () => ({ ensureActiveOrganization: async () => st.org }));
 vi.mock("@/lib/db/coreEntities", () => ({ User: { get: () => ({ go: async () => ({ data: { id: "u1", suspendedAt: st.suspended ? "x" : undefined, subscriptionPlan: "PRO" } }) }) } }));
-vi.mock("@/lib/plan/entitlement", () => ({ effectivePlan: () => "PRO" }));
+vi.mock("@/lib/plan/entitlement", () => ({ effectivePlan: () => "PRO", planEntitlement: () => ({ plan: "PRO", onTrial: false }) }));
 vi.mock("@/lib/subscription", () => ({ resolveManageLandingPagePublishing: () => false }));
 
 import { resolveStrataCaller } from "@/lib/strata/caller";

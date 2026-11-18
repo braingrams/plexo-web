@@ -25,6 +25,9 @@ vi.mock("@/lib/db/coreEntities", () => {
   const conflict = () => Object.assign(new Error("conditional"), { name: "ConditionalCheckFailedException" });
   return {
     User: { get: () => ({ go: async () => ({ data: { name: "Ada" } }) }) },
+    // No site-level brand links here: the cron route's site sweep finds nothing, and apps aren't managed by one.
+    SiteBrand: { get: () => ({ go: async () => ({ data: null }) }), scan: { where: () => ({ go: async () => ({ data: [], cursor: null }) }) } },
+    StrataProjectWebhook: { get: () => ({ go: async () => ({ data: null }) }) },
     StrataAutoUpdate: {
       get: ({ appId }: { appId: string }) => ({ go: async () => ({ data: state.rows.get(appId) ?? null }) }),
       upsert: (item: Row) => ({ go: async () => void state.rows.set(item.appId, { ...state.rows.get(item.appId), ...item }) }),

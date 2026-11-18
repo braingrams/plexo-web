@@ -5,7 +5,9 @@ import { DiffEditor } from "@monaco-editor/react";
 import { X } from "lucide-react";
 import { appsApi, ApiError } from "./api";
 import { C, Empty } from "./ui";
-import { ensureMonaco, languageFor, EDITOR_THEME } from "./monaco";
+import { ensureMonaco, languageFor } from "./monaco";
+import { useMonacoTheme } from "../../_components/EditorTheme";
+
 
 // Side-by-side review of what changed between two versions (or a version and the working
 // copy): the "Review changes" after an AI turn, and History's "View changes".
@@ -18,6 +20,7 @@ const BADGE: Record<Status, { label: string; color: string }> = {
 };
 
 export function DiffView(props: { appId: string; versionId: string; against: string; title?: string; onClose?: () => void }) {
+  const monacoTheme = useMonacoTheme();
   const { appId, versionId, against } = props;
   ensureMonaco();
   const [files, setFiles] = useState<Array<{ path: string; status: Status }> | null>(null);
@@ -98,7 +101,7 @@ export function DiffView(props: { appId: string; versionId: string; against: str
                   type="button"
                   onClick={() => setSelected(f.path)}
                   aria-current={selected === f.path}
-                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "0.35rem 0.5rem", borderRadius: 7, border: "none", cursor: "pointer", textAlign: "left", background: selected === f.path ? "rgba(255,255,255,0.08)" : "transparent", color: C.text, fontSize: "0.76rem" }}
+                  style={{ width: "100%", display: "flex", alignItems: "center", gap: 6, padding: "0.35rem 0.5rem", borderRadius: 7, border: "none", cursor: "pointer", textAlign: "left", background: selected === f.path ? "var(--ed-w-080)" : "transparent", color: C.text, fontSize: "0.76rem" }}
                 >
                   <span title={BADGE[f.status].label} style={{ fontFamily: C.mono, fontWeight: 700, color: BADGE[f.status].color, width: 12 }}>
                     {f.status}
@@ -119,7 +122,7 @@ export function DiffView(props: { appId: string; versionId: string; against: str
                 original={content.before}
                 modified={content.after}
                 language={language}
-                theme={EDITOR_THEME}
+                theme={monacoTheme}
                 options={{ readOnly: true, renderSideBySide: !narrow, minimap: { enabled: false }, fontSize: 12.5, scrollBeyondLastLine: false, automaticLayout: true }}
               />
             )}

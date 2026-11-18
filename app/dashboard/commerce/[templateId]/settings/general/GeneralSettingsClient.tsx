@@ -26,16 +26,16 @@ const RADIUS_OPTIONS: { value: CommerceButtonRadius; label: string; preview: str
 ];
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
+  width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+  borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem", marginBottom: "1.25rem" }}>
-      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>{title}</h2>
-      {description && <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1rem" }}>{description}</p>}
+    <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem", marginBottom: "1.25rem" }}>
+      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>{title}</h2>
+      {description && <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", margin: "0.3rem 0 1rem" }}>{description}</p>}
       <div style={{ display: "grid", gap: "0.9rem", marginTop: description ? 0 : "1rem" }}>{children}</div>
     </div>
   );
@@ -112,7 +112,7 @@ function ProductDetailLayoutSection({ templateId, layout }: { templateId: string
     >
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
         <div>
-          <p style={{ fontSize: "0.75rem", color: layout ? (layout.ready ? "#4ade80" : "#f59e0b") : "rgba(240,242,255,0.4)", margin: 0 }}>
+          <p style={{ fontSize: "0.75rem", color: layout ? (layout.ready ? "var(--cmx-success, #4ade80)" : "var(--cmx-warning, #f59e0b)") : "var(--cmx-muted, rgba(240,242,255,0.4))", margin: 0 }}>
             {!layout ? "Will be created automatically once you enable and save Commerce." : layout.ready ? "Product page is live — using the default design." : "Draft — the required block was removed, re-add it to go live."}
           </p>
         </div>
@@ -120,46 +120,46 @@ function ProductDetailLayoutSection({ templateId, layout }: { templateId: string
           <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
             <a
               href={`/dashboard/templates/${layout.templateId}`}
-              style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", fontSize: "0.8rem", fontWeight: 600, textDecoration: "none" }}
+              style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", color: "var(--cmx-text, #f0f2ff)", fontSize: "0.8rem", fontWeight: 600, textDecoration: "none" }}
             >
               Edit design
             </a>
-            <button type="button" onClick={() => void handleDetach()} disabled={busy} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.5)", fontSize: "0.8rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+            <button type="button" onClick={() => void handleDetach()} disabled={busy} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "transparent", color: "var(--cmx-muted, rgba(240,242,255,0.5))", fontSize: "0.8rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
               Turn off
             </button>
           </div>
         ) : (
           <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
-            <button type="button" onClick={() => void handleShowPicker()} disabled={busy} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.8rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+            <button type="button" onClick={() => void handleShowPicker()} disabled={busy} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "transparent", color: "var(--cmx-muted, rgba(240,242,255,0.6))", fontSize: "0.8rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
               Use a design from another site
             </button>
-            <button type="button" onClick={() => void handleCreateNow()} disabled={busy} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: "rgba(240,242,255,0.7)", fontSize: "0.8rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+            <button type="button" onClick={() => void handleCreateNow()} disabled={busy} style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)", color: "var(--cmx-text, rgba(240,242,255,0.7))", fontSize: "0.8rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
               {busy ? "Creating…" : "Create it now"}
             </button>
           </div>
         )}
       </div>
 
-      {error && <p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>{error}</p>}
+      {error && <p style={{ fontSize: "0.78rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p>}
 
       {showPicker && !layout && (
         <div style={{ marginTop: "0.25rem" }}>
           {candidates === null ? (
-            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>Loading…</p>
+            <p style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}>Loading…</p>
           ) : candidates.length === 0 ? (
-            <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>No other product pages to reuse yet — it'll be created automatically instead.</p>
+            <p style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}>No other product pages to reuse yet — it'll be created automatically instead.</p>
           ) : (
             <div style={{ display: "grid", gap: "0.5rem" }}>
               {candidates.map((c) => (
                 <div key={c.layoutTemplateId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
-                  <span style={{ fontSize: "0.8rem", color: "#f0f2ff" }}>
-                    {c.layoutName} <span style={{ color: "rgba(240,242,255,0.4)" }}>— from {c.siteName} · updated {new Date(c.updatedAt).toLocaleDateString()}</span>
+                  <span style={{ fontSize: "0.8rem", color: "var(--cmx-text, #f0f2ff)" }}>
+                    {c.layoutName} <span style={{ color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}>— from {c.siteName} · updated {new Date(c.updatedAt).toLocaleDateString()}</span>
                   </span>
                   <button
                     type="button"
                     onClick={() => void handleUseExisting(c.layoutTemplateId)}
                     disabled={busy}
-                    style={{ padding: "0.35rem 0.7rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", fontSize: "0.75rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit", flexShrink: 0 }}
+                    style={{ padding: "0.35rem 0.7rem", borderRadius: 7, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", color: "var(--cmx-text, #f0f2ff)", fontSize: "0.75rem", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit", flexShrink: 0 }}
                   >
                     Use this
                   </button>
@@ -191,20 +191,20 @@ function CurrencyGrid({ value, onChange, disabled }: { value: string; onChange: 
               textAlign: "center",
               cursor: disabled ? "not-allowed" : "pointer",
               fontFamily: "inherit",
-              border: selected ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
-              background: selected ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
+              border: selected ? "1.5px solid var(--cmx-brand, var(--brand))" : "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+              background: selected ? "var(--cmx-brand-subtle, var(--brand-subtle))" : "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
               opacity: disabled ? 0.6 : 1,
             }}
           >
             {selected && (
-              <span style={{ position: "absolute", top: 6, right: 6, width: 14, height: 14, borderRadius: "50%", background: "var(--brand)", display: "grid", placeItems: "center" }}>
-                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <span style={{ position: "absolute", top: 6, right: 6, width: 14, height: 14, borderRadius: "50%", background: "var(--cmx-brand, var(--brand))", display: "grid", placeItems: "center" }}>
+                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="var(--cmx-on-brand, #fff)" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               </span>
             )}
-            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff" }}>{c.symbol}</div>
-            <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "rgba(240,242,255,0.55)", marginTop: 2 }}>{c.code}</div>
+            <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)" }}>{c.symbol}</div>
+            <div style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--cmx-muted, rgba(240,242,255,0.55))", marginTop: 2 }}>{c.code}</div>
           </button>
         );
       })}
@@ -227,7 +227,7 @@ function AppearanceSection({
   autoDetected: CommerceTheme | null;
   disabled: boolean;
 }) {
-  const effectiveColor = accentColor ?? autoDetected?.accentColor ?? "#16233F";
+  const effectiveColor = accentColor ?? autoDetected?.accentColor ?? "var(--cmx-surface, #16233F)";
   const effectiveRadius = buttonRadius ?? autoDetected?.buttonRadius ?? "sharp";
 
   return (
@@ -236,12 +236,12 @@ function AppearanceSection({
       description="The shop grid, cart, checkout, and newsletter signup button match your site's own colors automatically. Override below only if you want something different."
     >
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>Accent color</span>
+        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--cmx-text, #f0f2ff)" }}>Accent color</span>
         <div style={{ display: "flex", alignItems: "center", gap: "0.7rem" }}>
           <div style={{ pointerEvents: disabled ? "none" : undefined, opacity: disabled ? 0.5 : 1 }}>
             <ColorSwatchPicker value={effectiveColor} onChange={(v) => onAccentColorChange(v)} />
           </div>
-          <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.45)" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))" }}>
             {accentColor ? "Custom" : `Automatic — detected ${autoDetected?.accentColor ?? "no signal yet, using default"}`}
           </span>
           {accentColor && (
@@ -249,7 +249,7 @@ function AppearanceSection({
               type="button"
               disabled={disabled}
               onClick={() => onAccentColorChange(null)}
-              style={{ padding: "0.3rem 0.6rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", fontSize: "0.72rem", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+              style={{ padding: "0.3rem 0.6rem", borderRadius: 7, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", color: "var(--cmx-text, #f0f2ff)", fontSize: "0.72rem", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}
             >
               Reset to automatic
             </button>
@@ -258,7 +258,7 @@ function AppearanceSection({
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "#f0f2ff" }}>Button shape</span>
+        <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--cmx-text, #f0f2ff)" }}>Button shape</span>
         <div style={{ display: "flex", gap: "0.6rem" }}>
           {RADIUS_OPTIONS.map((opt) => {
             const selected = effectiveRadius === opt.value;
@@ -273,9 +273,9 @@ function AppearanceSection({
                   fontSize: "0.78rem",
                   fontFamily: "inherit",
                   cursor: disabled ? "not-allowed" : "pointer",
-                  color: "#f0f2ff",
-                  border: selected ? "1.5px solid var(--brand)" : "1px solid rgba(255,255,255,0.1)",
-                  background: selected ? "var(--brand-subtle)" : "rgba(255,255,255,0.03)",
+                  color: "var(--cmx-text, #f0f2ff)",
+                  border: selected ? "1.5px solid var(--cmx-brand, var(--brand))" : "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                  background: selected ? "var(--cmx-brand-subtle, var(--brand-subtle))" : "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
                   borderRadius: opt.preview,
                 }}
               >
@@ -288,14 +288,14 @@ function AppearanceSection({
               type="button"
               disabled={disabled}
               onClick={() => onButtonRadiusChange(null)}
-              style={{ padding: "0.3rem 0.6rem", borderRadius: 7, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "#f0f2ff", fontSize: "0.72rem", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}
+              style={{ padding: "0.3rem 0.6rem", borderRadius: 7, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)", color: "var(--cmx-text, #f0f2ff)", fontSize: "0.72rem", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit" }}
             >
               Reset to automatic
             </button>
           )}
         </div>
         {!buttonRadius && (
-          <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.45)" }}>
+          <span style={{ fontSize: "0.75rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))" }}>
             Automatic — currently {autoDetected?.buttonRadius ?? "sharp (default, no signal yet)"}
           </span>
         )}
@@ -353,7 +353,7 @@ export function GeneralSettingsClient({ templateId, initial }: { templateId: str
       <Section title="Enable Commerce" description="Turns on the storefront script and unlocks the rest of this page — do this first.">
         <label style={{ display: "flex", alignItems: "center", gap: "0.7rem", cursor: "pointer" }}>
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} style={{ width: 18, height: 18 }} />
-          <span style={{ fontSize: "0.85rem", color: "#f0f2ff" }}>
+          <span style={{ fontSize: "0.85rem", color: "var(--cmx-text, #f0f2ff)" }}>
             {enabled ? "Commerce is live on this site." : "Commerce is off — the storefront script won't load."}
           </span>
         </label>
@@ -380,7 +380,7 @@ export function GeneralSettingsClient({ templateId, initial }: { templateId: str
             <CurrencyGrid value={currency} onChange={() => {}} disabled />
           </Section>
           <Section title="Product page" description="Created automatically with a working default the moment Commerce is enabled.">
-            <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", margin: 0 }}>Enable Commerce above to set this up.</p>
+            <p style={{ fontSize: "0.75rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", margin: 0 }}>Enable Commerce above to set this up.</p>
           </Section>
         </Locked>
       )}

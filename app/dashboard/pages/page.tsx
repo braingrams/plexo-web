@@ -9,6 +9,7 @@ import { User } from "@/lib/db/coreEntities";
 import { sortDomainsPrimaryFirst } from "@/lib/domains/primaryDomain";
 
 import { PagesOverviewClient } from "./PagesOverviewClient";
+import { redirectToSitesIfV3 } from "@/lib/dashboardV3/hubRedirect";
 import { PagesShell } from "../_components/PagesShell";
 
 // Same reasoning as the Templates page: this route sits behind an always-visible nav link
@@ -16,7 +17,8 @@ import { PagesShell } from "../_components/PagesShell";
 // payload right after publishing/adding a sub-page.
 export const dynamic = "force-dynamic";
 
-export default async function PagesOverviewPage() {
+export default async function PagesOverviewPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  await redirectToSitesIfV3("websites", (await searchParams).classic);
   const session = await auth();
 
   if (!session?.user) {
@@ -29,7 +31,7 @@ export default async function PagesOverviewPage() {
   }
 
   const { data: user } = await User.get({ id: session.user.id }).go();
-  const isUltra = getTierFeatures(effectivePlan(user)).multiPageSitesEnabled;
+  const canAddSites = getTierFeatures(effectivePlan(user)).multiPageSitesEnabled;
 
   // Root landing-page templates with at least one sub-page — i.e. multi-site templates,
   // regardless of whether they've been published to a domain yet. Mirrors the root-template
@@ -67,7 +69,7 @@ export default async function PagesOverviewPage() {
   return (
     <PagesShell>
       <PagesOverviewClient
-        isUltra={isUltra}
+        canAddSites={canAddSites}
         pages={withChildren.map((r, i) => ({
           id: r.template.id,
           name: r.template.name,

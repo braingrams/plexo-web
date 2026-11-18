@@ -1,5 +1,5 @@
 // How many funnels an org may have live at once: the plan's included allotment
-// (lib/subscription.ts's includedFunnelSlots — only Ultra ships 1) plus however many
+// (lib/subscription.ts's includedFunnelSlots — Starter 1, Pro 3) plus however many
 // recurring LmsFunnelAddonSlot rows are currently ACTIVE or PAST_DUE (grace period —
 // stays counted so a funnel doesn't get treated as over-quota mid-dunning). Mirrors
 // lib/domainLimit.ts's one-function simplicity.

@@ -5,7 +5,6 @@ import { ArrowLeftRight, ArrowUpRight, Clock, Download, ExternalLink, GitBranch,
 import { api, ApiError } from "./api";
 import { C, Button, Notice, PaneHeader, Pill, ProblemState, Shimmer, StateStyles, EmptyHero, StatCard, inputStyle, timeAgo } from "./ui";
 
-import { BRAND } from "@/lib/theme";
 // Two-way GitHub sync: every Plexo version becomes a commit, and pushes to the branch come
 // back into Plexo and rebuild the preview. Owners see it as "a copy of your app's code in your
 // own GitHub account that stays in step both ways", so the page avoids git words wherever it can.
@@ -19,7 +18,7 @@ type Status = {
 };
 
 // Plexo purples for decoration; green / amber / red only ever mean a status.
-const P = { brand: BRAND.primary, deep: BRAND.deep, deeper: BRAND[700], lavender: BRAND[400], pale: "#c4b5fd", orchid: BRAND[300], indigo: "#6366f1" };
+const P = { brand: "var(--brand)", deep: "var(--brand-deep)", deeper: "var(--brand-deeper)", lavender: "var(--brand-soft)", pale: "var(--ed-lavender)", orchid: "var(--brand-light)", indigo: "var(--ed-violet)" };
 
 const GITHUB_CSS = `
 @keyframes gh-flow { from { background-position: 0 0; } to { background-position: 28px 0; } }
@@ -28,7 +27,7 @@ const GITHUB_CSS = `
 @keyframes gh-spin { to { transform: rotate(360deg); } }
 .gh-spin { animation: gh-spin 0.9s linear infinite; }
 .gh-choice { transition: border-color 0.15s, background 0.15s; }
-.gh-choice:hover { border-color: rgba(var(--brand-rgb), 0.45) !important; }
+.gh-choice:hover { border-color: color-mix(in srgb, var(--brand) 45%, transparent) !important; }
 .gh-choice:focus-within { outline: 2px solid ${P.brand}; outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .gh-flow, .gh-spin { animation: none; } }
 `;
@@ -48,18 +47,18 @@ function SyncIllustration() {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
       {/* The app: a tiny browser window with a hero, a button and a couple of tiles. */}
-      <div style={{ ...card, background: "rgba(11,15,25,0.6)", transform: "rotate(-2deg)" }}>
+      <div style={{ ...card, background: "color-mix(in srgb, var(--ed-bg) 60%, transparent)", transform: "rotate(-2deg)" }}>
         <div style={{ display: "flex", gap: 4, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>
           {[P.pale, P.lavender, P.brand].map((c) => (
             <span key={c} style={{ width: 7, height: 7, borderRadius: 99, background: c, opacity: 0.8 }} />
           ))}
         </div>
         <span style={{ height: 34, borderRadius: 8, background: `linear-gradient(135deg, ${P.brand}, ${P.indigo})` }} />
-        <span style={{ width: "70%", height: 6, borderRadius: 99, background: "rgba(255,255,255,0.3)" }} />
-        <span style={{ width: "48%", height: 6, borderRadius: 99, background: "rgba(255,255,255,0.14)" }} />
+        <span style={{ width: "70%", height: 6, borderRadius: 99, background: "var(--ed-w-300)" }} />
+        <span style={{ width: "48%", height: 6, borderRadius: 99, background: "var(--ed-w-140)" }} />
         <div style={{ display: "flex", gap: 6 }}>
-          <span style={{ flex: 1, height: 22, borderRadius: 6, background: `${P.orchid}55` }} />
-          <span style={{ flex: 1, height: 22, borderRadius: 6, background: `${P.lavender}40` }} />
+          <span style={{ flex: 1, height: 22, borderRadius: 6, background: `color-mix(in srgb, ${P.orchid} 33%, transparent)` }} />
+          <span style={{ flex: 1, height: 22, borderRadius: 6, background: `color-mix(in srgb, ${P.lavender} 25%, transparent)` }} />
         </div>
         <span style={{ fontSize: "0.66rem", fontWeight: 650, color: C.muted, marginTop: 2 }}>Your app</span>
       </div>
@@ -67,7 +66,7 @@ function SyncIllustration() {
       {/* Two lanes of moving dashes: changes going out, and coming back. */}
       <div style={{ width: 70, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
         <span className="gh-flow" style={{ width: "100%", height: 2 }} />
-        <span style={{ width: 36, height: 36, borderRadius: 99, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${P.brand}, ${P.deeper})`, color: "#fff", boxShadow: `0 0 0 6px ${P.brand}22` }}>
+        <span style={{ width: 36, height: 36, borderRadius: 99, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${P.brand}, ${P.deeper})`, color: "var(--ed-on-brand)", boxShadow: `0 0 0 6px color-mix(in srgb, ${P.brand} 13%, transparent)` }}>
           <ArrowLeftRight size={16} />
         </span>
         <span className="gh-flow is-back" style={{ width: "100%", height: 2 }} />
@@ -77,7 +76,7 @@ function SyncIllustration() {
       <div style={{ ...card, background: "#0d1117", transform: "rotate(2deg)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 6, borderBottom: `1px solid ${C.border}` }}>
           <GitHubMark size={14} color={C.text} />
-          <span style={{ width: "50%", height: 6, borderRadius: 99, background: "rgba(255,255,255,0.3)" }} />
+          <span style={{ width: "50%", height: 6, borderRadius: 99, background: "var(--ed-w-300)" }} />
         </div>
         {[
           { indent: 0, w: "62%", c: P.orchid },
@@ -88,7 +87,7 @@ function SyncIllustration() {
         ].map((l, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, paddingLeft: l.indent }}>
             <span style={{ width: 10, height: 5, borderRadius: 99, background: l.c }} />
-            <span style={{ width: l.w, height: 5, borderRadius: 99, background: "rgba(255,255,255,0.16)" }} />
+            <span style={{ width: l.w, height: 5, borderRadius: 99, background: "var(--ed-w-160)" }} />
           </div>
         ))}
         <span style={{ fontSize: "0.66rem", fontWeight: 650, color: C.muted, marginTop: 2 }}>Its code on GitHub</span>
@@ -291,7 +290,7 @@ export function GitHubPane(props: { appId: string; onLinked?: (buildId: string |
   function renderLinkForm() {
     const s = status!;
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "1.1rem 1.2rem", borderRadius: 16, border: `1px solid ${C.border}`, background: "rgba(11,15,25,0.45)" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "1.1rem 1.2rem", borderRadius: 16, border: `1px solid ${C.border}`, background: "color-mix(in srgb, var(--ed-bg) 45%, transparent)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12 }}>
           <label style={fieldLabel}>
             GitHub account
@@ -409,10 +408,10 @@ export function GitHubPane(props: { appId: string; onLinked?: (buildId: string |
             padding: "1.5rem 1.6rem",
             borderRadius: 20,
             border: `1px solid ${C.border}`,
-            background: `radial-gradient(70% 120% at 100% 0%, ${P.brand}26, transparent 60%), radial-gradient(60% 100% at 0% 100%, ${P.indigo}14, transparent 60%), rgba(255,255,255,0.015)`,
+            background: `radial-gradient(70% 120% at 100% 0%, color-mix(in srgb, ${P.brand} 15%, transparent), transparent 60%), radial-gradient(60% 100% at 0% 100%, color-mix(in srgb, ${P.indigo} 8%, transparent), transparent 60%), var(--ed-w-015)`,
           }}
         >
-          <span style={{ width: 56, height: 56, borderRadius: 16, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${P.brand}, ${P.deeper})`, color: "#fff", flexShrink: 0, boxShadow: `0 12px 30px ${P.brand}40` }}>
+          <span style={{ width: 56, height: 56, borderRadius: 16, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${P.brand}, ${P.deeper})`, color: "var(--ed-on-brand)", flexShrink: 0, boxShadow: `0 12px 30px color-mix(in srgb, ${P.brand} 25%, transparent)` }}>
             <GitHubMark size={26} />
           </span>
           <div style={{ flex: "1 1 280px", minWidth: 0 }}>
@@ -473,7 +472,7 @@ export function GitHubPane(props: { appId: string; onLinked?: (buildId: string |
             { icon: ArrowLeftRight, color: P.orchid, title: "Both sides changed at once", body: "Plexo never overwrites anything — it leaves its changes on GitHub for you to accept, then you press Sync now." },
           ].map(({ icon: Icon, color, title, body }, i, all) => (
             <div key={title} className="plx-row" style={{ display: "flex", alignItems: "center", gap: 14, padding: "0.9rem 1.1rem", borderBottom: i < all.length - 1 ? `1px solid ${C.border}` : "none" }}>
-              <span style={{ width: 36, height: 36, borderRadius: 11, display: "grid", placeItems: "center", background: `${color}26`, color, flexShrink: 0 }}>
+              <span style={{ width: 36, height: 36, borderRadius: 11, display: "grid", placeItems: "center", background: `color-mix(in srgb, ${color} 15%, transparent)`, color, flexShrink: 0 }}>
                 <Icon size={17} />
               </span>
               <span style={{ minWidth: 0 }}>
@@ -501,12 +500,12 @@ function ChoiceCard({ checked, onPick, icon, title, body }: { checked: boolean; 
         padding: "0.85rem 0.95rem",
         borderRadius: 14,
         cursor: "pointer",
-        border: `1px solid ${checked ? `${P.brand}99` : C.border}`,
-        background: checked ? `${P.brand}1a` : "rgba(255,255,255,0.03)",
+        border: `1px solid ${checked ? `color-mix(in srgb, ${P.brand} 60%, transparent)` : C.border}`,
+        background: checked ? `color-mix(in srgb, ${P.brand} 10%, transparent)` : "var(--ed-w-030)",
       }}
     >
       <input type="radio" checked={checked} onChange={onPick} style={{ position: "absolute", opacity: 0, pointerEvents: "none" }} />
-      <span style={{ width: 32, height: 32, borderRadius: 10, display: "grid", placeItems: "center", background: checked ? P.brand : `${P.brand}26`, color: checked ? "#fff" : P.pale, flexShrink: 0 }}>{icon}</span>
+      <span style={{ width: 32, height: 32, borderRadius: 10, display: "grid", placeItems: "center", background: checked ? P.brand : `color-mix(in srgb, ${P.brand} 15%, transparent)`, color: checked ? "var(--ed-on-brand)" : P.pale, flexShrink: 0 }}>{icon}</span>
       <span style={{ minWidth: 0 }}>
         <span style={{ display: "block", fontSize: "0.84rem", fontWeight: 650 }}>{title}</span>
         <span style={{ display: "block", fontSize: "0.74rem", color: C.muted, marginTop: 2, lineHeight: 1.45 }}>{body}</span>

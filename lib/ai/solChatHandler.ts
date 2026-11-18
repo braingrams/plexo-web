@@ -19,8 +19,11 @@ import {
   type AgentTurnDeps,
   type ResumeAgentTurnDeps,
   type AskUserAnswer,
+  type SolPromptPreferences,
 } from "./solAgent";
 import { ASK_USER_QUESTION_TOOL_NAME } from "./solToolSchema";
+import { loadBuildProfile } from "./solBuildContext";
+import { withSites } from "./solSiteContext";
 import { maybeExtractMemoryFact } from "./memoryExtraction";
 import { maybeGenerateConversationTitle } from "./titleGeneration";
 import { recordSolUsageEvent, type SolToolCallRecord } from "@/lib/solAnalytics";
@@ -95,13 +98,16 @@ async function loadOwnedConversation(userId: string, conversationId: string) {
  * `facts` array, so callers that need to gate something else on the *setting itself* (e.g.
  * whether to attempt automatic memory extraction after this turn) can't infer it from `facts`
  * alone and need `memoryEnabled` explicitly. */
-async function loadMemoryContext(userId: string): Promise<{ memoryEnabled: boolean; facts: string[] }> {
+async function loadMemoryContext(userId: string): Promise<{ memoryEnabled: boolean; facts: string[]; preferences: SolPromptPreferences }> {
   const { data: prefs } = await SolPreferences.get({ userId }).go();
+  // The owner's tone / length / custom instructions from Settings → SOL, fed into the system prompt.
+  const preferences: SolPromptPreferences = { tonePreset: prefs?.tonePreset ?? null, responseLength: prefs?.responseLength ?? null, customInstructions: prefs?.customInstructions ?? null };
   const memoryEnabled = prefs?.memoryEnabled !== false;
-  if (!memoryEnabled) return { memoryEnabled: false, facts: [] };
+  if (!memoryEnabled) return { memoryEnabled: false, facts: [], preferences };
   const { data: facts } = await SolMemoryFact.query.primary({ userId }).go({ pages: "all" });
-  return { memoryEnabled: true, facts: facts.map((f) => f.text) };
+  return { memoryEnabled: true, facts: facts.map((f) => f.text), preferences };
 }
+
 
 interface SolAiRouting {
   provider: AiProvider;
@@ -189,6 +195,9 @@ function buildCallbacks(emit: (frame: StreamFrame) => void) {
       lastPreparingAt.set(progress.id, now);
       emit({ type: "tool_call_preparing", id: progress.id, name: progress.name, label: humanizeToolName(progress.name), characters: progress.characters });
     },
+    // The loop's own calm progress lines ("Checking the page…"): shown as steps, never recorded as tool calls.
+    onStep: (step: { id: string; name: string; phase: "start" | "done" }) =>
+      emit(step.phase === "start" ? { type: "tool_call_start", id: step.id, name: step.name, label: humanizeToolName(step.name), args: {} } : { type: "tool_call_result", id: step.id, name: "", status: "success" }),
     onToolCallStart: (call: { id: string; name: string; args: unknown }) =>
       emit({ type: "tool_call_start", id: call.id, name: call.name, label: humanizeToolName(call.name), args: call.args }),
     onToolCallAwaitingConfirmation: async (call: { id: string; name: string; args: unknown; messageId: string }) => {
@@ -525,7 +534,7 @@ export async function prepareMessagesTurn(
   resolved: ResolvedUser,
   body: unknown,
 ): Promise<PreparedTurn> {
-  const parsed = body as { text?: string; attachments?: Array<{ type?: string; url?: string; filename?: string }>; modelTier?: string };
+  const parsed = body as { text?: string; attachments?: Array<{ type?: string; url?: string; filename?: string }>; modelTier?: string; siteId?: string; siteChosen?: boolean; siteHintId?: string };
   const text = typeof parsed.text === "string" ? parsed.text.trim() : "";
   let modelTier = parsed.modelTier as ModelTier;
   const hasAttachments = Array.isArray(parsed.attachments) && parsed.attachments.some((a) => a?.url);
@@ -556,7 +565,14 @@ export async function prepareMessagesTurn(
     }
   }
 
-  const { memoryEnabled, facts: memoryFacts } = await loadMemoryContext(resolved.userId);
+  const { memoryEnabled, facts: memoryFacts, preferences } = await loadMemoryContext(resolved.userId);
+  const explicitSiteId = parsed.siteChosen === true && typeof parsed.siteId === "string" ? parsed.siteId : undefined;
+  const hintSiteId = typeof parsed.siteHintId === "string" ? parsed.siteHintId : undefined;
+  const buildProfile = await withSites(await loadBuildProfile(resolved.userId), resolved.organizationId, { explicitSiteId, boundSiteId: conversation.siteId ?? undefined, hintSiteId });
+  // A site the owner chose in this chat sticks to it, so later turns never ask again (only a real site of theirs counts).
+  if (explicitSiteId && explicitSiteId !== conversation.siteId && buildProfile?.sites?.some((s) => s.id === explicitSiteId)) {
+    await bumpConversationActivity(resolved.userId, conversationId, { siteId: explicitSiteId }).catch((err) => console.error("binding the chat to a site failed", err));
+  }
   const turnStartedAt = new Date().toISOString();
   // Started here, immediately, NOT inside `run` below — this needs to begin running in
   // parallel with the main turn as early as possible, using only `text` (the user's own
@@ -597,6 +613,8 @@ export async function prepareMessagesTurn(
         apiKey: routing.apiKey,
         userMessageContent,
         memoryFacts,
+        preferences,
+        buildProfile,
         appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
         boundAppId: conversation.appId ?? undefined,
         ...callbacks,
@@ -701,7 +719,8 @@ export async function prepareConfirmTurn(
   if ("error" in routing) return { ok: false, status: routing.status, body: { error: routing.error } };
   const modelTier = tierFor(routing.route, routing.plan, ((conversation.modelTier as ModelTier) ?? "BASIC") as ConcreteTier) as ModelTier;
   await ensureCreditPeriod(resolved.userId);
-  const { memoryEnabled, facts: memoryFacts } = await loadMemoryContext(resolved.userId);
+  const { memoryEnabled, facts: memoryFacts, preferences } = await loadMemoryContext(resolved.userId);
+  const buildProfile = await withSites(await loadBuildProfile(resolved.userId), resolved.organizationId, { boundSiteId: conversation.siteId ?? undefined });
   const userTextForMemory = findPrecedingUserText(messages, pendingMessage.createdAt);
   const turnStartedAt = new Date().toISOString();
   // Almost always a no-op by the time a resume happens — the first turn's own
@@ -733,6 +752,8 @@ export async function prepareConfirmTurn(
         decision,
         answers,
         memoryFacts,
+        preferences,
+        buildProfile,
         appContext: conversation.appId ? await buildSolAppContext(conversation.appId, resolved).catch(() => undefined) : undefined,
         boundAppId: conversation.appId ?? undefined,
         ...callbacks,

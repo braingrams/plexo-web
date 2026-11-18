@@ -115,7 +115,7 @@ export default async function TemplateEditorPage(props: {
     if (!parsed.ok) {
       // Never open an editor on a design it can't read: saving would overwrite the real one.
       return (
-        <div style={{ padding: "3rem 1.5rem", maxWidth: 560, margin: "0 auto", textAlign: "center", color: "rgba(240,242,255,0.8)" }}>
+        <div style={{ padding: "3rem 1.5rem", maxWidth: 560, margin: "0 auto", textAlign: "center", color: "var(--ed-t-800)" }}>
           <h1 style={{ fontSize: "1.2rem", fontWeight: 800 }}>This page can&rsquo;t be opened right now</h1>
           <p style={{ fontSize: "0.9rem", lineHeight: 1.6 }}>{parsed.error} Nothing has been changed. You can restore an earlier version from the site&rsquo;s version history, or contact support.</p>
         </div>
@@ -131,7 +131,7 @@ export default async function TemplateEditorPage(props: {
         else initialV2Design = { ...parsed.design, designSystemUrl: await designSystemDownloadUrl(ref.hash) };
       } catch (err) {
         return (
-          <div style={{ padding: "3rem 1.5rem", maxWidth: 560, margin: "0 auto", textAlign: "center", color: "rgba(240,242,255,0.8)" }}>
+          <div style={{ padding: "3rem 1.5rem", maxWidth: 560, margin: "0 auto", textAlign: "center", color: "var(--ed-t-800)" }}>
             <h1 style={{ fontSize: "1.2rem", fontWeight: 800 }}>This page can&rsquo;t be opened right now</h1>
             <p style={{ fontSize: "0.9rem", lineHeight: 1.6 }}>{err instanceof Error ? err.message : "Its colours and fonts couldn't be loaded."} Nothing has been changed. Please try again in a moment.</p>
           </div>

@@ -11,7 +11,7 @@ export async function guardSsrSettings(
   const resolved = await resolveUser(request);
   if (!resolved) return { error: NextResponse.json({ error: "Unauthorized. Valid API key or session required." }, { status: 401 }) };
   if (!getTierFeatures(resolved.subscriptionPlan).ssrEnabled) {
-    return { error: NextResponse.json({ error: "Server-rendered apps are available on the ULTRA plan." }, { status: 403 }) };
+    return { error: NextResponse.json({ error: "Server apps are part of the Pro plan. Upgrade in Settings → Billing to use them." }, { status: 403 }) };
   }
   const { data: template } = await Template.get({ id: templateId }).go({ attributes: ["id", "organizationId"] });
   if (!template || template.organizationId !== resolved.organizationId) {

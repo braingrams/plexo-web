@@ -22,7 +22,13 @@ export type StrataAdapterOptions = {
   fetchFn?: typeof fetch;
   /** The app being designed. With it, the editor's "Keep my website up to date" switch is wired to this app's server-side updates. */
   appId?: string;
+  /**
+   * The site being designed (its root page id), for the visual editor. With it, the switch links the WHOLE site to the Strata
+   * project and keeps it in sync (/api/v1/sites/:id/brand — lib/brand/siteBrand.ts): every page of the site follows the brand.
+   */
+  siteId?: string;
 };
+type SiteBrandStateDto = { linked: boolean; projectId: string | null; autoSync: boolean; status: "active" | "needs-reconnect" | "off"; lastResult: string | null; lastResultKind: AutoUpdateState["lastResultKind"] };
 /** A picture or video held in a Strata project (the editor's StrataAsset). */
 export type StrataAssetItem = { id: string; name: string; kind: "image" | "video"; url: string; type?: string; role?: string; mimeType?: string };
 export type PlexoStrataAdapter = StrataAdapter & {
@@ -162,7 +168,24 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
             return { enabled: state.enabled, ok: state.status === "active" && (state.lastResultKind === null || state.lastResultKind === "updated" || state.lastResultKind === "up-to-date"), message: state.lastResult ?? undefined };
           },
         }
-      : {}),
+      : options.siteId
+        ? {
+            async setAutoUpdate(projectId: string, enabled: boolean) {
+              const path = `/api/v1/sites/${encodeURIComponent(options.siteId!)}/brand`;
+              const state = await call<SiteBrandStateDto>(path);
+              if (!enabled) {
+                if (state.linked) await call(path, { method: "PATCH", body: { autoSync: false } });
+                return;
+              }
+              if (state.linked && state.projectId === projectId && state.status === "active") await call(path, { method: "PATCH", body: { autoSync: true } });
+              else await call(path, { method: "POST", body: { projectId, autoSync: true } });
+            },
+            async autoUpdateStatus() {
+              const state = await call<SiteBrandStateDto>(`/api/v1/sites/${encodeURIComponent(options.siteId!)}/brand`);
+              return { enabled: state.linked && state.autoSync, ok: state.status === "active" && (state.lastResultKind === null || state.lastResultKind === "updated" || state.lastResultKind === "up-to-date"), message: state.lastResult ?? undefined };
+            },
+          }
+        : {}),
     async listAssets(projectId) {
       return (await call<{ assets: StrataAssetItem[] }>(`/projects/${encodeURIComponent(projectId)}/assets`)).assets;
     },

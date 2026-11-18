@@ -134,7 +134,7 @@ export function CommerceTabs({ templateId }: { templateId: string }) {
         display: "flex",
         gap: "0.3rem",
         overflowX: "auto",
-        borderBottom: "1px solid rgba(255,255,255,0.07)",
+        borderBottom: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 7%, transparent)",
         paddingBottom: 1,
         marginBottom: "1.5rem",
       }}
@@ -152,7 +152,7 @@ export function CommerceTabs({ templateId }: { templateId: string }) {
               padding: "0.55rem 0.85rem",
               fontSize: "0.83rem",
               fontWeight: isActive ? 600 : 500,
-              color: isActive ? "#fff" : "rgba(240,242,255,0.5)",
+              color: isActive ? "var(--cmx-on-brand, #fff)" : "var(--cmx-muted, rgba(240,242,255,0.5))",
               borderBottom: `2px solid ${isActive ? "var(--brand, var(--brand))" : "transparent"}`,
               whiteSpace: "nowrap",
               flexShrink: 0,

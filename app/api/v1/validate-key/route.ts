@@ -1,17 +1,18 @@
-import { effectivePlan } from "@/lib/plan/entitlement";
+import { planEntitlement } from "@/lib/plan/entitlement";
+import { planFromOwner, workspacePlan } from "@/lib/plan/workspacePlan";
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { ApiKey, Member, Organization, User } from "@/lib/db/coreEntities";
-import { resolveManageLandingPagePublishing, canWhiteLabel } from "@/lib/subscription";
+import { getTierFeatures } from "@/lib/subscription";
 
 function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
 /**
- * Resolved only when the org is entitled (Pro/Ultra owner plan) and has actually set
+ * Resolved only when the org is entitled (Enterprise owner plan) and has actually set
  * branding — otherwise omitted from the response entirely, so a Free-tier embed (or one
  * from an org that hasn't configured anything) keeps plexo-sdk's default Plexo splash.
  * See plexo-sdk's useApiKeyValidation.ts, which consumes this field.
@@ -29,8 +30,9 @@ async function resolveSdkBranding(
   if (!owner) return undefined;
 
   const { data: ownerUser } = await User.get({ id: owner.userId }).go();
-  const plan = effectivePlan(ownerUser);
-  if (!canWhiteLabel(plan)) return undefined;
+  // White-label: Enterprise, and not during the free trial.
+  const { plan, onTrial } = planEntitlement(ownerUser);
+  if (!getTierFeatures(plan, { trial: onTrial }).whiteLabelEnabled) return undefined;
 
   const { data: org } = await Organization.get({ id: organizationId }).go();
   if (!org || (!org.logo && !org.brandColor)) return undefined;
@@ -47,7 +49,7 @@ async function resolveSdkBranding(
  *   x-api-key: <raw api key> | "workspace-internal"
  *
  * Responses:
- *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, branding?: { name: string, logoUrl?: string, brandColor?: string } }
+ *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA" (SDK-compatible), planId: "FREE" | "STARTER" | "PRO" | "ENTERPRISE", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, branding?: { name: string, logoUrl?: string, brandColor?: string } }
  *   Deliberately does NOT return a canvasFidelity field -- that used to gate the compiled
  *   canvas behind an app-specific allowlist, a leftover from canary-rollout scaffolding built
  *   before the SDK's own default ('auto') resolved to 'compiled' unconditionally. plexo-sdk's
@@ -61,6 +63,13 @@ async function resolveSdkBranding(
  *   401 { valid: false, error: "Invalid key or unauthorized." }
  *   500 { valid: false, error: "Internal server error." }
  */
+/** The plan name published @charisol/plexo-sdk versions understand (FREE / PRO / ULTRA). */
+function sdkPlanName(plan: string): "FREE" | "PRO" | "ULTRA" {
+  if (plan === "STARTER") return "PRO";
+  if (plan === "PRO" || plan === "ENTERPRISE") return "ULTRA";
+  return "FREE";
+}
+
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const rawKey = request.headers.get("x-api-key")?.trim();
 
@@ -99,9 +108,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         );
       }
 
-      subscriptionPlan = effectivePlan(user);
-      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user.manageLandingPagePublishing ?? false);
-
       // ApiKey has no createdAt-sorted index for "this user's keys" (byUser's SK is `id`,
       // not createdAt) — sort the (small) result set in memory, same pattern as
       // app/api/v1/ai/generate/route.ts's own workspace-internal resolution.
@@ -117,6 +123,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       }
 
       const orgResolution = await ensureActiveOrganization(session.user.id);
+      // The workspace's plan is its owner's (lib/plan/workspacePlan.ts).
+      const plan = orgResolution.status === "resolved" ? await workspacePlan(orgResolution.organizationId, user, orgResolution.role) : planFromOwner(user);
+      subscriptionPlan = plan.subscriptionPlan;
+      manageLandingPagePublishing = plan.manageLandingPagePublishing;
       if (orgResolution.status === "resolved") {
         branding = await resolveSdkBranding(orgResolution.organizationId);
       }
@@ -135,8 +145,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
       const { data: user } = await User.get({ id: apiKey.userId }).go();
 
-      subscriptionPlan = effectivePlan(user);
-      manageLandingPagePublishing = resolveManageLandingPagePublishing(subscriptionPlan, user?.manageLandingPagePublishing ?? false);
+      const plan = user ? await workspacePlan(apiKey.organizationId, user, null) : planFromOwner(null);
+      subscriptionPlan = plan.subscriptionPlan;
+      manageLandingPagePublishing = plan.manageLandingPagePublishing;
       useAi = apiKey.useAi ?? false;
       aiProvider = apiKey.aiProvider ?? "openai";
       aiTier = apiKey.aiTier ?? "AUTO";
@@ -151,7 +162,10 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({
       valid: true,
-      plan: subscriptionPlan,
+      // `plan` keeps the names published SDK versions understand (they know FREE/PRO/ULTRA,
+      // where their PRO is today's Starter and ULTRA today's Pro); `planId` is today's id.
+      plan: sdkPlanName(subscriptionPlan),
+      planId: subscriptionPlan,
       useAi,
       aiProvider,
       aiTier,

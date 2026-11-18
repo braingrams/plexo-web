@@ -1,3 +1,4 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/v3Redirect";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
@@ -11,6 +12,7 @@ import { NewFunnelLauncher } from "./_components/NewFunnelLauncher";
  * most-recently-updated funnel. An org with none yet gets a real empty state that starts
  * the "New Funnel" flow — same dispatcher shape as /dashboard/commerce/page.tsx. */
 export default async function FunnelsRootPage() {
+  await redirectIfV3("/dashboard/learners");
   const session = await auth();
   if (!session?.user) redirect("/auth/login");
 

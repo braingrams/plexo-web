@@ -40,7 +40,7 @@ function IconArrowRight() {
   );
 }
 
-export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: AiSettingsApiKey[]; isUltra: boolean }) {
+export function AiSettingsClient({ initialApiKeys, canUseHostManagedAi }: { initialApiKeys: AiSettingsApiKey[]; canUseHostManagedAi: boolean }) {
   const [apiKeys, setApiKeys] = useState<AiSettingsApiKey[]>(initialApiKeys);
   const [activeKeyId, setActiveKeyId] = useState<string | null>(
     initialApiKeys.find((item) => item.isActive)?.id ?? initialApiKeys[0]?.id ?? null,
@@ -138,22 +138,22 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
       <PageHeader eyebrow="Developer" title="SOL (AI)" subtitle="SOL is Plexo's AI. Choose whether it runs on Plexo's AI (paid from your AI credits) or your own AI key." />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
-        <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "1.5rem" }}>
-          <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.35rem" }}>
+        <div style={{ background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", borderRadius: 16, padding: "1.5rem" }}>
+          <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)", marginBottom: "0.35rem" }}>
             AI Configuration
           </h2>
-          <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.35)", marginBottom: "1.25rem" }}>
+          <p style={{ fontSize: "0.78rem", color: "var(--plx-faint, rgba(240,242,255,0.35))", marginBottom: "1.25rem" }}>
             Changes auto-save for the selected API key.
           </p>
 
           {apiKeys.length === 0 ? (
-            <div style={{ padding: "1.25rem", borderRadius: 12, background: "rgba(255,255,255,0.03)", border: "1px dashed rgba(255,255,255,0.1)", textAlign: "center", color: "rgba(240,242,255,0.35)", fontSize: "0.875rem" }}>
+            <div style={{ padding: "1.25rem", borderRadius: 12, background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", border: "1px dashed color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)", textAlign: "center", color: "var(--plx-faint, rgba(240,242,255,0.35))", fontSize: "0.875rem" }}>
               You don&apos;t have any API keys yet — generate one on the API Keys page first.
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
               <div>
-                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.4rem" }}>
                   API Key
                 </span>
                 <CustomSelect value={activeKeyId ?? ""} options={keyOptions} onChange={(v) => setActiveKeyId(v)} />
@@ -162,10 +162,10 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
               {activeKey && (
                 <>
                   {/* Use AI Toggle */}
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.9rem 1rem", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 11 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.9rem 1rem", background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 7%, transparent)", borderRadius: 11 }}>
                     <div>
-                      <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "#f0f2ff" }}>Use SOL</p>
-                      <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)" }}>Let SOL work with this key</p>
+                      <p style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>Use SOL</p>
+                      <p style={{ fontSize: "0.75rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>Let SOL work with this key</p>
                     </div>
                     <button
                       type="button"
@@ -181,8 +181,8 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                       }}
                       style={{
                         position: "relative", width: 44, height: 24, borderRadius: 999,
-                        background: draftUseAi ? "var(--brand)" : "rgba(255,255,255,0.1)",
-                        border: draftUseAi ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.12)",
+                        background: draftUseAi ? "var(--brand)" : "color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
+                        border: draftUseAi ? "1px solid var(--brand)" : "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
                         cursor: activeKey.isActive ? "pointer" : "not-allowed",
                         opacity: activeKey.isActive ? 1 : 0.5,
                         transition: "background 0.2s, border-color 0.2s", flexShrink: 0,
@@ -196,14 +196,14 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                     <>
                       {/* AI Access Mode */}
                       <div>
-                        <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+                        <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
                           AI Access Mode
                         </p>
                         <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                           {ACCESS_MODE_OPTIONS.map((option) => {
                             const active = draftAccessMode === option.value;
-                            const requiresUltra = option.value === "HOST_MANAGED" && !isUltra;
-                            const isBtnDisabled = !activeKey.isActive || requiresUltra;
+                            const requiresUpgrade = option.value === "HOST_MANAGED" && !canUseHostManagedAi;
+                            const isBtnDisabled = !activeKey.isActive || requiresUpgrade;
                             return (
                               <button
                                 key={option.value}
@@ -216,9 +216,9 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                                 }}
                                 style={{
                                   padding: "0.65rem 0.75rem", borderRadius: 9,
-                                  border: active ? "1.5px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.08)",
-                                  background: active ? "rgba(var(--brand-rgb),0.1)" : "rgba(255,255,255,0.03)",
-                                  color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
+                                  border: active ? "1.5px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 40%, transparent)" : "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
+                                  background: active ? "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 10%, transparent)" : "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
+                                  color: active ? "var(--plx-violet, #c4b5fd)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 55%, transparent)",
                                   cursor: isBtnDisabled ? "not-allowed" : "pointer",
                                   fontFamily: "inherit", textAlign: "left", transition: "all 0.15s",
                                   opacity: isBtnDisabled && !active ? 0.5 : 1,
@@ -226,20 +226,20 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                               >
                                 <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                                   <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600 }}>{option.label}</p>
-                                  {requiresUltra && (
-                                    <span style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--brand)", background: "var(--brand-subtle)", padding: "0.15rem 0.4rem", borderRadius: 5 }}>
-                                      Requires Ultra
+                                  {requiresUpgrade && (
+                                    <span style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--plx-link, var(--brand))", background: "var(--brand-subtle)", padding: "0.15rem 0.4rem", borderRadius: 5 }}>
+                                      Pro plan
                                     </span>
                                   )}
                                 </div>
-                                <p style={{ fontSize: "0.68rem", color: active ? "rgba(196,181,253,0.7)" : "rgba(240,242,255,0.3)" }}>{option.desc}</p>
+                                <p style={{ fontSize: "0.68rem", color: active ? "color-mix(in srgb, var(--plx-violet, rgb(196 181 253)) 70%, transparent)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 30%, transparent)" }}>{option.desc}</p>
                               </button>
                             );
                           })}
                         </div>
-                        {draftAccessMode === "HOST_MANAGED" && !isUltra && (
-                          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginTop: "0.5rem" }}>
-                            This account is configured for Host-Managed AI access but is not on the Ultra plan — AI requests will be blocked until you upgrade. Upgrade in the Subscription section.
+                        {draftAccessMode === "HOST_MANAGED" && !canUseHostManagedAi && (
+                          <p style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginTop: "0.5rem" }}>
+                            This key is set to let your own app approve and pay for AI, which is part of the Pro plan. AI requests through it are paused until you upgrade to Pro on the Subscription page.
                           </p>
                         )}
                       </div>
@@ -250,17 +250,17 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                           nothing. */}
                       {draftAccessMode === "SYSTEM" ? (
                         <div>
-                          <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                          <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.4rem" }}>
                             AI Provider
                           </span>
-                          <div style={{ padding: "0.65rem 0.75rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(255,255,255,0.03)" }}>
-                            <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "rgba(240,242,255,0.75)" }}>Plexo&apos;s managed AI</p>
-                            <p style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.3)" }}>Automatically selected and maintained by Plexo — nothing to configure here.</p>
+                          <div style={{ padding: "0.65rem 0.75rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)" }}>
+                            <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--plx-text, rgba(240,242,255,0.75))" }}>Plexo&apos;s managed AI</p>
+                            <p style={{ fontSize: "0.68rem", color: "var(--plx-faint, rgba(240,242,255,0.3))" }}>Automatically selected and maintained by Plexo — nothing to configure here.</p>
                           </div>
                         </div>
                       ) : (
                         <div>
-                          <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                          <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.4rem" }}>
                             AI Provider
                           </span>
                           <CustomSelect
@@ -280,7 +280,7 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
 
                       {/* Tier */}
                       <div>
-                        <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+                        <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
                           Creativity Tier
                         </p>
                         <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)", gap: "0.5rem" }}>
@@ -300,16 +300,16 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                                 }}
                                 style={{
                                   padding: "0.65rem 0.75rem", borderRadius: 9,
-                                  border: active ? "1.5px solid rgba(var(--brand-rgb),0.4)" : "1px solid rgba(255,255,255,0.08)",
-                                  background: active ? "rgba(var(--brand-rgb),0.1)" : "rgba(255,255,255,0.03)",
-                                  color: active ? "#c4b5fd" : "rgba(240,242,255,0.55)",
+                                  border: active ? "1.5px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 40%, transparent)" : "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
+                                  background: active ? "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 10%, transparent)" : "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
+                                  color: active ? "var(--plx-violet, #c4b5fd)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 55%, transparent)",
                                   cursor: isBtnDisabled ? "not-allowed" : "pointer",
                                   fontFamily: "inherit", textAlign: "left", transition: "all 0.15s",
                                   opacity: isBtnDisabled && !active ? 0.5 : 1,
                                 }}
                               >
                                 <p style={{ fontSize: "0.8rem", fontWeight: active ? 700 : 600 }}>{tier.label}</p>
-                                <p style={{ fontSize: "0.68rem", color: active ? "rgba(196,181,253,0.7)" : "rgba(240,242,255,0.3)" }}>{tier.desc}</p>
+                                <p style={{ fontSize: "0.68rem", color: active ? "color-mix(in srgb, var(--plx-violet, rgb(196 181 253)) 70%, transparent)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 30%, transparent)" }}>{tier.desc}</p>
                               </button>
                             );
                           })}
@@ -318,7 +318,7 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
 
                       {(draftAccessMode === "BYOK" || draftAccessMode === "HOST_MANAGED") && (
                         <div>
-                          <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                          <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.4rem" }}>
                             AI API Key
                           </span>
                           <input
@@ -331,9 +331,9 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                               setAiKeyTouched(true);
                               setDraftDirty(true);
                             }}
-                            style={{ width: "100%", padding: "0.6rem 0.875rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(240,242,255,0.9)", fontFamily: "inherit", fontSize: "0.875rem", outline: "none", cursor: "text", transition: "border-color 0.15s" }}
+                            style={{ width: "100%", padding: "0.6rem 0.875rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)", color: "var(--plx-text, rgba(240,242,255,0.9))", fontFamily: "inherit", fontSize: "0.875rem", outline: "none", cursor: "text", transition: "border-color 0.15s" }}
                           />
-                          <p style={{ fontSize: "0.72rem", color: activeKey.hasAiApiKey ? "#34d399" : "rgba(240,242,255,0.3)", marginTop: "0.3rem" }}>
+                          <p style={{ fontSize: "0.72rem", color: activeKey.hasAiApiKey ? "var(--plx-success, #34d399)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 30%, transparent)", marginTop: "0.3rem" }}>
                             {activeKey.hasAiApiKey
                               ? "A key is saved and encrypted at rest. It is never sent back to the browser — leave this field blank to keep it."
                               : draftAccessMode === "HOST_MANAGED"
@@ -346,7 +346,7 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                       {draftAccessMode === "HOST_MANAGED" && (
                         <>
                           <div>
-                            <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                            <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.4rem" }}>
                               Authorization Webhook URL
                             </span>
                             <input
@@ -358,14 +358,14 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                                 setDraftHostAuthWebhookUrl(e.target.value);
                                 setDraftDirty(true);
                               }}
-                              style={{ width: "100%", padding: "0.6rem 0.875rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(240,242,255,0.9)", fontFamily: "inherit", fontSize: "0.875rem", outline: "none", cursor: "text", transition: "border-color 0.15s" }}
+                              style={{ width: "100%", padding: "0.6rem 0.875rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)", color: "var(--plx-text, rgba(240,242,255,0.9))", fontFamily: "inherit", fontSize: "0.875rem", outline: "none", cursor: "text", transition: "border-color 0.15s" }}
                             />
-                            <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.3)", marginTop: "0.3rem" }}>
+                            <p style={{ fontSize: "0.72rem", color: "var(--plx-faint, rgba(240,242,255,0.3))", marginTop: "0.3rem" }}>
                               Called with POST {"{url}"}/ai-authorize and /ai-charge before and after every AI action — your app decides who can afford it and charges them.
                             </p>
                           </div>
                           <div>
-                            <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.4rem" }}>
+                            <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.4rem" }}>
                               Webhook Signing Secret
                             </span>
                             <input
@@ -378,15 +378,15 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                                 setHostWebhookSecretTouched(true);
                                 setDraftDirty(true);
                               }}
-                              style={{ width: "100%", padding: "0.6rem 0.875rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.05)", color: "rgba(240,242,255,0.9)", fontFamily: "inherit", fontSize: "0.875rem", outline: "none", cursor: "text", transition: "border-color 0.15s" }}
+                              style={{ width: "100%", padding: "0.6rem 0.875rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)", color: "var(--plx-text, rgba(240,242,255,0.9))", fontFamily: "inherit", fontSize: "0.875rem", outline: "none", cursor: "text", transition: "border-color 0.15s" }}
                             />
-                            <p style={{ fontSize: "0.72rem", color: activeKey.hasHostWebhookSecret ? "#34d399" : "rgba(240,242,255,0.3)", marginTop: "0.3rem" }}>
+                            <p style={{ fontSize: "0.72rem", color: activeKey.hasHostWebhookSecret ? "var(--plx-success, #34d399)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 30%, transparent)", marginTop: "0.3rem" }}>
                               {activeKey.hasHostWebhookSecret
                                 ? "A secret is saved and encrypted at rest. It is never sent back to the browser — leave this field blank to keep it."
                                 : "Must match the secret your webhook uses to verify the x-plexo-signature header."}
                             </p>
                           </div>
-                          <a href="/dashboard/integrations" style={{ fontSize: "0.75rem", color: "var(--brand)", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                          <a href="/dashboard/integrations" style={{ fontSize: "0.75rem", color: "var(--plx-link, var(--brand))", textDecoration: "underline", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
                             View the full webhook integration guide (payload shapes, signature verification, endpoints to implement) <IconArrowRight />
                           </a>
                         </>
@@ -394,9 +394,9 @@ export function AiSettingsClient({ initialApiKeys, isUltra }: { initialApiKeys: 
                     </>
                   )}
 
-                  {saving && <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.45)" }}>Saving…</p>}
-                  {saveNotice && <p style={{ fontSize: "0.78rem", color: "#34d399" }}>{saveNotice}</p>}
-                  {saveError && <p style={{ fontSize: "0.78rem", color: "#f87171" }}>{saveError}</p>}
+                  {saving && <p style={{ fontSize: "0.78rem", color: "var(--plx-muted, rgba(240,242,255,0.45))" }}>Saving…</p>}
+                  {saveNotice && <p style={{ fontSize: "0.78rem", color: "var(--plx-success, #34d399)" }}>{saveNotice}</p>}
+                  {saveError && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)" }}>{saveError}</p>}
                 </>
               )}
             </div>

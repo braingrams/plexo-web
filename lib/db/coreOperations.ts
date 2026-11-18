@@ -35,9 +35,12 @@ export async function createUserWithEmailLock(params: {
   image?: string;
   passwordHash?: string;
   isConfirmed: boolean;
-  pendingPlan?: "PRO" | "ULTRA";
+  pendingPlan?: "STARTER" | "PRO" | "ENTERPRISE";
+  country?: string;
+  countrySetAt?: string;
 }): Promise<void> {
-  const createUser = User.create(params).params();
+  // New accounts are written in today's plan terms (lib/plan/plans.ts planVersion).
+  const createUser = User.create({ ...params, planVersion: 2 }).params();
   const createLock = UserEmailLock.create({ email: params.email, userId: params.id }).params();
 
   try {

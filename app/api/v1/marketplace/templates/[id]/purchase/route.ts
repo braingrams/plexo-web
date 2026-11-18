@@ -5,6 +5,7 @@ import { getStripe } from "@/lib/stripe";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template, TemplatePurchase } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
+import { onboardingReturnPath } from "@/lib/onboarding/marketDesigns";
 
 /**
  * POST /api/v1/marketplace/templates/:id/purchase
@@ -25,6 +26,9 @@ export async function POST(
   }
 
   const { id } = await params;
+  // Onboarding sends { returnTo } so someone who pays mid-setup comes back to setup, not the marketplace page.
+  const sent = await request.json().catch(() => null) as { returnTo?: unknown } | null;
+  const returnPath = onboardingReturnPath(sent?.returnTo, id);
   const { data: template } = await Template.get({ id }).go();
   if (!template || template.marketplaceStatus !== "PUBLISHED") {
     return NextResponse.json({ error: "Template not found." }, { status: 404 });
@@ -86,10 +90,10 @@ export async function POST(
         // webhook skips crediting when this resolves to the marketplace system owner.
         sellerUserId: template.userId,
       },
-      // Card entry itself is now embedded in-page (see PurchaseAction.tsx's checkout
+      // Card entry itself is now embedded in-page (see DesignAction.tsx's checkout
       // modal) — Stripe still does one final navigation to return_url once payment
       // completes, same as every other embedded Checkout session in this codebase.
-      return_url: `${appUrl}/marketplace/${id}?purchase=success`,
+      return_url: `${appUrl}${returnPath ?? `/dashboard/marketplace/${id}?purchase=success`}`,
     });
     return NextResponse.json({ clientSecret: checkoutSession.client_secret });
   } catch (err) {

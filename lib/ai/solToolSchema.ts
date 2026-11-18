@@ -35,14 +35,14 @@ export const ASK_USER_QUESTION_TOOL_NAME = "ask_user_question";
 const askUserQuestionTool: BedrockToolDef = {
   name: ASK_USER_QUESTION_TOOL_NAME,
   description:
-    "Ask the user one or more clarifying questions through a structured, interactive prompt, instead of writing the questions out as plain text in your reply. Use this whenever a request is genuinely ambiguous and you need to ask more than one thing, or want to offer concrete choices instead of an open-ended question. Each question can carry 2-4 short options — the interface automatically also lets the user type their own free-text answer instead, so never add an \"Other\"/\"something else\"/\"none of these\" option yourself. Ask at most 4 questions in one call. Don't use this for a single obvious yes/no — just ask in plain text, or (for a destructive/irreversible action) let the normal confirmation gate handle it. Only put multiple questions in ONE call if they're genuinely independent of each other's answers — if question 2 should really depend on how question 1 gets answered (different follow-ups for different answers), ask question 1 alone, wait for the real answer, then call this tool again for question 2 informed by it. Don't pre-plan a fixed multi-question sequence that ignores what the user actually answers along the way.",
+    "Ask the user one or more clarifying questions through a structured, interactive prompt, instead of writing the questions out as plain text in your reply. Use this whenever a request is genuinely ambiguous and you need to ask more than one thing, or want to offer concrete choices instead of an open-ended question — including the one compact round before building something new (name, what they do, which pages, the feel, their colours), with sensible options for each. Each question can carry 2-4 short options — the interface automatically also lets the user type their own free-text answer instead, so never add an \"Other\"/\"something else\"/\"none of these\" option yourself. Ask at most 6 questions in one call (the intake card for a new build may use up to 6; anything else, 4 or fewer). Don't use this for a single obvious yes/no — just ask in plain text, or (for a destructive/irreversible action) let the normal confirmation gate handle it. Only put multiple questions in ONE call if they're genuinely independent of each other's answers — if question 2 should really depend on how question 1 gets answered (different follow-ups for different answers), ask question 1 alone, wait for the real answer, then call this tool again for question 2 informed by it. Don't pre-plan a fixed multi-question sequence that ignores what the user actually answers along the way.",
   input_schema: {
     type: "object",
     properties: {
       questions: {
         type: "array",
         minItems: 1,
-        maxItems: 4,
+        maxItems: 6,
         items: {
           type: "object",
           properties: {

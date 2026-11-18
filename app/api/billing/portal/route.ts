@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
+import { paystackManageLink } from "@/lib/paystack";
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
   const session = await auth();
@@ -12,6 +13,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { data: user } = await User.get({ id: session.user.id }).go();
   if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
+
+  // Local-currency plans: Paystack's own page for changing the card on the subscription.
+  if (user.subscriptionProvider === "PAYSTACK" && user.subscriptionId && !user.subscriptionId.startsWith("pending:")) {
+    const key = process.env.PLATFORM_PAYSTACK_SECRET_KEY;
+    if (!key) return NextResponse.json({ error: "Card changes aren't available right now. Please try again later." }, { status: 503 });
+    try {
+      return NextResponse.json({ url: await paystackManageLink(key, user.subscriptionId) });
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "Could not open the card page." }, { status: 503 });
+    }
+  }
 
   if (!user.stripeCustomerId) {
     return NextResponse.json(

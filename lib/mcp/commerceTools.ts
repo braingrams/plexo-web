@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { commerceEnableError, commercePlanForOrg, countStoreProducts, defaultPaymentProvider, paymentProviderError, productLimitError } from "@/lib/plan/commerceGate";
 import { catalogFieldsFromInput } from "@/lib/commerce/variants";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { slugify } from "@/server/slugDynamo";
@@ -630,6 +631,9 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         { kind, priceMinor },
       );
 
+      const limitError = productLimitError(await commercePlanForOrg(resolved.organizationId), await countStoreProducts(siteId));
+      if (limitError) throw new Error(limitError);
+
       const slug = await ensureUniqueProductSlug(siteId, name);
       const categoryId = (await resolveCategoryId(siteId, resolved.organizationId, args.category)) ?? undefined;
 
@@ -816,6 +820,9 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       if (paymentProvider !== undefined && !["BYO_PAYSTACK", "PLATFORM_PAYSTACK", "PLATFORM_STRIPE", "BYO_STRIPE"].includes(paymentProvider)) {
         throw new Error("paymentProvider must be BYO_PAYSTACK, PLATFORM_PAYSTACK, PLATFORM_STRIPE, or BYO_STRIPE.");
       }
+      const commercePlan = await commercePlanForOrg(resolved.organizationId);
+      const planError = (args.enabled === true ? commerceEnableError(commercePlan) : null) ?? paymentProviderError(commercePlan, paymentProvider);
+      if (planError) throw new Error(planError);
       if (paymentProvider === "PLATFORM_STRIPE") {
         const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go({ pages: "all" });
         if (!requests.some((r) => r.status === "APPROVED")) throw new Error("Platform Stripe isn't approved for this organization yet — call request_commerce_stripe_access first.");
@@ -843,6 +850,10 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
       if (typeof args.enabled === "boolean") data.enabled = args.enabled;
       if (typeof currency === "string") data.currency = currency.toUpperCase();
       if (paymentProvider !== undefined) data.paymentProvider = paymentProvider;
+      else if (args.enabled === true) {
+        const { data: current } = await CommerceSettings.get({ templateId: siteId }).go();
+        if (!current?.paymentProvider) data.paymentProvider = defaultPaymentProvider(commercePlan);
+      }
       if (paystackMode !== undefined) data.paystackMode = paystackMode;
       if (typeof args.paystackTestPublicKey === "string") {
         if (args.paystackTestPublicKey) data.paystackTestPublicKey = args.paystackTestPublicKey;

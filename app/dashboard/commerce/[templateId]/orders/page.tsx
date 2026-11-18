@@ -1,3 +1,4 @@
+import { redirectToHubIfV3 } from "@/lib/dashboardV3/hubRedirect";
 import { CommerceOrder, CommerceOrderItem, CommerceBooking, CommerceDigitalDelivery, CommerceProduct } from "@/lib/db/commerceEntities";
 import { orderDeliveryDetails } from "@/lib/commerce/bankTransfer";
 import { orderDeleteBlocker } from "@/lib/commerce/orderDeletion";
@@ -6,6 +7,7 @@ import { OrdersClient, type OrderSummary } from "./OrdersClient";
 
 export default async function CommerceOrdersPage({ params, searchParams }: { params: Promise<{ templateId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { templateId } = await params;
+  await redirectToHubIfV3(templateId, "orders", (await searchParams)?.classic);
 
   const { data: allOrders } = await CommerceOrder.query.primary({ templateId }).go({ pages: "all" });
   const { items: orders, total, page, pageSize } = paginate(

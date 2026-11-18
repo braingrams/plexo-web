@@ -190,7 +190,7 @@ describe("page_describe", () => {
     expect(d.brand).toBeTruthy();
     const kinds = d.catalog.kinds.map((k: any) => k.kind);
     expect(kinds).toEqual(expect.arrayContaining(["hero", "blogList", "blogArticle", "shop", "cartCheckout", "funnelSignup"]));
-    expect(d.catalog.pageTemplates.map((t: any) => t.id)).toEqual(["blank", "home", "landing", "about", "services", "contact", "pricing"]);
+    expect(d.catalog.pageTemplates.map((t: any) => t.id)).toEqual(["blank", "home", "landing", "about", "services", "contact", "pricing", "store", "blog", "product", "faq", "gallery", "team", "menu"]);
     const sub = await call("page_describe", { siteId: home.templateId, slug: "/pricing", includeCatalog: false });
     expect(sub.page.name).toBe("Pricing");
     expect(sub.catalog).toBeUndefined();

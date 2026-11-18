@@ -3,11 +3,11 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useAppBackHref } from "../../_components/EditorTheme";
 import { Check, Copy, ExternalLink, FolderOpen, Globe, Image as ImageIcon, KeyRound, Link2, Mail, PenLine, Plus, Search, Settings2, ShieldCheck, Trash2, Upload, UserCheck } from "lucide-react";
 import { api, appsApi, ApiError, type AppSummary } from "./api";
 import { Button, C, Notice, Panel, Pill, ProblemState, Shimmer, StateStyles, hueGradient, inputStyle } from "./ui";
 
-import { BRAND } from "@/lib/theme";
 type Access = "public" | "private";
 type Settings = {
   auth: {
@@ -52,19 +52,19 @@ function AppBanner({ summary }: { summary: AppSummary | null }) {
   if (!summary) return <Shimmer height={92} radius={20} />;
   const address = summary.domains.find((d) => d.verified)?.domain ?? summary.liveUrl?.replace(/^https:\/\//, "") ?? null;
   return (
-    <section style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "1.2rem 1.4rem", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(60% 140% at 100% 0%, rgba(var(--brand-rgb), 0.2), transparent 60%), radial-gradient(50% 120% at 0% 100%, rgba(99,102,241,0.12), transparent 60%), rgba(255,255,255,0.015)" }}>
-      <span aria-hidden style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "grid", placeItems: "center", background: hueGradient(summary.name), color: "#fff", fontSize: "clamp(1.15rem, 4.2vw, 1.4rem)", fontWeight: 800, boxShadow: "0 10px 28px rgba(var(--brand-rgb), 0.3)" }}>
+    <section style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap", padding: "1.2rem 1.4rem", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(60% 140% at 100% 0%, color-mix(in srgb, var(--brand) 20%, transparent), transparent 60%), radial-gradient(50% 120% at 0% 100%, color-mix(in srgb, var(--ed-violet) 12%, transparent), transparent 60%), var(--ed-w-015)" }}>
+      <span aria-hidden style={{ width: 56, height: 56, borderRadius: 16, flexShrink: 0, display: "grid", placeItems: "center", background: hueGradient(summary.name), color: "var(--ed-on-brand)", fontSize: "clamp(1.15rem, 4.2vw, 1.4rem)", fontWeight: 800, boxShadow: "0 10px 28px color-mix(in srgb, var(--brand) 30%, transparent)" }}>
         {summary.name.charAt(0).toUpperCase()}
       </span>
       <div style={{ flex: "1 1 240px", minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <span style={{ fontSize: "1.2rem", fontWeight: 750, color: C.text }}>{summary.name}</span>
-          <Pill color={summary.published ? C.success : C.muted}>{summary.published ? "Live" : "Not published yet"}</Pill>
+          <Pill color={summary.published ? C.success : C.muted}>{summary.published ? "Live" : "Draft"}</Pill>
         </div>
         <div style={{ fontSize: "0.82rem", color: C.muted, marginTop: 4, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
           {address ? (
-            <a href={`https://${address}`} target="_blank" rel="noreferrer" style={{ color: "#c4b5fd", textDecoration: "none" }}>
-              {address} <ExternalLink size={11} aria-hidden style={{ verticalAlign: "-1px" }} />
+            <a href={`https://${address}`} target="_blank" rel="noreferrer" style={{ color: "var(--ed-lavender)", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
+              {address}<ExternalLink size={11} aria-hidden style={{ flex: "none" }} />
             </a>
           ) : (
             "Publish your app to give it a web address."
@@ -92,10 +92,16 @@ function SettingsSkeleton() {
   );
 }
 
-export function SettingsPane({ appId, summary, onRenamed }: { appId: string; summary: AppSummary | null; onRenamed?: (name: string) => void }) {
+/**
+ * `only`: show just ONE settings section (General / Search & sharing / Sign-in / Files) with no app header, no section tabs and no
+ * Delete (the new dashboard's Advanced area lists these as its own sections and keeps Delete in its own place at the end).
+ * Without it the pane is the original all-in-one screen used by the app editor.
+ */
+export function SettingsPane({ appId, summary, onRenamed, only }: { appId: string; summary: AppSummary | null; onRenamed?: (name: string) => void; only?: Exclude<SectionId, "delete"> }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [section, setSection] = useState<SectionId>("general");
+  const [pickedSection, setSection] = useState<SectionId>("general");
+  const section: SectionId = only ?? pickedSection;
 
   const load = useCallback(
     async (signal?: { cancelled: boolean }) => {
@@ -126,8 +132,8 @@ export function SettingsPane({ appId, summary, onRenamed }: { appId: string; sum
   return (
     <div style={{ position: "absolute", inset: 0, overflowY: "auto", padding: "1.4rem 1.8rem 2.5rem" }}>
       <StateStyles />
-      <AppBanner summary={summary} />
-      <nav aria-label="App settings" className="dash-pill-nav" style={{ margin: "1.3rem 0 0.6rem", overflowX: "auto" }}>
+      {only ? null : <AppBanner summary={summary} />}
+      {only ? null : <nav aria-label="App settings" className="dash-pill-nav" style={{ margin: "1.3rem 0 0.6rem", overflowX: "auto" }}>
         {SECTIONS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -141,8 +147,8 @@ export function SettingsPane({ appId, summary, onRenamed }: { appId: string; sum
             {label}
           </button>
         ))}
-      </nav>
-      <p style={{ margin: "0 0 1rem", fontSize: "0.8rem", color: C.muted }}>{current.hint}</p>
+      </nav>}
+      {only ? null : <p style={{ margin: "0 0 1rem", fontSize: "0.8rem", color: C.muted }}>{current.hint}</p>}
       <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem" }}>
           {section === "general" && (
             <>
@@ -228,7 +234,7 @@ function SeoSection({ appId, summary, settings, onSaved }: { appId: string; summ
             <TextField label="Description" value={draft.description} max={200} multiline placeholder="One or two sentences about what your app does and who it's for." onChange={(v) => set("description", v)} />
           </div>
         </Panel>
-        <Panel icon={<ImageIcon size={18} />} iconColor={BRAND[300]} title="Images">
+        <Panel icon={<ImageIcon size={18} />} iconColor={"var(--brand-light)"} title="Images">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.9rem" }}>
             <ImageField label="Sharing image" hint="Shown on link previews. 1200 × 630 works best." value={draft.imageUrl} busy={uploading === "imageUrl"} wide onUpload={(f) => void upload("imageUrl", f)} onClear={() => set("imageUrl", "")} />
             <ImageField label="Browser-tab icon" hint="A square image, at least 64 × 64." value={draft.faviconUrl} busy={uploading === "faviconUrl"} onUpload={(f) => void upload("faviconUrl", f)} onClear={() => set("faviconUrl", "")} />
@@ -236,7 +242,7 @@ function SeoSection({ appId, summary, settings, onSaved }: { appId: string; summ
         </Panel>
         <Panel
           icon={<ShieldCheck size={18} />}
-          iconColor="#6366f1"
+          iconColor="var(--ed-violet)"
           title="Prove you own this app"
           description="Google Search Console and Bing Webmaster Tools ask for this before showing your search traffic. Choose the “HTML tag” option there and paste the code — or the whole tag — here."
         >
@@ -275,8 +281,8 @@ function SeoSection({ appId, summary, settings, onSaved }: { appId: string; summ
         </div>
         <div style={previewLabel}>When shared</div>
         <div style={{ borderRadius: 12, overflow: "hidden", border: `1px solid ${C.borderStrong}`, background: C.panelSolid }}>
-          <div style={{ aspectRatio: "1200 / 630", background: draft.imageUrl ? `center / cover no-repeat url("${draft.imageUrl}")` : "linear-gradient(135deg, rgba(var(--brand-rgb), 0.35), rgba(var(--brand-deep-rgb), 0.1))", display: "grid", placeItems: "center" }}>
-            {!draft.imageUrl && <ImageIcon size={28} color="rgba(255,255,255,0.5)" />}
+          <div style={{ aspectRatio: "1200 / 630", background: draft.imageUrl ? `center / cover no-repeat url("${draft.imageUrl}")` : "linear-gradient(135deg, color-mix(in srgb, var(--brand) 35%, transparent), color-mix(in srgb, var(--brand-deep) 10%, transparent))", display: "grid", placeItems: "center" }}>
+            {!draft.imageUrl && <ImageIcon size={28} color="var(--ed-w-500)" />}
           </div>
           <div style={{ padding: "0.65rem 0.8rem" }}>
             <div style={{ fontSize: "0.68rem", color: C.faint, textTransform: "uppercase", letterSpacing: "0.04em" }}>{address}</div>
@@ -293,7 +299,7 @@ function SeoSection({ appId, summary, settings, onSaved }: { appId: string; summ
 function TextField({ label, value, onChange, placeholder, max, multiline, mono }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; max?: number; multiline?: boolean; mono?: boolean }) {
   const id = useId();
   const over = max !== undefined && value.length > max;
-  const style = { ...inputStyle, fontFamily: mono ? C.mono : undefined, borderColor: over ? "rgba(248,113,113,0.5)" : C.border, resize: "vertical" as const };
+  const style = { ...inputStyle, fontFamily: mono ? C.mono : undefined, borderColor: over ? "color-mix(in srgb, var(--ed-danger) 50%, transparent)" : C.border, resize: "vertical" as const };
   return (
     <div style={fieldStyle}>
       <span style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
@@ -325,7 +331,7 @@ function ImageField({ label, hint, value, busy, wide, onUpload, onClear }: { lab
           flexShrink: 0,
           borderRadius: 10,
           border: `1px dashed ${value ? "transparent" : C.borderStrong}`,
-          background: value ? `center / ${wide ? "cover" : "contain"} no-repeat url("${value}"), rgba(255,255,255,0.04)` : "rgba(255,255,255,0.03)",
+          background: value ? `center / ${wide ? "cover" : "contain"} no-repeat url("${value}"), var(--ed-w-040)` : "var(--ed-w-030)",
           display: "grid",
           placeItems: "center",
           cursor: "pointer",
@@ -338,7 +344,7 @@ function ImageField({ label, hint, value, busy, wide, onUpload, onClear }: { lab
         <div style={{ fontSize: "0.8rem", fontWeight: 600, color: C.text }}>{label}</div>
         <div style={{ fontSize: "0.72rem", color: C.muted, lineHeight: 1.45 }}>{hint}</div>
         <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-          <button type="button" onClick={() => input.current?.click()} disabled={busy} style={{ ...linkButton, color: "#c4b5fd", textDecoration: "none", fontSize: "0.74rem", fontWeight: 600 }}>
+          <button type="button" onClick={() => input.current?.click()} disabled={busy} style={{ ...linkButton, color: "var(--ed-lavender)", textDecoration: "none", fontSize: "0.74rem", fontWeight: 600 }}>
             {busy ? "Uploading…" : value ? "Replace" : "Upload"}
           </button>
           {value && !busy && (
@@ -500,7 +506,7 @@ function SignInSection({ appId, summary, settings, onSaved }: { appId: string; s
         />
       </div>
     </Panel>
-    <Panel icon={<UserCheck size={18} />} iconColor="#6366f1" title="Who can join">
+    <Panel icon={<UserCheck size={18} />} iconColor="var(--ed-violet)" title="Who can join">
       <div style={{ display: "flex", flexDirection: "column" }}>
         <Toggle
           label="Require email confirmation"
@@ -622,14 +628,14 @@ function MethodTile({ icon, label, hint, checked, busy, onChange }: { icon: Reac
         cursor: busy ? "wait" : "pointer",
         fontFamily: "inherit",
         color: C.text,
-        border: `1px solid ${checked ? "rgba(var(--brand-rgb), 0.55)" : C.border}`,
-        background: checked ? "linear-gradient(135deg, rgba(var(--brand-rgb), 0.16), rgba(99,102,241,0.05))" : "rgba(255,255,255,0.02)",
+        border: `1px solid ${checked ? "color-mix(in srgb, var(--brand) 55%, transparent)" : C.border}`,
+        background: checked ? "linear-gradient(135deg, color-mix(in srgb, var(--brand) 16%, transparent), color-mix(in srgb, var(--ed-violet) 5%, transparent))" : "var(--ed-w-020)",
         opacity: busy ? 0.7 : 1,
       }}
     >
       <span style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: checked ? "rgba(var(--brand-rgb), 0.25)" : "rgba(255,255,255,0.06)", color: checked ? "#c4b5fd" : C.muted }}>{icon}</span>
-        <span aria-hidden style={{ width: 34, height: 20, borderRadius: 99, padding: 2, background: checked ? C.brand : "rgba(255,255,255,0.15)", transition: "background 0.15s" }}>
+        <span style={{ width: 40, height: 40, borderRadius: 12, display: "grid", placeItems: "center", background: checked ? "color-mix(in srgb, var(--brand) 25%, transparent)" : "var(--ed-w-060)", color: checked ? "var(--ed-lavender)" : C.muted }}>{icon}</span>
+        <span aria-hidden style={{ width: 34, height: 20, borderRadius: 99, padding: 2, background: checked ? C.brand : "var(--ed-w-150)", transition: "background 0.15s" }}>
           <span style={{ display: "block", width: 16, height: 16, borderRadius: 99, background: "#fff", transform: checked ? "translateX(14px)" : "none", transition: "transform 0.15s" }} />
         </span>
       </span>
@@ -681,7 +687,7 @@ function Toggle({ label, hint, checked, busy, onChange }: { label: string; hint:
           border: "none",
           padding: 2,
           cursor: busy ? "wait" : "pointer",
-          background: checked ? C.brand : "rgba(255,255,255,0.15)",
+          background: checked ? C.brand : "var(--ed-w-150)",
           opacity: busy ? 0.6 : 1,
           transition: "background 0.15s",
         }}
@@ -737,7 +743,7 @@ function BucketsSection({ appId, settings, onSaved }: { appId: string; settings:
   return (
     <Panel
       icon={<FolderOpen size={18} />}
-      iconColor={BRAND[300]}
+      iconColor={"var(--brand-light)"}
       title="Upload folders"
       description={
         <>
@@ -763,7 +769,7 @@ function BucketsSection({ appId, settings, onSaved }: { appId: string; settings:
                   }}
                   placeholder="folder-name"
                   aria-invalid={!!problems[i]}
-                  style={{ ...inputStyle, fontFamily: C.mono, borderColor: problems[i] ? "rgba(248,113,113,0.5)" : C.border }}
+                  style={{ ...inputStyle, fontFamily: C.mono, borderColor: problems[i] ? "color-mix(in srgb, var(--ed-danger) 50%, transparent)" : C.border }}
                 />
                 {problems[i] && <span style={{ fontSize: "0.68rem", color: C.danger }}>{problems[i]}</span>}
               </label>
@@ -818,7 +824,7 @@ function BucketsSection({ appId, settings, onSaved }: { appId: string; settings:
 function DomainsSection({ summary }: { summary: AppSummary | null }) {
   const domains = summary?.domains ?? [];
   return (
-    <Panel icon={<Globe size={18} />} iconColor="#6366f1" title="Web addresses" description={summary?.published ? "Where visitors find your live app." : "Your app gets a free address the first time you publish."}>
+    <Panel icon={<Globe size={18} />} iconColor="var(--ed-violet)" title="Web addresses" description={summary?.published ? "Where visitors find your live app." : "Your app gets a free address the first time you publish."}>
       {domains.length > 0 && (
         <ul style={{ listStyle: "none", margin: "0 0 0.7rem", padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
           {domains.map((d) => (
@@ -840,7 +846,7 @@ function DomainsSection({ summary }: { summary: AppSummary | null }) {
           </a>
         </p>
       )}
-      <Link href="/dashboard/domains" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "0.78rem", fontWeight: 600, color: "#c4b5fd" }}>
+      <Link href="/dashboard/domains" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: "0.78rem", fontWeight: 600, color: "var(--ed-lavender)" }}>
         Connect your own domain <ExternalLink size={12} aria-hidden />
       </Link>
     </Panel>
@@ -851,6 +857,7 @@ function DomainsSection({ summary }: { summary: AppSummary | null }) {
 
 function DangerZone({ appId, summary }: { appId: string; summary: AppSummary | null }) {
   const router = useRouter();
+  const afterDeleteHref = useAppBackHref();
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState("");
   const [deleting, setDeleting] = useState(false);
@@ -872,7 +879,7 @@ function DangerZone({ appId, summary }: { appId: string; summary: AppSummary | n
     setError(null);
     try {
       await api(`/api/v1/apps/${appId}`, { method: "DELETE" });
-      router.push("/dashboard/apps");
+      router.push(afterDeleteHref);
     } catch (err) {
       setError(errText(err, "Couldn't delete the app."));
       setDeleting(false);
@@ -880,7 +887,7 @@ function DangerZone({ appId, summary }: { appId: string; summary: AppSummary | n
   };
 
   return (
-    <Panel icon={<Trash2 size={18} />} iconColor={C.danger} title="Delete this app" style={{ borderColor: "rgba(248,113,113,0.25)", background: "rgba(248,113,113,0.03)" }}>
+    <Panel icon={<Trash2 size={18} />} iconColor={C.danger} title="Delete this app" style={{ borderColor: "color-mix(in srgb, var(--ed-danger) 25%, transparent)", background: "color-mix(in srgb, var(--ed-danger) 3%, transparent)" }}>
       {!open ? (
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "0.7rem" }}>
           <p style={{ margin: 0, fontSize: "0.76rem", color: C.muted, flex: "1 1 260px" }}>Delete this app, its code, database, files, users and web addresses. This can&apos;t be undone.</p>

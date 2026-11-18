@@ -3,17 +3,10 @@
 import { FormEvent, useEffect, useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-
-function PlexoLogoMark() {
-  return (
-    <div style={{ width: 28, height: 28, borderRadius: 7, background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", display: "grid", placeItems: "center", boxShadow: "0 0 14px rgba(var(--brand-rgb), 0.4)", flexShrink: 0 }}>
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z" fill="white" opacity="0.95" />
-        <path d="M9 12l2 2 4-4" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    </div>
-  );
-}
+import { MailCheck, X, CircleCheck } from "lucide-react";
+import { AuthShell } from "@/app/auth/_kit/AuthShell";
+import { Alert, Button, PageHead } from "@/app/auth/_kit/ui";
+import { TextField } from "@/app/auth/_kit/fields";
 
 type FunnelMeta = { name: string; signupMode: "FREE" | "PAID"; requireName: boolean; collectPhone: boolean; price: { priceMinor: number; currency: string } | null };
 
@@ -30,22 +23,9 @@ type FunnelMeta = { name: string; signupMode: "FREE" | "PAID"; requireName: bool
 function StripeCheckoutModal({ clientSecret, publishableKey, onClose }: { clientSecret: string; publishableKey: string; onClose: () => void }) {
   const [stripePromise] = useState(() => loadStripe(publishableKey));
   return (
-    <div
-      onClick={onClose}
-      style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,7,15,0.75)", backdropFilter: "blur(6px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ background: "#fff", borderRadius: 16, width: "100%", maxWidth: 560, maxHeight: "90vh", overflow: "auto", position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          style={{ position: "absolute", top: "0.75rem", right: "0.75rem", zIndex: 1, width: 30, height: 30, display: "grid", placeItems: "center", background: "rgba(15,15,25,0.06)", border: "none", borderRadius: 8, color: "rgba(15,15,25,0.6)", cursor: "pointer", fontSize: "1rem", lineHeight: 1 }}
-        >
-          ✕
-        </button>
+    <div className="ax-modal" onClick={onClose}>
+      <div className="ax-modal-box" onClick={(e) => e.stopPropagation()}>
+        <button type="button" className="ax-modal-close" onClick={onClose} aria-label="Close"><X size={18} aria-hidden="true" /></button>
         <EmbeddedCheckoutProvider stripe={stripePromise} options={{ clientSecret }}>
           <EmbeddedCheckout />
         </EmbeddedCheckoutProvider>
@@ -113,82 +93,43 @@ export function SignupClient({ templateId, funnelName, errorMessage, paidReturn 
   // page load — this is honestly "payment received," not proof of enrollment yet.
   if (paidReturn) {
     return (
-      <main className="auth-shell">
-        <section className="auth-card">
-          <div className="auth-logo">
-            <PlexoLogoMark />
-            <span className="auth-logo-text">{funnelName}</span>
-          </div>
-          <h1 className="auth-title">Payment received</h1>
-          <p className="auth-subtitle">We&apos;re finishing setting up your access — check your email in a moment for your link in.</p>
-        </section>
-      </main>
+      <AuthShell layout="center">
+        <div className="ax-center-text">
+          <div className="ax-badge-icon ax-lime"><CircleCheck size={30} aria-hidden="true" /></div>
+          <PageHead title="Payment received">We’re setting up your access. Check your email in a moment for your link in.</PageHead>
+        </div>
+      </AuthShell>
     );
   }
 
   return (
-    <main className="auth-shell">
-      <section className="auth-card">
-        <div className="auth-logo">
-          <PlexoLogoMark />
-          <span className="auth-logo-text">{funnelName}</span>
+    <AuthShell layout="center">
+      {sent ? (
+        <div className="ax-center-text">
+          <div className="ax-badge-icon ax-lime"><MailCheck size={30} aria-hidden="true" /></div>
+          <PageHead title="Check your email">
+            We sent a link to <strong>{email.trim()}</strong>. Click it to start.
+          </PageHead>
+          <p className="ax-tips">Nothing yet? Check your spam folder, or wait a minute and sign up again.</p>
         </div>
-
-        <h1 className="auth-title">{sent ? "Check your email" : funnelName}</h1>
-        <p className="auth-subtitle">
-          {sent
-            ? `We sent a link to ${email} — click it to start.`
-            : "Sign up below and we'll send you a link to get started. No password needed."}
-        </p>
-
-        {sent ? (
-          <div style={{ marginTop: "1.5rem", padding: "1.25rem", borderRadius: 12, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)" }}>
-            <div style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem" }}>
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34d399" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, marginTop: 1 }}>
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <p style={{ fontSize: "0.875rem", color: "#34d399", lineHeight: 1.55 }}>
-                Didn't get it? Check spam, or wait a minute and try signing up again.
-              </p>
-            </div>
-          </div>
-        ) : (
-          <form onSubmit={onSubmit} noValidate>
+      ) : (
+        <>
+          <PageHead title={funnelName}>Sign up and we’ll email you a link to get started. No password needed.</PageHead>
+          <form onSubmit={onSubmit} noValidate className="ax-stack">
+            {error ? <Alert tone="error">{error}</Alert> : null}
             {(meta?.requireName ?? true) && (
-              <label className="auth-field">
-                <span className="auth-label">Name</span>
-                <input className="auth-input" type="text" required value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
-              </label>
+              <TextField label="Name" type="text" required autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
             )}
-            <label className="auth-field">
-              <span className="auth-label">Email address</span>
-              <input className="auth-input" type="email" required autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
-            </label>
+            <TextField label="Email address" type="email" required autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
             {meta?.collectPhone && (
-              <label className="auth-field">
-                <span className="auth-label">Phone number</span>
-                <input className="auth-input" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Optional" />
-              </label>
+              <TextField label="Phone number" type="tel" autoComplete="tel" optional value={phone} onChange={(e) => setPhone(e.target.value)} />
             )}
-
-            {error ? (
-              <p className="auth-error" role="alert">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
-                </svg>
-                {error}
-              </p>
-            ) : null}
-
-            <button className="auth-button" type="submit" disabled={loading}>
-              {loading ? <span className="auth-spinner" aria-hidden="true" /> : null}
-              {loading ? "Sending…" : ctaLabel}
-            </button>
+            <Button type="submit" loading={loading}>{loading ? "Sending…" : ctaLabel}</Button>
           </form>
-        )}
-      </section>
+        </>
+      )}
 
       {checkout && <StripeCheckoutModal clientSecret={checkout.clientSecret} publishableKey={checkout.publishableKey} onClose={() => setCheckout(null)} />}
-    </main>
+    </AuthShell>
   );
 }

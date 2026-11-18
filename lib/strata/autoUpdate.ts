@@ -1,5 +1,5 @@
 import { createStrataClient, planAutoUpdate, StrataError } from "@charisol/plexo-sdk/v2/strata";
-import { StrataAutoUpdate, User } from "@/lib/db/coreEntities";
+import { SiteBrand, StrataAutoUpdate, User } from "@/lib/db/coreEntities";
 import { Template } from "@/lib/db/contentEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
 import { decryptStrataToken, encryptStrataToken } from "@/lib/crypto";
@@ -198,6 +198,15 @@ async function claim(appId: string): Promise<boolean> {
   }
 }
 
+async function managedBySiteBrand(appId: string): Promise<boolean> {
+  try {
+    const { data } = await SiteBrand.get({ siteId: appId }).go();
+    return Boolean(data?.autoSync);
+  } catch {
+    return false;
+  }
+}
+
 type Finish = { kind: AutoUpdateKind; message: string; status?: "active" | "needs-reconnect"; revision?: string };
 
 async function finish(appId: string, f: Finish): Promise<void> {
@@ -217,6 +226,8 @@ export async function runStrataAutoUpdate(appId: string): Promise<RunResult> {
   try {
     row = await getRow(appId);
     if (!row || row.status !== "active") return { outcome: "skipped" };
+    // A site-level brand link (lib/brand/siteBrand.ts) now keeps this app up to date: don't apply the same change twice.
+    if (await managedBySiteBrand(appId)) return { outcome: "skipped" };
     if (!(await claim(appId))) return { outcome: "busy" };
   } catch (err) {
     console.error(`[strata-auto-update] ${appId}: couldn't start`, err);
@@ -265,47 +276,58 @@ export async function runStrataAutoUpdate(appId: string): Promise<RunResult> {
     if (plan.status === "up-to-date") return await done("up-to-date", { kind: "up-to-date", message: "Your site matches Strata.", revision: seen });
     if (plan.status === "needs-review" || !plan.merged) return await done("needs-review", { kind: "needs-review", message: NEEDS_REVIEW_NOTE, revision: seen });
 
-    // Safe to apply. Snapshot any unsaved work first so we can tell whether a republish would
-    // also push out changes the owner hasn't published yet.
-    const { data: template } = await Template.get({ id: appId }).go();
-    if (!template) {
+    const applied = await applyBrandToApp(appId, row.userId, { ...plan.merged, strata: { ...plan.merged.strata, projectId: row.strataProjectId, autoUpdate: true } });
+    if (!applied) {
       await stopAndForget(row);
       return { outcome: "stopped" };
     }
-    const actor = { userId: row.userId, organizationId: template.organizationId, userName: (await User.get({ id: row.userId }).go({ attributes: ["name"] })).data?.name ?? undefined };
-    let liveVersionId: string | null = null;
-    if (template.liveBuildId) {
-      const [{ versionId: headVersionId }, live] = await Promise.all([
-        ensureVersion(appId, { message: "Saved before updating the brand from Strata", source: "editor", authorId: actor.userId, authorName: actor.userName }),
-        ProjectBuild.get({ id: template.liveBuildId }).go(),
-      ]);
-      liveVersionId = live.data?.versionId && live.data.versionId === headVersionId ? headVersionId : null;
-    }
-
-    const applied = await applyDesignSystem(appId, { ...plan.merged, strata: { ...plan.merged.strata, projectId: row.strataProjectId, autoUpdate: true } }, row.userId);
-
-    const notes: string[] = [`Strata's latest brand was applied to ${applied.recompiled.length} page${applied.recompiled.length === 1 ? "" : "s"}.`];
-    if (applied.skipped.length) notes.push(`${applied.skipped.join(", ")} ${applied.skipped.length === 1 ? "was" : "were"} edited in code, so ${applied.skipped.length === 1 ? "it was" : "they were"} left as they are.`);
-    try {
-      await startPreview(appId, actor, { message: "Updated brand from Strata", source: "editor" });
-      if (template.liveBuildId && liveVersionId) {
-        await startPublish(appId, actor);
-        notes.push("Your live site is being updated.");
-      } else if (template.liveBuildId) {
-        notes.push("Your preview is updated. Publish when you're ready — you have other changes that aren't live yet.");
-      } else {
-        notes.push("Your preview is updated.");
-      }
-    } catch (err) {
-      console.error(`[strata-auto-update] ${appId}: rebuild didn't start`, err);
-      notes.push("Rebuilding didn't start — open the app and press Build to finish.");
-    }
+    const notes = applied.notes;
     return await done("updated", { kind: "updated", message: notes.join(" "), revision: seen });
   } catch (err) {
     if (err instanceof StrataError && err.kind === "expired") return await done("needs-reconnect", { kind: "reconnect", message: RECONNECT_NOTE, status: "needs-reconnect" });
     console.error(`[strata-auto-update] ${appId}: failed`, err);
     return await done("error", { kind: "error", message: TRY_AGAIN_NOTE });
   }
+}
+
+/**
+ * Saves a new design system into an app, recompiles its canvas pages and rebuilds — and, when the live site is exactly the
+ * latest saved version, republishes it, so visitors get the new brand without anyone opening the editor. Returns plain-language
+ * notes for the owner, or null when the app is gone. Shared by this job and the site-level brand sync (lib/brand/siteBrand.ts).
+ */
+export async function applyBrandToApp(appId: string, userId: string, designSystem: Parameters<typeof applyDesignSystem>[1]): Promise<{ notes: string[] } | null> {
+  // Snapshot any unsaved work first so we can tell whether a republish would also push out changes the owner hasn't published yet.
+  const { data: template } = await Template.get({ id: appId }).go();
+  if (!template) return null;
+  const actor = { userId, organizationId: template.organizationId, userName: (await User.get({ id: userId }).go({ attributes: ["name"] })).data?.name ?? undefined };
+  let liveVersionId: string | null = null;
+  if (template.liveBuildId) {
+    const [{ versionId: headVersionId }, live] = await Promise.all([
+      ensureVersion(appId, { message: "Saved before updating the brand from Strata", source: "editor", authorId: actor.userId, authorName: actor.userName }),
+      ProjectBuild.get({ id: template.liveBuildId }).go(),
+    ]);
+    liveVersionId = live.data?.versionId && live.data.versionId === headVersionId ? headVersionId : null;
+  }
+
+  const applied = await applyDesignSystem(appId, designSystem, userId);
+
+  const notes: string[] = [`Strata's latest brand was applied to ${applied.recompiled.length} page${applied.recompiled.length === 1 ? "" : "s"}.`];
+  if (applied.skipped.length) notes.push(`${applied.skipped.join(", ")} ${applied.skipped.length === 1 ? "was" : "were"} edited in code, so ${applied.skipped.length === 1 ? "it was" : "they were"} left as they are.`);
+  try {
+    await startPreview(appId, actor, { message: "Updated brand from Strata", source: "editor" });
+    if (template.liveBuildId && liveVersionId) {
+      await startPublish(appId, actor);
+      notes.push("Your live site is being updated.");
+    } else if (template.liveBuildId) {
+      notes.push("Your preview is updated. Publish when you're ready — you have other changes that aren't live yet.");
+    } else {
+      notes.push("Your preview is updated.");
+    }
+  } catch (err) {
+    console.error(`[strata-auto-update] ${appId}: rebuild didn't start`, err);
+    notes.push("Rebuilding didn't start — open the app and press Build to finish.");
+  }
+  return { notes };
 }
 
 /** The scheduled sweep: every app with automatic updates on, a few at a time, within a time budget. */

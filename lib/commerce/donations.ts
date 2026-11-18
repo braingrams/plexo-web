@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { checkoutPlanBlock } from "@/lib/plan/commerceGate";
 import type { EntityItem } from "electrodb";
 import { decryptPaystackKey, decryptStripeKey } from "@/lib/crypto";
 import {
@@ -219,6 +220,8 @@ export async function startDonation(input: StartDonationInput): Promise<StartDon
   ]);
   if (!campaign || !(campaign.active ?? true)) throw new DonationError("This donation form isn't accepting donations right now.", 404);
   if (!settings?.enabled) throw new DonationError("This site isn't accepting donations yet — please check back soon.");
+  const planBlock = await checkoutPlanBlock(settings);
+  if (planBlock) throw new DonationError("This site isn't accepting donations right now — please check back soon.");
 
   const presets = (campaign.presetAmounts as DonationPreset[]) ?? [];
   const isPreset = presets.some((p) => p.amountMinor === input.amountMinor);

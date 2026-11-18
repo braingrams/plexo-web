@@ -81,8 +81,8 @@ export function NotificationsSection({ initial }: Props) {
   }
 
   return (
-    <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: "1.5rem" }}>
-      <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.35)", maxWidth: 560, marginBottom: "1.25rem" }}>
+    <div style={{ background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", borderRadius: 16, padding: "1.5rem" }}>
+      <p style={{ fontSize: "0.78rem", color: "var(--plx-faint, rgba(240,242,255,0.35))", maxWidth: 560, marginBottom: "1.25rem" }}>
         Account-security emails (verification, password reset) and things you&apos;re actively waiting on (org invites, site transfer requests)
         always send regardless of these.
       </p>
@@ -93,12 +93,12 @@ export function NotificationsSection({ initial }: Props) {
             key={row.key}
             style={{
               display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap",
-              padding: "0.9rem 0", borderBottom: idx < ROWS.length - 1 ? "1px solid rgba(255,255,255,0.06)" : "none",
+              padding: "0.9rem 0", borderBottom: idx < ROWS.length - 1 ? "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" : "none",
             }}
           >
             <div>
-              <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff", marginBottom: "0.2rem" }}>{row.label}</p>
-              <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)" }}>{row.desc}</p>
+              <p style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)", marginBottom: "0.2rem" }}>{row.label}</p>
+              <p style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>{row.desc}</p>
             </div>
             <button
               type="button"
@@ -107,8 +107,8 @@ export function NotificationsSection({ initial }: Props) {
               onClick={() => void onToggle(row.key)}
               style={{
                 position: "relative", width: 44, height: 24, borderRadius: 999, flexShrink: 0,
-                background: prefs[row.key] ? "var(--brand)" : "rgba(255,255,255,0.1)",
-                border: prefs[row.key] ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.12)",
+                background: prefs[row.key] ? "var(--brand)" : "color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
+                border: prefs[row.key] ? "1px solid var(--brand)" : "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
                 cursor: savingKey === row.key ? "default" : "pointer",
                 transition: "background 0.2s, border-color 0.2s",
               }}
@@ -124,13 +124,13 @@ export function NotificationsSection({ initial }: Props) {
           </div>
         ))}
       </div>
-      {error && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{error}</p>}
+      {error && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)", marginTop: "0.75rem" }}>{error}</p>}
 
-      <div style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-        <label htmlFor="notification-email" style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "#f0f2ff", marginBottom: "0.3rem" }}>
+      <div style={{ marginTop: "1.25rem", paddingTop: "1.25rem", borderTop: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" }}>
+        <label htmlFor="notification-email" style={{ display: "block", fontSize: "0.85rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)", marginBottom: "0.3rem" }}>
           Send to
         </label>
-        <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginBottom: "0.6rem" }}>
+        <p style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.6rem" }}>
           Leave blank to use your own account email. Point it somewhere else — a shared team inbox, say — to redirect all of the above there instead.
         </p>
         <input
@@ -143,11 +143,11 @@ export function NotificationsSection({ initial }: Props) {
           placeholder="you@example.com"
           style={{
             width: "100%", maxWidth: 360, padding: "0.55rem 0.8rem", borderRadius: 8,
-            border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)",
-            color: "#f0f2ff", fontSize: "0.85rem", fontFamily: "inherit",
+            border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 2%, transparent)",
+            color: "var(--plx-text, #f0f2ff)", fontSize: "0.85rem", fontFamily: "inherit",
           }}
         />
-        {emailError && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.5rem" }}>{emailError}</p>}
+        {emailError && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)", marginTop: "0.5rem" }}>{emailError}</p>}
       </div>
     </div>
   );

@@ -6,6 +6,7 @@ import { findRootTemplateId } from "@/lib/siteLayoutDynamo";
 import { Template, BlogRedirect } from "@/lib/db/contentEntities";
 
 import { RedirectsClient, type RedirectSummary } from "./RedirectsClient";
+import { SiteToolBack } from "@/app/dashboard/_v3/page/SiteToolBack";
 
 export default async function RedirectsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -43,5 +44,10 @@ export default async function RedirectsPage({ params }: { params: Promise<{ id: 
     createdAt: r.createdAt ?? new Date().toISOString(),
   }));
 
-  return <RedirectsClient templateId={found.id} initialRedirects={initialRedirects} />;
+  return (
+    <>
+    <SiteToolBack siteId={found.id} tab="settings" />
+      <RedirectsClient templateId={found.id} initialRedirects={initialRedirects} />
+    </>
+  );
 }

@@ -59,7 +59,7 @@ vi.mock("@/lib/commerce/storefrontLayout", () => ({ getStorefrontPath: async () 
 vi.mock("@/lib/commerce/deriveCommerceTheme", () => ({ deriveCommerceTheme: () => null }));
 vi.mock("@/lib/analyticsRollup", () => ({ recordPageViewRollup: async () => {} }));
 vi.mock("@/server/analytics", () => ({ parseUserAgent: () => ({}), extractGeoFromHeaders: () => ({}) }));
-vi.mock("@/server/orgDynamo", () => ({ getOrganizationOwnerPlanDynamo: async () => "FREE" }));
+vi.mock("@/server/orgDynamo", () => ({ orgCanWhiteLabelDynamo: async () => false }));
 vi.mock("@/lib/forms/recordSubmission", () => ({
   collectFormFields: (entries: Iterable<[string, unknown]>) => Object.fromEntries([...entries].filter(([, v]) => typeof v === "string" && v)),
   recordFormSubmission: async (i: { formName: string; fields: Record<string, string> }) => { db.submissions.push({ formName: i.formName, fields: i.fields }); },

@@ -1,6 +1,7 @@
 import { ImportJob } from "@/lib/db/importEntities";
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
 import { ImportClient } from "./ImportClient";
+import { SiteToolBack } from "@/app/dashboard/_v3/page/SiteToolBack";
 
 export default async function BlogImportPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -15,6 +16,8 @@ export default async function BlogImportPage({ params }: { params: Promise<{ id:
   const activeJob = activeJobs[0] ?? null;
 
   return (
+    <>
+    <SiteToolBack siteId={access.templateId} tab="blog" label="Back to your blog" />
     <ImportClient
       templateId={access.templateId}
       templateName={access.templateName}
@@ -31,5 +34,6 @@ export default async function BlogImportPage({ params }: { params: Promise<{ id:
           : null
       }
     />
+    </>
   );
 }

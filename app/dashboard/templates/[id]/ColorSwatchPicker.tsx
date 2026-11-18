@@ -249,16 +249,16 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
         title="Pick a color"
         style={{
           position: "relative", width: 28, height: 28, borderRadius: 7, flexShrink: 0,
-          overflow: "hidden", border: isOpen ? "1px solid var(--brand)" : "1px solid rgba(255,255,255,0.15)",
+          overflow: "hidden", border: isOpen ? "1px solid var(--brand)" : "1px solid var(--ed-w-150)",
           cursor: "pointer", padding: 0,
           backgroundImage:
-            "linear-gradient(45deg, rgba(255,255,255,0.12) 25%, transparent 25%), linear-gradient(-45deg, rgba(255,255,255,0.12) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.12) 75%), linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.12) 75%)",
+            "linear-gradient(45deg, var(--ed-w-120) 25%, transparent 25%), linear-gradient(-45deg, var(--ed-w-120) 25%, transparent 25%), linear-gradient(45deg, transparent 75%, var(--ed-w-120) 75%), linear-gradient(-45deg, transparent 75%, var(--ed-w-120) 75%)",
           backgroundSize: "8px 8px",
-          backgroundColor: "#1e1b30",
+          backgroundColor: "var(--ed-panel-2)",
         }}
       >
         <div style={{ position: "absolute", inset: 0, background: isTransparent ? "transparent" : value, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          {isTransparent && <div style={{ position: "absolute", width: "140%", height: 2, background: "#f87171", transform: "rotate(45deg)" }} />}
+          {isTransparent && <div style={{ position: "absolute", width: "140%", height: 2, background: "var(--ed-danger)", transform: "rotate(45deg)" }} />}
         </div>
       </button>
 
@@ -269,8 +269,8 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
             style={{
               position: "fixed", top: panelPos.top, left: panelPos.left, zIndex: 100000,
               width: 224, borderRadius: 12, padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.75rem",
-              background: "#16142c", border: "1px solid rgba(255,255,255,0.1)", boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
-              color: "#f0f2ff",
+              background: "var(--ed-panel-2)", border: "1px solid var(--ed-w-100)", boxShadow: "0 20px 50px rgba(0,0,0,0.5)",
+              color: "var(--ed-text)",
             }}
           >
             <div
@@ -319,10 +319,10 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
               />
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "0.5rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", borderTop: "1px solid var(--ed-w-080)", paddingTop: "0.5rem" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "rgba(240,242,255,0.6)" }}>Opacity</span>
-                <span style={{ fontSize: "0.65rem", fontFamily: "monospace", background: "rgba(255,255,255,0.06)", padding: "0.1rem 0.35rem", borderRadius: 5, color: "rgba(240,242,255,0.6)" }}>
+                <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "var(--ed-t-600)" }}>Opacity</span>
+                <span style={{ fontSize: "0.65rem", fontFamily: "monospace", background: "var(--ed-w-060)", padding: "0.1rem 0.35rem", borderRadius: 5, color: "var(--ed-t-600)" }}>
                   {opacity}%
                 </span>
               </div>
@@ -337,15 +337,15 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
               />
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,0.08)", paddingTop: "0.5rem" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid var(--ed-w-080)", paddingTop: "0.5rem" }}>
               <button
                 type="button"
                 onClick={() => void handleEyeDropper()}
                 title="Pick color from screen"
                 style={{
                   display: "grid", placeItems: "center", width: 26, height: 26, borderRadius: 7,
-                  border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)",
-                  color: "rgba(240,242,255,0.7)", cursor: "pointer",
+                  border: "1px solid var(--ed-w-100)", background: "var(--ed-w-040)",
+                  color: "var(--ed-t-700)", cursor: "pointer",
                 }}
               >
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -357,13 +357,13 @@ export function ColorSwatchPicker({ value, onChange }: Props) {
               </button>
 
               <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                <span style={{ fontSize: "0.68rem", fontWeight: 600, color: "rgba(240,242,255,0.6)" }}>Transparent</span>
+                <span style={{ fontSize: "0.68rem", fontWeight: 600, color: "var(--ed-t-600)" }}>Transparent</span>
                 <button
                   type="button"
                   onClick={() => onChange(isTransparent ? hex : "transparent")}
                   style={{
                     position: "relative", width: 30, height: 17, borderRadius: 999, border: "none", flexShrink: 0,
-                    cursor: "pointer", background: isTransparent ? "var(--brand)" : "rgba(255,255,255,0.15)",
+                    cursor: "pointer", background: isTransparent ? "var(--brand)" : "var(--ed-w-150)",
                   }}
                 >
                   <span

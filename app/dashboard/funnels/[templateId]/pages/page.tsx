@@ -1,3 +1,4 @@
+import { redirectIfV3 } from "@/lib/dashboardV3/v3Redirect";
 import { auth } from "@/server/authDynamo";
 import { LmsPage } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
@@ -5,6 +6,8 @@ import { PagesBuilderClient } from "./PagesBuilderClient";
 
 export default async function FunnelPagesRoute({ params }: { params: Promise<{ templateId: string }> }) {
   const { templateId } = await params;
+  // New dashboard: lessons are managed on the course's Lessons tab.
+  await redirectIfV3(`/dashboard/learners/${templateId}/lessons`);
   const session = await auth();
 
   const [{ data: pages }, { data: user }] = await Promise.all([

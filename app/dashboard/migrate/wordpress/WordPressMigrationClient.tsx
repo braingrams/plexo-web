@@ -7,6 +7,9 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { CheckStep, FindSiteStep, GoLiveStep, MovingStep, PluginList, ReviewStep } from "./wizard/steps";
 import { Stepper, type WizardStep } from "./wizard/ui";
 import type { DomainRow, ExistingMigration, JobStatus, Preview, Report } from "./wizard/types";
+import { GoLiveScreen, ProgressScreen, ReportScreen, ReviewScreen, StartScreen } from "@/app/dashboard/_v3/migrate/Screens";
+import { DomainPanel, PrivateDataPanel } from "@/app/dashboard/_v3/migrate/Panels";
+import { FullReportV3 } from "@/app/dashboard/_v3/migrate/FullReportV3";
 
 // "Move from WordPress", as a guided wizard (./wizard): find the site → review what will
 // move → watch it move → check the new site → go live. One thing per screen, one obvious
@@ -70,7 +73,7 @@ function StatusDot({ status }: { status: CheckStatus }) {
   );
 }
 
-interface ConnectorView {
+export interface ConnectorView {
   status: "WAITING" | "CONNECTED" | "ERROR";
   summary: {
     tables: { name: string; rows: number; columns: string[] }[];
@@ -85,7 +88,7 @@ interface ConnectorView {
   error: string | null;
   code: string | null;
 }
-interface ExtrasView {
+export interface ExtrasView {
   stage: string;
   counts: {
     formEntries: number;
@@ -324,8 +327,8 @@ function PrivateDataCard({ templateId, jobId }: { templateId: string; jobId: str
 }
 
 
-interface CutoverRecord { name: string; type: string; value: string; priority?: number; why: string }
-interface CutoverView {
+export interface CutoverRecord { name: string; type: string; value: string; priority?: number; why: string }
+export interface CutoverView {
   plan: {
     domain: string;
     wwwDomain: string;
@@ -512,7 +515,8 @@ function CutoverPanel({ templateId, jobId }: { templateId: string; jobId: string
   );
 }
 
-export function WordPressMigrationClient() {
+/** `v3`: the new-look dashboard is on, so the move is drawn with the v3 screens (same data, same endpoints). `canMove`: the plan includes moving a site. */
+export function WordPressMigrationClient({ v3 = false, canMove = true }: { v3?: boolean; canMove?: boolean } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [url, setUrl] = useState("");
@@ -706,10 +710,11 @@ export function WordPressMigrationClient() {
 
   // ── A move that's started ────────────────────────────────────────────────────
   if (jobId && siteId) {
-    if (!job) return frame(2, <p style={muted}>Loading your move…</p>);
+    if (!job) return v3 ? <p style={muted}>Loading your move…</p> : frame(2, <p style={muted}>Loading your move…</p>);
     const siteName = job.report?.source.siteName || job.install?.siteName || "your site";
 
     if (job.phase !== "COMPLETED" || !job.report) {
+      if (v3) return <ProgressScreen job={job} siteName={siteName} onRetry={() => void retry(job.templateId, job.id)} />;
       return frame(2, <MovingStep job={job} siteName={siteName} onRetry={() => void retry(job.templateId, job.id)} />);
     }
 
@@ -726,6 +731,34 @@ export function WordPressMigrationClient() {
     const view = afterView ?? (domains.some((d) => d.type === "CUSTOM") ? "live" : "check");
     const go = (s: WizardStep) => setAfterView(s === 4 ? "live" : "check");
 
+    if (v3 && view === "live") {
+      return (
+        <GoLiveScreen host={host} templateId={job.templateId} onBack={() => setAfterView("check")}>
+          {(onSafe) => <DomainPanel templateId={job.templateId} jobId={job.id} onSafe={onSafe} />}
+        </GoLiveScreen>
+      );
+    }
+    if (v3) {
+      return (
+        <ReportScreen
+          report={report}
+          siteName={siteName}
+          templateId={job.templateId}
+          preview={previewDomain}
+          subdomain={subdomain}
+          onSubdomain={setSubdomain}
+          publishing={publishing}
+          publishError={publishError}
+          onPublish={() => void handlePublish()}
+          onContinue={() => {
+            setAfterView("live");
+            window.scrollTo({ top: 0, behavior: "smooth" });
+          }}
+          privateData={<PrivateDataPanel templateId={job.templateId} jobId={job.id} />}
+          fullReport={<FullReportV3 report={report} templateId={job.templateId} />}
+        />
+      );
+    }
     if (view === "live") {
       return frame(
         4,
@@ -761,6 +794,27 @@ export function WordPressMigrationClient() {
   }
 
   // ── Before the move ──────────────────────────────────────────────────────────
+  if (v3 && preview) {
+    return (
+      <ReviewScreen
+        preview={preview}
+        wholeSite={wholeSite}
+        onWholeSite={setWholeSite}
+        owns={owns}
+        onOwns={setOwns}
+        needsAup={needsAup}
+        aup={aup}
+        onAup={setAup}
+        starting={starting}
+        error={error}
+        onStart={() => void handleStart()}
+        onBack={() => {
+          setPreview(null);
+          setError(null);
+        }}
+      />
+    );
+  }
   if (preview) {
     return frame(
       1,
@@ -785,6 +839,7 @@ export function WordPressMigrationClient() {
       () => setPreview(null),
     );
   }
+  if (v3) return <StartScreen url={url} onUrl={setUrl} onCheck={(e) => void handleCheck(e)} checking={checking} error={error} upgradeNeeded={upgradeNeeded} existing={existing} canMove={canMove} />;
   return frame(0, <FindSiteStep url={url} onUrl={setUrl} onCheck={(e) => void handleCheck(e)} checking={checking} error={error} upgradeNeeded={upgradeNeeded} existing={existing} />);
 }
 

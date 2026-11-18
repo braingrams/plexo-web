@@ -1,0 +1,51 @@
+/*
+ * Shop pages (and Visits) on the new dashboard. The pages were written for the old dashboard and
+ * name their colours as `var(--cmx-x, <old colour>)`. Outside the new dashboard these variables
+ * don't exist, so the old colours apply unchanged. Inside it they resolve to the live brand tokens,
+ * so light, dark and a Strata publish all restyle the shop with nothing hardcoded.
+ */
+[data-plexo-v3] {
+  --cmx-ink: var(--plx-text);
+  --cmx-text: var(--plx-text);
+  --cmx-muted: var(--plx-muted);
+  --cmx-surface: var(--plx-surface);
+  --cmx-on-brand: var(--plx-on-brand);
+  --cmx-brand: var(--plx-brand);
+  --cmx-brand-deep: var(--plx-brand);
+  --cmx-brand-subtle: var(--plx-tint);
+  --cmx-accent: var(--plx-link);
+  --cmx-success: var(--plx-success);
+  --cmx-danger: var(--plx-danger);
+  --cmx-warning: var(--plx-warning);
+  --cmx-info: var(--plx-info);
+  --cmx-violet: var(--plx-violet);
+  --cmx-card: var(--plx-surface);
+  --cmx-card-border: var(--plx-border);
+}
+
+/* Shop frame */
+.plx-shop { display: flex; flex-direction: column; gap: 24px; min-width: 0; }
+.plx-shop__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; }
+.plx-shop__id { display: flex; flex-direction: column; gap: 10px; min-width: 0; flex: 1 1 280px; }
+.plx-shop__title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.plx-shop__tabs { overflow-x: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; }
+.plx-shop__tabs::-webkit-scrollbar { display: none; }
+.plx-shop__tabs .plx-tabs__list { min-width: max-content; }
+.plx-shop__body { min-width: 0; }
+.plx-shop__switch { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: var(--plx-muted); font-size: 14px; }
+.plx-shop__select { font: inherit; min-height: 44px; padding: 0 12px; border-radius: var(--plx-radius); border: 1px solid var(--plx-border-strong); background: var(--plx-surface); color: var(--plx-text); max-width: 100%; }
+
+/* Inside the shop pages, plain controls take the new look too. */
+.plx-shop__body input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]),
+.plx-shop__body select,
+.plx-shop__body textarea { font-family: inherit; color: var(--plx-text); border-radius: var(--plx-radius); }
+.plx-shop__body input::placeholder, .plx-shop__body textarea::placeholder { color: var(--plx-faint); }
+.plx-shop__body button { font-family: inherit; }
+.plx-shop__body select option { background: var(--plx-surface); color: var(--plx-text); }
+.plx-shop__body table { font-family: inherit; }
+
+/* Shop settings' second row of choices (General · Payments · Checkout · Notifications) */
+.plx-shop__body .dash-pill-nav { gap: 6px; padding: 4px; background: var(--plx-elevated); border-radius: 999px; width: fit-content; max-width: 100%; flex: none; }
+.plx-shop__body .dash-pill-nav-item { min-height: 40px; display: inline-flex; align-items: center; padding: 0 16px; font-size: 14px; font-weight: 700; color: var(--plx-muted); }
+.plx-shop__body .dash-pill-nav-item:hover { background: var(--plx-ghost-hover); color: var(--plx-text); }
+.plx-shop__body .dash-pill-nav-item.active { background: var(--plx-surface); color: var(--plx-text); box-shadow: var(--plx-shadow-card); border: 1px solid var(--plx-border); }

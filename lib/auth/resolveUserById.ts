@@ -1,6 +1,6 @@
 import { User } from "@/lib/db/coreEntities";
 import { membershipsForUser, ensurePersonalWorkspace } from "@/server/orgMemberships";
-import { resolveManageLandingPagePublishing } from "@/lib/subscription";
+import { workspacePlan } from "@/lib/plan/workspacePlan";
 import type { OrgRole } from "@/server/accessControl";
 
 export interface LambdaResolvedUser {
@@ -8,6 +8,8 @@ export interface LambdaResolvedUser {
   organizationId: string;
   role: OrgRole | null;
   subscriptionPlan: string;
+  /** The workspace owner's plan is on its free trial. */
+  onTrial: boolean;
   customDomainLimit: number | null;
   manageLandingPagePublishing: boolean;
 }
@@ -51,12 +53,8 @@ export async function resolveUserById(
     return null;
   }
 
-  return {
-    userId: user.id,
-    organizationId,
-    role,
-    subscriptionPlan: user.subscriptionPlan ?? "FREE",
-    customDomainLimit: user.customDomainLimit ?? null,
-    manageLandingPagePublishing: resolveManageLandingPagePublishing(user.subscriptionPlan ?? "FREE", user.manageLandingPagePublishing ?? false),
-  };
+  // The workspace's plan is its owner's (lib/plan/workspacePlan.ts) — and the effective one,
+  // so a lapsed subscription or legacy plan value is read correctly here too.
+  const plan = await workspacePlan(organizationId, user, role);
+  return { userId: user.id, organizationId, role, ...plan };
 }

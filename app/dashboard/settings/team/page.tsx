@@ -1,3 +1,5 @@
+import { getV3SettingsContext } from "@/lib/dashboardV3/settingsContext";
+import { TeamV3 } from "./v3";
 import { redirect } from "next/navigation";
 
 import { auth } from "@/server/authDynamo";
@@ -11,6 +13,9 @@ export default async function TeamSettingsPage() {
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/settings/team");
   }
+
+  const v3 = await getV3SettingsContext("/dashboard/settings/team");
+  if (v3) return <TeamV3 ctx={v3} />;
 
   const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {

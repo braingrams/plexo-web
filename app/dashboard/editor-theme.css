@@ -1,0 +1,159 @@
+/*
+ * Colours for the site editors (the page, blog, layout and app editors and everything inside them).
+ *
+ * The editors were written against the old dashboard's dark palette, so every colour in them is a
+ * variable named --ed-* (or one of the old --brand / --bg / --text-* variables) instead of a literal.
+ *   - Old dashboard: the first block below keeps exactly the look the editors always had.
+ *   - New dashboard (V3): the second block points the same names at Plexo's own brand tokens
+ *     (--plx-*, which come live from Strata, light and dark), so the editors match the rest of the
+ *     app and follow the Light / Dark / System choice. Nothing here is a V3 literal.
+ * The colours of the owner's own site inside the canvas are never touched by this file.
+ */
+
+/* Old dashboard (default) */
+:root {
+  --ed-text: #f0f2ff;
+  --ed-on-brand: #fff;
+  --ed-on-danger: #fff;
+  --ed-accent-text: var(--brand);
+  --ed-cta: linear-gradient(135deg, var(--brand), var(--brand-deep));
+  --ed-cta-wide: linear-gradient(135deg, var(--brand-light), var(--brand) 55%, var(--brand-deep));
+  --ed-danger: #f87171;
+  --ed-danger-fill: linear-gradient(135deg, #ef4444, #b91c1c);
+  --ed-violet: #6366f1;
+  --ed-lavender: #c4b5fd;
+  --ed-amber: #f59e0b;
+  --ed-warning: #fbbf24;
+  --ed-success: #34d399;
+  --ed-bg: #0b0f19;
+  --ed-panel: #11162a;
+  --ed-panel-2: #16142c;
+  --ed-sunken: #070a12;
+  --ed-scrim: rgba(5, 6, 12, 0.7);
+  --ed-w-015: rgba(255, 255, 255, 0.015);
+  --ed-w-020: rgba(255, 255, 255, 0.02);
+  --ed-w-025: rgba(255, 255, 255, 0.025);
+  --ed-w-030: rgba(255, 255, 255, 0.03);
+  --ed-w-040: rgba(255, 255, 255, 0.04);
+  --ed-w-050: rgba(255, 255, 255, 0.05);
+  --ed-w-060: rgba(255, 255, 255, 0.06);
+  --ed-w-070: rgba(255, 255, 255, 0.07);
+  --ed-w-080: rgba(255, 255, 255, 0.08);
+  --ed-w-090: rgba(255, 255, 255, 0.09);
+  --ed-w-100: rgba(255, 255, 255, 0.1);
+  --ed-w-120: rgba(255, 255, 255, 0.12);
+  --ed-w-140: rgba(255, 255, 255, 0.14);
+  --ed-w-150: rgba(255, 255, 255, 0.15);
+  --ed-w-160: rgba(255, 255, 255, 0.16);
+  --ed-w-180: rgba(255, 255, 255, 0.18);
+  --ed-w-200: rgba(255, 255, 255, 0.2);
+  --ed-w-250: rgba(255, 255, 255, 0.25);
+  --ed-w-280: rgba(255, 255, 255, 0.28);
+  --ed-w-300: rgba(255, 255, 255, 0.3);
+  --ed-w-320: rgba(255, 255, 255, 0.32);
+  --ed-w-350: rgba(255, 255, 255, 0.35);
+  --ed-w-500: rgba(255, 255, 255, 0.5);
+  --ed-w-600: rgba(255, 255, 255, 0.6);
+  --ed-w-900: rgba(255, 255, 255, 0.9);
+  --ed-t-200: rgba(240, 242, 255, 0.2);
+  --ed-t-250: rgba(240, 242, 255, 0.25);
+  --ed-t-300: rgba(240, 242, 255, 0.3);
+  --ed-t-350: rgba(240, 242, 255, 0.35);
+  --ed-t-400: rgba(240, 242, 255, 0.4);
+  --ed-t-450: rgba(240, 242, 255, 0.45);
+  --ed-t-500: rgba(240, 242, 255, 0.5);
+  --ed-t-550: rgba(240, 242, 255, 0.55);
+  --ed-t-600: rgba(240, 242, 255, 0.6);
+  --ed-t-650: rgba(240, 242, 255, 0.65);
+  --ed-t-700: rgba(240, 242, 255, 0.7);
+  --ed-t-750: rgba(240, 242, 255, 0.75);
+  --ed-t-800: rgba(240, 242, 255, 0.8);
+  --ed-t-850: rgba(240, 242, 255, 0.85);
+}
+
+/* New dashboard: Plexo's brand tokens. :root[data-theme] covers menus the editors attach to the page itself. */
+[data-plexo-v3],
+:root[data-theme] {
+  --ed-text: var(--plx-text);
+  --ed-on-brand: var(--plx-on-brand);
+  --ed-on-danger: var(--plx-on-danger);
+  --ed-accent-text: var(--plx-link);
+  --ed-cta: var(--plx-brand);
+  --ed-cta-wide: var(--plx-brand);
+  --ed-danger: var(--plx-danger);
+  --ed-danger-fill: var(--plx-danger);
+  --ed-violet: var(--plx-violet);
+  --ed-lavender: var(--plx-info);
+  --ed-amber: var(--plx-accent);
+  --ed-warning: var(--plx-warning);
+  --ed-success: var(--plx-success);
+  --ed-bg: var(--plx-bg);
+  --ed-panel: var(--plx-surface);
+  --ed-panel-2: var(--plx-elevated);
+  --ed-sunken: var(--plx-sunken);
+  --ed-scrim: var(--plx-overlay);
+  --ed-w-015: color-mix(in srgb, var(--plx-text) 1.5%, transparent);
+  --ed-w-020: color-mix(in srgb, var(--plx-text) 2%, transparent);
+  --ed-w-025: color-mix(in srgb, var(--plx-text) 2.5%, transparent);
+  --ed-w-030: color-mix(in srgb, var(--plx-text) 3%, transparent);
+  --ed-w-040: color-mix(in srgb, var(--plx-text) 4%, transparent);
+  --ed-w-050: color-mix(in srgb, var(--plx-text) 5%, transparent);
+  --ed-w-060: color-mix(in srgb, var(--plx-text) 6%, transparent);
+  --ed-w-070: color-mix(in srgb, var(--plx-text) 7%, transparent);
+  --ed-w-080: color-mix(in srgb, var(--plx-text) 8%, transparent);
+  --ed-w-090: color-mix(in srgb, var(--plx-text) 9%, transparent);
+  --ed-w-100: color-mix(in srgb, var(--plx-text) 10%, transparent);
+  --ed-w-120: color-mix(in srgb, var(--plx-text) 12%, transparent);
+  --ed-w-140: color-mix(in srgb, var(--plx-text) 14%, transparent);
+  --ed-w-150: color-mix(in srgb, var(--plx-text) 15%, transparent);
+  --ed-w-160: color-mix(in srgb, var(--plx-text) 16%, transparent);
+  --ed-w-180: color-mix(in srgb, var(--plx-text) 18%, transparent);
+  --ed-w-200: color-mix(in srgb, var(--plx-text) 20%, transparent);
+  --ed-w-250: color-mix(in srgb, var(--plx-text) 25%, transparent);
+  --ed-w-280: color-mix(in srgb, var(--plx-text) 28%, transparent);
+  --ed-w-300: color-mix(in srgb, var(--plx-text) 30%, transparent);
+  --ed-w-320: color-mix(in srgb, var(--plx-text) 32%, transparent);
+  --ed-w-350: color-mix(in srgb, var(--plx-text) 35%, transparent);
+  --ed-w-500: color-mix(in srgb, var(--plx-text) 50%, transparent);
+  --ed-w-600: color-mix(in srgb, var(--plx-text) 60%, transparent);
+  --ed-w-900: color-mix(in srgb, var(--plx-text) 90%, transparent);
+  --ed-t-200: color-mix(in srgb, var(--plx-text) 20%, transparent);
+  --ed-t-250: color-mix(in srgb, var(--plx-text) 25%, transparent);
+  --ed-t-300: color-mix(in srgb, var(--plx-text) 30%, transparent);
+  --ed-t-350: color-mix(in srgb, var(--plx-text) 35%, transparent);
+  --ed-t-400: color-mix(in srgb, var(--plx-text) 40%, transparent);
+  --ed-t-450: color-mix(in srgb, var(--plx-text) 45%, transparent);
+  --ed-t-500: color-mix(in srgb, var(--plx-text) 50%, transparent);
+  --ed-t-550: color-mix(in srgb, var(--plx-text) 55%, transparent);
+  --ed-t-600: color-mix(in srgb, var(--plx-text) 60%, transparent);
+  --ed-t-650: color-mix(in srgb, var(--plx-text) 65%, transparent);
+  --ed-t-700: color-mix(in srgb, var(--plx-text) 70%, transparent);
+  --ed-t-750: color-mix(in srgb, var(--plx-text) 75%, transparent);
+  --ed-t-800: color-mix(in srgb, var(--plx-text) 80%, transparent);
+  --ed-t-850: color-mix(in srgb, var(--plx-text) 85%, transparent);
+}
+
+/* The old brand / surface / text names, re-pointed so code that still uses them looks right in the new dashboard. */
+[data-editor-theme][data-editor-v3] {
+  --brand: var(--plx-brand);
+  --brand-deep: var(--plx-deep);
+  --brand-deeper: var(--plx-brand-active);
+  --brand-light: var(--plx-brand-hover);
+  --brand-soft: var(--plx-brand);
+  --brand-subtle: var(--plx-tint);
+  --brand-glow: color-mix(in srgb, var(--plx-brand) 35%, transparent);
+  --bg: var(--plx-bg);
+  --bg-1: var(--plx-surface);
+  --bg-2: var(--plx-elevated);
+  --bg-3: var(--plx-elevated);
+  --surface: var(--plx-surface);
+  --surface-border: var(--plx-border);
+  --text-main: var(--plx-text);
+  --text-muted: var(--plx-muted);
+  --text-faint: var(--plx-faint);
+  --font-heading: var(--font-family-base, var(--font-v3-sans));
+  --font-body: var(--font-family-base, var(--font-v3-sans));
+  --font-mono: var(--font-v3-mono);
+  font-family: var(--font-family-base, var(--font-v3-sans)), ui-sans-serif, system-ui, sans-serif;
+  color: var(--plx-text);
+}

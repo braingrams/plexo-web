@@ -83,7 +83,7 @@ export async function queueSsrPushBuild(link: ProjectGitLinkItem, push: { after:
     }
     const plan = getTierFeatures(effectivePlan(owner));
     if (!plan.ssrEnabled) {
-      await failed("Server apps are available on the ULTRA plan.");
+      await failed("Server apps are part of the Pro plan. Upgrade in Settings → Billing to use them.");
       return;
     }
 

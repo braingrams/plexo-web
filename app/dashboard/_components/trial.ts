@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-// Shared by every "Try Pro free for 14 days" button: whether this account can still start
+// Shared by every "Try Starter/Pro free for 14 days" button: whether this account can still start
 // its one trial, and starting it. One request per page load, however many buttons ask.
 
 let availability: Promise<{ available: boolean; trialDays: number }> | null = null;
@@ -23,7 +23,7 @@ export function useTrialAvailable(): { available: boolean; trialDays: number } {
 }
 
 /** Starts the trial, then reloads `returnTo` (default: this page) so everything unlocked shows at once. */
-export async function startTrial(plan: "PRO" | "ULTRA", returnTo?: string): Promise<void> {
+export async function startTrial(plan: "STARTER" | "PRO", returnTo?: string): Promise<void> {
   const res = await fetch("/api/billing/trial", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

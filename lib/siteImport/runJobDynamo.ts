@@ -65,7 +65,7 @@ async function runDetectAndDiscover(job: { id: string; templateId: string; sourc
   // platform's signature) rather than adding a dedicated "was this locked" schema field for it.
   const platform = job.platform !== "UNKNOWN" ? job.platform : detectPlatformFromHtml(homepageHtml);
 
-  const maxPages = 50; // see lib/siteImport's security hardening notes — Ultra-tier cap
+  const maxPages = 50; // see lib/siteImport's security hardening notes — per-import cap
   const { discovered, excluded } = await discoverSite(job.sourceUrl, homepageHtml, { maxPages });
 
   if (discovered.length === 0) {

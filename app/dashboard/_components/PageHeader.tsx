@@ -29,7 +29,7 @@ export function PageHeader({ eyebrow, title, subtitle, action }: Props) {
               fontWeight: 700,
               letterSpacing: "0.12em",
               textTransform: "uppercase",
-              color: "var(--brand)",
+              color: "var(--plx-link, var(--brand))",
               marginBottom: "0.25rem",
             }}
           >
@@ -42,14 +42,14 @@ export function PageHeader({ eyebrow, title, subtitle, action }: Props) {
             fontSize: isModern ? "clamp(1.35rem, 3.5vw, 2.2rem)" : "clamp(1.25rem, 3.5vw, 1.95rem)",
             fontWeight: 800,
             letterSpacing: "-0.025em",
-            color: "#f0f2ff",
+            color: "var(--plx-text, #f0f2ff)",
             lineHeight: 1.2,
           }}
         >
           {title}
         </h1>
         {subtitle && (
-          <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.45)", marginTop: "0.35rem", lineHeight: 1.45 }}>{subtitle}</p>
+          <p style={{ fontSize: "0.82rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", marginTop: "0.35rem", lineHeight: 1.45 }}>{subtitle}</p>
         )}
       </div>
       {action && (

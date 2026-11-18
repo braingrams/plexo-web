@@ -8,7 +8,7 @@ export function CommentBody({ body }: { body: string }) {
     <>
       {segments.map((seg, i) =>
         seg.type === "mention" ? (
-          <span key={i} style={{ color: "var(--brand)", fontWeight: 600 }}>
+          <span key={i} style={{ color: "var(--ed-accent-text)", fontWeight: 600 }}>
             @{seg.name}
           </span>
         ) : (

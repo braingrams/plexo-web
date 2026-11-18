@@ -25,9 +25,9 @@ export function ActivityHeatmap({ data }: { data: HeatmapPoint[] }) {
   const hasData = data.some((d) => d.count > 0);
 
   function cellColor(value: number): string {
-    if (value === 0) return "rgba(255,255,255,0.035)";
+    if (value === 0) return "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3.5%, transparent)";
     const ratio = value / max;
-    return `rgba(var(--brand-rgb),${0.15 + ratio * 0.75})`;
+    return `color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) ${Math.round((0.15 + ratio * 0.75) * 100)}%, transparent)`;
   }
 
   return (
@@ -37,14 +37,14 @@ export function ActivityHeatmap({ data }: { data: HeatmapPoint[] }) {
         {DAY_LABELS.map((label) => (
           <div
             key={label}
-            style={{ textAlign: "center", fontSize: "0.68rem", fontWeight: 600, color: "rgba(240,242,255,0.35)" }}
+            style={{ textAlign: "center", fontSize: "0.68rem", fontWeight: 600, color: "var(--cmx-muted, rgba(240,242,255,0.35))" }}
           >
             {label}
           </div>
         ))}
         {grid.map((row, bandIdx) => (
           <Fragment key={bandIdx}>
-            <div style={{ fontSize: "0.66rem", color: "rgba(240,242,255,0.3)", display: "flex", alignItems: "center" }}>
+            <div style={{ fontSize: "0.66rem", color: "var(--cmx-muted, rgba(240,242,255,0.3))", display: "flex", alignItems: "center" }}>
               {BAND_LABELS[bandIdx]}
             </div>
             {row.map((value, dayIdx) => (
@@ -59,17 +59,17 @@ export function ActivityHeatmap({ data }: { data: HeatmapPoint[] }) {
       </div>
 
       {!hasData && (
-        <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.3)", marginTop: "1rem", textAlign: "center" }}>
+        <p style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.3))", marginTop: "1rem", textAlign: "center" }}>
           No visits yet — activity will appear here once your pages get traffic.
         </p>
       )}
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: "0.4rem", marginTop: "0.9rem" }}>
-        <span style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.3)" }}>Less</span>
+        <span style={{ fontSize: "0.68rem", color: "var(--cmx-muted, rgba(240,242,255,0.3))" }}>Less</span>
         {[0.1, 0.3, 0.5, 0.75, 1].map((ratio) => (
-          <div key={ratio} style={{ width: 11, height: 11, borderRadius: 3, background: `rgba(var(--brand-rgb),${0.12 + ratio * 0.7})` }} />
+          <div key={ratio} style={{ width: 11, height: 11, borderRadius: 3, background: `color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) ${Math.round((0.12 + ratio * 0.7) * 100)}%, transparent)` }} />
         ))}
-        <span style={{ fontSize: "0.68rem", color: "rgba(240,242,255,0.3)" }}>More</span>
+        <span style={{ fontSize: "0.68rem", color: "var(--cmx-muted, rgba(240,242,255,0.3))" }}>More</span>
       </div>
     </div>
   );

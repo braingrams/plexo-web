@@ -34,7 +34,7 @@ async function purchaseCountFor(templateId: string): Promise<number> {
   return data.length;
 }
 
-/** Used by app/marketplace/[id]'s Server Component — direct DB access, no self-fetch. */
+/** Used by app/dashboard/marketplace/[id]'s Server Component — direct DB access, no self-fetch. */
 export async function getMarketplaceTemplateDetail(id: string, userId: string | null): Promise<MarketplaceDetail | null> {
   const { data: template } = await Template.get({ id }).go();
   if (!template || template.marketplaceStatus !== "PUBLISHED") return null;
@@ -84,9 +84,17 @@ async function scanPublishedTemplates(): Promise<EntityItem<typeof Template>[]> 
   return all;
 }
 
+/** Every published site (landing page) template, without its HTML — for SOL's list_site_templates. */
+export async function listPublishedSiteTemplates(): Promise<Array<{ id: string; name: string; category: string | null; description: string | null; priceCents: number; designFormat: string; publishedAt: string | null }>> {
+  const published = await scanPublishedTemplates();
+  return published
+    .filter((t) => t.kind === "LANDING_PAGE")
+    .map((t) => ({ id: t.id, name: t.name, category: t.marketplaceCategory ?? null, description: t.marketplaceDescription ?? null, priceCents: t.priceCents ?? 0, designFormat: t.designFormat ?? "v1", publishedAt: t.marketplacePublishedAt ?? null }));
+}
+
 /**
  * Shared by app/api/v1/marketplace/templates (external/API consumers) and
- * app/marketplace (the browse page itself, called directly as a Server Component —
+ * app/dashboard/marketplace (the browse page itself, called directly as a Server Component —
  * no self-HTTP-fetch) so the filter/sort logic lives in exactly one place.
  */
 export async function listMarketplaceTemplates(
@@ -143,4 +151,23 @@ export async function listMarketplaceTemplates(
     page,
     pageSize: PAGE_SIZE,
   };
+}
+
+/** Every published web page design (never emails), with its picture, for the onboarding design picker. Ranked and paged by the caller. */
+export async function listPublishedPageDesigns(): Promise<MarketplaceListItem[]> {
+  const published = await scanPublishedTemplates();
+  const counts = new Map<string, number>();
+  const pages = published.filter((t) => t.kind === "LANDING_PAGE");
+  await Promise.all(pages.map(async (t) => { counts.set(t.id, await purchaseCountFor(t.id)); }));
+  return pages.map((t) => ({
+    id: t.id,
+    name: t.name,
+    kind: t.kind,
+    category: t.marketplaceCategory ?? null,
+    description: t.marketplaceDescription ?? null,
+    priceCents: t.priceCents ?? 0,
+    publishedAt: t.marketplacePublishedAt ?? null,
+    purchaseCount: counts.get(t.id) ?? 0,
+    compiledHtml: t.compiledHtml,
+  }));
 }

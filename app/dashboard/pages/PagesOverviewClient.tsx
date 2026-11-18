@@ -180,7 +180,7 @@ function AddNewSiteButton() {
   );
 }
 
-export function PagesOverviewClient({ pages, isUltra }: { pages: PublishedPageSummary[]; isUltra: boolean }) {
+export function PagesOverviewClient({ pages, canAddSites }: { pages: PublishedPageSummary[]; canAddSites: boolean }) {
 
   return (
     <>
@@ -188,7 +188,7 @@ export function PagesOverviewClient({ pages, isUltra }: { pages: PublishedPageSu
         eyebrow="Content"
         title="Pages"
         subtitle="Every multi-page site you've built, published or not."
-        action={isUltra ? <AddNewSiteButton /> : undefined}
+        action={canAddSites ? <AddNewSiteButton /> : undefined}
       />
 
       {pages.length === 0 ? (
@@ -207,7 +207,7 @@ export function PagesOverviewClient({ pages, isUltra }: { pages: PublishedPageSu
             No multi-page sites yet
           </h2>
           <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.45)", maxWidth: 420 }}>
-            {isUltra
+            {canAddSites
               ? 'Click "Add new" above to import an existing website, or add a sub-page to one of your templates from its editor.'
               : "Add a sub-page to one of your templates from its editor to see it here."}
           </p>

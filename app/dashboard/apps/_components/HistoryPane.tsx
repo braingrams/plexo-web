@@ -5,7 +5,6 @@ import { Bot, CalendarClock, Code2, Eye, FileText, Flag, GitMerge, Hammer, Histo
 import { appsApi, ApiError, type BuildReport } from "./api";
 import { C, Button, Notice, PaneHeader, StateStyles, Shimmer, ListSkeleton, ProblemState, EmptyHero, StatCard, Pill, timeAgo } from "./ui";
 
-import { BRAND } from "@/lib/theme";
 // Every version of the app (each SOL turn, code edit, publish, go-back, import) with one-click
 // go-back, plus the log of every preview refresh and publish.
 
@@ -15,14 +14,14 @@ type IconType = ComponentType<{ size?: number }>;
 
 // Who or what made each version, in the owner's words — each with its own colour on the timeline.
 const SOURCE: Record<string, { label: string; color: string; icon: IconType }> = {
-  ai: { label: "SOL", color: BRAND.primary, icon: Bot },
-  editor: { label: "Code edit", color: "#6366f1", icon: Code2 },
-  deploy: { label: "Published", color: BRAND.deep, icon: Rocket },
-  restore: { label: "Went back", color: BRAND[300], icon: Undo2 },
-  scaffold: { label: "App created", color: BRAND[400], icon: Flag },
-  git: { label: "Imported", color: BRAND[700], icon: GitMerge },
+  ai: { label: "SOL", color: "var(--ed-accent-text)", icon: Bot },
+  editor: { label: "Code edit", color: "var(--ed-violet)", icon: Code2 },
+  deploy: { label: "Published", color: "var(--brand-deep)", icon: Rocket },
+  restore: { label: "Went back", color: "var(--brand-light)", icon: Undo2 },
+  scaffold: { label: "App created", color: "var(--brand-soft)", icon: Flag },
+  git: { label: "Imported", color: "var(--brand-deeper)", icon: GitMerge },
 };
-const sourceOf = (s: string) => SOURCE[s] ?? { label: "Saved", color: "#c4b5fd", icon: History };
+const sourceOf = (s: string) => SOURCE[s] ?? { label: "Saved", color: "var(--ed-lavender)", icon: History };
 
 /** "Today", "Yesterday", or a friendly date — the timeline's section labels. */
 function dayLabel(iso: string): string {
@@ -113,7 +112,7 @@ export function HistoryPane(props: { appId: string; refreshKey?: number; onResto
         ) : versions.length === 0 ? (
           <EmptyHero
             title="No versions yet"
-            tint={BRAND.primary}
+            tint={"var(--ed-accent-text)"}
             body="Every change you or SOL make to your app is saved here automatically, so you can see what changed and go back to any earlier version anytime. Ask SOL to build something and your first version will show up here."
             art={<TimelineIllustration />}
           />
@@ -123,7 +122,7 @@ export function HistoryPane(props: { appId: string; refreshKey?: number; onResto
       ) : !builds ? (
         <ListSkeleton rows={5} label="Loading updates" />
       ) : builds.length === 0 ? (
-        <EmptyHero title="No updates yet" tint="#6366f1" body="Each time your preview refreshes or you publish, it's logged here — with what went wrong, if anything did, so SOL can fix it." />
+        <EmptyHero title="No updates yet" tint="var(--ed-violet)" body="Each time your preview refreshes or you publish, it's logged here — with what went wrong, if anything did, so SOL can fix it." />
       ) : (
         <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-start" }}>
           <BuildList builds={builds} selected={report?.buildId ?? null} onOpen={(id) => void openBuild(id)} />
@@ -149,7 +148,7 @@ function ViewSwitch({ value, onChange }: { value: "versions" | "builds"; onChang
           role="tab"
           aria-selected={value === id}
           onClick={() => onChange(id)}
-          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.4rem 0.8rem", fontSize: "0.76rem", fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: value === id ? "rgba(var(--brand-rgb), 0.25)" : "transparent", color: value === id ? C.text : C.muted }}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.4rem 0.8rem", fontSize: "0.76rem", fontWeight: 600, border: "none", cursor: "pointer", fontFamily: "inherit", background: value === id ? "color-mix(in srgb, var(--brand) 25%, transparent)" : "transparent", color: value === id ? C.text : C.muted }}
         >
           <Icon size={14} /> {label}
         </button>
@@ -161,9 +160,9 @@ function ViewSwitch({ value, onChange }: { value: "versions" | "builds"; onChang
 function VersionTimeline({ versions, busy, onRestore, onViewChanges }: { versions: Version[]; busy: string | null; onRestore: (v: Version) => void; onViewChanges?: (versionId: string, against: string) => void }) {
   const weekAgo = Date.now() - 7 * 86_400_000;
   const stats = [
-    { label: versions.length === 1 ? "Version saved" : "Versions saved", value: versions.length, color: BRAND.primary, icon: History },
-    { label: "Made by SOL", value: versions.filter((v) => v.source === "ai").length, color: BRAND[300], icon: Bot },
-    { label: "This week", value: versions.filter((v) => Date.parse(v.createdAt) > weekAgo).length, color: "#6366f1", icon: CalendarClock },
+    { label: versions.length === 1 ? "Version saved" : "Versions saved", value: versions.length, color: "var(--ed-accent-text)", icon: History },
+    { label: "Made by SOL", value: versions.filter((v) => v.source === "ai").length, color: "var(--brand-light)", icon: Bot },
+    { label: "This week", value: versions.filter((v) => Date.parse(v.createdAt) > weekAgo).length, color: "var(--ed-violet)", icon: CalendarClock },
   ];
 
   return (
@@ -176,7 +175,7 @@ function VersionTimeline({ versions, busy, onRestore, onViewChanges }: { version
       <section style={{ border: `1px solid ${C.border}`, borderRadius: 18, background: C.panel, padding: "0.6rem 1rem 0.8rem" }}>
         <ol style={{ listStyle: "none", margin: 0, padding: 0, position: "relative" }}>
           {/* The timeline's spine, running behind every dot. */}
-          <span aria-hidden style={{ position: "absolute", left: 19, top: 22, bottom: 22, width: 2, borderRadius: 2, background: "linear-gradient(180deg, rgba(var(--brand-rgb), 0.6), rgba(192,132,252,0.3) 50%, rgba(255,255,255,0.06))" }} />
+          <span aria-hidden style={{ position: "absolute", left: 19, top: 22, bottom: 22, width: 2, borderRadius: 2, background: "linear-gradient(180deg, color-mix(in srgb, var(--brand) 60%, transparent), color-mix(in srgb, var(--ed-violet) 30%, transparent) 50%, var(--ed-w-060))" }} />
           {versions.map((v, i) => {
             const previous = versions[i + 1];
             const day = dayLabel(v.createdAt);
@@ -195,17 +194,17 @@ function VersionTimeline({ versions, busy, onRestore, onViewChanges }: { version
                   </div>
                 )}
                 <div style={{ position: "relative", display: "flex", alignItems: "flex-start", gap: 14, padding: "0.35rem 0" }}>
-                  <span aria-hidden style={{ width: 40, height: 40, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${src.color}, ${src.color}aa)`, color: "#fff", border: `3px solid ${C.bg}`, boxShadow: current ? `0 0 0 3px ${src.color}40, 0 8px 24px ${src.color}40` : "0 6px 18px rgba(0,0,0,0.3)", marginTop: 4 }}>
+                  <span aria-hidden style={{ width: 40, height: 40, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: `linear-gradient(135deg, ${src.color}, color-mix(in srgb, ${src.color} 67%, transparent))`, color: "#fff", border: `3px solid ${C.bg}`, boxShadow: current ? `0 0 0 3px color-mix(in srgb, ${src.color} 25%, transparent), 0 8px 24px color-mix(in srgb, ${src.color} 25%, transparent)` : "0 6px 18px rgba(0,0,0,0.3)", marginTop: 4 }}>
                     <Icon size={16} />
                   </span>
                   <div
                     className="plx-row"
-                    style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "0.7rem 1rem", flexWrap: "wrap", padding: "0.8rem 1rem", borderRadius: 14, border: `1px solid ${current ? `${src.color}55` : C.border}`, background: current ? `linear-gradient(135deg, ${src.color}14, transparent 70%)` : "transparent", opacity: busy === v.id ? 0.55 : 1 }}
+                    style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "0.7rem 1rem", flexWrap: "wrap", padding: "0.8rem 1rem", borderRadius: 14, border: `1px solid ${current ? `color-mix(in srgb, ${src.color} 33%, transparent)` : C.border}`, background: current ? `linear-gradient(135deg, color-mix(in srgb, ${src.color} 8%, transparent), transparent 70%)` : "transparent", opacity: busy === v.id ? 0.55 : 1 }}
                   >
                     <div style={{ flex: "1 1 260px", minWidth: 0 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                         <span style={{ fontSize: "0.88rem", fontWeight: 600, color: C.text, lineHeight: 1.4, overflowWrap: "anywhere" }}>{v.message}</span>
-                        {current && <Pill color={BRAND.primary}>Current version</Pill>}
+                        {current && <Pill color={"var(--ed-accent-text)"}>Current version</Pill>}
                         {v.isLive && <Pill color={C.success}>Live on your site</Pill>}
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, fontSize: "0.75rem", color: C.muted }}>
@@ -254,7 +253,7 @@ function TimelineSkeleton() {
         ))}
       </div>
       <div style={{ position: "relative", border: `1px solid ${C.border}`, borderRadius: 18, padding: "0.8rem 1rem" }}>
-        <span aria-hidden style={{ position: "absolute", left: 35, top: 30, bottom: 30, width: 2, background: "rgba(255,255,255,0.06)" }} />
+        <span aria-hidden style={{ position: "absolute", left: 35, top: 30, bottom: 30, width: 2, background: "var(--ed-w-060)" }} />
         {widths.map((w, i) => (
           <div key={i} style={{ position: "relative", display: "flex", alignItems: "center", gap: 14, padding: "0.45rem 0" }}>
             <Shimmer width={40} height={40} radius={99} />
@@ -275,21 +274,21 @@ function TimelineSkeleton() {
 /** A little timeline of coloured versions, the newest glowing at the top. */
 function TimelineIllustration() {
   const steps = [
-    { c: BRAND.primary, w: "64%" },
-    { c: BRAND[300], w: "48%" },
-    { c: "#6366f1", w: "56%" },
-    { c: BRAND[400], w: "40%" },
+    { c: "var(--ed-accent-text)", w: "64%" },
+    { c: "var(--brand-light)", w: "48%" },
+    { c: "var(--ed-violet)", w: "56%" },
+    { c: "var(--brand-soft)", w: "40%" },
   ];
   return (
-    <div style={{ position: "relative", borderRadius: 16, background: "rgba(11,15,25,0.6)", border: `1px solid ${C.borderStrong}`, padding: "18px 18px 18px 16px", boxShadow: "0 24px 60px rgba(0,0,0,0.35)", transform: "rotate(-1.5deg)", display: "flex", flexDirection: "column", gap: 12 }}>
-      <span style={{ position: "absolute", left: 30, top: 30, bottom: 30, width: 2, background: "linear-gradient(180deg, rgba(var(--brand-rgb), 0.7), rgba(196,181,253,0.2))" }} />
+    <div style={{ position: "relative", borderRadius: 16, background: "color-mix(in srgb, var(--ed-bg) 60%, transparent)", border: `1px solid ${C.borderStrong}`, padding: "18px 18px 18px 16px", boxShadow: "0 24px 60px rgba(0,0,0,0.35)", transform: "rotate(-1.5deg)", display: "flex", flexDirection: "column", gap: 12 }}>
+      <span style={{ position: "absolute", left: 30, top: 30, bottom: 30, width: 2, background: "linear-gradient(180deg, color-mix(in srgb, var(--brand) 70%, transparent), color-mix(in srgb, var(--ed-lavender) 20%, transparent))" }} />
       {steps.map((s, i) => (
         <div key={i} style={{ position: "relative", display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ width: 28, height: 28, borderRadius: 99, flexShrink: 0, background: `linear-gradient(135deg, ${s.c}, ${s.c}99)`, border: "3px solid #0b0f19", boxShadow: i === 0 ? `0 0 0 3px ${s.c}40` : "none" }} />
-          <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 10, border: `1px solid ${i === 0 ? `${s.c}66` : C.border}`, background: i === 0 ? `${s.c}1a` : "rgba(255,255,255,0.03)" }}>
+          <span style={{ width: 28, height: 28, borderRadius: 99, flexShrink: 0, background: `linear-gradient(135deg, ${s.c}, color-mix(in srgb, ${s.c} 60%, transparent))`, border: "3px solid var(--ed-bg)", boxShadow: i === 0 ? `0 0 0 3px color-mix(in srgb, ${s.c} 25%, transparent)` : "none" }} />
+          <span style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 10, border: `1px solid ${i === 0 ? `color-mix(in srgb, ${s.c} 40%, transparent)` : C.border}`, background: i === 0 ? `color-mix(in srgb, ${s.c} 10%, transparent)` : "var(--ed-w-030)" }}>
             <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 5 }}>
-              <span style={{ width: s.w, height: 7, borderRadius: 99, background: "rgba(255,255,255,0.32)" }} />
-              <span style={{ width: "30%", height: 5, borderRadius: 99, background: "rgba(255,255,255,0.12)" }} />
+              <span style={{ width: s.w, height: 7, borderRadius: 99, background: "var(--ed-w-320)" }} />
+              <span style={{ width: "30%", height: 5, borderRadius: 99, background: "var(--ed-w-120)" }} />
             </span>
             {i > 0 && (
               <span style={{ color: s.c, display: "grid", placeItems: "center" }}>
@@ -307,7 +306,7 @@ const STATUS: Record<string, { label: string; color: string }> = {
   SUCCEEDED: { label: "Worked", color: C.success },
   FAILED: { label: "Had a problem", color: C.danger },
   CANCELLED: { label: "Stopped", color: C.muted },
-  BUILDING: { label: "In progress", color: BRAND[400] },
+  BUILDING: { label: "In progress", color: "var(--brand-soft)" },
   QUEUED: { label: "Waiting", color: C.warning },
 };
 
@@ -319,16 +318,16 @@ function BuildList({ builds, selected, onOpen }: { builds: BuildRow[]; selected:
           const status = STATUS[b.status] ?? { label: b.status.toLowerCase(), color: C.muted };
           const publish = b.mode === "release";
           const Icon = publish ? Rocket : Eye;
-          const tint = publish ? BRAND.deep : "#6366f1";
+          const tint = publish ? "var(--brand-deep)" : "var(--ed-violet)";
           return (
             <li key={b.id} className="plx-history-build" style={{ borderBottom: `1px solid ${C.border}` }}>
               <button
                 type="button"
                 className="plx-row"
                 onClick={() => onOpen(b.id)}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "0.75rem 1rem", border: "none", borderLeft: `3px solid ${selected === b.id ? C.brand : "transparent"}`, background: selected === b.id ? "rgba(var(--brand-rgb), 0.08)" : "transparent", color: C.text, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, padding: "0.75rem 1rem", border: "none", borderLeft: `3px solid ${selected === b.id ? C.brand : "transparent"}`, background: selected === b.id ? "color-mix(in srgb, var(--brand) 8%, transparent)" : "transparent", color: C.text, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}
               >
-                <span aria-hidden style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: `${tint}26`, color: tint }}>
+                <span aria-hidden style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: `color-mix(in srgb, ${tint} 15%, transparent)`, color: tint }}>
                   <Icon size={16} />
                 </span>
                 <span style={{ flex: 1, minWidth: 0 }}>
@@ -353,7 +352,7 @@ function BuildDetail({ report }: { report: BuildReport }) {
   return (
     <section style={{ flex: "2 1 440px", minWidth: 0, border: `1px solid ${C.border}`, borderRadius: 18, background: C.panel, padding: "1.1rem 1.2rem", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span aria-hidden style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: report.mode === "release" ? "rgba(var(--brand-deep-rgb), 0.2)" : "rgba(99,102,241,0.2)", color: report.mode === "release" ? BRAND[400] : "#c4b5fd" }}>
+        <span aria-hidden style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "grid", placeItems: "center", background: report.mode === "release" ? "color-mix(in srgb, var(--brand-deep) 20%, transparent)" : "color-mix(in srgb, var(--ed-violet) 20%, transparent)", color: report.mode === "release" ? "var(--brand-soft)" : "var(--ed-lavender)" }}>
           {report.mode === "release" ? <Rocket size={18} /> : <Eye size={18} />}
         </span>
         <div style={{ minWidth: 0 }}>

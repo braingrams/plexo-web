@@ -22,8 +22,9 @@ export async function generate({
 }: ProviderCallParams): Promise<ProviderCallResult> {
   const client = new Anthropic({ apiKey });
 
+  // Pictures go in as image blocks; everything else (a PDF) as a document block.
   const content: any[] = (attachments ?? []).map((attachment) => ({
-    type: "document",
+    type: attachment.mediaType.startsWith("image/") ? "image" : "document",
     source: {
       type: "base64",
       media_type: attachment.mediaType as any,

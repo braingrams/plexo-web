@@ -13,9 +13,9 @@ import { ink, muted, surface, border, fill, brandGradient } from "./appPlan";
 
 const primary = (enabled: boolean): CSSProperties => ({
   display: "inline-flex", alignItems: "center", gap: 8, fontFamily: "inherit", fontSize: 15, fontWeight: 700, padding: "14px 24px", borderRadius: 13, border: "none",
-  background: enabled ? brandGradient : fill(14), color: enabled ? "#fff" : muted, cursor: enabled ? "pointer" : "default",
+  background: enabled ? brandGradient : fill(14), color: enabled ? "var(--ed-on-brand)" : muted, cursor: enabled ? "pointer" : "default",
 });
-const linkButton: CSSProperties = { background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: 13.5, color: "var(--brand)", cursor: "pointer" };
+const linkButton: CSSProperties = { background: "none", border: "none", padding: 0, fontFamily: "inherit", fontSize: 13.5, color: "var(--ed-accent-text)", cursor: "pointer" };
 
 export function GitHubStart(props: { onCancel: () => void }) {
   const router = useRouter();
@@ -68,7 +68,7 @@ export function GitHubStart(props: { onCancel: () => void }) {
               maxLength={80}
               style={{ width: "100%", boxSizing: "border-box", padding: "14px 16px", borderRadius: 13, border: `1px solid ${border}`, background: surface, color: ink, fontSize: 16, fontFamily: "inherit" }}
             />
-            {error && <p role="alert" style={{ margin: 0, fontSize: 13.5, color: "#f87171" }}>{error}</p>}
+            {error && <p role="alert" style={{ margin: 0, fontSize: 13.5, color: "var(--ed-danger)" }}>{error}</p>}
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <button type="submit" disabled={!name.trim() || creating} style={primary(!!name.trim() && !creating)}>
                 {creating ? <><Loader2 size={16} className="ah-spin" /> Creating…</> : "Continue"}

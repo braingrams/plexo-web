@@ -1315,6 +1315,9 @@ async function runFinalizing(job: JobItem): Promise<string> {
   });
 
   await Template.patch({ id: job.templateId }).set({ migratedFrom: plan.origin }).go();
+  // Match the migrated site's own colours and fonts to brand roles now, so linking a Strata brand later puts it on the site
+  // straight away (lib/brand/mapping.ts). Best effort: a site that can't be matched just keeps its look.
+  await import("@/lib/brand/siteBrand").then((m) => m.refreshBrandMapping(job.templateId)).catch((err) => console.warn(`[wp-migration] ${job.templateId}: brand matching skipped`, err));
   await WpMigrationJob.patch({ templateId: job.templateId, id: job.id })
     .set({ plugins, report, phase: "COMPLETED", finishedAt: new Date().toISOString() })
     .go();

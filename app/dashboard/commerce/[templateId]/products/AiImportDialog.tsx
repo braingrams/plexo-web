@@ -11,10 +11,10 @@ import {
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
-  background: "rgba(255,255,255,0.04)",
-  border: "1px solid rgba(255,255,255,0.1)",
+  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
+  border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
   borderRadius: 9,
-  color: "#f0f2ff",
+  color: "var(--cmx-text, #f0f2ff)",
   padding: "0.55rem 0.7rem",
   fontSize: "0.85rem",
   outline: "none",
@@ -143,8 +143,8 @@ export function AiImportDialog({
           width: "min(100%,780px)",
           maxHeight: "85vh",
           overflowY: "auto",
-          background: "#0d0f1a",
-          border: "1px solid rgba(255,255,255,0.1)",
+          background: "var(--cmx-surface, #0d0f1a)",
+          border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
           borderRadius: 18,
           padding: "1.5rem",
         }}
@@ -158,7 +158,7 @@ export function AiImportDialog({
           }}
         >
           <h2
-            style={{ fontSize: "1.05rem", fontWeight: 700, color: "#f0f2ff" }}
+            style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)" }}
           >
             <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
               <SolIcon size={18} /> Import products with SOL
@@ -170,7 +170,7 @@ export function AiImportDialog({
             style={{
               background: "none",
               border: "none",
-              color: "rgba(240,242,255,0.5)",
+              color: "var(--cmx-muted, rgba(240,242,255,0.5))",
               cursor: "pointer",
               fontSize: "1.1rem",
             }}
@@ -191,9 +191,9 @@ export function AiImportDialog({
               marginBottom: "1rem",
               padding: "0.6rem 0.8rem",
               borderRadius: 8,
-              background: "rgba(239,68,68,0.1)",
-              border: "1px solid rgba(239,68,68,0.3)",
-              color: "#fca5a5",
+              background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 10%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)",
+              color: "var(--cmx-danger, #fca5a5)",
               fontSize: "0.8rem",
             }}
           >
@@ -203,7 +203,7 @@ export function AiImportDialog({
 
         {step === "upload" && (
           <div style={{ display: "grid", gap: "1rem" }}>
-            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.55)" }}>
+            <p style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>
               Upload a CSV or PDF product catalog. SOL reads it and lines the
               products up with your product list — no column setup needed. Uses AI credits.
             </p>
@@ -213,10 +213,10 @@ export function AiImportDialog({
                 placeItems: "center",
                 padding: "2rem",
                 borderRadius: 12,
-                border: "1.5px dashed rgba(255,255,255,0.15)",
-                background: "rgba(255,255,255,0.02)",
+                border: "1.5px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 15%, transparent)",
+                background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)",
                 cursor: suggesting ? "wait" : "pointer",
-                color: "rgba(240,242,255,0.55)",
+                color: "var(--cmx-muted, rgba(240,242,255,0.55))",
                 fontSize: "0.85rem",
               }}
             >
@@ -242,7 +242,7 @@ export function AiImportDialog({
 
         {step === "mapping" && (
           <div style={{ display: "grid", gap: "1rem" }}>
-            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.55)" }}>
+            <p style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>
               Check how SOL matched your file to product fields, then change any that
               look wrong.
             </p>
@@ -260,7 +260,7 @@ export function AiImportDialog({
                   <span
                     style={{
                       fontSize: "0.82rem",
-                      color: "#f0f2ff",
+                      color: "var(--cmx-text, #f0f2ff)",
                       fontWeight: 600,
                     }}
                   >
@@ -300,9 +300,9 @@ export function AiImportDialog({
                 style={{
                   padding: "0.55rem 1rem",
                   borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "#f0f2ff",
+                  border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)",
+                  color: "var(--cmx-text, #f0f2ff)",
                   cursor: "pointer",
                   fontFamily: "inherit",
                   fontSize: "0.82rem",
@@ -319,8 +319,8 @@ export function AiImportDialog({
                   border: "none",
                   cursor: "pointer",
                   background:
-                    "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-                  color: "#fff",
+                    "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))",
+                  color: "var(--cmx-on-brand, #fff)",
                   fontFamily: "inherit",
                   fontSize: "0.82rem",
                   fontWeight: 700,
@@ -334,7 +334,7 @@ export function AiImportDialog({
 
         {step === "preview" && (
           <div style={{ display: "grid", gap: "1rem" }}>
-            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.55)" }}>
+            <p style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>
               {previewRows.length} row{previewRows.length === 1 ? "" : "s"}{" "}
               found — {previewRows.length - errorCount} ready to import
               {errorCount > 0
@@ -345,7 +345,7 @@ export function AiImportDialog({
             <div
               style={{
                 overflowX: "auto",
-                border: "1px solid rgba(255,255,255,0.08)",
+                border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)",
                 borderRadius: 10,
               }}
             >
@@ -357,12 +357,12 @@ export function AiImportDialog({
                 }}
               >
                 <thead>
-                  <tr style={{ background: "rgba(255,255,255,0.04)" }}>
+                  <tr style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)" }}>
                     <th
                       style={{
                         textAlign: "left",
                         padding: "0.5rem 0.7rem",
-                        color: "rgba(240,242,255,0.5)",
+                        color: "var(--cmx-muted, rgba(240,242,255,0.5))",
                       }}
                     >
                       Row
@@ -371,7 +371,7 @@ export function AiImportDialog({
                       style={{
                         textAlign: "left",
                         padding: "0.5rem 0.7rem",
-                        color: "rgba(240,242,255,0.5)",
+                        color: "var(--cmx-muted, rgba(240,242,255,0.5))",
                       }}
                     >
                       SKU
@@ -380,7 +380,7 @@ export function AiImportDialog({
                       style={{
                         textAlign: "left",
                         padding: "0.5rem 0.7rem",
-                        color: "rgba(240,242,255,0.5)",
+                        color: "var(--cmx-muted, rgba(240,242,255,0.5))",
                       }}
                     >
                       Name
@@ -389,7 +389,7 @@ export function AiImportDialog({
                       style={{
                         textAlign: "left",
                         padding: "0.5rem 0.7rem",
-                        color: "rgba(240,242,255,0.5)",
+                        color: "var(--cmx-muted, rgba(240,242,255,0.5))",
                       }}
                     >
                       Type
@@ -398,7 +398,7 @@ export function AiImportDialog({
                       style={{
                         textAlign: "left",
                         padding: "0.5rem 0.7rem",
-                        color: "rgba(240,242,255,0.5)",
+                        color: "var(--cmx-muted, rgba(240,242,255,0.5))",
                       }}
                     >
                       Price
@@ -407,7 +407,7 @@ export function AiImportDialog({
                       style={{
                         textAlign: "left",
                         padding: "0.5rem 0.7rem",
-                        color: "rgba(240,242,255,0.5)",
+                        color: "var(--cmx-muted, rgba(240,242,255,0.5))",
                       }}
                     >
                       Issues
@@ -419,43 +419,43 @@ export function AiImportDialog({
                     <tr
                       key={row.rowNumber}
                       style={{
-                        borderTop: "1px solid rgba(255,255,255,0.06)",
+                        borderTop: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)",
                         background:
                           row.errors.length > 0
-                            ? "rgba(239,68,68,0.08)"
+                            ? "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 8%, transparent)"
                             : "transparent",
                       }}
                     >
                       <td
                         style={{
                           padding: "0.5rem 0.7rem",
-                          color: "rgba(240,242,255,0.5)",
+                          color: "var(--cmx-muted, rgba(240,242,255,0.5))",
                         }}
                       >
                         {row.rowNumber}
                       </td>
                       <td
-                        style={{ padding: "0.5rem 0.7rem", color: "#f0f2ff" }}
+                        style={{ padding: "0.5rem 0.7rem", color: "var(--cmx-text, #f0f2ff)" }}
                       >
                         {row.sku || "—"}
                       </td>
                       <td
-                        style={{ padding: "0.5rem 0.7rem", color: "#f0f2ff" }}
+                        style={{ padding: "0.5rem 0.7rem", color: "var(--cmx-text, #f0f2ff)" }}
                       >
                         {row.name || "—"}
                       </td>
                       <td
-                        style={{ padding: "0.5rem 0.7rem", color: "#f0f2ff" }}
+                        style={{ padding: "0.5rem 0.7rem", color: "var(--cmx-text, #f0f2ff)" }}
                       >
                         {row.kind}
                       </td>
                       <td
-                        style={{ padding: "0.5rem 0.7rem", color: "#f0f2ff" }}
+                        style={{ padding: "0.5rem 0.7rem", color: "var(--cmx-text, #f0f2ff)" }}
                       >
                         {(row.priceMinor / 100).toFixed(2)}
                       </td>
                       <td
-                        style={{ padding: "0.5rem 0.7rem", color: "#fca5a5" }}
+                        style={{ padding: "0.5rem 0.7rem", color: "var(--cmx-danger, #fca5a5)" }}
                       >
                         {row.errors.length > 0 ? row.errors.join(" ") : ""}
                       </td>
@@ -477,9 +477,9 @@ export function AiImportDialog({
                 style={{
                   padding: "0.55rem 1rem",
                   borderRadius: 8,
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  background: "rgba(255,255,255,0.05)",
-                  color: "#f0f2ff",
+                  border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+                  background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 5%, transparent)",
+                  color: "var(--cmx-text, #f0f2ff)",
                   cursor: "pointer",
                   fontFamily: "inherit",
                   fontSize: "0.82rem",
@@ -504,8 +504,8 @@ export function AiImportDialog({
                       ? 0.6
                       : 1,
                   background:
-                    "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-                  color: "#fff",
+                    "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))",
+                  color: "var(--cmx-on-brand, #fff)",
                   fontFamily: "inherit",
                   fontSize: "0.82rem",
                   fontWeight: 700,
@@ -521,7 +521,7 @@ export function AiImportDialog({
 
         {step === "done" && result && (
           <div style={{ display: "grid", gap: "1rem" }}>
-            <p style={{ fontSize: "0.9rem", color: "#f0f2ff" }}>
+            <p style={{ fontSize: "0.9rem", color: "var(--cmx-text, #f0f2ff)" }}>
               Imported {result.importedCount} product
               {result.importedCount === 1 ? "" : "s"}
               {result.skippedCount > 0
@@ -538,8 +538,8 @@ export function AiImportDialog({
                   border: "none",
                   cursor: "pointer",
                   background:
-                    "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-                  color: "#fff",
+                    "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))",
+                  color: "var(--cmx-on-brand, #fff)",
                   fontFamily: "inherit",
                   fontSize: "0.82rem",
                   fontWeight: 700,

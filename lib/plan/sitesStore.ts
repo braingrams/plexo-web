@@ -20,13 +20,14 @@ const TEMPLATE_ATTRIBUTES = [
 ] as const;
 
 /**
- * Every site whose serving this account's plan decides: a site it created, or one it put
- * live at an address (PublishedDomain.userId — the serve route applies the plan of
- * whoever published the address). Only the account's own addresses are listed per site.
+ * Every site whose serving this account's plan decides: every site in every workspace it
+ * OWNS — a workspace runs on its owner's plan (lib/plan/workspacePlan.ts), whoever on the
+ * team built or published a site. Sites in workspaces it's only a member of follow those
+ * owners' plans instead.
  */
 export async function listGovernedSites(userId: string): Promise<GovernedSite[]> {
   const { data: memberships } = await Member.query.byUser({ userId }).go({ pages: "all" });
-  const organizationIds = [...new Set(memberships.map((m) => m.organizationId))];
+  const organizationIds = [...new Set(memberships.filter((m) => m.role === "owner").map((m) => m.organizationId))];
 
   const perOrg = await Promise.all(
     organizationIds.map(async (organizationId) => {
@@ -46,8 +47,7 @@ export async function listGovernedSites(userId: string): Promise<GovernedSite[]>
       const sites = await Promise.all(
         roots.map(async (root): Promise<GovernedSite | null> => {
           const { data: rows } = await PublishedDomain.query.primary({ templateId: root.id }).go({ pages: "all" });
-          const own = rows.filter((d) => d.userId === userId);
-          if (root.userId !== userId && own.length === 0) return null;
+          const own = rows;
           const pages: PlanSite["pages"] = [];
           const stack = [...(childrenOf.get(root.id) ?? [])];
           while (stack.length) {
@@ -72,7 +72,7 @@ export async function listGovernedSites(userId: string): Promise<GovernedSite[]>
               planDisabledAt: d.planDisabledAt,
               planFallback: d.planFallback,
             })),
-            sharedWithOtherPlan: rows.some((d) => d.userId !== userId && d.active !== false && !d.planDisabledAt),
+            sharedWithOtherPlan: false,
           };
         }),
       );

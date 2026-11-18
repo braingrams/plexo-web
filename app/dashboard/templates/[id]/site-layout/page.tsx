@@ -1,6 +1,7 @@
 import { requireSiteLayoutAccess } from "@/lib/siteLayoutDynamo";
 import { SiteLayout, Template } from "@/lib/db/contentEntities";
 import { SiteLayoutClient } from "./SiteLayoutClient";
+import { SiteToolBack } from "@/app/dashboard/_v3/page/SiteToolBack";
 
 export default async function SiteLayoutPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -13,6 +14,8 @@ export default async function SiteLayoutPage({ params }: { params: Promise<{ id:
   ]);
 
   return (
+    <>
+    <SiteToolBack siteId={access.templateId} tab="pages" />
     <SiteLayoutClient
       templateId={access.templateId}
       siteName={access.templateName}
@@ -20,5 +23,6 @@ export default async function SiteLayoutPage({ params }: { params: Promise<{ id:
       header={header?.data ? { templateId: header.data.id, updatedAt: header.data.updatedAt ?? new Date().toISOString() } : null}
       footer={footer?.data ? { templateId: footer.data.id, updatedAt: footer.data.updatedAt ?? new Date().toISOString() } : null}
     />
+    </>
   );
 }

@@ -14,8 +14,8 @@ export function trackEvent(payload: DataLayerEvent): void {
 
 // The plan names the analytics spec uses. Ultra isn't in the spec's list yet; it's sent as "ultra" until
 // the analyst confirms. Change it in this one place if that changes.
-export function analyticsPlan(plan: "FREE" | "PRO" | "ULTRA"): "free" | "pro" | "ultra" {
-  return plan.toLowerCase() as "free" | "pro" | "ultra";
+export function analyticsPlan(plan: string): string {
+  return plan.toLowerCase();
 }
 
 let userIdentifiedThisLoad = false;

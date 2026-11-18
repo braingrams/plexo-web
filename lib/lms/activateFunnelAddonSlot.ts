@@ -5,7 +5,7 @@ import { reconcileFunnelSlotsForOrg } from "./funnelSlots";
 /**
  * Called from app/api/webhooks/stripe/route.ts's customer.subscription.created/updated
  * cases when the subscription's metadata identifies it as an lms_addon_slot (as opposed to
- * the platform PRO/ULTRA plan subscription those cases otherwise handle). One Subscription
+ * the platform plan subscription those cases otherwise handle). One Subscription
  * object per slot (see LmsFunnelAddonSlot's own comment) means this only ever touches the
  * one slot named in metadata — every other slot/funnel on the org is untouched.
  */

@@ -85,7 +85,7 @@ async function main() {
     customDomainLimit: user.customDomainLimit ?? null,
     manageLandingPagePublishing: true,
   } as unknown as ResolvedUser;
-  log(`account ${user.id} · workspace ${organizationId} · plan ${plan} · sites allowed ${features.maxLandingPages} · multi-page sites ${features.multiPageSitesEnabled ? "yes" : "NO (Ultra)"}`);
+  log(`account ${user.id} · workspace ${organizationId} · plan ${plan} · sites allowed ${features.maxLandingPages} · multi-page sites ${features.multiPageSitesEnabled ? "yes" : "NO (Pro)"}`);
 
   const contentBlock = sdkHasContentBlock();
   const multiPage = features.multiPageSitesEnabled;
@@ -153,7 +153,7 @@ async function main() {
       skipped.push(spec.name);
       // still prove it builds, so it is ready for the day the plan allows it
       const html = await compileFor(spec, design, "dry-run", root?.id ?? "dry-run-root", spec.name);
-      log(`  ${spec.name}: skipped — needs the Ultra plan (compiles fine, ${(html as string).length} bytes)`);
+      log(`  ${spec.name}: skipped — needs the Pro plan (compiles fine, ${(html as string).length} bytes)`);
       continue;
     }
     if (spec.isHome) {
@@ -171,7 +171,7 @@ async function main() {
       }
       continue;
     }
-    // a page of the site (Ultra)
+    // a page of the site (Pro)
     const existing = root ? orgTemplates.find((t) => t.parentId === root!.id && t.slug === spec.slug) : null;
     if (existing) {
       const html = await compileFor(spec, design, existing.id, root!.id, spec.name);

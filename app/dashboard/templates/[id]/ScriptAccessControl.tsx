@@ -131,27 +131,27 @@ export function ScriptAccessControl({ templateId, onModeChange }: Props) {
   const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", flexWrap: "wrap" };
   const buttonStyle: React.CSSProperties = {
     padding: "0.3rem 0.7rem", borderRadius: 7, fontSize: "0.72rem", fontWeight: 600,
-    background: "rgba(var(--brand-rgb),0.12)", border: "1px solid rgba(var(--brand-rgb),0.35)", color: "#c4b5fd",
+    background: "color-mix(in srgb, var(--brand) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--brand) 35%, transparent)", color: "var(--ed-lavender)",
     cursor: submitting ? "default" : "pointer", opacity: submitting ? 0.6 : 1,
   };
   const inputStyle: React.CSSProperties = {
-    background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6,
-    color: "#f0f2ff", padding: "0.3rem 0.5rem", fontSize: "0.72rem", outline: "none", fontFamily: "inherit",
+    background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)", borderRadius: 6,
+    color: "var(--ed-text)", padding: "0.3rem 0.5rem", fontSize: "0.72rem", outline: "none", fontFamily: "inherit",
     minWidth: 200,
   };
 
   if (data.status === "APPROVED_ACTIVE") {
     return (
       <div style={rowStyle}>
-        <span style={{ color: "#34d399", fontWeight: 700 }}>
+        <span style={{ color: "var(--ed-success)", fontWeight: 700 }}>
           Full interactive preview active — {localSeconds !== null ? formatMMSS(localSeconds) : "…"} remaining
         </span>
-        {error && <span style={{ color: "#f87171" }}>{error}</span>}
+        {error && <span style={{ color: "var(--ed-danger)" }}>{error}</span>}
         <button
           type="button"
           onClick={() => void endEarly()}
           disabled={submitting}
-          style={{ ...buttonStyle, background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.6)" }}
+          style={{ ...buttonStyle, background: "none", border: "1px solid var(--ed-w-120)", color: "var(--ed-t-600)" }}
         >
           End early — back to editable preview
         </button>
@@ -162,7 +162,7 @@ export function ScriptAccessControl({ templateId, onModeChange }: Props) {
   if (data.status === "PENDING") {
     return (
       <div style={rowStyle}>
-        <span style={{ color: "#f59e0b" }}>Full script preview requested — awaiting staff approval.</span>
+        <span style={{ color: "var(--ed-amber)" }}>Full script preview requested — awaiting staff approval.</span>
       </div>
     );
   }
@@ -171,12 +171,12 @@ export function ScriptAccessControl({ templateId, onModeChange }: Props) {
   return (
     <div style={rowStyle}>
       {data.status === "REJECTED" && data.rejectionReason && (
-        <span style={{ color: "#f87171" }}>Request declined: {data.rejectionReason}</span>
+        <span style={{ color: "var(--ed-danger)" }}>Request declined: {data.rejectionReason}</span>
       )}
       {data.status === "APPROVED_EXPIRED" && (
-        <span style={{ color: "rgba(240,242,255,0.45)" }}>Your last grant expired.</span>
+        <span style={{ color: "var(--ed-t-450)" }}>Your last grant expired.</span>
       )}
-      {error && <span style={{ color: "#f87171" }}>{error}</span>}
+      {error && <span style={{ color: "var(--ed-danger)" }}>{error}</span>}
       {showReasonInput ? (
         <>
           <input
@@ -193,7 +193,7 @@ export function ScriptAccessControl({ templateId, onModeChange }: Props) {
             type="button"
             onClick={() => setShowReasonInput(false)}
             disabled={submitting}
-            style={{ ...buttonStyle, background: "none", border: "1px solid rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.6)" }}
+            style={{ ...buttonStyle, background: "none", border: "1px solid var(--ed-w-120)", color: "var(--ed-t-600)" }}
           >
             Cancel
           </button>

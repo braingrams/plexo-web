@@ -95,7 +95,7 @@ export async function invokeSsrFunction(functionUrl: string, request: NextReques
 }
 
 /** Copies an upstream (function) response back to the visitor. */
-function relay(upstream: Response, app: DeployedSsrShape, rawPath: string): Promise<NextResponse> | NextResponse {
+function relay(upstream: Response, app: DeployedSsrShape, rawPath: string, brand?: { templateId: string; method: string }): Promise<NextResponse> | NextResponse {
   // TEMPORARY (debug/upstream-status): the server app's status, to find the 502 on plexo-next.
   console.log("[pub-debug] upstream", upstream.status, upstream.headers.get("content-type"), upstream.headers.get("x-amzn-errortype") ?? "", upstream.headers.get("x-plexo-hosting-tier") ?? "");
   const headers = new Headers();
@@ -107,7 +107,20 @@ function relay(upstream: Response, app: DeployedSsrShape, rawPath: string): Prom
   else headers.set("Cache-Control", cacheControlFor(rawPath || "index.html", app.hostingTier));
   headers.set("X-Plexo-Hosting-Tier", app.hostingTier ?? "LAMBDA");
   // Decoded by fetch above, so the bytes are identity: send them as-is.
-  return upstream.arrayBuffer().then((body) => new NextResponse(new Uint8Array(body), { status: upstream.status, headers }));
+  return upstream.arrayBuffer().then(async (body) => {
+    let bytes: Uint8Array<ArrayBuffer> = new Uint8Array(body);
+    // The site's brand link goes into full HTML pages (never other responses; fails open). See lib/brand/ssrInject.ts.
+    // Only for HTML, and fail open: any trouble (even loading the brand code) serves the app's bytes untouched.
+    if (brand?.templateId && process.env.BRAND_SERVER_INJECT?.trim().toLowerCase() !== "off" && /^\s*text\/html/i.test(headers.get("content-type") ?? "")) {
+      try {
+        const { applyBrandToAppResponse } = await import("@/lib/brand/ssrInject");
+        bytes = (await applyBrandToAppResponse(bytes, brand.templateId, { status: upstream.status, contentType: headers.get("content-type"), method: brand.method })) as Uint8Array<ArrayBuffer>;
+      } catch (err) {
+        console.warn("[site-brand] serving the app without the brand", err);
+      }
+    }
+    return new NextResponse(bytes, { status: upstream.status, headers });
+  });
 }
 
 /** The app's built assets are addressed under /__plexo/assets/ (the build sets the app's assetPrefix to it).
@@ -166,5 +179,5 @@ export async function serveDeployedSsr(
     return relay(await invokeSsrFunction(app.imageFunctionUrl, request, slugSegments), app, rawPath);
   }
 
-  return relay(await invokeSsrFunction(targetUrl, request, slugSegments), app, rawPath);
+  return relay(await invokeSsrFunction(targetUrl, request, slugSegments), app, rawPath, { templateId: options.templateId, method: request.method });
 }

@@ -102,15 +102,15 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
     <>
       <PageHeader eyebrow="Developer" title="API Keys" subtitle="Generate and manage the API keys your integrations authenticate with." />
 
-      <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, overflow: "hidden" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid rgba(255,255,255,0.06)", flexWrap: "wrap", gap: "0.75rem" }}>
+      <div style={{ background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", borderRadius: 16, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "1rem 1.25rem", borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)", flexWrap: "wrap", gap: "0.75rem" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-            <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.2)", display: "grid", placeItems: "center", color: "var(--brand)", flexShrink: 0 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--brand-subtle)", border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 20%, transparent)", display: "grid", placeItems: "center", color: "var(--plx-link, var(--brand))", flexShrink: 0 }}>
               <IconKey />
             </div>
             <div>
-              <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff" }}>API Key Management</h2>
-              <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)" }}>{apiKeys.length} key{apiKeys.length !== 1 ? "s" : ""} total</p>
+              <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "0.95rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>API Key Management</h2>
+              <p style={{ fontSize: "0.72rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>{apiKeys.length} key{apiKeys.length !== 1 ? "s" : ""} total</p>
             </div>
           </div>
           <button
@@ -121,8 +121,8 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
             style={{
               display: "inline-flex", alignItems: "center", gap: "0.5rem",
               padding: "0.5rem 0.9rem", borderRadius: 9, border: "none", cursor: isGenerating ? "not-allowed" : "pointer",
-              fontSize: "0.78rem", fontWeight: 700, background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-              color: "#fff", opacity: isGenerating ? 0.7 : 1, boxShadow: "0 3px 14px var(--brand-glow)",
+              fontSize: "0.78rem", fontWeight: 700, background: "var(--plx-brand, linear-gradient(135deg,var(--brand),var(--brand-deep)))",
+              color: "var(--plx-on-brand, #fff)", opacity: isGenerating ? 0.7 : 1, boxShadow: "0 3px 14px var(--brand-glow)",
               fontFamily: "inherit", whiteSpace: "nowrap", marginLeft: "auto",
             }}
           >
@@ -134,9 +134,9 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
         <div style={{ width: "100%", overflowX: "auto" }} className="table-responsive-wrap">
           <table style={{ width: "100%", minWidth: 550, borderCollapse: "collapse", fontSize: "0.85rem" }}>
             <thead>
-              <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+              <tr style={{ borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)" }}>
                 {["Name", "Masked Key", "Created", "Status", "Action"].map((h) => (
-                  <th key={h} style={{ padding: "0.75rem 1rem", textAlign: "left", fontWeight: 600, fontSize: "0.7rem", letterSpacing: "0.08em", textTransform: "uppercase", color: "rgba(240,242,255,0.35)", whiteSpace: "nowrap" }}>
+                  <th key={h} style={{ padding: "0.75rem 1rem", textAlign: "left", fontWeight: 600, fontSize: "0.7rem", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--plx-faint, rgba(240,242,255,0.35))", whiteSpace: "nowrap" }}>
                     {h}
                   </th>
                 ))}
@@ -145,23 +145,23 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
             <tbody>
               {apiKeys.length === 0 ? (
                 <tr>
-                  <td colSpan={5} style={{ padding: "2.5rem", textAlign: "center", color: "rgba(240,242,255,0.35)", fontSize: "0.875rem" }}>
+                  <td colSpan={5} style={{ padding: "2.5rem", textAlign: "center", color: "var(--plx-faint, rgba(240,242,255,0.35))", fontSize: "0.875rem" }}>
                     No API keys yet. Generate your first key to enable AI features.
                   </td>
                 </tr>
               ) : (
                 apiKeys.map((item) => (
-                  <tr key={item.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-                    <td style={{ padding: "0.85rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "#f0f2ff" }}>{item.name}</td>
-                    <td style={{ padding: "0.85rem 1.25rem", fontFamily: "monospace", fontSize: "0.8rem", color: "rgba(240,242,255,0.55)" }}>{item.maskedKey}</td>
-                    <td style={{ padding: "0.85rem 1.25rem", color: "rgba(240,242,255,0.45)", fontSize: "0.8rem" }}>{formatDate(item.createdAt)}</td>
+                  <tr key={item.id} style={{ borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 4%, transparent)" }}>
+                    <td style={{ padding: "0.85rem 1.25rem", fontSize: "0.875rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>{item.name}</td>
+                    <td style={{ padding: "0.85rem 1.25rem", fontFamily: "monospace", fontSize: "0.8rem", color: "var(--plx-muted, rgba(240,242,255,0.55))" }}>{item.maskedKey}</td>
+                    <td style={{ padding: "0.85rem 1.25rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", fontSize: "0.8rem" }}>{formatDate(item.createdAt)}</td>
                     <td style={{ padding: "0.85rem 1.25rem" }}>
                       <span style={{
                         display: "inline-flex", alignItems: "center", gap: "0.3rem", padding: "0.2rem 0.6rem", borderRadius: 999,
                         fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase",
-                        background: item.isActive ? "rgba(52,211,153,0.1)" : "rgba(248,113,113,0.1)",
-                        color: item.isActive ? "#34d399" : "#f87171",
-                        border: `1px solid ${item.isActive ? "rgba(52,211,153,0.2)" : "rgba(248,113,113,0.2)"}`,
+                        background: item.isActive ? "color-mix(in srgb, var(--plx-success, rgb(52 211 153)) 10%, transparent)" : "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 10%, transparent)",
+                        color: item.isActive ? "var(--plx-success, #34d399)" : "var(--plx-danger, #f87171)",
+                        border: `1px solid ${item.isActive ? "color-mix(in srgb, var(--plx-success, rgb(52 211 153)) 20%, transparent)" : "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 20%, transparent)"}`,
                       }}>
                         {item.isActive ? <IconCheck /> : <IconX />}
                         {item.isActive ? "Active" : "Revoked"}
@@ -173,8 +173,8 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
                         disabled={!item.isActive || revokingKeys.has(item.id)}
                         onClick={() => void revokeKey(item.id)}
                         style={{
-                          padding: "0.4rem 0.85rem", borderRadius: 7, border: "1px solid rgba(248,113,113,0.25)",
-                          background: "transparent", color: "#f87171", fontSize: "0.75rem", fontWeight: 600,
+                          padding: "0.4rem 0.85rem", borderRadius: 7, border: "1px solid color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 25%, transparent)",
+                          background: "transparent", color: "var(--plx-danger, #f87171)", fontSize: "0.75rem", fontWeight: 600,
                           cursor: (item.isActive && !revokingKeys.has(item.id)) ? "pointer" : "not-allowed",
                           opacity: (item.isActive && !revokingKeys.has(item.id)) ? 1 : 0.4,
                           fontFamily: "inherit", transition: "background 0.15s",
@@ -190,21 +190,21 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
           </table>
         </div>
       </div>
-      {saveError && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{saveError}</p>}
+      {saveError && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)", marginTop: "0.75rem" }}>{saveError}</p>}
 
       {generatedRawKey && (
-        <div role="dialog" aria-modal="true" aria-labelledby="key-modal-title" style={{ position: "fixed", inset: 0, zIndex: 50, display: "grid", placeItems: "center", background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", padding: "1rem" }}>
-          <div style={{ width: "min(100%,480px)", background: "#0d0f1a", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 20, padding: "1.75rem", boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px rgba(var(--brand-rgb),0.08)" }}>
+        <div role="dialog" aria-modal="true" aria-labelledby="key-modal-title" style={{ position: "fixed", inset: 0, zIndex: 50, display: "grid", placeItems: "center", background: "var(--plx-overlay, rgba(0,0,0,0.75))", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", padding: "1rem" }}>
+          <div style={{ width: "min(100%,480px)", background: "var(--plx-surface, #0d0f1a)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)", borderRadius: 20, padding: "1.75rem", boxShadow: "0 30px 100px rgba(0,0,0,0.7), 0 0 0 1px color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 8%, transparent)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.5rem" }}>
-              <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--brand-subtle)", border: "1px solid rgba(var(--brand-rgb),0.25)", display: "grid", placeItems: "center", color: "var(--brand)" }}>
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--brand-subtle)", border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)", display: "grid", placeItems: "center", color: "var(--plx-link, var(--brand))" }}>
                 <IconKey />
               </div>
-              <h3 id="key-modal-title" style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.1rem", fontWeight: 700, color: "#f0f2ff" }}>Your New API Key</h3>
+              <h3 id="key-modal-title" style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.1rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>Your New API Key</h3>
             </div>
-            <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.45)", marginBottom: "1.25rem" }}>
+            <p style={{ fontSize: "0.82rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", marginBottom: "1.25rem" }}>
               This is the only time the full key will be shown. Copy and store it securely.
             </p>
-            <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(var(--brand-rgb),0.2)", borderRadius: 10, padding: "0.9rem 1rem", fontFamily: "monospace", fontSize: "0.82rem", color: "var(--brand)", wordBreak: "break-all", marginBottom: "1.25rem" }}>
+            <div style={{ background: "color-mix(in srgb, var(--plx-text, #fff) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 20%, transparent)", borderRadius: 10, padding: "0.9rem 1rem", fontFamily: "monospace", fontSize: "0.82rem", color: "var(--plx-link, var(--brand))", wordBreak: "break-all", marginBottom: "1.25rem" }}>
               {generatedRawKey}
             </div>
             <div style={{ display: "flex", gap: "0.75rem" }}>
@@ -215,8 +215,8 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
                 style={{
                   flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem", padding: "0.7rem",
                   borderRadius: 9, border: "none", cursor: "pointer",
-                  background: copied ? "rgba(52,211,153,0.15)" : "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-                  color: copied ? "#34d399" : "#fff", fontFamily: "inherit", fontSize: "0.875rem", fontWeight: 700, transition: "all 0.2s",
+                  background: copied ? "color-mix(in srgb, var(--plx-success, rgb(52 211 153)) 15%, transparent)" : "var(--plx-brand, linear-gradient(135deg,var(--brand),var(--brand-deep)))",
+                  color: copied ? "var(--plx-success, #34d399)" : "#fff", fontFamily: "inherit", fontSize: "0.875rem", fontWeight: 700, transition: "all 0.2s",
                 }}
               >
                 {copied ? <IconCheck /> : <IconCopy />}
@@ -225,7 +225,7 @@ export function ApiKeysClient({ initialApiKeys }: { initialApiKeys: SettingsApiK
               <button
                 type="button"
                 onClick={() => { setGeneratedRawKey(null); setCopied(false); }}
-                style={{ padding: "0.7rem 1.1rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.65)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.875rem", fontWeight: 600 }}
+                style={{ padding: "0.7rem 1.1rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)", background: "transparent", color: "var(--plx-muted, rgba(240,242,255,0.65))", cursor: "pointer", fontFamily: "inherit", fontSize: "0.875rem", fontWeight: 600 }}
               >
                 Close
               </button>

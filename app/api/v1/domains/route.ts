@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { countLiveCustomDomains, customDomainError } from "@/lib/plan/domainGate";
 import { getTierFeatures } from "@/lib/subscription";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
@@ -83,7 +84,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // the page, which is why a customer domain kept issuing a fresh certificate every few
   // minutes and never actually finished attaching. Reads and writes are fully separated now.
 
-  // -1 = unlimited (self-managed publishing, Ultra-gated — see resolveManageLandingPagePublishing)
+  // -1 = unlimited (self-managed publishing, Pro and above — see resolveManageLandingPagePublishing)
   const limit = resolved.manageLandingPagePublishing
     ? -1
     : getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
@@ -240,10 +241,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let certificateValidationName: string | undefined;
   let certificateValidationValue: string | undefined;
   if (type === "CUSTOM") {
-    if (!getTierFeatures(resolved.subscriptionPlan).customDomainEnabled) {
-      return NextResponse.json({
-        error: "Custom domains require a Pro or Ultra plan. Upgrade in Settings → Billing."
-      }, { status: 403 });
+    const customError = customDomainError(resolved, countLiveCustomDomains(domainCountBatches.flatMap((b) => b.data).filter((d) => d.domain !== finalDomain)));
+    if (customError) {
+      return NextResponse.json({ error: customError, code: "PLAN_CUSTOM_DOMAIN_LIMIT", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
     }
     try {
       const result = await requestCustomDomainConnection(finalDomain);

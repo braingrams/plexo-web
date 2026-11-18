@@ -53,6 +53,9 @@ export const Template = new Entity(
       // back: the TemplateRevision (made by POST /api/templates/:id/convert-to-v2) holding its
       // classic design. Cleared when the owner goes back.
       classicBackupId: { type: "string" },
+      // The site's OWN logo and colours (root page only): { logoUrl?, colors?, noLogo? }, written by the Brand tab and
+      // copied from the owner's onboarding answers when a site is made. Read through readSiteBrand() (lib/dashboardV3/brandLook.ts).
+      brand: { type: "any" },
       designJson: { type: "any", required: true, set: (v: unknown) => packJson(v), get: (v: unknown) => unpackJson(v) },
       compiledHtml: { type: "string", required: true, set: (v: string | undefined) => packHtml(v) ?? undefined, get: (v: string | undefined) => unpackHtml(v) ?? undefined },
       // Draft/Publish model: designJson/compiledHtml above are always the LIVE, currently-
@@ -1192,6 +1195,14 @@ export const Feedback = new Entity(
       userName: { type: "string", required: true },
       message: { type: "string", required: true },
       pageUrl: { type: "string" },
+      // "feedback" (owner-initiated) or "struggle" (the dashboard noticed they were stuck and offered help).
+      type: { type: "string" },
+      category: { type: "string" },
+      // Comma-separated names of the signals that made the nudge appear (e.g. "rage_click,failed_requests").
+      signals: { type: "string" },
+      browser: { type: "string" },
+      // Private storage URL of an optional screenshot the owner attached.
+      screenshotUrl: { type: "string" },
       status: {
         type: ["NEW", "REVIEWED", "ARCHIVED"] as const,
         default: "NEW",

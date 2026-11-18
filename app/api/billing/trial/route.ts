@@ -15,7 +15,7 @@ export async function GET(): Promise<NextResponse> {
 
 /**
  * POST /api/billing/trial
- *   { plan: "PRO" | "ULTRA" } — start the account's one 14-day trial (no card).
+ *   { plan: "STARTER" | "PRO" } — start the account's one 14-day trial (no card).
  *   { dismiss: true }         — "Continue on Free": don't offer it again after signup.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -29,12 +29,14 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ success: true });
   }
 
-  if (!TRIAL_PLANS.includes(body.plan as TrialPlan)) {
-    return NextResponse.json({ error: "Choose Pro or Ultra to try." }, { status: 400 });
+  // A page loaded before the plan rename may still send ULTRA (= today's Pro).
+  const plan = body.plan === "ULTRA" ? "PRO" : body.plan;
+  if (!TRIAL_PLANS.includes(plan as TrialPlan)) {
+    return NextResponse.json({ error: "Choose Starter or Pro to try." }, { status: 400 });
   }
   try {
-    const { endsAt } = await startTrial(session.user.id, body.plan as TrialPlan);
-    return NextResponse.json({ success: true, plan: body.plan, endsAt });
+    const { endsAt } = await startTrial(session.user.id, plan as TrialPlan);
+    return NextResponse.json({ success: true, plan, endsAt });
   } catch (err) {
     if (err instanceof PlanLifecycleError) return NextResponse.json({ error: err.message }, { status: err.status });
     throw err;

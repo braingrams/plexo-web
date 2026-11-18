@@ -1,4 +1,5 @@
 import { EntityItem } from "electrodb";
+import { workspaceOwner } from "@/lib/plan/workspacePlan";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { Template, PublishedDomain, BlogSite } from "@/lib/db/contentEntities";
 import { DeployedApp } from "@/lib/db/appEntities";
@@ -61,11 +62,14 @@ export async function resolveSite(rawDomain: string): Promise<ResolveSiteResult>
     return { status: "suspended" };
   }
 
-  const [{ data: template }, { data: user }, { data: organization }] = await Promise.all([
+  // The site is served on its WORKSPACE's plan — the workspace owner's, whoever on the team
+  // published it (lib/plan/workspacePlan.ts). Falls back to the publisher for an ownerless workspace.
+  const [{ data: template }, owner, { data: organization }] = await Promise.all([
     Template.get({ id: domainRow.templateId }).go(),
-    User.get({ id: domainRow.userId }).go(),
+    workspaceOwner(domainRow.organizationId),
     Organization.get({ id: domainRow.organizationId }).go(),
   ]);
+  const user = owner ?? (await User.get({ id: domainRow.userId }).go()).data;
   if (!template) return { status: "not_found" };
 
   // The plan lifecycle heals itself here, whatever changed the plan (Stripe, the trial

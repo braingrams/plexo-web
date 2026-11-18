@@ -1,23 +1,17 @@
 "use client";
 
-import { startTrial } from "../_components/trial";
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
-import { getStripePromise } from "@/lib/stripeClientPromise";
-import { useTopupPacks, packLabel } from "../_components/useTopupPacks";
 import { trackEvent, trackPurchaseOnce, subscriptionItem, purchaseTypeFor, analyticsPlan } from "@/lib/analytics";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useTopupPacks, packLabel } from "../_components/useTopupPacks";
+import { StripeCheckoutModal } from "../_components/StripeCheckoutModal";
+import { PlanPicker } from "../_components/PlanPicker";
+import { startCheckout as beginCheckout, verifyPaystackPayment, type CheckoutBody, type CheckoutResult } from "@/lib/billing/clientCheckout";
+import { PLAN_LABELS, type PlanId } from "@/lib/plan/plans";
+import type { BillingInterval } from "@/lib/billing/pricing";
 
 type LedgerEntryType = "MONTHLY_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
-
-function IconSparkle() {
-  return (
-    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18" />
-    </svg>
-  );
-}
 
 type LedgerEntry = {
   id: string;
@@ -28,23 +22,27 @@ type LedgerEntry = {
 };
 
 type Props = {
-  plan: "FREE" | "PRO" | "ULTRA";
+  plan: PlanId;
   /** A paid subscription is behind the plan (false on Free, a trial, or an admin grant). */
   paying?: boolean;
   /** One plain-language line on where the plan stands (trial days left, kept by Plexo, …). */
   planNote?: { text: string; tone: "info" | "warning" } | null;
   /** The account can still start its one free trial. */
   trialAvailable?: boolean;
+  /** Who bills the plan: Stripe (US dollars) or Paystack (local currency). */
+  provider?: "STRIPE" | "PAYSTACK" | null;
+  interval?: BillingInterval | null;
+  /** The plan won't renew (already cancelled). */
+  cancelAtPeriodEnd?: boolean;
+  /** A plan move booked for the next renewal (the 2026 plan change), with its price. */
+  scheduled?: { plan: PlanId; at: string | null; priceLabel: string | null } | null;
+  /** "Your price changes to X on <date>." when an admin price change reaches this subscriber's next renewal. */
+  priceNotice?: string | null;
   allowanceBalance: number;
   topupBalance: number;
   allowanceResetAt: string;
   recentActivity: LedgerEntry[];
 };
-
-type CheckoutBody =
-  | { kind: "subscription"; plan: "PRO" | "ULTRA" }
-  | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE" }
-  | { kind: "funnel_addon_slot" };
 
 type FunnelSlotsSummary = { total: number; used: number; hasSlotAvailable: boolean };
 
@@ -56,7 +54,7 @@ const TYPE_LABELS: Record<LedgerEntryType, string> = {
   ADJUSTMENT: "Adjustment",
 };
 
-// Credits per pack come from its real price (half of it as AI value — lib/credits/value.ts).
+// Credits per pack and their price in the person's currency come from the price list (lib/billing/pricing.ts).
 const TOPUP_PACKS: Array<{ pack: "SMALL" | "MEDIUM" | "LARGE"; sub: string }> = [
   { pack: "SMALL", sub: "Small top-up" },
   { pack: "MEDIUM", sub: "Medium top-up" },
@@ -74,8 +72,8 @@ const actionButtonStyle: CSSProperties = {
   cursor: "pointer",
   fontSize: "0.8rem",
   fontWeight: 700,
-  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-  color: "#fff",
+  background: "var(--plx-brand, linear-gradient(135deg,var(--brand),var(--brand-deep)))",
+  color: "var(--plx-text, #fff)",
   fontFamily: "inherit",
   boxShadow: "0 3px 14px var(--brand-glow)",
   textAlign: "left",
@@ -84,8 +82,8 @@ const actionButtonStyle: CSSProperties = {
 const secondaryButtonStyle: CSSProperties = {
   ...actionButtonStyle,
   background: "transparent",
-  border: "1px solid rgba(255,255,255,0.1)",
-  color: "rgba(240,242,255,0.75)",
+  border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 10%, transparent)",
+  color: "var(--plx-text, rgba(240,242,255,0.75))",
   boxShadow: "none",
 };
 
@@ -98,47 +96,7 @@ function daysUntil(iso: string): number {
   return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
 }
 
-/** The card-entry step now renders in this modal (Stripe's embedded Checkout, an iframe) —
- * the visitor never leaves the app to pay. Stripe still does one final navigation to
- * `return_url` once payment completes (that part of embedded Checkout isn't avoidable), which
- * is what BillingSection's own ?session_id handling below picks up. */
-function CheckoutModal({ clientSecret, onClose }: { clientSecret: string; onClose: () => void }) {
-  return (
-    <div
-      onClick={onClose}
-      style={{
-        position: "fixed", inset: 0, zIndex: 200, background: "rgba(6,7,15,0.75)", backdropFilter: "blur(6px)",
-        display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem",
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          background: "#fff", borderRadius: 16, width: "100%", maxWidth: 560, maxHeight: "90vh",
-          overflow: "auto", position: "relative", boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
-        }}
-      >
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          style={{
-            position: "absolute", top: "0.75rem", right: "0.75rem", zIndex: 1, width: 30, height: 30,
-            display: "grid", placeItems: "center", background: "rgba(15,15,25,0.06)", border: "none",
-            borderRadius: 8, color: "rgba(15,15,25,0.6)", cursor: "pointer", fontSize: "1rem", lineHeight: 1,
-          }}
-        >
-          ✕
-        </button>
-        <EmbeddedCheckoutProvider stripe={getStripePromise()} options={{ clientSecret }}>
-          <EmbeddedCheckout />
-        </EmbeddedCheckoutProvider>
-      </div>
-    </div>
-  );
-}
-
-export function BillingSection({ plan, paying = plan !== "FREE", planNote = null, trialAvailable = false, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
+export function BillingSection({ plan, paying = plan !== "FREE", planNote = null, trialAvailable = false, provider = null, interval = null, cancelAtPeriodEnd = false, scheduled = null, priceNotice = null, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -167,7 +125,7 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
   }
 
   // Picks up the `?session_id=` Stripe's embedded Checkout lands back on after a completed
-  // payment (see CheckoutModal's comment) — confirms the real status via our own backend
+  // payment (see StripeCheckoutModal) — confirms the real status via our own backend
   // rather than trusting the query string, then strips it from the URL so a refresh doesn't
   // re-trigger this. The actual plan/credit change is applied by the checkout.session.completed
   // webhook, same as before switching to embedded Checkout — this only drives the banner and a
@@ -191,7 +149,6 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           return;
         }
         if (data.status === "complete") {
-          // Purchase: only once the payment is paid and Stripe has given the invoice (transaction) ID.
           if (data.paymentStatus === "paid" && data.transactionId && (data.plan === "PRO" || data.plan === "ULTRA")) {
             trackPurchaseOnce(String(data.transactionId), {
               event: "purchase",
@@ -231,21 +188,38 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // A Pro/Ultra-gated feature elsewhere in the dashboard (e.g. Domains' custom-domain
-  // upsell) navigates here with ?upgrade=PRO|ULTRA instead of trying to start embedded
-  // checkout itself — this is the one place that already knows how (EmbeddedCheckoutProvider
-  // below, startCheckout's own working clientSecret flow), so every upsell entry point
-  // reuses it rather than re-implementing it. Auto-fires the same checkout a clicking the
-  // matching plan button would, once, on arrival.
+  // Paystack (local-currency payments) lands back here with ?paystack=1&reference=… when its
+  // popup couldn't be used — confirm the payment with our backend, same as ?session_id above.
   useEffect(() => {
-    const upgrade = searchParams.get("upgrade");
-    if (upgrade !== "PRO" && upgrade !== "ULTRA") return;
-    // Read and captured as a local before router.replace strips the query string below —
-    // startCheckout's async POST (fired right after, in this same effect) still closes
-    // over this value regardless of what the URL looks like by the time it resolves.
+    const reference = searchParams.get("reference") ?? searchParams.get("trxref");
+    if (searchParams.get("paystack") !== "1" || !reference) return;
     const returnTo = searchParams.get("returnTo");
     router.replace(pathname);
-    void startCheckout({ kind: "subscription", plan: upgrade }, `sub-${upgrade}`, isSafeReturnTo(returnTo) ? returnTo : null);
+    let cancelled = false;
+    setCheckoutStatus({ kind: "processing", text: "Confirming your payment…" });
+    void verifyPaystackPayment(reference).then((result) => {
+      if (!cancelled) handleResult(result, isSafeReturnTo(returnTo) ? returnTo : null);
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // A plan-gated feature elsewhere in the dashboard (e.g. Domains' custom-domain upsell)
+  // navigates here with ?upgrade=STARTER|PRO|ENTERPRISE (&interval=yearly) instead of starting
+  // checkout itself — this is the one place that handles every outcome (Stripe's card form,
+  // Paystack's popup, an in-place plan change). Fires once, on arrival.
+  useEffect(() => {
+    const raw = searchParams.get("upgrade");
+    // ULTRA: a link from before the plan rename (today's Pro).
+    const upgrade = raw === "ULTRA" ? "PRO" : raw;
+    if (upgrade !== "STARTER" && upgrade !== "PRO" && upgrade !== "ENTERPRISE") return;
+    const interval = searchParams.get("interval") === "yearly" ? "yearly" : "monthly";
+    // Read and captured as a local before router.replace strips the query string below.
+    const returnTo = searchParams.get("returnTo");
+    router.replace(pathname);
+    void startCheckout({ kind: "subscription", plan: upgrade, interval }, `sub-${upgrade}`, isSafeReturnTo(returnTo) ? returnTo : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -259,36 +233,58 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /** Shows what happened after a checkout and, once paid, refreshes (or goes back to where the upgrade started). */
+  function handleResult(result: CheckoutResult, returnTo: string | null = null): void {
+    switch (result.kind) {
+      case "stripe":
+        setCheckoutSecret(result.clientSecret);
+        return;
+      case "changed":
+      case "paid":
+        setCheckoutStatus({ kind: "success", text: result.message });
+        setTimeout(() => (returnTo && isSafeReturnTo(returnTo) ? router.push(returnTo) : router.refresh()), 2000);
+        return;
+      case "processing":
+        setCheckoutStatus({ kind: "processing", text: result.message });
+        return;
+      case "error":
+        setError(result.message);
+        return;
+      default:
+        return; // cancelled, or on the way to Paystack's page
+    }
+  }
+
   async function startCheckout(body: CheckoutBody, actionKey: string, returnTo: string | null = null): Promise<void> {
     setBusyAction(actionKey);
     setError(null);
-    try {
-      const res = await fetch("/api/billing/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(returnTo ? { ...body, returnTo } : body),
+    const result = await beginCheckout(returnTo ? { ...body, returnTo } : body);
+    setBusyAction(null);
+    // Only PRO has a list price in the analytics helpers; other plans are not tracked yet.
+    if (result.kind === "stripe" && body.kind === "subscription" && body.plan === "PRO") {
+      // The payment form is open now. Clear the previous ecommerce object first, as the spec requires.
+      trackEvent({ ecommerce: null });
+      trackEvent({
+        event: "begin_checkout",
+        checkout_type: "subscription",
+        ecommerce: { currency: "USD", value: 19, items: [subscriptionItem(body.plan)] },
       });
-      const data = (await res.json()) as { clientSecret?: string; changed?: boolean; message?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Could not start checkout.");
-      if (data.changed) {
-        // Already subscribed: the plan was changed in place, no card form needed.
-        setCheckoutStatus({ kind: "success", text: data.message ?? "Your plan is updating now." });
-        setTimeout(() => (returnTo && isSafeReturnTo(returnTo) ? router.push(returnTo) : router.refresh()), 2000);
-        return;
-      }
-      if (!data.clientSecret) throw new Error(data.error ?? "Could not start checkout.");
-      setCheckoutSecret(data.clientSecret);
-      if (body.kind === "subscription") {
-        // The payment form is open now. Clear the previous ecommerce object first, as the spec requires.
-        trackEvent({ ecommerce: null });
-        trackEvent({
-          event: "begin_checkout",
-          checkout_type: "subscription",
-          ecommerce: { currency: "USD", value: body.plan === "PRO" ? 19 : 49, items: [subscriptionItem(body.plan)] },
-        });
-      }
+    }
+    handleResult(result, returnTo);
+  }
+
+  async function cancelPlan(): Promise<void> {
+    if (!window.confirm("Stop your plan from renewing? Everything keeps working until the end of the period you've paid for.")) return;
+    setBusyAction("cancel");
+    setError(null);
+    try {
+      const res = await fetch("/api/billing/cancel", { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "We couldn't cancel your plan.");
+      setCheckoutStatus({ kind: "success", text: data.message ?? "Your plan won't renew." });
+      router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not start checkout.");
+      setError(err instanceof Error ? err.message : "We couldn't cancel your plan.");
     } finally {
       setBusyAction(null);
     }
@@ -300,10 +296,10 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
     try {
       const res = await fetch("/api/billing/portal", { method: "POST" });
       const data = (await res.json()) as { url?: string; error?: string };
-      if (!res.ok || !data.url) throw new Error(data.error ?? "Could not open billing portal.");
+      if (!res.ok || !data.url) throw new Error(data.error ?? "We couldn't open your billing page.");
       window.location.href = data.url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open billing portal.");
+      setError(err instanceof Error ? err.message : "We couldn't open your billing page.");
       setBusyAction(null);
     }
   }
@@ -311,8 +307,8 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
   return (
     <div
       style={{
-        background: "rgba(255,255,255,0.03)",
-        border: "1px solid rgba(255,255,255,0.08)",
+        background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)",
         borderRadius: 16,
         overflow: "hidden",
       }}
@@ -323,17 +319,17 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           alignItems: "center",
           justifyContent: "space-between",
           padding: "1.25rem 1.5rem",
-          borderBottom: "1px solid rgba(255,255,255,0.06)",
+          borderBottom: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)",
           flexWrap: "wrap",
           gap: "0.75rem",
         }}
       >
         <div>
-          <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "#f0f2ff" }}>
+          <h2 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>
             Billing &amp; Credits
           </h2>
-          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)" }}>
-            System AI usage (accounts without a configured BYOK key) draws from this balance.
+          <p style={{ fontSize: "0.75rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>
+            AI features you use without your own AI key draw from this balance.
           </p>
         </div>
         <span
@@ -348,11 +344,11 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
             letterSpacing: "0.06em",
             textTransform: "uppercase",
             background: "var(--brand-subtle)",
-            color: "var(--brand)",
-            border: "1px solid rgba(var(--brand-rgb),0.25)",
+            color: "var(--plx-link, var(--brand))",
+            border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)",
           }}
         >
-          {plan} plan
+          {PLAN_LABELS[plan]} plan
         </span>
       </div>
 
@@ -361,9 +357,9 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           <div
             style={{
               display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.7rem 1rem", borderRadius: 10, fontSize: "0.82rem",
-              background: checkoutStatus.kind === "success" ? "rgba(52,211,153,0.1)" : checkoutStatus.kind === "error" ? "rgba(248,113,113,0.1)" : "rgba(251,191,36,0.1)",
-              border: `1px solid ${checkoutStatus.kind === "success" ? "rgba(52,211,153,0.25)" : checkoutStatus.kind === "error" ? "rgba(248,113,113,0.25)" : "rgba(251,191,36,0.25)"}`,
-              color: checkoutStatus.kind === "success" ? "#4ade80" : checkoutStatus.kind === "error" ? "#f87171" : "#fbbf24",
+              background: checkoutStatus.kind === "success" ? "color-mix(in srgb, var(--plx-success, rgb(52 211 153)) 10%, transparent)" : checkoutStatus.kind === "error" ? "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 10%, transparent)" : "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 10%, transparent)",
+              border: `1px solid ${checkoutStatus.kind === "success" ? "color-mix(in srgb, var(--plx-success, rgb(52 211 153)) 25%, transparent)" : checkoutStatus.kind === "error" ? "color-mix(in srgb, var(--plx-danger, rgb(248 113 113)) 25%, transparent)" : "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 25%, transparent)"}`,
+              color: checkoutStatus.kind === "success" ? "var(--plx-success, #4ade80)" : checkoutStatus.kind === "error" ? "var(--plx-danger, #f87171)" : "var(--plx-warning, #fbbf24)",
             }}
           >
             {checkoutStatus.text}
@@ -373,31 +369,31 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
         {/* Balance */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: "1rem" }}>
           <div>
-            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.25rem" }}>
+            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.25rem" }}>
               Total balance
             </p>
-            <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff" }}>{total.toLocaleString()} credits</p>
+            <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--plx-text, #f0f2ff)" }}>{total.toLocaleString()} credits</p>
           </div>
           <div>
-            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.25rem" }}>
+            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.25rem" }}>
               Monthly allowance
             </p>
-            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "rgba(240,242,255,0.75)" }}>{allowanceBalance.toLocaleString()} left</p>
-            <p suppressHydrationWarning style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>
+            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--plx-text, rgba(240,242,255,0.75))" }}>{allowanceBalance.toLocaleString()} left</p>
+            <p suppressHydrationWarning style={{ fontSize: "0.7rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>
               Resets in {daysUntil(allowanceResetAt)}d ({formatDate(allowanceResetAt)})
             </p>
           </div>
           <div>
-            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.25rem" }}>
+            <p style={{ fontSize: "0.72rem", letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.25rem" }}>
               Top-up balance
             </p>
-            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "rgba(240,242,255,0.75)" }}>{topupBalance.toLocaleString()}</p>
-            <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)" }}>Never expires</p>
+            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--plx-text, rgba(240,242,255,0.75))" }}>{topupBalance.toLocaleString()}</p>
+            <p style={{ fontSize: "0.7rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>Never expires</p>
           </div>
         </div>
         {total < 0 && (
-          <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "#fcd34d", background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, padding: "0.7rem 0.9rem" }}>
-            <strong style={{ color: "#fde68a" }}>Why is my balance below zero?</strong>{" "}Your credits ran out while SOL was partway through a step.
+          <p style={{ fontSize: "0.8rem", lineHeight: 1.6, color: "var(--plx-warning, #fcd34d)", background: "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 7%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 25%, transparent)", borderRadius: 10, padding: "0.7rem 0.9rem" }}>
+            <strong style={{ color: "var(--plx-warning, #fde68a)" }}>Why is my balance below zero?</strong>{" "}Your credits ran out while SOL was partway through a step.
             We let it finish rather than stop, so your work wasn&apos;t left half-done. That amount is taken off your next monthly credits or
             top-up first; until you&apos;re back above zero, SOL waits for you to add credits.
           </p>
@@ -405,97 +401,80 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
 
         {/* Plan actions */}
         <div>
-          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
             Plan
           </p>
           {planNote && (
             <p
               style={{
                 fontSize: "0.82rem", lineHeight: 1.5, marginBottom: "0.75rem", padding: "0.6rem 0.9rem", borderRadius: 10,
-                color: planNote.tone === "warning" ? "#fbbf24" : "rgba(240,242,255,0.75)",
-                background: planNote.tone === "warning" ? "rgba(251,191,36,0.08)" : "rgba(var(--brand-rgb),0.07)",
-                border: `1px solid ${planNote.tone === "warning" ? "rgba(251,191,36,0.25)" : "rgba(var(--brand-rgb),0.25)"}`,
+                color: planNote.tone === "warning" ? "var(--plx-warning, #fbbf24)" : "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 75%, transparent)",
+                background: planNote.tone === "warning" ? "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 8%, transparent)" : "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 7%, transparent)",
+                border: `1px solid ${planNote.tone === "warning" ? "color-mix(in srgb, var(--plx-warning, rgb(251 191 36)) 25%, transparent)" : "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)"}`,
               }}
             >
               {planNote.text}
             </p>
           )}
-          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-            {/* On a trial or an admin grant there's no subscription yet: offer both plans, to keep. */}
-            {!paying && plan !== "FREE" && (["PRO", "ULTRA"] as const).map((p) => (
-              <button
-                key={p}
-                type="button"
-                disabled={busyAction === `sub-${p}`}
-                onClick={() => void startCheckout({ kind: "subscription", plan: p }, `sub-${p}`)}
-                style={{ ...actionButtonStyle, opacity: busyAction === `sub-${p}` ? 0.7 : 1 }}
-              >
-                {busyAction === `sub-${p}` ? "Opening…" : p === plan ? `Keep ${p}` : `Subscribe to ${p}`}
-              </button>
-            ))}
-            {/* The one free trial, for anyone who hasn't had it — no card. */}
-            {plan === "FREE" && trialAvailable && (["PRO", "ULTRA"] as const).map((p) => (
-              <button
-                key={`trial-${p}`}
-                type="button"
-                disabled={busyAction !== null}
-                onClick={() => {
-                  setBusyAction(`trial-${p}`);
-                  setError(null);
-                  void startTrial(p).catch((err) => {
-                    setError(err instanceof Error ? err.message : "Couldn't start your trial.");
-                    setBusyAction(null);
-                  });
-                }}
-                style={{ ...(p === "PRO" ? actionButtonStyle : secondaryButtonStyle), opacity: busyAction === `trial-${p}` ? 0.7 : 1 }}
-              >
-                {busyAction === `trial-${p}` ? "Starting your trial…" : `Try ${p === "PRO" ? "Pro" : "Ultra"} free for 14 days`}
-              </button>
-            ))}
-            {plan === "FREE" && (
-              <button
-                type="button"
-                disabled={busyAction === "sub-PRO"}
-                onClick={() => void startCheckout({ kind: "subscription", plan: "PRO" }, "sub-PRO")}
-                style={{ ...actionButtonStyle, opacity: busyAction === "sub-PRO" ? 0.7 : 1 }}
-              >
-                {busyAction === "sub-PRO" ? "Opening…" : "Upgrade to PRO"}
-              </button>
-            )}
-            {paying && plan !== "ULTRA" || plan === "FREE" ? (
-              <button
-                type="button"
-                disabled={busyAction === "sub-ULTRA"}
-                onClick={() => void startCheckout({ kind: "subscription", plan: "ULTRA" }, "sub-ULTRA")}
-                style={{ ...actionButtonStyle, opacity: busyAction === "sub-ULTRA" ? 0.7 : 1 }}
-              >
-                {busyAction === "sub-ULTRA" ? "Opening…" : "Upgrade to ULTRA"}
-              </button>
-            ) : null}
-            {paying && plan === "ULTRA" && (
-              <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#34d399", padding: "0.5rem 0.9rem", borderRadius: 9, background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.2)", display: "inline-flex", alignItems: "center", gap: "0.35rem" }}>
-                Current Plan: ULTRA <IconSparkle />
-              </span>
-            )}
-            <button
-              type="button"
-              disabled={busyAction === "portal"}
-              onClick={() => void openPortal()}
-              style={{ ...secondaryButtonStyle, opacity: busyAction === "portal" ? 0.7 : 1 }}
+          {scheduled && (
+            <p
+              style={{
+                fontSize: "0.82rem", lineHeight: 1.5, marginBottom: "0.75rem", padding: "0.6rem 0.9rem", borderRadius: 10,
+                color: "var(--plx-text, rgba(240,242,255,0.75))", background: "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 7%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)",
+              }}
             >
-              {busyAction === "portal" ? "Opening…" : "Manage subscription"}
-            </button>
-          </div>
+              {`From your next renewal${scheduled.at ? ` on ${formatDate(scheduled.at)}` : ""} you'll be on ${PLAN_LABELS[scheduled.plan]}${scheduled.priceLabel ? ` at ${scheduled.priceLabel}` : ""}. It includes everything you have today — nothing for you to do.`}
+            </p>
+          )}
+          {priceNotice && (
+            <p
+              style={{
+                fontSize: "0.82rem", lineHeight: 1.5, marginBottom: "0.75rem", padding: "0.6rem 0.9rem", borderRadius: 10,
+                color: "var(--plx-text, rgba(240,242,255,0.75))", background: "color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 7%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-brand, rgb(var(--brand-rgb))) 25%, transparent)",
+              }}
+            >
+              {`${priceNotice} Nothing for you to do. Until then you keep paying what you pay now.`}
+            </p>
+          )}
+          <PlanPicker
+            currentPlan={plan}
+            paying={paying}
+            currentInterval={interval}
+            trialAvailable={plan === "FREE" && trialAvailable}
+            onResult={(result) => handleResult(result)}
+          />
+          {paying && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap", marginTop: "0.9rem" }}>
+              <button
+                type="button"
+                disabled={busyAction === "portal"}
+                onClick={() => void openPortal()}
+                style={{ ...secondaryButtonStyle, opacity: busyAction === "portal" ? 0.7 : 1 }}
+              >
+                {busyAction === "portal" ? "Opening…" : provider === "PAYSTACK" ? "Change card" : "Manage subscription"}
+              </button>
+              {provider === "PAYSTACK" && !cancelAtPeriodEnd && (
+                <button
+                  type="button"
+                  disabled={busyAction === "cancel"}
+                  onClick={() => void cancelPlan()}
+                  style={{ ...secondaryButtonStyle, opacity: busyAction === "cancel" ? 0.7 : 1 }}
+                >
+                  {busyAction === "cancel" ? "Cancelling…" : "Cancel plan"}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Funnel add-on slots */}
         {funnelSlots && (
           <div>
-            <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+            <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
               Funnel slots
             </p>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
-              <span style={{ fontSize: "0.83rem", color: "rgba(240,242,255,0.6)" }}>
+              <span style={{ fontSize: "0.83rem", color: "var(--plx-muted, rgba(240,242,255,0.6))" }}>
                 {funnelSlots.used} of {funnelSlots.total} in use
               </span>
               <button
@@ -507,15 +486,15 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
                 {busyAction === "addon-funnel-slot" ? "Opening…" : "Buy another funnel slot"}
               </button>
             </div>
-            <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)", marginTop: "0.4rem" }}>
-              Billed monthly, per slot. Cancel any time from "Manage subscription" above.
+            <p style={{ fontSize: "0.7rem", color: "var(--plx-faint, rgba(240,242,255,0.35))", marginTop: "0.4rem" }}>
+              Billed monthly in US dollars, per slot. Cancel any time from &quot;Manage subscription&quot; above.
             </p>
           </div>
         )}
 
         {/* Top-up packs */}
         <div>
-          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
             Buy credits
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "0.6rem" }}>
@@ -538,15 +517,15 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           </div>
         </div>
 
-        {error && <p style={{ fontSize: "0.78rem", color: "#f87171" }}>{error}</p>}
+        {error && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)" }}>{error}</p>}
 
         {/* Recent activity */}
         <div>
-          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "rgba(240,242,255,0.4)", marginBottom: "0.5rem" }}>
+          <p style={{ fontSize: "0.78rem", fontWeight: 600, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginBottom: "0.5rem" }}>
             Recent activity
           </p>
           {recentActivity.length === 0 ? (
-            <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.35)" }}>No credit activity yet.</p>
+            <p style={{ fontSize: "0.8rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>No credit activity yet.</p>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
               {recentActivity.map((entry) => (
@@ -558,19 +537,19 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
                     justifyContent: "space-between",
                     padding: "0.5rem 0.75rem",
                     borderRadius: 9,
-                    background: "rgba(255,255,255,0.02)",
-                    border: "1px solid rgba(255,255,255,0.05)",
+                    background: "color-mix(in srgb, var(--plx-text, #fff) 2%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 5%, transparent)",
                     fontSize: "0.8rem",
                     gap: "0.75rem",
                   }}
                 >
                   <div>
-                    <p style={{ color: "#f0f2ff", fontWeight: 600 }}>{TYPE_LABELS[entry.type]}</p>
-                    <p style={{ color: "rgba(240,242,255,0.35)", fontSize: "0.7rem" }}>
+                    <p style={{ color: "var(--plx-text, #f0f2ff)", fontWeight: 600 }}>{TYPE_LABELS[entry.type]}</p>
+                    <p style={{ color: "var(--plx-faint, rgba(240,242,255,0.35))", fontSize: "0.7rem" }}>
                       {entry.description ?? "—"} · {formatDate(entry.createdAt)}
                     </p>
                   </div>
-                  <span style={{ fontWeight: 700, color: entry.amount >= 0 ? "#34d399" : "#f87171", whiteSpace: "nowrap" }}>
+                  <span style={{ fontWeight: 700, color: entry.amount >= 0 ? "var(--plx-success, #34d399)" : "var(--plx-danger, #f87171)", whiteSpace: "nowrap" }}>
                     {entry.amount >= 0 ? "+" : ""}
                     {entry.amount.toLocaleString()}
                   </span>
@@ -581,7 +560,7 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
         </div>
       </div>
 
-      {checkoutSecret && <CheckoutModal clientSecret={checkoutSecret} onClose={() => setCheckoutSecret(null)} />}
+      {checkoutSecret && <StripeCheckoutModal clientSecret={checkoutSecret} onClose={() => setCheckoutSecret(null)} />}
     </div>
   );
 }

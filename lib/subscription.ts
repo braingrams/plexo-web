@@ -1,12 +1,14 @@
 /**
- * Plexo Subscription Tier System
+ * Plexo plans and what each one includes — THE entitlement table.
  *
- * Tiers: FREE → PRO → ULTRA
- * This module defines the feature gates per tier so that when you assign
- * a plan to a user, the SDK and API will automatically enforce the right limits.
+ * Plans: FREE → STARTER → PRO → ENTERPRISE (lib/plan/plans.ts; the old PRO/ULTRA map onto
+ * STARTER/PRO). Prices live in lib/billing/pricing.ts; AI credit amounts in
+ * lib/credits/value.ts. Every limit check reads getTierFeatures(plan) — never a plan name.
  */
 
-export type SubscriptionPlan = "FREE" | "PRO" | "ULTRA";
+import { PLAN_IDS, toPlanId, type PlanId } from "@/lib/plan/plans";
+
+export type SubscriptionPlan = PlanId;
 
 export type TierFeatures = {
   /** Maximum number of email templates the user can create */
@@ -102,7 +104,7 @@ export type TierFeatures = {
    */
   deployedAppDailyRequestLimit: number | null;
   /**
-   * Server-rendered (SSR) apps: upload, build, publish, env vars, and serving. Only ULTRA for now.
+   * Server-rendered (SSR) apps: upload, build, publish, env vars, and serving. Pro and Enterprise.
    * Every SSR endpoint and the SSR serving paths check this flag.
    */
   ssrEnabled: boolean;
@@ -111,20 +113,70 @@ export type TierFeatures = {
    * (lib/projects/ssrBudget.ts), so the budget caps builds per month. 0 when SSR is off.
    */
   ssrMonthlyBudgetUsd: number;
+  /** Whether the blog can be published (Free is homepage-only, so it has no blog). */
+  blogEnabled: boolean;
+  /** Whether Commerce (store, checkout) may take orders at all. */
+  commerceEnabled: boolean;
+  /**
+   * Whether a store may use its OWN Stripe/Paystack keys (BYO_*). Without it, a store takes
+   * payments through Plexo's own payment accounts (PLATFORM_*) only.
+   */
+  ownPaymentKeysEnabled: boolean;
+  /** Whether a store may take real payments right now (off on Free and during the free trial). */
+  livePaymentsEnabled: boolean;
+  /** Most products one store can hold. 0 when Commerce is off. */
+  maxCommerceProducts: number;
+  /** How many custom (non-Plexo) domains can be connected. 0 = Plexo address only. */
+  maxCustomDomains: number;
+  /** Domains Plexo registers for free with the plan (Pro: 1, Enterprise: 1 .com). */
+  includedFreeDomains: number;
+  /** People who can be invited to the workspace besides its owner (pending invites count). */
+  teamSeats: number;
+  /** Download a site as HTML files. Entitlement only — the export itself isn't built yet. */
+  htmlExportEnabled: boolean;
+  /** Import an HTML page/site. */
+  htmlImportEnabled: boolean;
+  /** Visitor analytics for published sites. */
+  analyticsEnabled: boolean;
+  /** Connect AI assistants over MCP. */
+  mcpEnabled: boolean;
+  /** Use the Plexo SDK. */
+  sdkEnabled: boolean;
+  /** What support the plan comes with, in plain words. */
+  supportLabel: "AI chat" | "Email" | "Email + call" | "Account manager";
 };
+
+// Shared by every paid plan — what the old PRO unlocked is unlocked by STARTER and above.
+const PAID_BASE = {
+  aiEnabled: true,
+  compileApiEnabled: true,
+  strataEnabled: true,
+  multiPageSitesEnabled: true,
+  siteMigrationEnabled: true,
+  customDomainEnabled: true,
+  brandingRemovalEnabled: true,
+  maxPublishedPagesPerSite: null,
+  blogEnabled: true,
+  maxPublishedBlogPosts: null,
+  commerceEnabled: true,
+  livePaymentsEnabled: true,
+  htmlExportEnabled: true,
+  htmlImportEnabled: true,
+  analyticsEnabled: true,
+  mcpEnabled: true,
+  sdkEnabled: true,
+} as const;
 
 const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
   FREE: {
-    maxEmailTemplates: 5,
+    maxEmailTemplates: 1,
     maxLandingPages: 5,
-    maxPublishedBlogPosts: 5,
+    maxPublishedBlogPosts: 0,
+    blogEnabled: false,
     // Free ships a small monthly AI allowance (lib/credits/value.ts) — hard-locking the
-    // AI entry point here made those credits impossible to ever spend (a free user could
-    // never even open the AI prompt box to try one). The real, already-enforced limit is
-    // ensureCreditPeriod/chargeUsage in app/api/v1/ai/generate/route.ts rejecting a request
-    // once the balance hits zero — that's the correct gate; this flag only controls whether
-    // the entry point is visible at all, so it should track "has a credit allowance" (every
-    // tier does), not "is a paid tier."
+    // AI entry point here made those credits impossible to ever spend. The real limit is
+    // the credit balance (ensureCreditPeriod/chargeUsage); this flag only controls whether
+    // the entry point is visible at all.
     aiEnabled: true,
     compileApiEnabled: false,
     strataEnabled: false,
@@ -133,8 +185,11 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     manageLandingPagePublishingEnabled: false,
     hostManagedAiEnabled: false,
     multiPageSitesEnabled: false,
-    siteMigrationEnabled: false,
+    // Moving an existing site in is on every plan (what Free can PUBLISH is still the homepage).
+    siteMigrationEnabled: true,
     customDomainEnabled: false,
+    maxCustomDomains: 0,
+    includedFreeDomains: 0,
     brandingRemovalEnabled: false,
     whiteLabelEnabled: false,
     includedFunnelSlots: 0,
@@ -144,69 +199,115 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     deployedAppDailyRequestLimit: 1_000,
     ssrEnabled: false,
     ssrMonthlyBudgetUsd: 0,
+    commerceEnabled: false,
+    livePaymentsEnabled: false,
+    ownPaymentKeysEnabled: false,
+    maxCommerceProducts: 0,
+    teamSeats: 0,
+    htmlExportEnabled: false,
+    htmlImportEnabled: true,
+    analyticsEnabled: false,
+    mcpEnabled: true,
+    sdkEnabled: true,
+    supportLabel: "AI chat",
   },
-  PRO: {
-    maxEmailTemplates: 25,
+  // Everything the old PRO plan had.
+  STARTER: {
+    ...PAID_BASE,
+    maxEmailTemplates: 5,
     maxLandingPages: 25,
-    maxPublishedBlogPosts: 50,
-    aiEnabled: true,
-    compileApiEnabled: true,
-    strataEnabled: true,
     maxApiKeys: 3,
     sdkAiTier: "MEDIUM",
     manageLandingPagePublishingEnabled: false,
     hostManagedAiEnabled: false,
-    multiPageSitesEnabled: true,
-    siteMigrationEnabled: true,
-    customDomainEnabled: true,
-    brandingRemovalEnabled: true,
-    whiteLabelEnabled: true,
-    includedFunnelSlots: 0,
-    maxPublishedSites: null,
-    maxPublishedPagesPerSite: null,
+    maxCustomDomains: 1,
+    includedFreeDomains: 0,
+    whiteLabelEnabled: false,
+    includedFunnelSlots: 1,
+    maxPublishedSites: 1,
     deployedAppHostingTiers: ["STATIC", "LAMBDA"],
     deployedAppDailyRequestLimit: 100_000,
     ssrEnabled: false,
     ssrMonthlyBudgetUsd: 0,
+    ownPaymentKeysEnabled: false,
+    maxCommerceProducts: 1_000,
+    teamSeats: 2,
+    supportLabel: "Email",
   },
-  ULTRA: {
-    maxEmailTemplates: 100,
+  // Everything the old ULTRA plan had (server apps, Plexo-hosted AI for the SDK, higher limits).
+  PRO: {
+    ...PAID_BASE,
+    maxEmailTemplates: 20,
     maxLandingPages: 100,
-    maxPublishedBlogPosts: null,
-    aiEnabled: true,
-    compileApiEnabled: true,
-    strataEnabled: true,
     maxApiKeys: 10,
     sdkAiTier: "HIGH",
     manageLandingPagePublishingEnabled: true,
     hostManagedAiEnabled: true,
-    multiPageSitesEnabled: true,
-    siteMigrationEnabled: true,
-    customDomainEnabled: true,
-    brandingRemovalEnabled: true,
-    whiteLabelEnabled: true,
-    includedFunnelSlots: 1,
-    maxPublishedSites: null,
-    maxPublishedPagesPerSite: null,
+    maxCustomDomains: 3,
+    includedFreeDomains: 1,
+    whiteLabelEnabled: false,
+    includedFunnelSlots: 3,
+    maxPublishedSites: 4,
     deployedAppHostingTiers: ["STATIC", "LAMBDA", "PROVISIONED"],
     deployedAppDailyRequestLimit: null,
     ssrEnabled: true,
     ssrMonthlyBudgetUsd: 6,
+    ownPaymentKeysEnabled: true,
+    maxCommerceProducts: 5_000,
+    teamSeats: 5,
+    supportLabel: "Email + call",
   },
+  // Everything in PRO and more. "Custom" limits in the price list are generous defaults here;
+  // an account can be raised further from the admin console (custom domain limit) on request.
+  ENTERPRISE: {
+    ...PAID_BASE,
+    maxEmailTemplates: 100,
+    maxLandingPages: 500,
+    maxApiKeys: 25,
+    sdkAiTier: "HIGH",
+    manageLandingPagePublishingEnabled: true,
+    hostManagedAiEnabled: true,
+    maxCustomDomains: 10,
+    includedFreeDomains: 1,
+    whiteLabelEnabled: true,
+    includedFunnelSlots: 10,
+    maxPublishedSites: null,
+    deployedAppHostingTiers: ["STATIC", "LAMBDA", "PROVISIONED"],
+    deployedAppDailyRequestLimit: null,
+    ssrEnabled: true,
+    ssrMonthlyBudgetUsd: 30,
+    ownPaymentKeysEnabled: true,
+    maxCommerceProducts: 10_000,
+    teamSeats: 25,
+    supportLabel: "Account manager",
+  },
+};
+
+/** What the 14-day trial holds back until the first payment: no custom domains, no live payments, no white-label. */
+const TRIAL_WITHHELD: Partial<TierFeatures> = {
+  customDomainEnabled: false,
+  maxCustomDomains: 0,
+  includedFreeDomains: 0,
+  whiteLabelEnabled: false,
+  livePaymentsEnabled: false,
 };
 
 // Monthly AI credit allowances are derived from each plan's AI dollar value in
 // lib/credits/value.ts (planMonthlyCredits) — the single reference for credit amounts.
 
 /**
- * Returns the feature set for a given subscription plan.
- * Defaults to FREE for any unrecognised plan string (fail-closed now that plans are billed).
+ * Returns the feature set for a plan. Accepts today's ids and the retired ULTRA (= PRO);
+ * anything unrecognised gets FREE (fail closed). Every plan id has an entry — the table is
+ * exhaustive by type. Pass `{ trial: true }` for an account on its free trial.
  */
-export function getTierFeatures(plan: string | null | undefined): TierFeatures {
-  if (plan === "FREE" || plan === "PRO" || plan === "ULTRA") {
-    return TIER_DEFINITIONS[plan];
-  }
-  return TIER_DEFINITIONS.FREE;
+export function getTierFeatures(plan: string | null | undefined, opts: { trial?: boolean } = {}): TierFeatures {
+  const features = TIER_DEFINITIONS[toPlanId(plan)];
+  return opts.trial ? { ...features, ...TRIAL_WITHHELD } : features;
+}
+
+/** The whole table, for pricing pages and the admin console. */
+export function allTierFeatures(): Record<SubscriptionPlan, TierFeatures> {
+  return Object.fromEntries(PLAN_IDS.map((p) => [p, TIER_DEFINITIONS[p]])) as Record<SubscriptionPlan, TierFeatures>;
 }
 
 /** True when only a site's homepage may be served on this plan (Free). */

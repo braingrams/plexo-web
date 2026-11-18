@@ -23,10 +23,10 @@ type PostRow = {
 };
 
 const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  DRAFT: { bg: "rgba(255,255,255,0.08)", color: "rgba(240,242,255,0.65)" },
-  SCHEDULED: { bg: "rgba(245,158,11,0.15)", color: "#f59e0b" },
-  PUBLISHED: { bg: "rgba(34,197,94,0.15)", color: "#4ade80" },
-  ARCHIVED: { bg: "rgba(239,68,68,0.12)", color: "#f87171" },
+  DRAFT: { bg: "var(--ed-w-080)", color: "var(--ed-t-650)" },
+  SCHEDULED: { bg: "color-mix(in srgb, var(--ed-amber) 15%, transparent)", color: "var(--ed-amber)" },
+  PUBLISHED: { bg: "color-mix(in srgb, var(--ed-success) 15%, transparent)", color: "var(--ed-success)" },
+  ARCHIVED: { bg: "color-mix(in srgb, var(--ed-danger) 12%, transparent)", color: "var(--ed-danger)" },
 };
 
 function StatusBadge({ status }: { status: string }) {
@@ -123,19 +123,19 @@ export function BlogListClient({
             style={{
               fontSize: "1.5rem",
               fontWeight: 800,
-              color: "#f0f2ff",
+              color: "var(--ed-text)",
               marginBottom: "0.25rem",
             }}
           >
             Blog
           </h1>
-          <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)" }}>
+          <p style={{ fontSize: "0.85rem", color: "var(--ed-t-500)" }}>
             {templateName}
           </p>
           <p
             style={{
               fontSize: "0.78rem",
-              color: quotaReached ? "#f59e0b" : "rgba(240,242,255,0.4)",
+              color: quotaReached ? "var(--ed-amber)" : "var(--ed-t-400)",
               marginTop: "0.3rem",
             }}
           >
@@ -148,7 +148,7 @@ export function BlogListClient({
                   marginLeft: "0.5rem",
                   background: "none",
                   border: "none",
-                  color: "var(--brand)",
+                  color: "var(--ed-accent-text)",
                   cursor: "pointer",
                   fontSize: "0.78rem",
                   fontWeight: 700,
@@ -171,8 +171,8 @@ export function BlogListClient({
               borderRadius: 8,
               fontSize: "0.85rem",
               fontWeight: 600,
-              color: "rgba(240,242,255,0.8)",
-              border: "1px solid rgba(255,255,255,0.12)",
+              color: "var(--ed-t-800)",
+              border: "1px solid var(--ed-w-120)",
               textDecoration: "none",
             }}
           >
@@ -187,8 +187,8 @@ export function BlogListClient({
               borderRadius: 8,
               fontSize: "0.85rem",
               fontWeight: 600,
-              color: "rgba(240,242,255,0.8)",
-              border: "1px solid rgba(255,255,255,0.12)",
+              color: "var(--ed-t-800)",
+              border: "1px solid var(--ed-w-120)",
               textDecoration: "none",
             }}
           >
@@ -203,8 +203,8 @@ export function BlogListClient({
               borderRadius: 8,
               fontSize: "0.85rem",
               fontWeight: 600,
-              color: "rgba(240,242,255,0.8)",
-              border: "1px solid rgba(255,255,255,0.12)",
+              color: "var(--ed-t-800)",
+              border: "1px solid var(--ed-w-120)",
               textDecoration: "none",
             }}
           >
@@ -225,7 +225,7 @@ export function BlogListClient({
               fontSize: "0.85rem",
               fontWeight: 700,
               background: "var(--brand)",
-              color: "#fff",
+              color: "var(--ed-on-brand)",
             }}
           >
             New Post
@@ -243,11 +243,11 @@ export function BlogListClient({
             padding: "0.9rem 1.1rem",
             borderRadius: 10,
             marginBottom: "1.5rem",
-            background: "rgba(245,158,11,0.08)",
-            border: "1px solid rgba(245,158,11,0.25)",
+            background: "color-mix(in srgb, var(--ed-amber) 8%, transparent)",
+            border: "1px solid color-mix(in srgb, var(--ed-amber) 25%, transparent)",
           }}
         >
-          <span style={{ fontSize: "0.85rem", color: "#f59e0b" }}>
+          <span style={{ fontSize: "0.85rem", color: "var(--ed-amber)" }}>
             Your blog isn&apos;t live yet — visitors can&apos;t see it at{" "}
             <code>/blog</code> until you turn it on.
           </span>
@@ -262,8 +262,8 @@ export function BlogListClient({
               cursor: "pointer",
               fontSize: "0.8rem",
               fontWeight: 700,
-              background: "#f59e0b",
-              color: "#1a1300",
+              background: "var(--ed-amber)",
+              color: "var(--ed-on-brand)",
               whiteSpace: "nowrap",
             }}
           >
@@ -277,7 +277,7 @@ export function BlogListClient({
           style={{
             textAlign: "center",
             padding: "4rem 1rem",
-            color: "rgba(240,242,255,0.4)",
+            color: "var(--ed-t-400)",
           }}
         >
           <p style={{ marginBottom: "1rem" }}>No posts yet.</p>
@@ -294,7 +294,7 @@ export function BlogListClient({
               fontSize: "0.85rem",
               fontWeight: 700,
               background: "var(--brand)",
-              color: "#fff",
+              color: "var(--ed-on-brand)",
             }}
           >
             Write your first post
@@ -304,7 +304,7 @@ export function BlogListClient({
         <>
         <div
           style={{
-            border: "1px solid rgba(255,255,255,0.08)",
+            border: "1px solid var(--ed-w-080)",
             borderRadius: 12,
             overflow: "hidden",
           }}
@@ -318,7 +318,7 @@ export function BlogListClient({
                 gap: "1rem",
                 padding: "0.9rem 1.1rem",
                 borderTop:
-                  i === 0 ? "none" : "1px solid rgba(255,255,255,0.06)",
+                  i === 0 ? "none" : "1px solid var(--ed-w-060)",
               }}
             >
               <div
@@ -326,7 +326,7 @@ export function BlogListClient({
                   width: 48,
                   height: 48,
                   borderRadius: 8,
-                  background: "rgba(255,255,255,0.05)",
+                  background: "var(--ed-w-050)",
                   backgroundImage: post.featuredImageUrl
                     ? `url(${post.featuredImageUrl})`
                     : undefined,
@@ -341,7 +341,7 @@ export function BlogListClient({
                   style={{
                     fontSize: "0.9rem",
                     fontWeight: 600,
-                    color: "#f0f2ff",
+                    color: "var(--ed-text)",
                     textDecoration: "none",
                   }}
                 >
@@ -350,7 +350,7 @@ export function BlogListClient({
                 <p
                   style={{
                     fontSize: "0.75rem",
-                    color: "rgba(240,242,255,0.4)",
+                    color: "var(--ed-t-400)",
                     marginTop: "0.15rem",
                   }}
                 >
@@ -367,9 +367,9 @@ export function BlogListClient({
                 style={{
                   padding: "0.4rem 0.7rem",
                   borderRadius: 6,
-                  border: "1px solid rgba(239,68,68,0.25)",
-                  background: "rgba(239,68,68,0.1)",
-                  color: "#f87171",
+                  border: "1px solid color-mix(in srgb, var(--ed-danger) 25%, transparent)",
+                  background: "color-mix(in srgb, var(--ed-danger) 10%, transparent)",
+                  color: "var(--ed-danger)",
                   cursor: "pointer",
                   fontSize: "0.75rem",
                   fontWeight: 600,
@@ -387,9 +387,13 @@ export function BlogListClient({
       <UpgradeModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
-        title="Published post limit reached"
-        message={`Your plan allows a maximum of ${publishedLimit ?? 0} published blog posts on this site. Upgrade to publish more.`}
-        targetPlan={plan === "FREE" ? "PRO" : "ULTRA"}
+        title={publishedLimit ? "Published post limit reached" : "Publishing a blog is part of Starter"}
+        message={
+          publishedLimit
+            ? `Your plan allows ${publishedLimit} published blog posts on this site. Upgrade for unlimited posts.`
+            : "Your posts are saved. Upgrade to Starter to publish your blog — with unlimited posts — alongside a full multi-page site."
+        }
+        targetPlan={plan === "FREE" ? "STARTER" : "PRO"}
         returnTo={`/dashboard/templates/${templateId}/blog`}
       />
     </PageContainer>

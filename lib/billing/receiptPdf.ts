@@ -1,15 +1,21 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 
+import { getPlexoBrand } from "@/lib/brand/plexoBrand";
+import { getPlexoLogo } from "@/lib/brand/plexoLogos";
+import { emailColorsFromTokens } from "@/lib/brand/emailBrand";
+import { parseColor } from "@/lib/brand/strataTokens";
+
 import type { PaymentItem } from "./payments";
 
 // The Plexo-branded receipt/invoice PDF, drawn from a Payment row — no Stripe call, so it
 // is identical every time it's downloaded. Standard PDF fonts only (WinAnsi), so any text
 // that comes from a customer is stripped of characters those fonts can't draw.
 
-const VIOLET = rgb(0.545, 0.361, 0.965);
-const INK = rgb(0.059, 0.09, 0.165);
-const MUTED = rgb(0.392, 0.455, 0.545);
-const LINE = rgb(0.886, 0.91, 0.941);
+// New Plexo brand: lime #B8F34A accent bar, deep green #517A12 title, ink #121212, muted #5B5B58, border #E8E8E4.
+const hexRgb = (hex: string) => {
+  const c = parseColor(hex) ?? [0, 0, 0];
+  return rgb(c[0] / 255, c[1] / 255, c[2] / 255);
+};
 
 const CARD_BRANDS: Record<string, string> = { visa: "Visa", mastercard: "Mastercard", amex: "Amex", discover: "Discover", jcb: "JCB", diners: "Diners", unionpay: "UnionPay" };
 
@@ -48,6 +54,14 @@ export async function buildReceiptPdf(payment: PaymentItem, customer: { name: st
   pdf.setTitle(`Plexo receipt ${payment.receiptNumber ?? ""}`.trim());
   pdf.setProducer("Plexo");
   pdf.setCreator("Plexo");
+  // The live Plexo brand (bundled colours when Strata is off/unreachable).
+  const brandColors = emailColorsFromTokens((await getPlexoBrand()).tokens);
+  const LIME = hexRgb(brandColors.brand);
+  const GREEN = hexRgb(brandColors.brandDeep);
+  const INK = hexRgb(brandColors.ink);
+  const MUTED = hexRgb(brandColors.muted);
+  const LINE = hexRgb(brandColors.border);
+  const TINT = hexRgb(brandColors.elevated);
   const page = pdf.addPage([595, 842]); // A4
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -64,15 +78,19 @@ export async function buildReceiptPdf(payment: PaymentItem, customer: { name: st
 
   // Header — logo mark + wordmark, and the document title on the right.
   const logoY = height - M - 28;
-  // Rounded square (drawn as a path — drawRectangle has no corner radius).
-  page.drawSvgPath("M7 0h14a7 7 0 0 1 7 7v14a7 7 0 0 1-7 7H7a7 7 0 0 1-7-7V7a7 7 0 0 1 7-7z", { x: M, y: logoY + 28, color: VIOLET });
-  page.drawSvgPath("M12 2L4 7v5c0 4.97 3.35 9.63 8 10.93C17.65 21.63 21 16.97 21 12V7L12 2z", { x: M + 6, y: logoY + 22, scale: 0.67, color: rgb(1, 1, 1) });
-  text("Plexo", M + 38, logoY + 8, { size: 18, font: bold });
-  text("RECEIPT", width - M, logoY + 14, { size: 20, font: bold, color: VIOLET, right: true });
-  text(payment.receiptNumber ?? "", width - M, logoY, { size: 10, color: MUTED, right: true });
+  page.drawRectangle({ x: 0, y: height - 10, width, height: 10, color: LIME });
+  try {
+    // The real wordmark (public/brand) — falls back to plain text if the file isn't on disk (e.g. a bundled runtime).
+    const png = await pdf.embedPng((await getPlexoLogo("email-on-light")).bytes);
+    page.drawImage(png, { x: (width - 108) / 2, y: logoY, width: 108, height: 28 });
+  } catch {
+    text("Plexo", (width - bold.widthOfTextAtSize("Plexo", 18)) / 2, logoY + 8, { size: 18, font: bold });
+  }
+  text("RECEIPT", M, logoY - 40, { size: 20, font: bold, color: GREEN });
+  text(payment.receiptNumber ?? "", M, logoY - 56, { size: 10, color: MUTED });
 
   // Meta block.
-  let y = logoY - 56;
+  let y = logoY - 100;
   const label = (t: string, x: number, yy: number) => text(t.toUpperCase(), x, yy, { size: 7.5, font: bold, color: MUTED });
   label("Billed to", M, y);
   text(customer.name || customer.email || "Plexo customer", M, y - 15, { size: 11, font: bold });
@@ -87,7 +105,7 @@ export async function buildReceiptPdf(payment: PaymentItem, customer: { name: st
 
   // Line item.
   y -= 100;
-  page.drawRectangle({ x: M, y: y - 8, width: width - 2 * M, height: 26, color: rgb(0.973, 0.98, 0.988) });
+  page.drawRectangle({ x: M, y: y - 8, width: width - 2 * M, height: 26, color: TINT });
   label("Description", M + 10, y);
   text("AMOUNT", width - M - 10, y, { size: 7.5, font: bold, color: MUTED, right: true });
   y -= 30;

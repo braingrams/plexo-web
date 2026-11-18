@@ -20,8 +20,8 @@ const MAX_REHOST_POSTS = 10;
 const STALE_HEARTBEAT_MS = 2 * 60 * 1000;
 const TERMINAL_STATUSES: JobStatus[] = ["COMPLETED", "FAILED", "CANCELLED"];
 
-const PANEL: React.CSSProperties = { border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "1.5rem", background: "rgba(255,255,255,0.02)" };
-const FIELD_INPUT: React.CSSProperties = { width: "100%", padding: "0.65rem 0.8rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)", color: "#f0f2ff", fontSize: "0.9rem" };
+const PANEL: React.CSSProperties = { border: "1px solid var(--ed-w-080)", borderRadius: 12, padding: "1.5rem", background: "var(--ed-w-020)" };
+const FIELD_INPUT: React.CSSProperties = { width: "100%", padding: "0.65rem 0.8rem", borderRadius: 8, border: "1px solid var(--ed-w-120)", background: "var(--ed-w-030)", color: "var(--ed-text)", fontSize: "0.9rem" };
 
 const STATUS_TEXT: Record<JobStatus, string> = {
   PENDING: "Starting…",
@@ -232,8 +232,8 @@ export function ImportClient({
 
   return (
     <PageContainer>
-      <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#f0f2ff", marginBottom: "0.25rem" }}>Import from WordPress</h1>
-      <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginBottom: "1.5rem" }}>
+      <h1 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "0.25rem" }}>Import from WordPress</h1>
+      <p style={{ fontSize: "0.85rem", color: "var(--ed-t-500)", marginBottom: "1.5rem" }}>
         Migrating into <strong>{templateName}</strong>. Paste your WordPress site&apos;s URL — no export file, no login needed. If your
         site&apos;s REST API is disabled, upload a WordPress export (.xml) file instead.
       </p>
@@ -247,10 +247,10 @@ export function ImportClient({
                 type="button"
                 onClick={() => setMode(m)}
                 style={{
-                  padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer",
+                  padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid var(--ed-w-120)", cursor: "pointer",
                   fontSize: "0.78rem", fontWeight: 700,
                   background: mode === m ? "var(--brand-subtle)" : "transparent",
-                  color: mode === m ? "var(--brand)" : "rgba(240,242,255,0.6)",
+                  color: mode === m ? "var(--ed-accent-text)" : "var(--ed-t-600)",
                 }}
               >
                 {m === "url" ? "Site URL" : "Upload export file"}
@@ -260,7 +260,7 @@ export function ImportClient({
 
           {mode === "url" ? (
             <>
-              <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "rgba(240,242,255,0.5)", display: "block", marginBottom: "0.5rem" }}>
+              <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--ed-t-500)", display: "block", marginBottom: "0.5rem" }}>
                 WordPress site URL
               </label>
               <input
@@ -272,7 +272,7 @@ export function ImportClient({
             </>
           ) : (
             <>
-              <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "rgba(240,242,255,0.5)", display: "block", marginBottom: "0.5rem" }}>
+              <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--ed-t-500)", display: "block", marginBottom: "0.5rem" }}>
                 WordPress export file (Tools &rarr; Export &rarr; All content, in your WP dashboard)
               </label>
               <input
@@ -284,7 +284,7 @@ export function ImportClient({
             </>
           )}
 
-          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "rgba(240,242,255,0.5)", display: "block", marginBottom: "0.5rem" }}>
+          <label style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--ed-t-500)", display: "block", marginBottom: "0.5rem" }}>
             Media
           </label>
           <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.4rem" }}>
@@ -297,32 +297,32 @@ export function ImportClient({
                 type="button"
                 onClick={() => setMediaHandling(opt.value)}
                 style={{
-                  padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer",
+                  padding: "0.4rem 0.9rem", borderRadius: 8, border: "1px solid var(--ed-w-120)", cursor: "pointer",
                   fontSize: "0.78rem", fontWeight: 700,
                   background: mediaHandling === opt.value ? "var(--brand-subtle)" : "transparent",
-                  color: mediaHandling === opt.value ? "var(--brand)" : "rgba(240,242,255,0.6)",
+                  color: mediaHandling === opt.value ? "var(--ed-accent-text)" : "var(--ed-t-600)",
                 }}
               >
                 {opt.label}
               </button>
             ))}
           </div>
-          <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginBottom: "0.9rem" }}>
+          <p style={{ fontSize: "0.72rem", color: "var(--ed-t-350)", marginBottom: "0.9rem" }}>
             {mediaHandling === "RETAIN"
               ? "Images keep linking to your old site. Fastest option, works for any size site."
               : `Images are downloaded and re-uploaded to your own storage. Only available for imports of ${MAX_REHOST_POSTS} posts or fewer.`}
           </p>
 
-          {error && <p style={{ color: "#f87171", fontSize: "0.8rem", marginBottom: "0.75rem" }}>{error}</p>}
+          {error && <p style={{ color: "var(--ed-danger)", fontSize: "0.8rem", marginBottom: "0.75rem" }}>{error}</p>}
           <button
             type="button"
             onClick={handleStart}
             disabled={starting}
-            style={{ padding: "0.6rem 1.3rem", borderRadius: 8, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, background: "var(--brand)", color: "#fff" }}
+            style={{ padding: "0.6rem 1.3rem", borderRadius: 8, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, background: "var(--brand)", color: "var(--ed-on-brand)" }}
           >
             {starting ? "Starting…" : "Start Import"}
           </button>
-          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.35)", marginTop: "0.9rem" }}>
+          <p style={{ fontSize: "0.75rem", color: "var(--ed-t-350)", marginTop: "0.9rem" }}>
             We&apos;ll pull your published posts, categories, tags, authors, and images — and set up redirects so your old links keep working.
             Keep this tab open while it runs; if you close it, progress pauses and picks back up automatically once a day, or you can come
             back and click Retry now.
@@ -332,11 +332,11 @@ export function ImportClient({
 
       {job && (
         <div style={PANEL}>
-          <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "#f0f2ff", marginBottom: "0.75rem" }}>{statusLine}</p>
-          <div style={{ height: 8, borderRadius: 999, background: "rgba(255,255,255,0.08)", overflow: "hidden", marginBottom: "0.6rem" }}>
+          <p style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--ed-text)", marginBottom: "0.75rem" }}>{statusLine}</p>
+          <div style={{ height: 8, borderRadius: 999, background: "var(--ed-w-080)", overflow: "hidden", marginBottom: "0.6rem" }}>
             <div style={{ height: "100%", width: `${progressPct}%`, background: "var(--brand)", transition: "width 0.4s" }} />
           </div>
-          <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.5)", marginBottom: "1rem" }}>
+          <p style={{ fontSize: "0.8rem", color: "var(--ed-t-500)", marginBottom: "1rem" }}>
             {job.processedPosts}
             {job.totalPosts ? ` / ${job.totalPosts}` : ""} posts imported
           </p>
@@ -345,7 +345,7 @@ export function ImportClient({
             {job.status === "COMPLETED" && (
               <Link
                 href={`/dashboard/templates/${templateId}/blog`}
-                style={{ display: "inline-flex", padding: "0.55rem 1.1rem", borderRadius: 8, background: "var(--brand)", color: "#fff", fontSize: "0.82rem", fontWeight: 700, textDecoration: "none" }}
+                style={{ display: "inline-flex", padding: "0.55rem 1.1rem", borderRadius: 8, background: "var(--brand)", color: "var(--ed-on-brand)", fontSize: "0.82rem", fontWeight: 700, textDecoration: "none" }}
               >
                 View your blog
               </Link>
@@ -356,7 +356,7 @@ export function ImportClient({
                 type="button"
                 onClick={handleRetry}
                 disabled={retrying}
-                style={{ padding: "0.55rem 1.1rem", borderRadius: 8, border: "1px solid var(--brand)", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, background: "transparent", color: "var(--brand)" }}
+                style={{ padding: "0.55rem 1.1rem", borderRadius: 8, border: "1px solid var(--brand)", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, background: "transparent", color: "var(--ed-accent-text)" }}
               >
                 {retrying ? "Retrying…" : "Retry now"}
               </button>
@@ -367,7 +367,7 @@ export function ImportClient({
                 type="button"
                 onClick={handleCancel}
                 disabled={cancelling}
-                style={{ padding: "0.55rem 1.1rem", borderRadius: 8, border: "1px solid rgba(248,113,113,0.4)", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, background: "transparent", color: "#f87171" }}
+                style={{ padding: "0.55rem 1.1rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--ed-danger) 40%, transparent)", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, background: "transparent", color: "var(--ed-danger)" }}
               >
                 {cancelling ? "Cancelling…" : "Cancel import"}
               </button>
@@ -376,10 +376,10 @@ export function ImportClient({
 
           {job.errors.length > 0 && (
             <div style={{ marginTop: "1.25rem" }}>
-              <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "#f59e0b", marginBottom: "0.5rem" }}>
+              <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--ed-amber)", marginBottom: "0.5rem" }}>
                 {job.errors.length} item{job.errors.length === 1 ? "" : "s"} need a look:
               </p>
-              <ul style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.6)", paddingLeft: "1.1rem", maxHeight: 200, overflowY: "auto" }}>
+              <ul style={{ fontSize: "0.75rem", color: "var(--ed-t-600)", paddingLeft: "1.1rem", maxHeight: 200, overflowY: "auto" }}>
                 {job.errors.map((e, i) => (
                   <li key={i} style={{ marginBottom: "0.3rem" }}>{e}</li>
                 ))}

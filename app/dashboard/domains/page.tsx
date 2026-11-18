@@ -1,13 +1,16 @@
-import { effectivePlan } from "@/lib/plan/entitlement";
+import { redirectIfV3 } from "@/lib/dashboardV3/settingsContext";
 import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { Template, PublishedDomain, RegisteredDomain } from "@/lib/db/contentEntities";
-import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { ensureActiveOrganization, getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
 import { DomainsClient } from "./domains-client";
 import { PageContainer } from "../_components/PageContainer";
 
-export default async function DomainsPage() {
+export default async function DomainsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  // "?classic=1" keeps the old screen reachable for buying a domain until that step is rebuilt.
+  const sp = await searchParams;
+  if (sp.classic !== "1") await redirectIfV3("/dashboard/domains", "/dashboard/settings/domains");
   const session = await auth();
 
   if (!session?.user) {
@@ -24,6 +27,9 @@ export default async function DomainsPage() {
   if (!user) {
     redirect("/auth/login");
   }
+
+  // Domains follow the workspace's plan (its owner's), the same plan the server enforces.
+  const workspace = await getOrganizationOwnerEntitlementDynamo(orgResolution.organizationId);
 
   const { data: orgTemplates } = await Template.query.byOrg({ organizationId: orgResolution.organizationId }).go({ pages: "all" });
 
@@ -99,8 +105,9 @@ export default async function DomainsPage() {
       <DomainsClient
         initialDomains={domains}
         landingPages={landingPages}
-        plan={effectivePlan(user)}
-        customLimit={user.customDomainLimit ?? null}
+        plan={workspace.subscriptionPlan}
+        onTrial={workspace.onTrial}
+        customLimit={workspace.customDomainLimit}
       />
     </PageContainer>
   );

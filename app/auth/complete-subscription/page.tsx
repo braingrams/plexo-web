@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { CompleteSubscriptionClient } from "./complete-subscription-client";
-import { TRIAL_DAYS } from "@/lib/plan/entitlement";
+import { TRIAL_DAYS, storedPlan } from "@/lib/plan/entitlement";
 
 export default async function CompleteSubscriptionPage() {
   const session = await auth();
@@ -14,11 +14,13 @@ export default async function CompleteSubscriptionPage() {
 
   const { data: user } = await User.get({ id: session.user.id }).go();
 
-  // databaseHooks (server/auth.ts) only ever writes PRO/ULTRA/null here, never FREE — this
-  // narrows the type for the client component, which only expects the two paid plans.
-  if (!user?.pendingPlan || user.pendingPlan === user.subscriptionPlan) {
+  // The plan picked at signup (never FREE), read in today's terms — a value saved before the
+  // 2026 plan rename (PRO/ULTRA) means Starter/Pro.
+  const pending = user?.pendingPlan ? storedPlan({ subscriptionPlan: user.pendingPlan, planVersion: user.planVersion }) : "FREE";
+  if (!user || pending === "FREE" || pending === storedPlan(user)) {
     redirect("/dashboard");
   }
 
-  return <CompleteSubscriptionClient plan={user.pendingPlan} canTrial={!user.trialStartedAt && !user.stripeSubscriptionId} trialDays={TRIAL_DAYS} />;
+  const hasSubscription = !!(user.subscriptionId || user.stripeSubscriptionId);
+  return <CompleteSubscriptionClient plan={pending} canTrial={!user.trialStartedAt && !hasSubscription && pending !== "ENTERPRISE"} trialDays={TRIAL_DAYS} />;
 }

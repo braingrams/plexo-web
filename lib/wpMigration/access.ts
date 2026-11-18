@@ -17,7 +17,7 @@ export interface MigrationAccess {
 // same security reason: the detect step fetches arbitrary URLs server-side, so it must not
 // be a free fetch proxy for accounts that can't use the result). The message tells the
 // owner exactly what unlocks it rather than a bare 403.
-export const MIGRATION_PLAN_MESSAGE = "Moving a whole WordPress site to Plexo is part of the Pro and Ultra plans. Upgrade in Settings → Billing to continue.";
+export const MIGRATION_PLAN_MESSAGE = "Moving a whole WordPress site to Plexo isn't available on your plan. Upgrade in Settings → Billing to continue.";
 
 export async function resolveMigrationAccess(
   request: NextRequest,

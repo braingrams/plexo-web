@@ -40,26 +40,26 @@ export function CustomersClient({ templateId }: { templateId: string }) {
 
   return (
     <div>
-      <p style={{ fontSize: "0.85rem", color: "rgba(240,242,255,0.5)", marginBottom: "1.25rem" }}>
+      <p style={{ fontSize: "0.85rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", marginBottom: "1.25rem" }}>
         Everyone who's completed a paid order with you, however they paid.
       </p>
 
       {error ? (
-        <div style={{ padding: "2rem", textAlign: "center", borderRadius: 14, border: "1px solid rgba(239,68,68,0.25)", background: "rgba(239,68,68,0.06)", color: "#f87171", fontSize: "0.85rem" }}>
+        <div style={{ padding: "2rem", textAlign: "center", borderRadius: 14, border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 25%, transparent)", background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 6%, transparent)", color: "var(--cmx-danger, #f87171)", fontSize: "0.85rem" }}>
           {error}
         </div>
       ) : loading ? (
-        <p style={{ color: "rgba(240,242,255,0.4)", fontSize: "0.85rem" }}>Loading…</p>
+        <p style={{ color: "var(--cmx-muted, rgba(240,242,255,0.4))", fontSize: "0.85rem" }}>Loading…</p>
       ) : customers.length === 0 ? (
-        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.02)", color: "rgba(240,242,255,0.45)", fontSize: "0.85rem" }}>
+        <div style={{ padding: "3rem 2rem", textAlign: "center", borderRadius: 14, border: "1px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", color: "var(--cmx-muted, rgba(240,242,255,0.45))", fontSize: "0.85rem" }}>
           No customers yet — they'll show up here once someone pays.
         </div>
       ) : (
         <>
-          <div style={{ overflowX: "auto", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14 }}>
+          <div style={{ overflowX: "auto", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
               <thead>
-                <tr style={{ color: "rgba(240,242,255,0.4)", textAlign: "left", background: "rgba(255,255,255,0.02)" }}>
+                <tr style={{ color: "var(--cmx-muted, rgba(240,242,255,0.4))", textAlign: "left", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)" }}>
                   <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Name</th>
                   <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Email</th>
                   <th style={{ fontWeight: 500, padding: "0.7rem 1rem" }}>Phone</th>
@@ -70,13 +70,13 @@ export function CustomersClient({ templateId }: { templateId: string }) {
               </thead>
               <tbody>
                 {customers.map((c) => (
-                  <tr key={c.email} style={{ borderTop: "1px solid rgba(255,255,255,0.06)", color: "#e2e4f5" }}>
+                  <tr key={c.email} style={{ borderTop: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 6%, transparent)", color: "var(--cmx-text, #e2e4f5)" }}>
                     <td style={{ padding: "0.7rem 1rem" }}>{c.name ?? "—"}</td>
                     <td style={{ padding: "0.7rem 1rem" }}>{c.email}</td>
-                    <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.55)" }}>{c.phone ?? "—"}</td>
+                    <td style={{ padding: "0.7rem 1rem", color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>{c.phone ?? "—"}</td>
                     <td style={{ padding: "0.7rem 1rem" }}>{c.orderCount}</td>
                     <td style={{ padding: "0.7rem 1rem" }}>{formatMoney(c.totalSpentMinor, c.currency)}</td>
-                    <td style={{ padding: "0.7rem 1rem", color: "rgba(240,242,255,0.4)" }}>{new Date(c.customerSince).toLocaleDateString()}</td>
+                    <td style={{ padding: "0.7rem 1rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))" }}>{new Date(c.customerSince).toLocaleDateString()}</td>
                   </tr>
                 ))}
               </tbody>

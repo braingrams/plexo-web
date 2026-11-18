@@ -11,7 +11,6 @@ import { PageContainer } from "../../../_components/PageContainer";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { UpgradeModal } from "../../../_components/UpgradeModal";
 import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuotaLabel";
-import { BRAND } from "@/lib/theme";
 
 type Status = "DRAFT" | "SCHEDULED" | "PUBLISHED" | "ARCHIVED";
 
@@ -41,7 +40,7 @@ export type InitialPost = {
 const FIELD_LABEL: React.CSSProperties = {
   fontSize: "0.75rem",
   fontWeight: 700,
-  color: "rgba(240,242,255,0.5)",
+  color: "var(--ed-t-500)",
   textTransform: "uppercase",
   letterSpacing: "0.04em",
   display: "block",
@@ -51,18 +50,18 @@ const FIELD_INPUT: React.CSSProperties = {
   width: "100%",
   padding: "0.55rem 0.7rem",
   borderRadius: 8,
-  border: "1px solid rgba(255,255,255,0.12)",
-  background: "rgba(255,255,255,0.03)",
-  color: "#f0f2ff",
+  border: "1px solid var(--ed-w-120)",
+  background: "var(--ed-w-030)",
+  color: "var(--ed-text)",
   fontSize: "0.85rem",
   fontFamily: "inherit",
 };
 const PANEL: React.CSSProperties = {
-  border: "1px solid rgba(255,255,255,0.08)",
+  border: "1px solid var(--ed-w-080)",
   borderRadius: 12,
   padding: "1rem",
   marginBottom: "1rem",
-  background: "rgba(255,255,255,0.02)",
+  background: "var(--ed-w-020)",
 };
 
 function slugifyClient(input: string): string {
@@ -113,8 +112,8 @@ function SeoToggleRow({ on, onChange }: { on: boolean; onChange: (on: boolean) =
       }}
     >
       <div>
-        <p style={{ margin: 0, fontSize: "0.8rem", color: "rgba(240,242,255,0.85)" }}>SEO Tools</p>
-        <p style={{ margin: "0.2rem 0 0", fontSize: "0.7rem", color: "rgba(240,242,255,0.45)" }}>
+        <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--ed-t-850)" }}>SEO Tools</p>
+        <p style={{ margin: "0.2rem 0 0", fontSize: "0.7rem", color: "var(--ed-t-450)" }}>
           Show or hide SEO enhancement tools for this blog post
         </p>
       </div>
@@ -133,7 +132,7 @@ function SeoToggleRow({ on, onChange }: { on: boolean; onChange: (on: boolean) =
           border: "none",
           borderRadius: 999,
           cursor: "pointer",
-          background: on ? BRAND[600] : "rgba(240,242,255,0.2)",
+          background: on ? "var(--brand-deeper)" : "var(--ed-t-200)",
           transition: "background 150ms",
         }}
       >
@@ -682,7 +681,7 @@ export function BlogPostEditor({
             width: "100%",
             fontSize: "1.75rem",
             fontWeight: 800,
-            color: "#f0f2ff",
+            color: "var(--ed-text)",
             background: "transparent",
             border: "none",
             outline: "none",
@@ -694,11 +693,11 @@ export function BlogPostEditor({
         <div
           style={{
             fontSize: "0.8rem",
-            color: "rgba(240,242,255,0.45)",
+            color: "var(--ed-t-450)",
             marginBottom: "1.25rem",
           }}
         >
-          Permalink: <span style={{ color: "var(--brand)" }}>{permalink}</span>{" "}
+          Permalink: <span style={{ color: "var(--ed-accent-text)" }}>{permalink}</span>{" "}
           {editingSlug ? (
             <input
               autoFocus
@@ -723,7 +722,7 @@ export function BlogPostEditor({
               style={{
                 background: "none",
                 border: "none",
-                color: "var(--brand)",
+                color: "var(--ed-accent-text)",
                 cursor: "pointer",
                 fontSize: "0.8rem",
                 textDecoration: "underline",
@@ -782,7 +781,7 @@ export function BlogPostEditor({
             <p
               style={{
                 fontSize: "0.7rem",
-                color: "rgba(240,242,255,0.35)",
+                color: "var(--ed-t-350)",
                 marginTop: "0.2rem",
               }}
             >
@@ -804,7 +803,7 @@ export function BlogPostEditor({
             <p
               style={{
                 fontSize: "0.7rem",
-                color: "rgba(240,242,255,0.35)",
+                color: "var(--ed-t-350)",
                 marginTop: "0.2rem",
               }}
             >
@@ -837,7 +836,7 @@ export function BlogPostEditor({
               gap: "0.5rem",
               marginTop: "0.75rem",
               fontSize: "0.8rem",
-              color: "rgba(240,242,255,0.7)",
+              color: "var(--ed-t-700)",
             }}
           >
             <input
@@ -877,13 +876,13 @@ export function BlogPostEditor({
                   gap: "0.5rem",
                   fontSize: "0.8rem",
                   marginBottom: "0.5rem",
-                  color: item.level === "good" ? "#4ade80" : "#f59e0b",
+                  color: item.level === "good" ? "var(--ed-success)" : "var(--ed-amber)",
                 }}
               >
                 <span style={{ display: "inline-flex" }}>
                   {item.level === "good" ? <IconCheck /> : <IconWarning />}
                 </span>
-                <span style={{ color: "rgba(240,242,255,0.75)" }}>
+                <span style={{ color: "var(--ed-t-750)" }}>
                   {item.label}
                 </span>
               </li>
@@ -927,7 +926,7 @@ export function BlogPostEditor({
           {error && (
             <p
               style={{
-                color: "#f87171",
+                color: "var(--ed-danger)",
                 fontSize: "0.8rem",
                 marginBottom: "0.5rem",
               }}
@@ -938,7 +937,7 @@ export function BlogPostEditor({
           <p
             style={{
               fontSize: "0.72rem",
-              color: quotaReached ? "#f59e0b" : "rgba(240,242,255,0.4)",
+              color: quotaReached ? "var(--ed-amber)" : "var(--ed-t-400)",
               marginBottom: "0.5rem",
             }}
           >
@@ -964,7 +963,7 @@ export function BlogPostEditor({
               fontSize: "0.85rem",
               fontWeight: 700,
               background: "var(--brand)",
-              color: "#fff",
+              color: "var(--ed-on-brand)",
               marginBottom: "0.5rem",
               opacity: quotaReached ? 0.6 : 1,
             }}
@@ -989,8 +988,8 @@ export function BlogPostEditor({
               fontSize: "0.8rem",
               fontWeight: 600,
               background: "transparent",
-              color: "rgba(240,242,255,0.6)",
-              border: "1px solid rgba(255,255,255,0.12)",
+              color: "var(--ed-t-600)",
+              border: "1px solid var(--ed-w-120)",
             }}
           >
             Save as Draft
@@ -1005,7 +1004,7 @@ export function BlogPostEditor({
                 textAlign: "center",
                 marginTop: "0.6rem",
                 fontSize: "0.78rem",
-                color: "var(--brand)",
+                color: "var(--ed-accent-text)",
               }}
             >
               Preview
@@ -1016,7 +1015,7 @@ export function BlogPostEditor({
               style={{
                 textAlign: "center",
                 fontSize: "0.7rem",
-                color: "rgba(240,242,255,0.3)",
+                color: "var(--ed-t-300)",
                 marginTop: "0.5rem",
               }}
             >
@@ -1035,7 +1034,7 @@ export function BlogPostEditor({
                 justifyContent: "space-between",
                 gap: "0.5rem",
                 fontSize: "0.75rem",
-                color: "#f59e0b",
+                color: "var(--ed-amber)",
                 marginBottom: "0.5rem",
               }}
               role="alert"
@@ -1067,7 +1066,7 @@ export function BlogPostEditor({
                 gap: "0.5rem",
                 height: 100,
                 borderRadius: 8,
-                border: "1px dashed rgba(255,255,255,0.2)",
+                border: "1px dashed var(--ed-w-200)",
               }}
             >
               <div
@@ -1075,13 +1074,13 @@ export function BlogPostEditor({
                   width: 22,
                   height: 22,
                   borderRadius: "50%",
-                  border: "3px solid rgba(255,255,255,0.15)",
+                  border: "3px solid var(--ed-w-150)",
                   borderTopColor: "var(--brand)",
                   animation: "blog-editor-spin 0.7s linear infinite",
                 }}
               />
               <span
-                style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.5)" }}
+                style={{ fontSize: "0.75rem", color: "var(--ed-t-500)" }}
               >
                 {featuredImageStatus === "uploading"
                   ? "Uploading…"
@@ -1108,7 +1107,7 @@ export function BlogPostEditor({
                 <p
                   style={{
                     fontSize: "0.72rem",
-                    color: "#f87171",
+                    color: "var(--ed-danger)",
                     marginBottom: "0.4rem",
                   }}
                 >
@@ -1123,7 +1122,7 @@ export function BlogPostEditor({
                 }}
                 style={{
                   fontSize: "0.75rem",
-                  color: "#f87171",
+                  color: "var(--ed-danger)",
                   background: "none",
                   border: "none",
                   cursor: "pointer",
@@ -1159,7 +1158,7 @@ export function BlogPostEditor({
                     borderRadius: 8,
                     border: "1px solid var(--brand)",
                     background: "var(--brand-subtle)",
-                    color: "var(--brand)",
+                    color: "var(--ed-accent-text)",
                     fontSize: "0.8rem",
                     fontWeight: 600,
                     cursor: "pointer",
@@ -1172,7 +1171,7 @@ export function BlogPostEditor({
                 <p
                   style={{
                     fontSize: "0.72rem",
-                    color: "#f87171",
+                    color: "var(--ed-danger)",
                     marginTop: "0.35rem",
                   }}
                 >
@@ -1188,7 +1187,7 @@ export function BlogPostEditor({
                 }}
                 style={{
                   fontSize: "0.75rem",
-                  color: "rgba(240,242,255,0.4)",
+                  color: "var(--ed-t-400)",
                   background: "none",
                   border: "none",
                   cursor: "pointer",
@@ -1207,10 +1206,10 @@ export function BlogPostEditor({
                   justifyContent: "center",
                   height: 100,
                   borderRadius: 8,
-                  border: "1px dashed rgba(255,255,255,0.2)",
+                  border: "1px dashed var(--ed-w-200)",
                   cursor: "pointer",
                   fontSize: "0.8rem",
-                  color: "rgba(240,242,255,0.5)",
+                  color: "var(--ed-t-500)",
                 }}
               >
                 Click to upload
@@ -1232,7 +1231,7 @@ export function BlogPostEditor({
                   width: "100%",
                   textAlign: "center",
                   fontSize: "0.75rem",
-                  color: "var(--brand)",
+                  color: "var(--ed-accent-text)",
                   background: "none",
                   border: "none",
                   cursor: "pointer",
@@ -1255,7 +1254,7 @@ export function BlogPostEditor({
                 alignItems: "center",
                 gap: "0.5rem",
                 fontSize: "0.82rem",
-                color: "rgba(240,242,255,0.8)",
+                color: "var(--ed-t-800)",
                 marginBottom: "0.35rem",
               }}
             >
@@ -1310,7 +1309,7 @@ export function BlogPostEditor({
                   padding: "0.2rem 0.55rem",
                   borderRadius: 999,
                   background: "var(--brand-subtle)",
-                  color: "var(--brand)",
+                  color: "var(--ed-accent-text)",
                   fontSize: "0.75rem",
                 }}
               >
@@ -1383,9 +1382,13 @@ export function BlogPostEditor({
       <UpgradeModal
         open={showUpgradeModal}
         onClose={() => setShowUpgradeModal(false)}
-        title="Published post limit reached"
-        message={`Your plan allows a maximum of ${publishedLimit ?? 0} published blog posts on this site. Upgrade to publish more.`}
-        targetPlan={plan === "FREE" ? "PRO" : "ULTRA"}
+        title={publishedLimit ? "Published post limit reached" : "Publishing a blog is part of Starter"}
+        message={
+          publishedLimit
+            ? `Your plan allows ${publishedLimit} published blog posts on this site. Upgrade for unlimited posts.`
+            : "Your posts are saved. Upgrade to Starter to publish your blog — with unlimited posts — alongside a full multi-page site."
+        }
+        targetPlan={plan === "FREE" ? "STARTER" : "PRO"}
         returnTo={
           postId
             ? `/dashboard/templates/${templateId}/blog/${postId}`

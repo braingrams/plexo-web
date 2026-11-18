@@ -26,8 +26,8 @@ const SUGGESTIONS: { label: string; type: CheckoutFieldType; placeholder?: strin
 ];
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
+  width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+  borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
@@ -108,39 +108,39 @@ export function CheckoutSettingsClient({ templateId, initialFields }: { template
 
   return (
     <div>
-      <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem" }}>
-        <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>Checkout questions</h2>
-        <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1.1rem", lineHeight: 1.5, maxWidth: 620 }}>
+      <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem" }}>
+        <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>Checkout questions</h2>
+        <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", margin: "0.3rem 0 1.1rem", lineHeight: 1.5, maxWidth: 620 }}>
           Ask customers for anything else you need at checkout — name, email, phone and address are already collected.
           A question can be limited to customers delivering to certain countries.
-          Answers show up on each order under <strong style={{ color: "rgba(240,242,255,0.7)" }}>Delivery info</strong>.
+          Answers show up on each order under <strong style={{ color: "var(--cmx-text, rgba(240,242,255,0.7))" }}>Delivery info</strong>.
         </p>
 
         {fields.length === 0 && (
-          <div style={{ padding: "1.5rem", textAlign: "center", borderRadius: 12, border: "1px dashed rgba(255,255,255,0.12)", color: "rgba(240,242,255,0.45)", fontSize: "0.83rem", marginBottom: "1rem" }}>
+          <div style={{ padding: "1.5rem", textAlign: "center", borderRadius: 12, border: "1px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", color: "var(--cmx-muted, rgba(240,242,255,0.45))", fontSize: "0.83rem", marginBottom: "1rem" }}>
             No extra questions yet — checkout only asks for the basics.
           </div>
         )}
 
         <div style={{ display: "grid", gap: "0.75rem" }}>
           {fields.map((f, i) => (
-            <div key={f.key} style={{ border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "0.9rem", background: "rgba(255,255,255,0.02)" }}>
+            <div key={f.key} style={{ border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 12, padding: "0.9rem", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)" }}>
               <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", alignItems: "flex-end" }}>
                 <label style={{ flex: "2 1 220px" }}>
-                  <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>Question</span>
+                  <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.3rem" }}>Question</span>
                   <input type="text" value={f.label} maxLength={80} onChange={(e) => update(f.key, { label: e.target.value })} placeholder="e.g. Gift message" style={inputStyle} />
                 </label>
                 <label style={{ flex: "1 1 150px" }}>
-                  <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>Answer type</span>
+                  <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.3rem" }}>Answer type</span>
                   <select value={f.type} onChange={(e) => update(f.key, { type: e.target.value as CheckoutFieldType })} style={inputStyle}>
                     {(Object.keys(TYPE_LABELS) as CheckoutFieldType[]).map((t) => (
-                      <option key={t} value={t} style={{ background: "#0d0f1a" }}>{TYPE_LABELS[t]}</option>
+                      <option key={t} value={t} style={{ background: "var(--cmx-surface, #0d0f1a)" }}>{TYPE_LABELS[t]}</option>
                     ))}
                   </select>
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", paddingBottom: "0.45rem" }}>
                   <Toggle checked={f.required} onChange={(v) => update(f.key, { required: v })} label="Required" />
-                  <span style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.6)" }}>Required</span>
+                  <span style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.6))" }}>Required</span>
                 </div>
                 <div style={{ display: "flex", gap: "0.3rem", paddingBottom: "0.3rem", marginLeft: "auto" }}>
                   <IconButton label="Move up" disabled={i === 0} onClick={() => move(i, -1)}>↑</IconButton>
@@ -150,12 +150,12 @@ export function CheckoutSettingsClient({ templateId, initialFields }: { template
               </div>
               {f.type === "select" ? (
                 <label style={{ display: "block", marginTop: "0.6rem" }}>
-                  <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>Choices (one per line)</span>
+                  <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.3rem" }}>Choices (one per line)</span>
                   <textarea value={f.optionsText} rows={3} onChange={(e) => update(f.key, { optionsText: e.target.value })} placeholder={"Small\nMedium\nLarge"} style={{ ...inputStyle, resize: "vertical" }} />
                 </label>
               ) : f.type !== "date" ? (
                 <label style={{ display: "block", marginTop: "0.6rem" }}>
-                  <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>Hint text (optional)</span>
+                  <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.3rem" }}>Hint text (optional)</span>
                   <input type="text" value={f.placeholder ?? ""} maxLength={80} onChange={(e) => update(f.key, { placeholder: e.target.value })} placeholder="Shown inside the empty box" style={inputStyle} />
                 </label>
               ) : null}
@@ -167,17 +167,17 @@ export function CheckoutSettingsClient({ templateId, initialFields }: { template
         <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center", marginTop: "1rem" }}>
           <button
             type="button" disabled={fields.length >= MAX_FIELDS} onClick={() => setFields((prev) => [...prev, newDraft()])}
-            style={{ padding: "0.55rem 1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit", opacity: fields.length >= MAX_FIELDS ? 0.5 : 1 }}
+            style={{ padding: "0.55rem 1rem", borderRadius: 9, border: "none", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)", fontWeight: 700, fontSize: "0.82rem", cursor: "pointer", fontFamily: "inherit", opacity: fields.length >= MAX_FIELDS ? 0.5 : 1 }}
           >
             + Add question
           </button>
           {unusedSuggestions.length > 0 && fields.length < MAX_FIELDS && (
             <>
-              <span style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginLeft: "0.4rem" }}>Quick add:</span>
+              <span style={{ fontSize: "0.75rem", color: "var(--cmx-muted, rgba(240,242,255,0.4))", marginLeft: "0.4rem" }}>Quick add:</span>
               {unusedSuggestions.map((sug) => (
                 <button
                   key={sug.label} type="button" onClick={() => setFields((prev) => [...prev, newDraft(sug)])}
-                  style={{ padding: "0.35rem 0.7rem", borderRadius: 999, border: "1px solid rgba(255,255,255,0.12)", background: "rgba(255,255,255,0.03)", color: "rgba(240,242,255,0.75)", fontSize: "0.75rem", cursor: "pointer", fontFamily: "inherit" }}
+                  style={{ padding: "0.35rem 0.7rem", borderRadius: 999, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)", color: "var(--cmx-text, rgba(240,242,255,0.75))", fontSize: "0.75rem", cursor: "pointer", fontFamily: "inherit" }}
                 >
                   {sug.label}
                 </button>
@@ -198,11 +198,11 @@ function AudiencePicker({ field, onChange }: { field: DraftField; onChange: (pat
   const available = CHECKOUT_COUNTRIES.filter(([code]) => !field.countries.includes(code));
   const chip: React.CSSProperties = {
     display: "inline-flex", alignItems: "center", gap: "0.35rem", padding: "0.25rem 0.35rem 0.25rem 0.65rem", borderRadius: 999,
-    background: "rgba(var(--brand-rgb),0.14)", border: "1px solid rgba(var(--brand-rgb),0.35)", color: "#f0f2ff", fontSize: "0.76rem",
+    background: "color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 14%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-brand, rgb(var(--brand-rgb))) 35%, transparent)", color: "var(--cmx-text, #f0f2ff)", fontSize: "0.76rem",
   };
   return (
     <div style={{ marginTop: "0.6rem" }}>
-      <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.3rem" }}>Who sees this question?</span>
+      <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.3rem" }}>Who sees this question?</span>
       <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
         <select
           value={field.limited ? "some" : "all"}
@@ -210,8 +210,8 @@ function AudiencePicker({ field, onChange }: { field: DraftField; onChange: (pat
           style={{ ...inputStyle, width: "auto", minWidth: 230 }}
           aria-label="Who sees this question"
         >
-          <option value="all" style={{ background: "#0d0f1a" }}>Everyone</option>
-          <option value="some" style={{ background: "#0d0f1a" }}>Only customers delivering to…</option>
+          <option value="all" style={{ background: "var(--cmx-surface, #0d0f1a)" }}>Everyone</option>
+          <option value="some" style={{ background: "var(--cmx-surface, #0d0f1a)" }}>Only customers delivering to…</option>
         </select>
         {field.limited && (
           <>
@@ -221,7 +221,7 @@ function AudiencePicker({ field, onChange }: { field: DraftField; onChange: (pat
                 <button
                   type="button" aria-label={`Remove ${checkoutCountryName(code) ?? code}`}
                   onClick={() => onChange({ countries: field.countries.filter((c) => c !== code) })}
-                  style={{ width: 18, height: 18, borderRadius: 999, border: "none", background: "rgba(255,255,255,0.12)", color: "#f0f2ff", cursor: "pointer", fontSize: "0.7rem", lineHeight: 1, fontFamily: "inherit" }}
+                  style={{ width: 18, height: 18, borderRadius: 999, border: "none", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", color: "var(--cmx-text, #f0f2ff)", cursor: "pointer", fontSize: "0.7rem", lineHeight: 1, fontFamily: "inherit" }}
                 >
                   ✕
                 </button>
@@ -233,16 +233,16 @@ function AudiencePicker({ field, onChange }: { field: DraftField; onChange: (pat
               style={{ ...inputStyle, width: "auto", minWidth: 170 }}
               aria-label="Add a country"
             >
-              <option value="" style={{ background: "#0d0f1a" }}>{field.countries.length ? "+ Add another country" : "Choose a country"}</option>
+              <option value="" style={{ background: "var(--cmx-surface, #0d0f1a)" }}>{field.countries.length ? "+ Add another country" : "Choose a country"}</option>
               {available.map(([code, name]) => (
-                <option key={code} value={code} style={{ background: "#0d0f1a" }}>{name}</option>
+                <option key={code} value={code} style={{ background: "var(--cmx-surface, #0d0f1a)" }}>{name}</option>
               ))}
             </select>
           </>
         )}
       </div>
       {field.limited && (
-        <p style={{ fontSize: "0.72rem", color: "rgba(240,242,255,0.45)", margin: "0.4rem 0 0" }}>
+        <p style={{ fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", margin: "0.4rem 0 0" }}>
           Hidden for everyone else, and never asked for pickup orders.
         </p>
       )}
@@ -255,8 +255,8 @@ function IconButton({ label, onClick, disabled, danger, children }: { label: str
     <button
       type="button" aria-label={label} title={label} onClick={onClick} disabled={disabled}
       style={{
-        width: 30, height: 30, borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)",
-        color: danger ? "#f87171" : "rgba(240,242,255,0.7)", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.35 : 1, fontFamily: "inherit", fontSize: "0.8rem",
+        width: 30, height: 30, borderRadius: 8, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 3%, transparent)",
+        color: danger ? "var(--cmx-danger, #f87171)" : "var(--cmx-text, rgba(240,242,255,0.7))", cursor: disabled ? "not-allowed" : "pointer", opacity: disabled ? 0.35 : 1, fontFamily: "inherit", fontSize: "0.8rem",
       }}
     >
       {children}

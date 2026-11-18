@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { storedPlan } from "@/lib/plan/entitlement";
 import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { ApiKey } from "@/lib/db/coreEntities";
@@ -10,6 +11,9 @@ import { OverviewClient, type NeedsAttentionItem, type ActivityItem, type Overvi
 import { OverviewSetup, type StarterTemplate } from "./_components/OverviewSetup";
 import { PageContainer } from "./_components/PageContainer";
 import { effectivePlan, shouldOfferTrial } from "@/lib/plan/entitlement";
+import { usesNewShell } from "@/lib/dashboardVersions/state";
+import { ONBOARDING_PATH, v3EntryDestination } from "@/lib/dashboardV3/flag";
+import { V3Home } from "./_v3/home/V3Home";
 
 export default async function OverviewPage() {
   const session = await auth();
@@ -30,17 +34,25 @@ export default async function OverviewPage() {
     redirect("/auth/login");
   }
 
-  // User picked Pro/Ultra at signup but hasn't completed payment yet (subscriptionPlan
-  // only flips once the Stripe webhook confirms an active subscription) — a UX nudge,
+  // User picked a paid plan at signup but hasn't completed payment yet (subscriptionPlan
+  // only flips once the payment webhook confirms an active subscription) — a UX nudge,
   // not the real security boundary: every actual entitlement check reads subscriptionPlan
   // directly regardless of whether the user ever passes through this page.
-  if (user.pendingPlan && user.pendingPlan !== user.subscriptionPlan) {
+  if (user.pendingPlan && storedPlan({ subscriptionPlan: user.pendingPlan, planVersion: user.planVersion }) !== storedPlan(user)) {
     redirect("/auth/complete-subscription");
   }
 
   // A brand-new account is offered the 14-day trial once (app/welcome).
   if (shouldOfferTrial(user)) {
     redirect("/welcome");
+  }
+
+  // v3 (DASHBOARD_V3): everyone sees the new setup once (unless they chose "Continue later"),
+  // then lands on the guided Home.
+  if (await usesNewShell(user)) {
+    if (v3EntryDestination(user) === "onboarding") redirect(ONBOARDING_PATH);
+    if (user.preferredSurface === "SOL") redirect("/dashboard/sol");
+    return <V3Home user={user} organizationId={organizationId} userId={user.id} />;
   }
 
   // A user who's picked SOL (the AI agent chat) as their landing surface skips the normal

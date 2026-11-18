@@ -114,8 +114,8 @@ export function CustomSelect({
           gap: "0.5rem",
           padding: "0.6rem 0.875rem",
           borderRadius: 9,
-          border: open ? "1px solid var(--brand)" : "1px solid var(--surface-border)",
-          background: open ? "var(--brand-subtle)" : "var(--surface)",
+          border: open ? "1px solid var(--cmx-brand, var(--brand))" : "1px solid var(--surface-border)",
+          background: open ? "var(--cmx-brand-subtle, var(--brand-subtle))" : "var(--surface)",
           color: disabled ? "var(--text-faint)" : "var(--text-main)",
           fontFamily: "inherit",
           fontSize: "0.875rem",
@@ -145,7 +145,7 @@ export function CustomSelect({
               background: "var(--bg-2)",
               backdropFilter: "blur(16px)",
               WebkitBackdropFilter: "blur(16px)",
-              border: "1px solid var(--brand)",
+              border: "1px solid var(--cmx-brand, var(--brand))",
               borderRadius: 10,
               maxHeight: "min(320px, 60vh)",
               overflowY: "auto",
@@ -167,10 +167,10 @@ export function CustomSelect({
                     justifyContent: "space-between",
                     gap: "0.5rem",
                     padding: "0.625rem 0.875rem",
-                    background: isActive ? "var(--brand-subtle)" : "transparent",
+                    background: isActive ? "var(--cmx-brand-subtle, var(--brand-subtle))" : "transparent",
                     border: "none",
                     borderBottom: "1px solid var(--surface-border)",
-                    color: opt.disabled ? "var(--text-faint)" : isActive ? "var(--brand)" : "var(--text-muted)",
+                    color: opt.disabled ? "var(--text-faint)" : isActive ? "var(--cmx-brand, var(--brand))" : "var(--text-muted)",
                     fontFamily: "inherit",
                     fontSize: "0.875rem",
                     fontWeight: isActive ? 600 : 400,
@@ -185,7 +185,7 @@ export function CustomSelect({
                       <span style={{ fontSize: "0.72rem", fontWeight: 400, color: "var(--text-faint)" }}>{opt.description}</span>
                     )}
                   </span>
-                  {isActive && <span style={{ color: "var(--brand)", display: "flex", alignItems: "center", flexShrink: 0 }}><IconCheck /></span>}
+                  {isActive && <span style={{ color: "var(--cmx-accent, var(--brand))", display: "flex", alignItems: "center", flexShrink: 0 }}><IconCheck /></span>}
                 </button>
               );
             })}

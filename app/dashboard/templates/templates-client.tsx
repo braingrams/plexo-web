@@ -1,6 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { parseTemplatesFilter, type TemplatesFilter } from "@/lib/templatesFilter";
+import { NewEmailModal } from "./NewEmailModal";
 import { PageHeader } from "../_components/PageHeader";
 import { useNewSite } from "../_components/NewSiteModal";
 import { TemplateCard, IconMail, type TemplateKind, type TemplateSummary } from "./TemplateCard";
@@ -37,12 +40,17 @@ function IconX() {
 
 
 
-type FilterKind = "ALL" | TemplateKind | "FUNNEL";
+type FilterKind = TemplatesFilter;
 
 export function TemplatesClient({ initialTemplates }: Props) {
   const { openNewSite } = useNewSite();
   const [templates, setTemplates] = useState<TemplateSummary[]>(initialTemplates);
-  const [filter, setFilter] = useState<FilterKind>("ALL");
+  // The "Emails" menu item opens this list on ?filter=EMAIL.
+  const filterParam = useSearchParams().get("filter");
+  const [filter, setFilter] = useState<FilterKind>(() => parseTemplatesFilter(filterParam));
+  // Tapping "Emails" in the menu while already on this page changes only the address.
+  useEffect(() => setFilter(parseTemplatesFilter(filterParam)), [filterParam]);
+  const [newEmailOpen, setNewEmailOpen] = useState(false);
   const [search, setSearch] = useState("");
 
   // Delete state
@@ -107,9 +115,25 @@ export function TemplatesClient({ initialTemplates }: Props) {
     <>
       <PageHeader
         eyebrow="Workspace"
-        title="Your Templates"
+        title="Your Sites & Emails"
         action={
-          <div style={{ display: "flex", gap: "0.6rem" }}>
+          <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
+            <button
+              id="create-email-btn"
+              type="button"
+              onClick={() => setNewEmailOpen(true)}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                padding: "0.65rem 1.2rem",
+                borderRadius: 10, fontWeight: 700, fontSize: "0.875rem",
+                background: "rgba(255,255,255,0.05)",
+                color: "#f0f2ff", border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer",
+                fontFamily: "inherit",
+              }}
+            >
+              <IconPlus />
+              New email
+            </button>
             <button
               id="create-template-btn"
               type="button"
@@ -145,7 +169,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
           borderRadius: 10, padding: "0.25rem",
         }}>
           {(["ALL", "EMAIL", "LANDING_PAGE", "FUNNEL"] as const).map((tab) => {
-            const label = tab === "ALL" ? "All" : tab === "EMAIL" ? "Email" : tab === "LANDING_PAGE" ? "Landing Pages" : "Funnels";
+            const label = tab === "ALL" ? "All" : tab === "EMAIL" ? "Emails" : tab === "LANDING_PAGE" ? "Landing Pages" : "Funnels";
             const active = filter === tab;
             return (
               <button
@@ -180,7 +204,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search templates…"
+            placeholder="Search…"
             style={{
               width: "100%",
               background: "rgba(255,255,255,0.04)",
@@ -249,32 +273,51 @@ export function TemplatesClient({ initialTemplates }: Props) {
             <IconMail />
           </div>
           <h3 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.1rem", color: "#f0f2ff", marginBottom: "0.5rem" }}>
-            {search || filter !== "ALL" ? "No templates match your search." : "No templates yet."}
+            {search || filter !== "ALL" ? "Nothing matches your search." : "Nothing here yet."}
           </h3>
           <p style={{ fontSize: "0.875rem", color: "rgba(240,242,255,0.4)", marginBottom: "1.5rem" }}>
-            {search || filter !== "ALL" ? "Try a different search or filter." : "Create your first template to get started."}
+            {search || filter !== "ALL" ? "Try a different search or filter." : "Make your first email or site to get started."}
           </p>
-          {!search && filter === "ALL" && (
-            <button
-              type="button"
-              onClick={openNewSite}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: "0.5rem",
-                padding: "0.65rem 1.25rem",
-                borderRadius: 10, border: "none", cursor: "pointer",
-                fontSize: "0.875rem", fontWeight: 700,
-                background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
-                color: "#fff",
-                boxShadow: "0 4px 20px var(--brand-glow)",
-                fontFamily: "inherit",
-              }}
-            >
-              <IconPlus />
-              Create First Template
-            </button>
+          {!search && (filter === "ALL" || filter === "EMAIL") && (
+            <div style={{ display: "flex", gap: "0.6rem", justifyContent: "center", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={() => setNewEmailOpen(true)}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                  padding: "0.65rem 1.25rem",
+                  borderRadius: 10, border: "none", cursor: "pointer",
+                  fontSize: "0.875rem", fontWeight: 700,
+                  background: "linear-gradient(135deg,var(--brand),var(--brand-deep))",
+                  color: "#fff",
+                  boxShadow: "0 4px 20px var(--brand-glow)",
+                  fontFamily: "inherit",
+                }}
+              >
+                <IconPlus />
+                New email
+              </button>
+              <button
+                type="button"
+                onClick={openNewSite}
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: "0.5rem",
+                  padding: "0.65rem 1.25rem",
+                  borderRadius: 10, border: "1px solid rgba(255,255,255,0.12)", cursor: "pointer",
+                  fontSize: "0.875rem", fontWeight: 700,
+                  background: "rgba(255,255,255,0.05)", color: "#f0f2ff",
+                  fontFamily: "inherit",
+                }}
+              >
+                <IconPlus />
+                New site
+              </button>
+            </div>
           )}
         </div>
       )}
+
+      {newEmailOpen && <NewEmailModal onClose={() => setNewEmailOpen(false)} />}
 
       {/* ── DELETE CONFIRMATION MODAL ────────────────────────── */}
       {deleteTarget && (
@@ -354,7 +397,7 @@ export function TemplatesClient({ initialTemplates }: Props) {
                   fontFamily: "inherit",
                 }}
               >
-                {isDeleting ? "Deleting…" : "Delete Template"}
+                {isDeleting ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>

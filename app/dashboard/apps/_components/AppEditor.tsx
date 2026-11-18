@@ -3,6 +3,7 @@
 import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useAppBackHref, useEditorV3 } from "../../_components/EditorTheme";
 import { ArrowLeft, Check, ChevronDown, Code2, ExternalLink, MessageSquare, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
 import { SolChatView } from "../../sol/_components/SolChatView";
 import type { ConversationSummary, ModelTier, SolMessage } from "../../sol/_components/types";
@@ -58,7 +59,7 @@ const WRITING_TOOLS = new Set(["app_write_files", "app_edit_file", "app_delete_f
 
 const seg = (active: boolean) => ({
   padding: "0.42rem 0.8rem", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: "0.82rem", whiteSpace: "nowrap" as const,
-  background: active ? "rgba(255,255,255,0.12)" : "transparent", color: active ? C.text : C.muted, fontWeight: active ? 700 : 500,
+  background: active ? "var(--ed-w-120)" : "transparent", color: active ? C.text : C.muted, fontWeight: active ? 700 : 500,
 });
 
 export function AppEditor(props: {
@@ -76,6 +77,8 @@ export function AppEditor(props: {
   fontClassName?: string;
 }) {
   const { appId } = props;
+  const v3 = useEditorV3();
+  const backHref = useAppBackHref(appId);
   const [summary, setSummary] = useState<AppSummary>(props.initialSummary);
   const initialTab = (TAB_ALIASES[props.initialPanel ?? ""] ?? [...MAIN_TABS, ...MORE_TABS].find((t) => t.id === props.initialPanel)?.id ?? "preview") as Tab;
   const [tab, setTab] = useState<Tab>(initialTab);
@@ -425,13 +428,13 @@ export function AppEditor(props: {
         // Free plans on Plexo's AI run on Basic (the server enforces it — lib/ai/solEngine.ts).
         lockedModelTier: props.lockedModelTier ?? undefined,
         afterMessages: firstBuild ? (
-          <div style={{ width: "100%", boxSizing: "border-box", maxWidth: 760, margin: "0.5rem auto 1rem", border: "1px solid rgba(var(--brand-rgb), 0.28)", background: "linear-gradient(180deg, rgba(var(--brand-rgb), 0.10), rgba(var(--brand-rgb), 0.03))", borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
+          <div style={{ width: "100%", boxSizing: "border-box", maxWidth: 760, margin: "0.5rem auto 1rem", border: "1px solid color-mix(in srgb, var(--brand) 28%, transparent)", background: "linear-gradient(180deg, color-mix(in srgb, var(--brand) 10%, transparent), color-mix(in srgb, var(--brand) 3%, transparent))", borderRadius: 14, padding: "0.9rem 1rem", display: "flex", flexDirection: "column", gap: "0.7rem" }}>
             <div style={{ fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: C.faint }}>What I&rsquo;m doing</div>
             {steps.map((label, i) => {
               const state = i < stepsDone ? "done" : i === stepsDone ? "active" : "todo";
               return (
                 <div key={label} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "0.86rem", fontWeight: state === "active" ? 700 : 500, color: state === "todo" ? C.faint : C.text }}>
-                  <span style={{ width: 20, height: 20, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: state === "done" ? C.success : "transparent", border: state === "done" ? "none" : `${state === "active" ? 2 : 1.5}px solid ${state === "active" ? C.brand : C.borderStrong}`, color: "#06281d" }}>
+                  <span style={{ width: 20, height: 20, borderRadius: 99, flexShrink: 0, display: "grid", placeItems: "center", background: state === "done" ? C.success : "transparent", border: state === "done" ? "none" : `${state === "active" ? 2 : 1.5}px solid ${state === "active" ? C.brand : C.borderStrong}`, color: "var(--ed-on-brand)" }}>
                     {state === "done" && <Check size={12} strokeWidth={3} />}
                     {state === "active" && <span className="ed-pulse" style={{ width: 8, height: 8, borderRadius: 99, background: C.brand }} />}
                   </span>
@@ -455,7 +458,7 @@ export function AppEditor(props: {
               />
             )}
             {turnChange && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0.45rem 0.6rem", borderRadius: 10, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)", fontSize: "0.76rem", color: C.text }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0.45rem 0.6rem", borderRadius: 10, background: "color-mix(in srgb, var(--ed-success) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--ed-success) 25%, transparent)", fontSize: "0.76rem", color: C.text }}>
                 <span style={{ flex: 1 }}>SOL updated your app.</span>
                 <Button size="sm" onClick={() => setDiff({ versionId: turnChange.from, against: turnChange.to, title: "What SOL changed" })}>
                   <Eye size={13} /> See what changed
@@ -481,7 +484,7 @@ export function AppEditor(props: {
               </div>
             )}
             {selected && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0.45rem 0.6rem", borderRadius: 10, background: "rgba(var(--brand-rgb), 0.12)", border: "1px solid rgba(var(--brand-rgb), 0.35)", fontSize: "0.76rem", color: C.text }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, padding: "0.45rem 0.6rem", borderRadius: 10, background: "color-mix(in srgb, var(--brand) 12%, transparent)", border: "1px solid color-mix(in srgb, var(--brand) 35%, transparent)", fontSize: "0.76rem", color: C.text }}>
                 <MousePointerClick size={14} color={C.brand} />
                 <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   Changing this {selected.tag === "img" ? "picture" : selected.tag === "button" || selected.tag === "a" ? "button" : "part"}
@@ -511,7 +514,7 @@ export function AppEditor(props: {
 
   const previewToolbar = (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "0.9rem 1.1rem 0.75rem", flexWrap: "wrap" }}>
-      <div role="group" aria-label="Screen size" style={{ display: "inline-flex", gap: 3, padding: 3, borderRadius: 10, background: "rgba(255,255,255,0.05)" }}>
+      <div role="group" aria-label="Screen size" style={{ display: "inline-flex", gap: 3, padding: 3, borderRadius: 10, background: "var(--ed-w-050)" }}>
         {VIEWPORTS.map((v) => (
           <button key={v.id} type="button" aria-pressed={viewport === v.id} onClick={() => setViewport(v.id)} style={{ ...seg(viewport === v.id), padding: "0.32rem 0.75rem", fontSize: "0.78rem" }}>
             {v.label}
@@ -525,7 +528,7 @@ export function AppEditor(props: {
         }}
         style={{ flex: 1, minWidth: 140, maxWidth: 360 }}
       >
-        <input aria-label="Page address" value={routeDraft} onChange={(e) => setRouteDraft(e.target.value)} style={{ width: "100%", padding: "0.4rem 0.7rem", borderRadius: 10, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.03)", color: C.text, fontFamily: C.mono, fontSize: "0.76rem" }} />
+        <input aria-label="Page address" value={routeDraft} onChange={(e) => setRouteDraft(e.target.value)} style={{ width: "100%", padding: "0.4rem 0.7rem", borderRadius: 10, border: `1px solid ${C.border}`, background: "var(--ed-w-030)", color: C.text, fontFamily: C.mono, fontSize: "0.76rem" }} />
       </form>
       <button
         type="button"
@@ -568,13 +571,13 @@ export function AppEditor(props: {
         {plan ? (
           <AppPreview audience={plan.audience} features={plan.features} other={plan.other} name={plan.name} />
         ) : (
-          <div style={{ flex: 1, borderRadius: 16, border: `1px solid ${C.border}`, display: "grid", placeItems: "center", color: C.muted, fontSize: "0.86rem", background: "radial-gradient(60% 50% at 30% 20%, rgba(192,132,252,0.12), transparent 70%), radial-gradient(60% 60% at 75% 80%, rgba(var(--brand-rgb), 0.18), transparent 70%)" }}>
+          <div style={{ flex: 1, borderRadius: 16, border: `1px solid ${C.border}`, display: "grid", placeItems: "center", color: C.muted, fontSize: "0.86rem", background: "radial-gradient(60% 50% at 30% 20%, color-mix(in srgb, var(--ed-violet) 12%, transparent), transparent 70%), radial-gradient(60% 60% at 75% 80%, color-mix(in srgb, var(--brand) 18%, transparent), transparent 70%)" }}>
             Your app appears here as it&rsquo;s built.
           </div>
         )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <span style={{ flex: 1, height: 6, borderRadius: 99, background: "rgba(255,255,255,0.1)" }}>
+        <span style={{ flex: 1, height: 6, borderRadius: 99, background: "var(--ed-w-100)" }}>
           <span style={{ display: "block", width: `${Math.max(6, (stepsDone / steps.length) * 100)}%`, height: "100%", borderRadius: 99, background: brandGradient, transition: "width 0.6s" }} />
         </span>
         <span style={{ fontSize: "0.78rem", color: C.muted, whiteSpace: "nowrap" }}>
@@ -637,10 +640,10 @@ export function AppEditor(props: {
     <div className={`app-editor ${props.fontClassName ?? ""}`} style={{ height: "100dvh", display: "flex", flexDirection: "column", background: C.bg, color: C.text }}>
       {/* Top bar */}
       {!focusing && <header className="ed-top" style={{ display: "flex", alignItems: "center", gap: 14, padding: "0 1.1rem", borderBottom: `1px solid ${C.border}`, minHeight: 60 }}>
-        <Link href="/dashboard/apps" aria-label="Back to apps" style={{ color: C.muted, display: "inline-flex" }}>
+        <Link href={backHref} aria-label={v3 ? "Back to your app" : "Back to apps"} style={{ color: C.muted, display: "inline-flex" }}>
           <ArrowLeft size={18} />
         </Link>
-        <span aria-hidden style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: "grid", placeItems: "center", background: gradientFor(summary.name), color: "#fff", fontWeight: 800, fontSize: "0.86rem" }}>
+        <span aria-hidden style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, display: "grid", placeItems: "center", background: gradientFor(summary.name), color: "var(--ed-on-brand)", fontWeight: 800, fontSize: "0.86rem" }}>
           {summary.name.charAt(0).toUpperCase()}
         </span>
         <div style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
@@ -649,7 +652,7 @@ export function AppEditor(props: {
         </div>
 
         {!firstBuild && <nav className="ed-tabs" aria-label="App tools" style={{ marginLeft: 28, display: "flex", alignItems: "center", gap: 8 }}>
-          <div role="tablist" style={{ display: "inline-flex", gap: 3, padding: 4, borderRadius: 12, background: "rgba(255,255,255,0.05)" }}>
+          <div role="tablist" style={{ display: "inline-flex", gap: 3, padding: 4, borderRadius: 12, background: "var(--ed-w-050)" }}>
             {MAIN_TABS.map((t) => (
               <button key={t.id} type="button" role="tab" aria-selected={!codeMode && tab === t.id} onClick={() => openTab(t.id)} style={seg(!codeMode && tab === t.id)}>
                 {t.label}
@@ -662,7 +665,7 @@ export function AppEditor(props: {
               {moreOpen && (
                 <div role="menu" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 80, width: 260, padding: 6, borderRadius: 12, background: C.panelSolid, border: `1px solid ${C.borderStrong}`, boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)" }}>
                   {MORE_TABS.map((t) => (
-                    <button key={t.id} type="button" role="menuitem" onClick={() => openTab(t.id)} style={{ width: "100%", textAlign: "left", padding: "0.55rem 0.65rem", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", background: tab === t.id && !codeMode ? "rgba(255,255,255,0.08)" : "transparent", color: C.text }}>
+                    <button key={t.id} type="button" role="menuitem" onClick={() => openTab(t.id)} style={{ width: "100%", textAlign: "left", padding: "0.55rem 0.65rem", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", background: tab === t.id && !codeMode ? "var(--ed-w-080)" : "transparent", color: C.text }}>
                       <span style={{ display: "block", fontSize: "0.84rem", fontWeight: 600 }}>{t.label}</span>
                       <span style={{ display: "block", fontSize: "0.74rem", color: C.muted }}>{t.hint}</span>
                     </button>
@@ -709,7 +712,7 @@ export function AppEditor(props: {
           <button type="button" disabled={!publishable || !summary.previewUrl} onClick={copyPreviewLink} title="Copy a link anyone can open" style={{ padding: "0.5rem 0.85rem", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: publishable ? C.text : C.faint, fontFamily: "inherit", fontSize: "0.8rem", cursor: publishable ? "pointer" : "default" }}>
             {copied ? "Link copied" : "Share"}
           </button>
-          <button type="button" disabled={!publishable} onClick={() => setPublishOpen(true)} style={{ padding: "0.5rem 0.95rem", borderRadius: 10, border: "none", background: publishable ? brandGradient : "rgba(255,255,255,0.12)", color: publishable ? "#fff" : C.faint, boxShadow: publishable ? "0 6px 20px rgba(var(--brand-rgb), 0.35)" : "none", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 700, cursor: publishable ? "pointer" : "default" }}>
+          <button type="button" disabled={!publishable} onClick={() => setPublishOpen(true)} style={{ padding: "0.5rem 0.95rem", borderRadius: 10, border: "none", background: publishable ? brandGradient : "var(--ed-w-120)", color: publishable ? "var(--ed-on-brand)" : C.faint, boxShadow: publishable ? "0 6px 20px color-mix(in srgb, var(--brand) 35%, transparent)" : "none", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 700, cursor: publishable ? "pointer" : "default" }}>
             {summary.published ? "Publish changes" : "Publish"}
           </button>
         </div>
@@ -719,7 +722,7 @@ export function AppEditor(props: {
       {/* Mobile switcher */}
       <div className="ed-mobile" style={{ display: "none", padding: "0.4rem 0.6rem", gap: 6, borderBottom: `1px solid ${C.border}` }}>
         {(["chat", "app"] as const).map((v) => (
-          <button key={v} type="button" onClick={() => setMobileView(v)} style={{ flex: 1, padding: "0.45rem", borderRadius: 9, border: `1px solid ${C.border}`, background: mobileView === v ? "rgba(255,255,255,0.1)" : "transparent", color: C.text, fontSize: "0.8rem", display: "inline-flex", gap: 6, justifyContent: "center", alignItems: "center" }}>
+          <button key={v} type="button" onClick={() => setMobileView(v)} style={{ flex: 1, padding: "0.45rem", borderRadius: 9, border: `1px solid ${C.border}`, background: mobileView === v ? "var(--ed-w-100)" : "transparent", color: C.text, fontSize: "0.8rem", display: "inline-flex", gap: 6, justifyContent: "center", alignItems: "center" }}>
             {v === "chat" ? <MessageSquare size={14} /> : <AppWindow size={14} />} {v === "chat" ? "Chat" : "App"}
           </button>
         ))}
@@ -937,7 +940,7 @@ function ProblemsBar(props: {
   if (!count && !typeCount) return null;
   const tone = count ? C.danger : C.warning;
   return (
-    <div style={{ borderTop: `1px solid ${tone}55`, background: `${tone}12`, maxHeight: open ? "45%" : undefined, display: "flex", flexDirection: "column" }}>
+    <div style={{ borderTop: `1px solid color-mix(in srgb, ${tone} 33%, transparent)`, background: `color-mix(in srgb, ${tone} 7%, transparent)`, maxHeight: open ? "45%" : undefined, display: "flex", flexDirection: "column" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0.5rem 0.8rem", fontSize: "0.8rem" }}>
         <Wrench size={14} color={tone} />
         <button type="button" onClick={() => setOpen((v) => !v)} style={{ background: "none", border: "none", color: C.text, cursor: "pointer", fontSize: "0.8rem", textAlign: "left", flex: 1, fontFamily: "inherit" }}>

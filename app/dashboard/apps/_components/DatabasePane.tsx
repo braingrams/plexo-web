@@ -28,9 +28,10 @@ import {
 } from "lucide-react";
 import { api, ApiError, type AppEnv } from "./api";
 import { Button, C, Empty, EnvSwitch, Notice, PaneHeader, Panel, inputStyle, timeAgo } from "./ui";
-import { ensureMonaco, EDITOR_THEME } from "./monaco";
+import { ensureMonaco } from "./monaco";
+import { useMonacoTheme } from "../../_components/EditorTheme";
 
-import { BRAND } from "@/lib/theme";
+
 // Mirrors lib/appData/overview.ts (kept local so this client bundle doesn't pull server code).
 type SecurityFinding = { level: "danger" | "warning" | "info"; table: string; message: string; fix: string };
 type Column = { name: string; type: string; nullable: boolean; hasDefault: boolean; primaryKey: boolean; references: string | null };
@@ -107,16 +108,16 @@ const rowKey = (row: Row, pk: string[]) => JSON.stringify(pk.map((c) => row[c]))
 const keyObject = (row: Row, pk: string[]) => Object.fromEntries(pk.map((c) => [c, row[c]]));
 
 const DATA_IDEAS: { icon: typeof Database; color: string; title: string; prompt: string }[] = [
-  { icon: Mail, color: BRAND.deep, title: "Contact form messages", prompt: "Save messages people send through a contact form, and show them to me in a list" },
-  { icon: Heart, color: BRAND[300], title: "Favourites", prompt: "Let signed-in people save their favourite items and see them on their own page" },
-  { icon: ShoppingBag, color: BRAND[400], title: "Products", prompt: "Keep a list of products with a name, price and photo that I can edit" },
-  { icon: Users, color: "#6366f1", title: "Newsletter sign-ups", prompt: "Collect email addresses for a newsletter with a simple sign-up box" },
+  { icon: Mail, color: "var(--brand-deep)", title: "Contact form messages", prompt: "Save messages people send through a contact form, and show them to me in a list" },
+  { icon: Heart, color: "var(--brand-light)", title: "Favourites", prompt: "Let signed-in people save their favourite items and see them on their own page" },
+  { icon: ShoppingBag, color: "var(--brand-soft)", title: "Products", prompt: "Keep a list of products with a name, price and photo that I can edit" },
+  { icon: Users, color: "var(--ed-violet)", title: "Newsletter sign-ups", prompt: "Collect email addresses for a newsletter with a simple sign-up box" },
 ];
 
 /** Nothing saved yet: what will appear here, and one tap to set something up with SOL. */
 function DataEmpty({ onAskAi }: { onAskAi?: (text: string) => void }) {
   return (
-    <section className="plx-data-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.9fr)", gap: "2rem", alignItems: "center", padding: "clamp(1.2rem, 4.5vw, 2.2rem)", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, rgba(var(--brand-rgb), 0.14), transparent 60%), rgba(255,255,255,0.015)" }}>
+    <section className="plx-data-empty" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 0.9fr)", gap: "2rem", alignItems: "center", padding: "clamp(1.2rem, 4.5vw, 2.2rem)", borderRadius: 20, border: `1px solid ${C.border}`, background: "radial-gradient(70% 90% at 100% 0%, color-mix(in srgb, var(--brand) 14%, transparent), transparent 60%), var(--ed-w-015)" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: "1.2rem", minWidth: 0 }}>
         <div>
           <h3 style={{ margin: 0, fontSize: "clamp(1.1rem, 4.2vw, 1.35rem)", fontWeight: 750, letterSpacing: "-0.01em" }}>Nothing saved yet</h3>
@@ -127,8 +128,8 @@ function DataEmpty({ onAskAi }: { onAskAi?: (text: string) => void }) {
         {onAskAi && (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
             {DATA_IDEAS.map(({ icon: Icon, color, title, prompt }) => (
-              <button key={title} type="button" className="plx-data-idea" onClick={() => onAskAi(prompt)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "0.8rem 0.9rem", borderRadius: 14, border: `1px solid ${C.border}`, background: "rgba(255,255,255,0.03)", color: C.text, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>
-                <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: `${color}26`, color }}>
+              <button key={title} type="button" className="plx-data-idea" onClick={() => onAskAi(prompt)} style={{ display: "flex", alignItems: "center", gap: 12, padding: "0.8rem 0.9rem", borderRadius: 14, border: `1px solid ${C.border}`, background: "var(--ed-w-030)", color: C.text, textAlign: "left", cursor: "pointer", fontFamily: "inherit" }}>
+                <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "grid", placeItems: "center", background: `color-mix(in srgb, ${color} 15%, transparent)`, color }}>
                   <Icon size={17} />
                 </span>
                 <span style={{ fontSize: "0.85rem", fontWeight: 600 }}>{title}</span>
@@ -145,22 +146,22 @@ function DataEmpty({ onAskAi }: { onAskAi?: (text: string) => void }) {
 /** A friendly picture of a filled-in table. */
 function DataIllustration() {
   const rows = [
-    { c: BRAND.primary, w: ["58%", "34%"] },
-    { c: BRAND[300], w: ["44%", "48%"] },
-    { c: BRAND[400], w: ["66%", "26%"] },
-    { c: "#6366f1", w: ["50%", "40%"] },
+    { c: "var(--ed-accent-text)", w: ["58%", "34%"] },
+    { c: "var(--brand-light)", w: ["44%", "48%"] },
+    { c: "var(--brand-soft)", w: ["66%", "26%"] },
+    { c: "var(--ed-violet)", w: ["50%", "40%"] },
   ];
   return (
-    <div aria-hidden className="plx-data-art" style={{ borderRadius: 16, background: "rgba(11,15,25,0.6)", border: `1px solid ${C.borderStrong}`, padding: 16, display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 24px 60px rgba(0,0,0,0.35)", transform: "rotate(-1.5deg)" }}>
+    <div aria-hidden className="plx-data-art" style={{ borderRadius: 16, background: "color-mix(in srgb, var(--ed-bg) 60%, transparent)", border: `1px solid ${C.borderStrong}`, padding: 16, display: "flex", flexDirection: "column", gap: 10, boxShadow: "0 24px 60px rgba(0,0,0,0.35)", transform: "rotate(-1.5deg)" }}>
       <div style={{ display: "flex", gap: 8, alignItems: "center", paddingBottom: 8, borderBottom: `1px solid ${C.border}` }}>
-        <span style={{ width: 70, height: 8, borderRadius: 99, background: "rgba(255,255,255,0.35)" }} />
+        <span style={{ width: 70, height: 8, borderRadius: 99, background: "var(--ed-w-350)" }} />
         <span style={{ marginLeft: "auto", width: 46, height: 18, borderRadius: 6, background: C.brand }} />
       </div>
       {rows.map((row, i) => (
         <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ width: 26, height: 26, borderRadius: 99, background: row.c, flexShrink: 0 }} />
-          <span style={{ width: row.w[0], height: 7, borderRadius: 99, background: "rgba(255,255,255,0.28)" }} />
-          <span style={{ marginLeft: "auto", width: row.w[1], maxWidth: 80, height: 7, borderRadius: 99, background: "rgba(255,255,255,0.12)" }} />
+          <span style={{ width: row.w[0], height: 7, borderRadius: 99, background: "var(--ed-w-280)" }} />
+          <span style={{ marginLeft: "auto", width: row.w[1], maxWidth: 80, height: 7, borderRadius: 99, background: "var(--ed-w-120)" }} />
         </div>
       ))}
     </div>
@@ -187,8 +188,8 @@ function DataSkeleton() {
 function DataProblem({ message, onRetry }: { message: string; onRetry: () => void }) {
   const waking = message.startsWith(WAKING_MESSAGE);
   return (
-    <section style={{ display: "flex", alignItems: "center", gap: "1.2rem", flexWrap: "wrap", padding: "1.8rem 2rem", borderRadius: 20, border: `1px solid ${waking ? "rgba(var(--brand-rgb), 0.3)" : "rgba(251,191,36,0.3)"}`, background: waking ? "rgba(var(--brand-rgb), 0.06)" : "rgba(251,191,36,0.05)" }}>
-      <span style={{ width: 48, height: 48, borderRadius: 14, display: "grid", placeItems: "center", background: waking ? "rgba(var(--brand-rgb), 0.16)" : "rgba(251,191,36,0.14)", color: waking ? "#c4b5fd" : C.warning, flexShrink: 0 }}>
+    <section style={{ display: "flex", alignItems: "center", gap: "1.2rem", flexWrap: "wrap", padding: "1.8rem 2rem", borderRadius: 20, border: `1px solid ${waking ? "color-mix(in srgb, var(--brand) 30%, transparent)" : "color-mix(in srgb, var(--ed-warning) 30%, transparent)"}`, background: waking ? "color-mix(in srgb, var(--brand) 6%, transparent)" : "color-mix(in srgb, var(--ed-warning) 5%, transparent)" }}>
+      <span style={{ width: 48, height: 48, borderRadius: 14, display: "grid", placeItems: "center", background: waking ? "color-mix(in srgb, var(--brand) 16%, transparent)" : "color-mix(in srgb, var(--ed-warning) 14%, transparent)", color: waking ? "var(--ed-lavender)" : C.warning, flexShrink: 0 }}>
         {waking ? <LoaderCircle size={22} className="plx-spin" /> : <CloudOff size={22} />}
       </span>
       <div style={{ flex: "1 1 320px", minWidth: 0 }}>
@@ -205,16 +206,16 @@ function DataProblem({ message, onRetry }: { message: string; onRetry: () => voi
 }
 
 const RESPONSIVE_CSS = `
-.plx-skel { background: linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.09), rgba(255,255,255,0.04)); background-size: 200% 100%; animation: plx-shimmer 1.4s ease-in-out infinite; }
+.plx-skel { background: linear-gradient(90deg, var(--ed-w-040), var(--ed-w-090), var(--ed-w-040)); background-size: 200% 100%; animation: plx-shimmer 1.4s ease-in-out infinite; }
 @keyframes plx-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 .plx-data-idea { transition: border-color 0.15s, background 0.15s, transform 0.15s; }
-.plx-data-idea:hover { border-color: rgba(var(--brand-rgb), 0.5) !important; background: rgba(var(--brand-rgb), 0.08) !important; transform: translateY(-1px); }
+.plx-data-idea:hover { border-color: color-mix(in srgb, var(--brand) 50%, transparent) !important; background: color-mix(in srgb, var(--brand) 8%, transparent) !important; transform: translateY(-1px); }
 @media (max-width: 1000px) { .plx-data-empty { grid-template-columns: minmax(0, 1fr) !important; } .plx-data-art { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { .plx-skel { animation: none; } .plx-data-idea:hover { transform: none; } }
 .plx-db-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 0.85rem; align-items: start; }
 @media (max-width: 900px) { .plx-db-layout { grid-template-columns: minmax(0, 1fr); } }
 .plx-db-cell:focus-visible, .plx-db-th:focus-visible { outline: 2px solid ${C.brand}; outline-offset: -2px; }
-.plx-db-row:hover td { background: rgba(255,255,255,0.025); }
+.plx-db-row:hover td { background: var(--ed-w-025); }
 @keyframes plx-spin { to { transform: rotate(360deg); } }
 .plx-spin { animation: plx-spin 0.9s linear infinite; }
 `;
@@ -397,7 +398,7 @@ function TableList(props: { tables: TableOverview[] | null; loading: boolean; se
                     border: "none",
                     cursor: "pointer",
                     textAlign: "left",
-                    background: active ? "rgba(var(--brand-rgb), 0.18)" : "transparent",
+                    background: active ? "color-mix(in srgb, var(--brand) 18%, transparent)" : "transparent",
                     color: active ? C.text : C.muted,
                     fontSize: "0.8rem",
                   }}
@@ -459,7 +460,7 @@ const badge = (color: string): CSSProperties => ({
   fontWeight: 700,
   padding: "0 0.3rem",
   borderRadius: 4,
-  background: `${color}22`,
+  background: `color-mix(in srgb, ${color} 13%, transparent)`,
   color,
   marginLeft: 4,
 });
@@ -1017,6 +1018,7 @@ function AddRowForm(props: { appId: string; env: AppEnv; table: TableOverview; s
 }
 
 function SqlTab(props: { appId: string; env: AppEnv; migrations: Array<{ name: string; appliedAt: string }> | null; onSchemaChanged: () => void; setWaking: (v: boolean) => void }) {
+  const monacoTheme = useMonacoTheme();
   const { appId, env, migrations, onSchemaChanged, setWaking } = props;
   const [sql, setSql] = useState("select * from information_schema.tables where table_schema = 'public';");
   const [running, setRunning] = useState(false);
@@ -1082,7 +1084,7 @@ function SqlTab(props: { appId: string; env: AppEnv; migrations: Array<{ name: s
           <Editor
             height={200}
             language="sql"
-            theme={EDITOR_THEME}
+            theme={monacoTheme}
             value={sql}
             onChange={(v) => setSql(v ?? "")}
             onMount={onMount}

@@ -13,7 +13,7 @@ type Ctx = { params: Promise<{ id: string }> };
  *
  * Nothing is switched on here. Plexo reviews each request by hand (a warm copy costs about $11 a month,
  * more than the plan's SSR budget), and only an approved request is ever turned on.
- * ULTRA plan only, like the rest of the server app routes.
+ * Pro plan and above, like the rest of the server app routes.
  */
 async function ownedSsrApp(request: NextRequest, templateId: string) {
   const resolved = await resolveUser(request);
@@ -23,7 +23,7 @@ async function ownedSsrApp(request: NextRequest, templateId: string) {
     return { error: NextResponse.json({ error: `No template found with id "${templateId}" for this account.` }, { status: 404 }) };
   }
   if (!getTierFeatures(resolved.subscriptionPlan).ssrEnabled) {
-    return { error: NextResponse.json({ error: "Server-rendered apps are available on the ULTRA plan." }, { status: 403 }) };
+    return { error: NextResponse.json({ error: "Server apps are part of the Pro plan. Upgrade in Settings → Billing to use them." }, { status: 403 }) };
   }
   const { data: app } = await DeployedApp.get({ templateId }).go();
   if (!app || app.type !== "SSR") {

@@ -15,8 +15,8 @@ type InitialNotificationsSettings = {
 };
 
 const inputStyle: React.CSSProperties = {
-  width: "100%", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
+  width: "100%", background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+  borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
@@ -25,22 +25,22 @@ const inputStyle: React.CSSProperties = {
 // arrow (the reason the picker below rendered with no visible arrow, looking like a plain
 // disabled box instead of a real dropdown).
 const selectStyle: React.CSSProperties = {
-  width: "100%", backgroundColor: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.1)",
-  borderRadius: 9, color: "#f0f2ff", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
+  width: "100%", backgroundColor: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
+  borderRadius: 9, color: "var(--cmx-text, #f0f2ff)", padding: "0.6rem 0.8rem", fontSize: "0.85rem",
   outline: "none", fontFamily: "inherit",
 };
 
 const primaryBtnStyle: React.CSSProperties = {
   padding: "0.55rem 1rem", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit",
-  fontSize: "0.8rem", fontWeight: 700, background: "linear-gradient(135deg,var(--brand),var(--brand-deep))", color: "#fff",
+  fontSize: "0.8rem", fontWeight: 700, background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", color: "var(--cmx-on-brand, #fff)",
   justifySelf: "start",
 };
 
 function Section({ title, description, children }: { title: string; description?: string; children: React.ReactNode }) {
   return (
-    <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: "1.4rem", marginBottom: "1.25rem" }}>
-      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "#f0f2ff", margin: 0 }}>{title}</h2>
-      {description && <p style={{ fontSize: "0.8rem", color: "rgba(240,242,255,0.45)", margin: "0.3rem 0 1rem" }}>{description}</p>}
+    <div style={{ background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.4rem", marginBottom: "1.25rem" }}>
+      <h2 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: 0 }}>{title}</h2>
+      {description && <p style={{ fontSize: "0.8rem", color: "var(--cmx-muted, rgba(240,242,255,0.45))", margin: "0.3rem 0 1rem" }}>{description}</p>}
       <div style={{ display: "grid", gap: "0.9rem", marginTop: description ? 0 : "1rem" }}>{children}</div>
     </div>
   );
@@ -49,9 +49,9 @@ function Section({ title, description, children }: { title: string; description?
 function FieldLabel({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label style={{ display: "block" }}>
-      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#c5cbe8", marginBottom: "0.35rem" }}>{label}</span>
+      <span style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "var(--cmx-text, #c5cbe8)", marginBottom: "0.35rem" }}>{label}</span>
       {children}
-      {hint && <span style={{ display: "block", fontSize: "0.72rem", color: "rgba(240,242,255,0.35)", marginTop: "0.3rem" }}>{hint}</span>}
+      {hint && <span style={{ display: "block", fontSize: "0.72rem", color: "var(--cmx-muted, rgba(240,242,255,0.35))", marginTop: "0.3rem" }}>{hint}</span>}
     </label>
   );
 }
@@ -139,10 +139,10 @@ function MaildripConnect({ templateId, onConnected }: { templateId: string; onCo
 
   if (step === "verify") {
     return (
-      <div style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "1rem", display: "grid", gap: "0.7rem" }}>
-        <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#f0f2ff" }}>Check your email</span>
-        <p style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.5)", margin: 0 }}>
-          MailDrip sent a verification code to <strong style={{ color: "#f0f2ff" }}>{email}</strong>. Enter it below to finish connecting.
+      <div style={{ border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 10, padding: "1rem", display: "grid", gap: "0.7rem" }}>
+        <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)" }}>Check your email</span>
+        <p style={{ fontSize: "0.78rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", margin: 0 }}>
+          MailDrip sent a verification code to <strong style={{ color: "var(--cmx-text, #f0f2ff)" }}>{email}</strong>. Enter it below to finish connecting.
         </p>
         <FieldLabel label="Verification code">
           <input type="text" value={code} onChange={(e) => setCode(e.target.value)} style={inputStyle} />
@@ -154,17 +154,17 @@ function MaildripConnect({ templateId, onConnected }: { templateId: string; onCo
           type="button"
           onClick={() => void resend()}
           disabled={resendState === "sending"}
-          style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline", justifySelf: "start", fontFamily: "inherit", padding: 0 }}
+          style={{ background: "none", border: "none", color: "var(--cmx-muted, rgba(240,242,255,0.5))", fontSize: "0.75rem", cursor: "pointer", textDecoration: "underline", justifySelf: "start", fontFamily: "inherit", padding: 0 }}
         >
           {resendState === "sent" ? "Code resent" : resendState === "sending" ? "Sending…" : "Didn't get it? Resend code"}
         </button>
-        {error && <p style={{ fontSize: "0.75rem", color: "#f87171", margin: 0 }}>{error}</p>}
+        {error && <p style={{ fontSize: "0.75rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p>}
       </div>
     );
   }
 
   return (
-    <div style={{ border: "1px solid rgba(255,255,255,0.1)", borderRadius: 10, padding: "1rem", display: "grid", gap: "0.7rem" }}>
+    <div style={{ border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", borderRadius: 10, padding: "1rem", display: "grid", gap: "0.7rem" }}>
       <div style={{ display: "flex", gap: "0.4rem" }}>
         {(["login", "register"] as const).map((t) => (
           <button
@@ -176,8 +176,8 @@ function MaildripConnect({ templateId, onConnected }: { templateId: string; onCo
             }}
             style={{
               flex: 1, padding: "0.45rem", borderRadius: 8, border: "none", cursor: "pointer", fontFamily: "inherit", fontSize: "0.78rem", fontWeight: 700,
-              background: tab === t ? "linear-gradient(135deg,var(--brand),var(--brand-deep))" : "rgba(255,255,255,0.04)",
-              color: tab === t ? "#fff" : "rgba(240,242,255,0.55)",
+              background: tab === t ? "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))" : "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)",
+              color: tab === t ? "var(--cmx-on-brand, #fff)" : "var(--cmx-muted, rgba(240,242,255,0.55))",
             }}
           >
             {t === "login" ? "Log in" : "Create account"}
@@ -212,8 +212,8 @@ function MaildripConnect({ templateId, onConnected }: { templateId: string; onCo
       >
         {busy ? "Connecting…" : tab === "login" ? "Log in" : "Create account"}
       </button>
-      {error && <p style={{ fontSize: "0.75rem", color: "#f87171", margin: 0 }}>{error}</p>}
-      <p style={{ fontSize: "0.7rem", color: "rgba(240,242,255,0.35)", margin: 0 }}>
+      {error && <p style={{ fontSize: "0.75rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p>}
+      <p style={{ fontSize: "0.7rem", color: "var(--cmx-muted, rgba(240,242,255,0.35))", margin: 0 }}>
         Your password goes straight to MailDrip's own login — it's never stored here.
       </p>
     </div>
@@ -267,7 +267,7 @@ function GroupSelect({
   return (
     <FieldLabel label={label} hint={hint}>
       {groupsError ? (
-        <p style={{ fontSize: "0.75rem", color: "#f87171", margin: 0 }}>{groupsError}</p>
+        <p style={{ fontSize: "0.75rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{groupsError}</p>
       ) : creating ? (
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <input type="text" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="New group name" style={inputStyle} autoFocus />
@@ -282,7 +282,7 @@ function GroupSelect({
           <button
             type="button"
             onClick={() => { setCreating(false); setError(null); setNewTitle(""); }}
-            style={{ padding: "0 0.9rem", borderRadius: 9, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "rgba(240,242,255,0.6)", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
+            style={{ padding: "0 0.9rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "transparent", color: "var(--cmx-muted, rgba(240,242,255,0.6))", fontSize: "0.8rem", cursor: "pointer", fontFamily: "inherit", flexShrink: 0 }}
           >
             Cancel
           </button>
@@ -297,18 +297,18 @@ function GroupSelect({
           }}
           style={selectStyle}
         >
-          <option value="" style={{ background: "#0d0f1a" }}>
+          <option value="" style={{ background: "var(--cmx-surface, #0d0f1a)" }}>
             {groups === null ? "Loading groups…" : groups.length === 0 ? "No groups yet" : "— none —"}
           </option>
           {groups?.map((g) => (
-            <option key={g.id} value={g.id} style={{ background: "#0d0f1a" }}>
+            <option key={g.id} value={g.id} style={{ background: "var(--cmx-surface, #0d0f1a)" }}>
               {g.title} ({g.totalContacts})
             </option>
           ))}
-          <option value="__create__" style={{ background: "#0d0f1a" }}>+ Create new group…</option>
+          <option value="__create__" style={{ background: "var(--cmx-surface, #0d0f1a)" }}>+ Create new group…</option>
         </select>
       )}
-      {error && <p style={{ fontSize: "0.72rem", color: "#f87171", margin: "0.3rem 0 0" }}>{error}</p>}
+      {error && <p style={{ fontSize: "0.72rem", color: "var(--cmx-danger, #f87171)", margin: "0.3rem 0 0" }}>{error}</p>}
     </FieldLabel>
   );
 }
@@ -395,8 +395,8 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
           showConnectFlow ? (
             <MaildripConnect templateId={templateId} onConnected={() => { setConnected(true); setShowConnectFlow(false); router.refresh(); }} />
           ) : (
-            <div style={{ border: "1px dashed rgba(255,255,255,0.12)", borderRadius: 10, padding: "1.1rem", textAlign: "center" }}>
-              <p style={{ fontSize: "0.82rem", color: "rgba(240,242,255,0.55)", margin: "0 0 0.9rem", lineHeight: 1.6 }}>
+            <div style={{ border: "1px dashed color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 12%, transparent)", borderRadius: 10, padding: "1.1rem", textAlign: "center" }}>
+              <p style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.55))", margin: "0 0 0.9rem", lineHeight: 1.6 }}>
                 Connect MailDrip to automatically tag paying customers and newsletter subscribers into real groups, and send order receipts — no keys to find or paste in.
               </p>
               <button type="button" onClick={() => setShowConnectFlow(true)} style={{ ...primaryBtnStyle, justifySelf: "center" }}>
@@ -406,8 +406,8 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
           )
         ) : (
           <>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.2)", borderRadius: 10, padding: "0.7rem 1rem" }}>
-              <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem", color: "#4ade80", fontWeight: 600 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem", background: "color-mix(in srgb, var(--cmx-success, rgb(52,211,153)) 8%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-success, rgb(52,211,153)) 20%, transparent)", borderRadius: 10, padding: "0.7rem 1rem" }}>
+              <span style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.82rem", color: "var(--cmx-success, #4ade80)", fontWeight: 600 }}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><path d="M9 12l2 2 4-4" /></svg>
                 MailDrip connected
               </span>
@@ -415,7 +415,7 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
                 type="button"
                 onClick={() => void handleDisconnect()}
                 disabled={disconnecting}
-                style={{ background: "none", border: "none", color: "rgba(240,242,255,0.5)", fontSize: "0.75rem", cursor: disconnecting ? "not-allowed" : "pointer", fontFamily: "inherit", textDecoration: "underline" }}
+                style={{ background: "none", border: "none", color: "var(--cmx-muted, rgba(240,242,255,0.5))", fontSize: "0.75rem", cursor: disconnecting ? "not-allowed" : "pointer", fontFamily: "inherit", textDecoration: "underline" }}
               >
                 {disconnecting ? "Disconnecting…" : "Disconnect"}
               </button>
@@ -448,7 +448,7 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
               </div>
             </div>
 
-            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem", fontSize: "0.82rem", color: "rgba(240,242,255,0.8)", cursor: maildripNewsletterGroupId ? "pointer" : "not-allowed", lineHeight: 1.5 }}>
+            <label style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem", fontSize: "0.82rem", color: "var(--cmx-text, rgba(240,242,255,0.8))", cursor: maildripNewsletterGroupId ? "pointer" : "not-allowed", lineHeight: 1.5 }}>
               <input
                 type="checkbox"
                 checked={newsletterPopupEnabled}
@@ -460,7 +460,7 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
                 Show a newsletter signup popup on your site (5-second delay or exit-intent, remembers a visitor&rsquo;s dismissal for 30 days). Works
                 independently of Commerce — no need to sell anything to capture emails.
                 {!maildripNewsletterGroupId && (
-                  <span style={{ display: "block", color: "rgba(240,242,255,0.4)", marginTop: "0.2rem" }}>
+                  <span style={{ display: "block", color: "var(--cmx-muted, rgba(240,242,255,0.4))", marginTop: "0.2rem" }}>
                     Select a newsletter group above first.
                   </span>
                 )}

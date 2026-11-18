@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isPrPreviewHost } from "@/lib/isPrPreviewHost";
+import { legacyMarketplaceRedirect } from "@/lib/dashboardV3/legacyMarketplace";
 
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   // CloudFront's OAC can't reliably sign POST bodies to a Lambda Function URL origin (see
@@ -191,6 +192,12 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return NextResponse.rewrite(new URL(`/api/runtime/${lookupDomain}${rest}${request.nextUrl.search}`, request.url));
     }
 
+    // The site's hosted brand sheet (lib/brand): /__plexo/brand/<siteId>.css on the site's own domain. Behind CloudFront this
+    // path has its own short-cache behaviour; the route reads the sheet from storage.
+    if (pathname.startsWith("/__plexo/brand/")) {
+      return NextResponse.rewrite(new URL(`/api/public/brand/${pathname.slice("/__plexo/brand/".length)}${request.nextUrl.search}`, request.url));
+    }
+
     // The blog's own routes keep Next's default URL style; every other path keeps its
     // trailing slash so the page serve route can apply the page's own URL style.
     if (hasTrailingSlash && (pathname === "/blog/" || pathname.startsWith("/blog/"))) return stripTrailingSlash();
@@ -198,6 +205,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // Rewrite path to /pub/${lookupDomain}${pathname}
     return NextResponse.rewrite(new URL(`/pub/${lookupDomain}${pathname}${request.nextUrl.search}`, request.url));
   }
+
+  // The marketplace has no public pages any more: old links go to the dashboard copy (the query,
+  // e.g. ?purchase=success, comes along), and signed-out visitors sign in and come back to it.
+  const marketplaceTarget = legacyMarketplaceRedirect(pathname);
+  if (marketplaceTarget) return NextResponse.redirect(new URL(marketplaceTarget + request.nextUrl.search, request.url), 308);
 
   if (hasTrailingSlash) return stripTrailingSlash();
 
@@ -212,7 +224,7 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
 
     if (!hasSessionCookie) {
       const loginUrl = new URL("/auth/login", request.url);
-      loginUrl.searchParams.set("redirectTo", pathname);
+      loginUrl.searchParams.set("redirectTo", pathname + request.nextUrl.search);
       return NextResponse.redirect(loginUrl);
     }
   }

@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { customDomainError } from "@/lib/plan/domainGate";
+import { planLabel } from "@/lib/plan/plans";
 import { NextRequest, NextResponse } from "next/server";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { compileToHTML } from "@/lib/compiler";
@@ -140,8 +142,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (kind === "LANDING_PAGE" && rawDomain) {
     const wantsCustom = (domainType ?? (rawDomain.includes(".") ? "CUSTOM" : "SUBDOMAIN")) === "CUSTOM";
     try {
-      if (wantsCustom && !features.customDomainEnabled) {
-        throw new PlanLimitError("PLAN_CUSTOM_DOMAIN_REQUIRES_UPGRADE", "Custom domains are part of Pro. Publish to a free Plexo address (a name without dots, e.g. \"acme\") or upgrade to use your own domain.");
+      if (wantsCustom && !getTierFeatures(resolved.subscriptionPlan, { trial: resolved.onTrial }).customDomainEnabled) {
+        throw new PlanLimitError("PLAN_CUSTOM_DOMAIN_REQUIRES_UPGRADE", `${customDomainError(resolved, 0) ?? "Custom domains aren't available on your plan."} Or publish to a free Plexo address (a name without dots, e.g. "acme").`);
       }
       if (features.maxPublishedSites !== null) {
         // The page is brand new, so every live site counts against the limit — except one
@@ -151,7 +153,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         if (live.length >= features.maxPublishedSites) {
           throw new PlanLimitError(
             "PLAN_SITE_LIMIT_EXCEEDED",
-            `The Free plan keeps one site live at a time, and "${live[0].name}" is live now. Upgrade to Pro to publish more sites, or call again without a domain to save this page as a draft.`,
+            `The ${planLabel(resolved.subscriptionPlan)} plan keeps ${features.maxPublishedSites === 1 ? "one site" : `${features.maxPublishedSites} sites`} live at a time, and ${features.maxPublishedSites === 1 ? `"${live[0].name}" is` : "they're all"} live now. Upgrade to publish more sites, or call again without a domain to save this page as a draft.`,
             { liveSiteIds: live.map((s) => s.id), liveSiteNames: live.map((s) => s.name) },
           );
         }

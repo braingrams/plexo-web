@@ -26,7 +26,7 @@ describe("who keeps a paid plan", () => {
   });
 
   it("the admin 'Keep on plan' switch keeps it with no payment, forever", () => {
-    const kept = { subscriptionPlan: "PRO", planKeptByAdmin: true, planAccessUntil: days(-30), planAccessSource: "TRIAL" };
+    const kept = { subscriptionPlan: "PRO", planVersion: 2, planKeptByAdmin: true, planAccessUntil: days(-30), planAccessSource: "TRIAL" };
     expect(paidAccess(kept, NOW)).toEqual({ entitled: true, basis: "ADMIN_KEPT" });
     expect(effectivePlan(kept, NOW)).toBe("PRO");
     expect(planSyncAction(kept, NOW)).toBeNull();

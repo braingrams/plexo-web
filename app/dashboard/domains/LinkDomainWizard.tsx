@@ -452,7 +452,7 @@ export function LinkDomainWizard(props: LinkDomainWizardProps) {
               <span style={{ display: "flex", flexDirection: "column", gap: "0.2rem", minWidth: 0 }}>
                 <span style={{ ...strong, fontSize: "0.92rem", display: "flex", gap: "0.5rem", alignItems: "center", flexWrap: "wrap" }}>
                   {o.title}
-                  {o.pro && !canUseCustomDomain && <span style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--brand)", background: "var(--brand-subtle)", padding: "0.1rem 0.4rem", borderRadius: 4 }}>Pro</span>}
+                  {o.pro && !canUseCustomDomain && <span style={{ fontSize: "0.62rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", color: "var(--brand)", background: "var(--brand-subtle)", padding: "0.1rem 0.4rem", borderRadius: 4 }}>Starter</span>}
                 </span>
                 <span style={{ ...muted, fontSize: "0.79rem" }}>{o.text}</span>
               </span>

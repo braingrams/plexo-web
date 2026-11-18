@@ -70,7 +70,15 @@ const VERB_IN_PROGRESS: Record<string, string> = {
   upload: "Uploading", import: "Importing", export: "Exporting", use: "Adding",
 };
 
+// The loop's own progress lines (lib/ai/solAgent.ts), in plain words.
+const LOOP_STEPS: Record<string, [string, string]> = {
+  sol_check_page: ["Checking the page", "Checked the page"],
+  sol_polish_page: ["Polishing a few details", "Polished a few details"],
+  sol_review_look: ["Looking it over on desktop and phone", "Looked it over on desktop and phone"],
+};
+
 function humanizeToolLabel(name: string, inProgress = false): string {
+  if (LOOP_STEPS[name]) return LOOP_STEPS[name][inProgress ? 0 : 1];
   const parts = name.split("_").filter(Boolean);
   if (parts.length === 0) return name;
   const [verb, ...rest] = parts;

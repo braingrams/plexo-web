@@ -1,8 +1,11 @@
 import { redirect } from "next/navigation";
+import { getV3SettingsContext } from "@/lib/dashboardV3/settingsContext";
+import { SettingsPage } from "../../_v3/settings/SettingsPage";
 
 import { auth } from "@/server/authDynamo";
 import { ApiKey, User } from "@/lib/db/coreEntities";
-import { ensureActiveOrganization } from "@/server/orgDynamo";
+import { ensureActiveOrganization, getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
+import { getTierFeatures } from "@/lib/subscription";
 
 import { AiSettingsClient } from "./AiSettingsClient";
 import { SettingsShell } from "../../_components/SettingsShell";
@@ -29,6 +32,7 @@ export default async function AiSettingsPage() {
     redirect("/auth/login?redirectTo=/dashboard/settings/ai");
   }
 
+  const v3 = await getV3SettingsContext("/dashboard/settings/ai");
   const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
@@ -43,8 +47,7 @@ export default async function AiSettingsPage() {
     .filter((k) => k.isActive)
     .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
 
-  return (
-    <SettingsShell>
+  const client = (
       <AiSettingsClient
         initialApiKeys={apiKeys.map((k) => ({
           id: k.id,
@@ -58,8 +61,15 @@ export default async function AiSettingsPage() {
           hostAuthWebhookUrl: k.hostAuthWebhookUrl ?? null,
           hasHostWebhookSecret: !!k.hostWebhookSecret,
         }))}
-        isUltra={user.subscriptionPlan === "ULTRA"}
+        canUseHostManagedAi={getTierFeatures((await getOrganizationOwnerEntitlementDynamo(orgResolution.organizationId)).subscriptionPlan).hostManagedAiEnabled}
       />
-    </SettingsShell>
   );
+  if (v3) {
+    return (
+      <SettingsPage current="developers" experience={v3.experience}>
+        {client}
+      </SettingsPage>
+    );
+  }
+  return <SettingsShell>{client}</SettingsShell>;
 }

@@ -1,0 +1,79 @@
+/**
+ * The "Your brand" picker's logic (app/dashboard/_v3/brand/StrataBrandPicker.tsx), pure: which state the picker is in, what the
+ * owner's choice means, the words it uses. Tested in tests/strataBrandPicker.test.ts.
+ *
+ * Plain words only: owners see "brand", "colours", "fonts", "logo" and "Strata", never tokens, ids or tool names.
+ */
+import { parseBrandChoice, type BrandChoice } from "@/lib/brand/brandModel";
+
+export type PickerProject = { id: string; name: string; description?: string | null; color?: string | null; logo?: string | null; updatedAt?: string; role?: "owner" | "editor" | "viewer" };
+
+export type PickerStage = "loading" | "unavailable" | "not-connected" | "error" | "empty" | "list";
+
+/** What the owner has chosen so far. `none` and `skip` both mean "carry on with my own brand". */
+export type PickerSelection = { kind: "none" } | { kind: "skip" } | { kind: "project"; id: string; name: string } | { kind: "create" };
+
+export const NO_SELECTION: PickerSelection = { kind: "none" };
+
+export function stageFor(input: { available: boolean | null; connected: boolean; loading: boolean; error?: string | null; projects: PickerProject[] | null }): PickerStage {
+  if (input.available === false) return "unavailable";
+  if (input.available === null || input.loading) return "loading";
+  if (!input.connected) return "not-connected";
+  if (input.error) return "error";
+  if (!input.projects || input.projects.length === 0) return "empty";
+  return "list";
+}
+
+/** The project this site uses now first, then the most recently edited. Projects the owner can only view are listed last (linking needs edit access). */
+export function sortProjects(projects: PickerProject[], currentId?: string | null): PickerProject[] {
+  const rank = (p: PickerProject) => (p.id === currentId ? 0 : p.role === "viewer" ? 2 : 1);
+  return [...projects].sort((a, b) => rank(a) - rank(b) || (b.updatedAt ?? "").localeCompare(a.updatedAt ?? "") || a.name.localeCompare(b.name));
+}
+
+export const canLink = (p: PickerProject): boolean => p.role !== "viewer";
+
+/** The first letter shown when a project has no logo. */
+export const projectInitial = (name: string): string => (name.trim().match(/[\p{L}\p{N}]/u)?.[0] ?? "S").toUpperCase();
+
+/** What the new-site and onboarding screens send to the server for this choice (undefined = no brand step result). */
+export function selectionToChoice(sel: PickerSelection): BrandChoice | undefined {
+  if (sel.kind === "project") return parseBrandChoice({ projectId: sel.id, projectName: sel.name });
+  if (sel.kind === "create") return parseBrandChoice({ createFromBrand: true });
+  return undefined;
+}
+
+/** Toggling a choice: choosing the same one again clears it. */
+export function toggleSelection(current: PickerSelection, next: PickerSelection): PickerSelection {
+  const same = current.kind === next.kind && (current.kind !== "project" || (next.kind === "project" && current.id === next.id));
+  return same ? NO_SELECTION : next;
+}
+
+export const PICKER_COPY = {
+  title: "Your brand",
+  lead: "If you keep your colours, fonts and logo in Strata, use them here. Your website will look like your brand from the start and follow it when you change it.",
+  connectTitle: "Connect Strata",
+  connectText: "Sign in with your Charisol account to see your brands. This is optional: everything works without it.",
+  connectButton: "Connect Strata",
+  notConnectedNote: "You'll sign in with your Charisol account in a small window.",
+  emptyTitle: "You don't have a brand in Strata yet",
+  emptyText: "You can make one from the colours and logo you're using here. It's saved in Strata and stays in step with your website.",
+  createTitle: "Create a Strata brand from mine",
+  createText: "Plexo makes a Strata project from your colours, fonts and logo, so your brand lives in one place from now on.",
+  createNeedsColours: "Choose your colours first, then Plexo can create your brand in Strata.",
+  skip: "Skip for now",
+  skipNote: "Your website will use the colours and logo you choose here. You can connect Strata any time from its Brand page.",
+  syncTitle: "Keep my website up to date",
+  syncOn: "When you publish a change in Strata, your website follows within a couple of minutes.",
+  syncOff: "Your website keeps its current look until you turn this back on.",
+  viewOnly: "View only: you need edit access in Strata",
+  deferred: "Your website will use this brand as soon as it's made.",
+  retry: "Try again",
+} as const;
+
+/** One plain sentence for after a brand was linked or created, e.g. for a toast or the panel's confirmation. */
+export function confirmationText(input: { projectName?: string | null; created?: boolean; autoSync: boolean; notes?: string[] }): string {
+  const name = input.projectName?.trim();
+  const head = input.created ? `Your brand is now in Strata${name ? ` as "${name}"` : ""} and on your website.` : `Your ${name ? `"${name}" ` : ""}brand is on your website.`;
+  const sync = input.autoSync ? " It stays in step when you publish in Strata." : "";
+  return `${head}${sync}${input.notes?.length ? ` ${input.notes[0]}` : ""}`;
+}

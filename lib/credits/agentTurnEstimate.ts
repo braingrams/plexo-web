@@ -10,6 +10,11 @@ export const MAX_TOOL_ITERATIONS = 8;
 // errors, screenshot, fix again — legitimately needs many more rounds; the per-round
 // budgetGuard checks the balance before each one.
 export const MAX_APP_TOOL_ITERATIONS = 40;
+// A turn that builds a whole website (site_create and friends): create it, add posts or
+// products, publish, polish a page or two — more rounds than an edit, far fewer than an app.
+export const MAX_SITE_TOOL_ITERATIONS = 20;
+/** Tools that mark a turn as a site build (lib/ai/solAgent.ts raises its step limit). */
+export const SITE_BUILD_TOOLS: ReadonlySet<string> = new Set(["site_create", "create_site_from_template", "page_create_from_template"]);
 
 /**
  * The credits SOL needs before it starts a turn: one round's worst case (a bedrock_claude

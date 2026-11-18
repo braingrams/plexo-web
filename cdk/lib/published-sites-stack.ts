@@ -241,6 +241,25 @@ export class PublishedSitesStack extends cdk.Stack {
       enableAcceptEncodingBrotli: true,
     });
 
+    // A site's hosted brand sheet (/__plexo/brand/<siteId>.css → app/api/public/brand, lib/brand/siteBrand.ts): the one
+    // stylesheet every page of a site links to, so a brand published in Strata reaches the live site without a rebuild. Pages
+    // link it as ?v=<revision>, so the revision is the ONLY thing in the cache key: a new brand is a new address and is fetched
+    // straight away, while a repeat visit is an edge hit. The origin's own Cache-Control (max-age=60, s-maxage=300,
+    // stale-while-revalidate) bounds how long an unversioned link (deployed static sites) can lag. Not keyed by host: the site
+    // id is in the path, and the sheet is the same on every one of a site's domains.
+    const brandSheetCachePolicy = new cloudfront.CachePolicy(this, "BrandSheetCachePolicy", {
+      cachePolicyName: `${this.stackName}-brand-sheet`,
+      comment: "Short-TTL, revision-keyed cache for site brand sheets (/__plexo/brand/*)",
+      defaultTtl: cdk.Duration.seconds(60),
+      minTtl: cdk.Duration.seconds(0),
+      maxTtl: cdk.Duration.seconds(300),
+      cookieBehavior: cloudfront.CacheCookieBehavior.none(),
+      queryStringBehavior: cloudfront.CacheQueryStringBehavior.allowList("v"),
+      headerBehavior: cloudfront.CacheHeaderBehavior.none(),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+
     // The "_next/image*" behavior below used CACHING_OPTIMIZED (a managed policy with no
     // query-string forwarding/cache-keying at all) with no originRequestPolicyId — the
     // ImageFn origin's own Lambda never received "url"/"w"/"q" at all, so every image ever
@@ -365,6 +384,7 @@ export class PublishedSitesStack extends cdk.Stack {
           // A React app's own backend (/__plexo/api/* on its domain → app/api/runtime): per
           // visitor, never cached, every method.
           { pathPattern: "__plexo/api/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
+          { pathPattern: "__plexo/brand/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: brandSheetCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
           { pathPattern: "__plexo/assets/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: appAssetCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
           { pathPattern: "api/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
           { pathPattern: "_next/image*", targetOriginId: "ImageFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: imageOptimizerCachePolicy.cachePolicyId, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: CACHED_METHODS, cachedMethods: CACHED_METHODS },
@@ -556,6 +576,12 @@ export class PublishedSitesStack extends cdk.Stack {
     // trial never lingers long; everything a person or visitor touches is already handled
     // the instant they do (lib/plan/lifecycle.ts).
     scheduledRoute("PlanLifecycle", "/api/internal/plan-lifecycle", events.Schedule.rate(cdk.Duration.hours(1)));
+
+    // Price changes for people who already subscribe: moves each subscriber whose renewal is within
+    // the next few days to the new price (lib/billing/priceMove.ts). ?apply=1 makes it live — without
+    // it the route is a dry run. Every 3 hours: the safe window is days wide, the last safe moment is
+    // hours before a charge. Idempotent; the Stripe/Paystack pre-renewal webhooks do the same per person.
+    scheduledRoute("PriceMoves", "/api/internal/price-moves?apply=1", events.Schedule.rate(cdk.Duration.hours(3)));
 
     new cdk.CfnOutput(this, "ConnectionGroupRoutingEndpoint", { value: connectionGroup.attrRoutingEndpoint });
     new cdk.CfnOutput(this, "PrimaryDistributionId", { value: primaryDistribution.attrId, exportName: `${this.stackName}-PrimaryDistributionId` });

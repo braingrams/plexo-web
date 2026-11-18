@@ -51,6 +51,12 @@ const APP_SECRET_KEYS = [
   // that encrypts their Strata session at rest, and Strata's API root (incl. /v1).
   "STRATA_TOKEN_ENCRYPTION_SECRET",
   "STRATA_API_URL",
+  // Optional: Plexo's own brand read live from Strata (docs/PLEXO_BRAND_FROM_STRATA.md). All have
+  // working defaults; set PLEXO_BRAND_STRATA=off to use only the bundled brand.
+  "PLEXO_BRAND_STRATA",
+  "PLEXO_BRAND_STRATA_PROJECT_ID",
+  "STRATA_PUBLIC_API",
+  "STRATA_SNAPSHOT_BASE",
   "APP_SIGNIN_COGNITO_CLIENT_ID",
   "APP_SIGNIN_COGNITO_USER_POOL_ID",
   "APP_SIGNIN_COGNITO_DOMAIN",
@@ -70,6 +76,9 @@ const APP_SECRET_KEYS = [
   // Runtime flag (not a secret): "true" creates NEW landing pages in the new editor's V2 format
   // (lib/v2/design.ts defaultDesignFormat). Unset/anything else = classic V1.
   "TEMPLATES_V2_NEW",
+  // Runtime flag (not a secret): "true" turns on the v3 dashboard redesign for everyone
+  // (lib/dashboardV3/flag.ts). A user's own dashboardV3 field overrides it (staff testing).
+  "DASHBOARD_V3",
   "MAILDRIP_API_URL",
   "MAILDRIP_API_KEY",
   // Alps CRM sync (lib/alps.ts). Leave ALPS_API_KEY unset to switch the integration off; the
@@ -102,12 +111,13 @@ const APP_SECRET_KEYS = [
   // deploy-production.yml/deploy-staging.yml's "Build the app" step).
   "PLATFORM_COMMERCE_STRIPE_PUBLISHABLE_KEY",
   "PLATFORM_COMMERCE_STRIPE_WEBHOOK_SECRET",
-  "STRIPE_PRICE_PRO",
-  "STRIPE_PRICE_ULTRA",
-  "STRIPE_PRICE_TOPUP_SMALL",
-  "STRIPE_PRICE_TOPUP_MEDIUM",
-  "STRIPE_PRICE_TOPUP_LARGE",
-  // A recurring per-slot add-on subscription, separate from the plan prices above — see
+  // Plan prices and AI top-ups need no Stripe price ids: they come from the price book that
+  // plexo-admin edits, and checkout makes the matching Stripe prices on demand
+  // (lib/billing/stripePrices.ts). Plexo's own Paystack account — Commerce's PLATFORM_PAYSTACK
+  // AND plan billing in naira/cedis/shillings/rand (lib/billing/paystackBilling.ts):
+  "PLATFORM_PAYSTACK_SECRET_KEY",
+  "PLATFORM_PAYSTACK_PUBLIC_KEY",
+  // A recurring per-slot add-on subscription, separate from the plan prices — see
   // lib/lms/funnelSlots.ts and app/api/billing/checkout/route.ts's "funnel_addon_slot" kind.
   "STRIPE_PRICE_LMS_ADDON_SLOT",
   "SYSTEM_AI_KEY_ANTHROPIC_CLAUDE",
