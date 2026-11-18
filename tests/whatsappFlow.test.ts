@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+const phoneSaved = vi.hoisted(() => ({ calls: [] as Array<[string, string]> }));
+vi.mock("@/lib/profile/phone", () => ({ savePhoneToProfile: async (userId: string, phone: string) => void phoneSaved.calls.push([userId, phone]) }));
+
 const h = vi.hoisted(() => {
   const dup = () => Object.assign(new Error("exists"), { name: "ConditionalCheckFailedException" });
   const db = {
@@ -120,6 +123,8 @@ describe("WhatsApp inbound flow", () => {
     expect(lastSent()).toMatch(/You're connected/);
     expect(h.db.links.get("2348011111111")).toMatchObject({ userId: "u1", organizationId: "org1" });
     expect(h.db.userLinks.get("u1")).toMatchObject({ phone: "2348011111111" });
+    // The confirmed number goes onto their profile too.
+    expect(phoneSaved.calls).toContainEqual(["u1", "2348011111111"]);
     expect(h.db.codes.has("123456")).toBe(false);
     await processInboundMessage(msg("m2", "LINK 123456"));
     expect(lastSent()).toMatch(/expired or isn't valid/);

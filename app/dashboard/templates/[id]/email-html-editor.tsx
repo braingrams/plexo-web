@@ -196,7 +196,7 @@ export function EmailHtmlEditor({ templateId, templateName, initialHtml, useAi }
       <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,1fr)" }} className="plx-emed">
         <section style={{ display: "flex", flexDirection: "column", minHeight: 0, borderRight: "1px solid var(--ed-w-080)" }}>
           <div style={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-            <CodeMirror value={code} height="100%" theme={oneDark} extensions={[htmlLang(), EditorView.lineWrapping]} onChange={setCode} onCreateEditor={(v) => { view.current = v; }} basicSetup={{ foldGutter: false }} style={{ height: "100%", fontSize: 13 }} />
+            <CodeMirror value={code} height="100%" placeholder="Paste your email's HTML here, or write it. Your email shows on the right as you type." theme={oneDark} extensions={[htmlLang(), EditorView.lineWrapping]} onChange={setCode} onCreateEditor={(v) => { view.current = v; }} basicSetup={{ foldGutter: false }} style={{ height: "100%", fontSize: 13 }} />
           </div>
           {warnings.length || unknown.length ? (
             <ul style={{ margin: 0, padding: "0.6rem 1rem 0.6rem 2rem", fontSize: "0.78rem", lineHeight: 1.5, color: "var(--ed-t-500)", borderTop: "1px solid var(--ed-w-080)", maxHeight: 120, overflow: "auto" }}>
@@ -238,7 +238,11 @@ export function EmailHtmlEditor({ templateId, templateName, initialHtml, useAi }
             <span style={{ fontSize: "0.74rem", color: "var(--ed-t-500)" }}>Double-click any text to edit it. Hover a block to move, copy or delete it. Drop a picture from your computer to add it.</span>
           </div>
           <div style={{ flex: 1, minHeight: 0, overflow: "auto", display: "flex", justifyContent: "center", padding: 16 }}>
-            <iframe ref={frame} title="Email preview" srcDoc={doc} sandbox="allow-scripts" style={{ border: 0, background: "#fff", borderRadius: 10, width: "100%", maxWidth: device === "phone" ? 375 : 680, height: "100%", minHeight: 420 }} />
+            {code.trim() ? (
+              <iframe ref={frame} title="Email preview" srcDoc={doc} sandbox="allow-scripts" style={{ border: 0, background: "#fff", borderRadius: 10, width: "100%", maxWidth: device === "phone" ? 375 : 680, height: "100%", minHeight: 420 }} />
+            ) : (
+              <p style={{ alignSelf: "center", textAlign: "center", maxWidth: 300, fontSize: "0.88rem", color: "var(--ed-t-500)" }}>Paste your HTML on the left and your email shows here.</p>
+            )}
           </div>
         </section>
       </div>

@@ -7,8 +7,6 @@ import { ArrowLeft, Code2, FilePlus2, LayoutDashboard, LayoutTemplate, Mail, Mes
 import { Badge, Button, ButtonLink, Input, Modal, Skeleton } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { solEmailHref, type EmailUsage } from "@/lib/dashboardV3/emails";
-import { EMAIL_MERGE_TAGS, emailHtmlWarnings, tagToken } from "@/lib/email/mergeTags";
-import { EmailPreview } from "./EmailPreview";
 
 export type ReadyMadeEmail = { id: string; name: string; category: string | null; priceCents: number; /** Only set for made-up preview data; real ones are fetched when they scroll into view. */ html?: string };
 export type EmailStart = "choose" | "blank" | "design" | "canvas" | "html";
@@ -85,7 +83,6 @@ export function NewEmailDialog({ open, onClose, usage, designs, preview, start =
   const [q, setQ] = useState("");
   const [items, setItems] = useState<ReadyMadeEmail[] | null>(designs ?? null);
   const [picked, setPicked] = useState<string | null>(null);
-  const [htmlText, setHtmlText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -123,8 +120,7 @@ export function NewEmailDialog({ open, onClose, usage, designs, preview, start =
       if (preview) return onClose();
       if (mode === "canvas" || mode === "html") {
         if (!name.trim()) throw new Error("Give your email a name first, like “Welcome email”.");
-        if (mode === "html" && !htmlText.trim()) throw new Error("Paste your email's HTML first, or write it in the box.");
-        const r = await hubApi<{ template: { id: string } }>("/api/templates", { method: "POST", json: { name: name.trim(), kind: "EMAIL", ...(mode === "html" ? { htmlContent: htmlText } : {}) } });
+        const r = await hubApi<{ template: { id: string } }>("/api/templates", { method: "POST", json: { name: name.trim(), kind: "EMAIL", ...(mode === "html" ? { htmlContent: "" } : {}) } });
         router.push(`/dashboard/templates/${r.template.id}`);
       } else if (chosen) {
         if (chosen.priceCents > 0) return void router.push(`/dashboard/marketplace/${chosen.id}`);
@@ -154,7 +150,7 @@ export function NewEmailDialog({ open, onClose, usage, designs, preview, start =
   );
 
   return (
-    <Modal open={open} onClose={onClose} width={choosing ? 760 : mode === "html" ? 1000 : 720} title="Make an email" description={usage.atLimit ? undefined : choosing ? "How would you like to start?" : undefined} footer={footer}>
+    <Modal open={open} onClose={onClose} width={choosing ? 760 : 720} title="Make an email" description={usage.atLimit ? undefined : choosing ? "How would you like to start?" : undefined} footer={footer}>
       {usage.atLimit ? (
         <div className="plx-inlinemsg plx-inlinemsg--warn">You have used all {usage.limit} email{usage.limit === 1 ? "" : "s"} your plan includes. Delete one you don&apos;t need, or move to a bigger plan to make more.</div>
       ) : (
@@ -174,30 +170,14 @@ export function NewEmailDialog({ open, onClose, usage, designs, preview, start =
               <button type="button" className="plx-echoice" onClick={() => setMode("html")} data-testid="email-kind-html">
                 <span className="plx-echoice__icon"><Code2 size={26} aria-hidden /></span>
                 <b>Paste or write HTML</b>
-                <span>Already have the HTML? Paste it and see it straight away.</span>
+                <span>Already have the HTML? Paste it into a full-size editor and see it straight away.</span>
               </button>
             </div>
           ) : null}
           {mode === "canvas" || mode === "html" ? (
-            <Input autoFocus label="What is this email for?" value={name} onChange={(e) => setName(e.target.value)} placeholder="Welcome email" onKeyDown={(e) => mode === "canvas" && e.key === "Enter" && create()} help="Only you see this name." />
+            <Input autoFocus label="What is this email for?" value={name} onChange={(e) => setName(e.target.value)} placeholder="Welcome email" onKeyDown={(e) => e.key === "Enter" && create()} help="Only you see this name." />
           ) : null}
-          {mode === "html" ? (
-            <>
-              <div className="plx-emhtml">
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
-                  <textarea className="plx-emhtml__code" aria-label="Email HTML" spellCheck={false} value={htmlText} onChange={(e) => setHtmlText(e.target.value)} placeholder="Paste your HTML here" />
-                  <div className="plx-emtags">
-                    <span>Add a field:</span>
-                    {EMAIL_MERGE_TAGS.map((t) => (
-                      <button key={t.key} type="button" className="plx-emtag" title={t.help} onClick={() => setHtmlText((h) => h + tagToken(t.key))}>{t.label}</button>
-                    ))}
-                  </div>
-                  {emailHtmlWarnings(htmlText).length ? <ul className="plx-emwarn">{emailHtmlWarnings(htmlText).map((w) => <li key={w}>{w}</li>)}</ul> : null}
-                </div>
-                <EmailPreview html={htmlText} height={420} empty="Paste your HTML on the left and your email shows here." />
-              </div>
-            </>
-          ) : null}
+          {mode === "html" ? <p className="plx-small">Next you'll see a full-size editor: paste your HTML on the left and your email shows on the right as you type.</p> : null}
           {mode === "design" ? (
             <>
               <div className="plx-emsearch" style={{ maxWidth: "none" }}>

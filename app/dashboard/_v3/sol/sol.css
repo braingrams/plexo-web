@@ -9,7 +9,7 @@
 .sol3 {
   --sol3-top: 73px;
   flex: 0 0 auto; min-height: 0; min-width: 0;
-  height: calc(100dvh - var(--sol3-top));
+  height: calc(var(--plx-dvh) - var(--sol3-top));
   display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr);
   background: var(--plx-bg); color: var(--plx-text);
   position: relative; overflow: hidden;
@@ -293,7 +293,7 @@
 
 /* ── Phones ──────────────────────────────────────────── */
 @media (max-width: 1023px) {
-  .sol3 { --sol3-top: calc(64px + env(safe-area-inset-top)); height: calc(100dvh - var(--sol3-top) - 68px - env(safe-area-inset-bottom)); }
+  .sol3 { --sol3-top: calc(64px + env(safe-area-inset-top)); height: calc(var(--plx-dvh) - var(--sol3-top) - 68px - env(safe-area-inset-bottom)); }
 }
 @media (max-width: 640px) {
   .sol3-head { padding: 6px 12px; min-height: 56px; }
@@ -320,7 +320,7 @@
 /* ── Shared conversation + SOL's own subpages ────────── */
 .sol3-page { max-width: 900px; margin: 0 auto; padding: 28px 24px 64px; display: flex; flex-direction: column; gap: 22px; }
 .sol3-page h1 { margin: 0; font-size: 28px; font-weight: 800; letter-spacing: -0.02em; }
-.sol3-share { min-height: 100dvh; background: var(--plx-bg); color: var(--plx-text); font-family: var(--font-family-base, var(--font-v3-sans), ui-sans-serif, system-ui, sans-serif); }
+.sol3-share { min-height: var(--plx-dvh); background: var(--plx-bg); color: var(--plx-text); font-family: var(--font-family-base, var(--font-v3-sans), ui-sans-serif, system-ui, sans-serif); }
 .sol3-share__top { display: flex; justify-content: center; padding: 28px 20px 8px; }
 .sol3-share__head { max-width: 720px; margin: 0 auto; padding: 8px 20px 24px; text-align: center; display: flex; flex-direction: column; gap: 6px; align-items: center; }
 .sol3-share__head h1 { margin: 0; font-size: clamp(24px, 4vw, 34px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.15; overflow-wrap: anywhere; }
@@ -330,15 +330,15 @@
 .sol3-share__cta { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 22px 24px; border-radius: 22px; background: var(--plx-tint); border: 1px solid var(--plx-border); }
 .sol3-share__cta b { display: block; font-size: 18px; font-weight: 800; letter-spacing: -0.01em; }
 .sol3-share__cta span { font-size: 14.5px; color: var(--plx-muted); }
-.sol3-share__empty { min-height: 100dvh; display: grid; place-items: center; text-align: center; padding: 24px; background: var(--plx-bg); color: var(--plx-text); }
+.sol3-share__empty { min-height: var(--plx-dvh); display: grid; place-items: center; text-align: center; padding: 24px; background: var(--plx-bg); color: var(--plx-text); }
 
 /* The header's chats button only exists where the left column doesn't (phones, tablets). */
 .sol3-head__panel { display: none; }
 @media (max-width: 1023px) { .sol3-head__panel { display: inline-grid; } }
 
 /* ── Splash: SOL is opening ─────────────────────────── */
-.sol3-splash { --sol3-top: 73px; height: calc(100dvh - var(--sol3-top)); display: grid; place-items: center; background: var(--plx-bg); }
-@media (max-width: 1023px) { .sol3-splash { --sol3-top: calc(64px + env(safe-area-inset-top)); height: calc(100dvh - var(--sol3-top) - 68px - env(safe-area-inset-bottom)); } }
+.sol3-splash { --sol3-top: 73px; height: calc(var(--plx-dvh) - var(--sol3-top)); display: grid; place-items: center; background: var(--plx-bg); }
+@media (max-width: 1023px) { .sol3-splash { --sol3-top: calc(64px + env(safe-area-inset-top)); height: calc(var(--plx-dvh) - var(--sol3-top) - 68px - env(safe-area-inset-bottom)); } }
 .sol3-splash__mark { width: 76px; height: 76px; border-radius: 24px; display: grid; place-items: center; background: var(--plx-brand); color: var(--plx-on-brand); box-shadow: var(--plx-shadow-raised); opacity: 0; animation: sol3-splash-in .35s ease .15s forwards, sol3-splash-pulse 1.8s ease-in-out .5s infinite; }
 @keyframes sol3-splash-in { to { opacity: 1; } }
 @keyframes sol3-splash-pulse { 50% { transform: scale(1.07); } }

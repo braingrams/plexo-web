@@ -4,6 +4,16 @@
  * dashboard and the marketing site are untouched.
  */
 
+/*
+ * Everything in the new dashboard is drawn at 90% on a desktop with a mouse, which reads calmer than 100% (the same as zooming the
+ * browser to 90%) without changing any proportions. Phones and tablets keep 100%, where text needs to be easy to tap and read.
+ * --plx-dvh is the screen height in the dashboard's own (zoomed) units; use it instead of 100dvh.
+ */
+[data-plexo-v3] { --plx-zoom: 1; --plx-dvh: calc(100dvh / var(--plx-zoom)); }
+@media (min-width: 1024px) and (pointer: fine) {
+  [data-plexo-v3] { --plx-zoom: 0.9; zoom: var(--plx-zoom); }
+}
+
 [data-plexo-v3] {
   font-family: var(--font-family-base, var(--font-v3-sans), ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
   color: var(--plx-text);
@@ -12,7 +22,7 @@
   -moz-osx-font-smoothing: grayscale;
   font-size: 15px;
   line-height: 1.5;
-  min-height: 100dvh;
+  min-height: var(--plx-dvh);
 }
 /*
  * Screens that were built before the redesign still read the old dashboard's neutral variables and
@@ -213,7 +223,7 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 
 /* ── Overlays: modal / sheet ──────────────────────────── */
 .plx-overlay { position: fixed; inset: 0; z-index: 80; background: var(--plx-overlay); display: grid; place-items: center; padding: 24px; animation: plx-fade .16s ease; backdrop-filter: blur(2px); }
-.plx-dialog { width: 100%; max-width: var(--plx-dialog-w, 560px); max-height: calc(100dvh - 48px); overflow: auto; background: var(--plx-surface); color: var(--plx-text); border-radius: var(--plx-radius-card-lg); box-shadow: var(--plx-shadow-overlay); border: 1px solid var(--plx-border); animation: plx-pop .18s cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; }
+.plx-dialog { width: 100%; max-width: var(--plx-dialog-w, 560px); max-height: calc(var(--plx-dvh) - 48px); overflow: auto; background: var(--plx-surface); color: var(--plx-text); border-radius: var(--plx-radius-card-lg); box-shadow: var(--plx-shadow-overlay); border: 1px solid var(--plx-border); animation: plx-pop .18s cubic-bezier(.2, .8, .2, 1); display: flex; flex-direction: column; }
 .plx-dialog__head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 24px 24px 0; }
 .plx-dialog__title { margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.015em; }
 .plx-dialog__desc { margin: 6px 0 0; color: var(--plx-muted); font-size: 15px; line-height: 1.5; }
@@ -309,7 +319,7 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 @media (max-width: 480px) { .plx-tour-offer { grid-template-columns: 1fr; } }
 
 /* ── Shell ────────────────────────────────────────────── */
-.plx-shell { display: grid; grid-template-columns: minmax(0, 1fr); padding-left: 264px; min-height: 100dvh; }
+.plx-shell { display: grid; grid-template-columns: minmax(0, 1fr); padding-left: 264px; min-height: var(--plx-dvh); }
 .plx-shell[data-chrome="none"] { display: block; padding-left: 0; }
 .plx-sidebar { position: fixed; z-index: 41; left: 0; top: 0; bottom: 0; width: 264px; display: flex; flex-direction: column; gap: 4px; padding: 22px 16px 16px; background: var(--plx-surface); border-right: 1px solid var(--plx-border); overflow-y: auto; }
 .plx-sidebar__brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; margin-bottom: 22px; min-height: 32px; text-decoration: none; color: var(--plx-text); font-weight: 800; font-size: 17px; }
@@ -478,7 +488,7 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 
 /* ── Floating panels (site and workspace switchers) ─────────── */
 .plx-pop-backdrop { position: fixed; inset: 0; z-index: 84; background: transparent; }
-.plx-pop { position: fixed; z-index: 85; display: flex; flex-direction: column; max-height: calc(100dvh - var(--plx-pop-top, 72px) - 16px); min-width: min(340px, calc(100vw - 24px)); background: var(--plx-surface); border: 1px solid var(--plx-border-strong); border-radius: 18px; box-shadow: var(--plx-shadow-overlay); overflow: hidden; animation: plx-pop .12s ease; }
+.plx-pop { position: fixed; z-index: 85; display: flex; flex-direction: column; max-height: calc(var(--plx-dvh) - var(--plx-pop-top, 72px) - 16px); min-width: min(340px, calc(100vw - 24px)); background: var(--plx-surface); border: 1px solid var(--plx-border-strong); border-radius: 18px; box-shadow: var(--plx-shadow-overlay); overflow: hidden; animation: plx-pop .12s ease; }
 @media (max-width: 640px) {
   .plx-pop-backdrop { background: var(--plx-overlay); }
   .plx-pop { left: 0 !important; right: 0; top: auto !important; bottom: 0; width: 100% !important; max-height: 82dvh; border-radius: 22px 22px 0 0; border-bottom: none; padding-bottom: env(safe-area-inset-bottom); animation: plx-rise .24s cubic-bezier(.2, .8, .2, 1); }

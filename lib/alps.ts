@@ -28,6 +28,8 @@ export type AlpsContact = {
   email: string;
   name?: string | null;
   image?: string | null;
+  /** International form, e.g. +2348012345678. */
+  phone?: string | null;
 };
 
 type SyncOptions = {
@@ -64,6 +66,7 @@ export async function syncContactToAlps(contact: AlpsContact, options: SyncOptio
     email: contact.email,
     ...splitName(contact.name),
     ...(contact.image ? { avatarUrl: contact.image } : {}),
+    ...(contact.phone ? { phone: contact.phone } : {}),
     ...(options.lifecycleStage ? { lifecycleStage: options.lifecycleStage } : {}),
     customProperties: { source: "Plexo", ...options.customProperties },
   };
@@ -130,5 +133,17 @@ export function syncPlanChangeToAlps(contact: AlpsContact, plan: string, eventId
       lifecycleStage: plan !== PLAN.FREE ? process.env.ALPS_CUSTOMER_STAGE || undefined : undefined,
       customProperties: { plexoPlan: plan },
     }),
+  );
+}
+
+/** Their phone number was saved (they connected WhatsApp to SOL): keep the contact in Alps up to date. */
+export function syncPhoneToAlps(contact: AlpsContact, phone: string): void {
+  if (!isAlpsEnabled()) return;
+  runInBackground(() =>
+    syncContactToAlps(
+      { ...contact, phone },
+      // One key per number, so connecting the same number again never repeats the sync.
+      { idempotencyKey: `phone-${contact.id}-${phone}` },
+    ),
   );
 }

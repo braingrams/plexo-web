@@ -18,7 +18,7 @@ const FEELS: { id: Experience; title: string; body: string }[] = [
   { id: "pro", title: "Everything", body: "All the tools in one place, and a tighter layout. For people who build a lot." },
 ];
 
-export function ProfileSection({ name: initialName, email, image: initialImage, experience: initialExperience, mock = false }: { name: string; email: string; image?: string | null; experience: Experience; mock?: boolean }) {
+export function ProfileSection({ name: initialName, email, phone, image: initialImage, experience: initialExperience, mock = false }: { name: string; email: string; phone?: string | null; image?: string | null; experience: Experience; mock?: boolean }) {
   const router = useRouter();
   const { show } = useToast();
   const tour = useOptionalTour();
@@ -141,6 +141,7 @@ export function ProfileSection({ name: initialName, email, image: initialImage, 
           </div>
           <Input label="Your name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" help="What your team and customers see." error={!name.trim() && dirty ? "Please type the name you'd like us to use." : undefined} onKeyDown={(e) => e.key === "Enter" && dirty && name.trim() && void saveName()} />
           <Input label="Your email" value={email} readOnly help="This is what you sign in with." />
+          {phone ? <Input label="Your phone number" value={phone} readOnly help="Saved when you connected WhatsApp." /> : null}
         </div>
       </Panel>
 

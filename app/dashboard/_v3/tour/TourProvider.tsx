@@ -1,5 +1,6 @@
 "use client";
 
+import { pageZoom } from "@/lib/dashboardV3/pageZoom";
 import { otherDialogOpen } from "@/lib/dashboardV3/dialogs";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
@@ -282,7 +283,8 @@ function CoachMark({ step, index, total, onNext, onBack, onSkip, onPause, onMiss
       const el = target.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setRect({ top: r.top - PAD, left: r.left - PAD, width: r.width + PAD * 2, height: r.height + PAD * 2 });
+      const z = pageZoom(el); // measured in what you see, placed in the dashboard's own units
+      setRect({ top: r.top / z - PAD, left: r.left / z - PAD, width: r.width / z + PAD * 2, height: r.height / z + PAD * 2 });
     };
     const find = () => {
       if (cancelled) return;
@@ -314,9 +316,11 @@ function CoachMark({ step, index, total, onNext, onBack, onSkip, onPause, onMiss
   // Put the card next to the spotlight: below, else above, else beside; always on screen.
   useLayoutEffect(() => {
     if (!rect || !card.current) return;
-    const c = card.current.getBoundingClientRect();
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
+    const z = pageZoom(card.current);
+    const cr = card.current.getBoundingClientRect();
+    const c = { width: cr.width / z, height: cr.height / z };
+    const vw = window.innerWidth / z;
+    const vh = window.innerHeight / z;
     const clampX = (x: number) => Math.max(16, Math.min(x, vw - c.width - 16));
     const clampY = (y: number) => Math.max(16, Math.min(y, vh - c.height - 16));
     let top: number;

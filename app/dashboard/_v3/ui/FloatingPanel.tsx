@@ -1,5 +1,6 @@
 "use client";
 
+import { pageZoom } from "@/lib/dashboardV3/pageZoom";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Portal } from "./portal";
 import { cx } from "./cx";
@@ -33,11 +34,14 @@ export function FloatingPanel({
   useLayoutEffect(() => {
     if (!open) return;
     const place = () => {
+      // The browser measures in what you see; the panel is placed in the dashboard's own units (see pageZoom).
+      const z = pageZoom(anchorRef.current);
       const r = anchorRef.current?.getBoundingClientRect();
-      const w = Math.min(width, window.innerWidth - 24);
+      const vw = window.innerWidth / z;
+      const w = Math.min(width, vw - 24);
       if (!r) return setPos({ left: 12, top: 72, width: w });
-      const left = Math.max(12, Math.min(r.left, window.innerWidth - w - 12));
-      setPos({ left, top: r.bottom + 8, width: w });
+      const left = Math.max(12, Math.min(r.left / z, vw - w - 12));
+      setPos({ left, top: r.bottom / z + 8, width: w });
     };
     place();
     window.addEventListener("resize", place);

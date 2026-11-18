@@ -225,6 +225,10 @@ export const User = new Entity(
       onboardingVersion: { type: "number" },
       // "Continue later" on onboarding: Home then shows a "Set up your first site" card instead.
       onboardingDeferredAt: { type: "string" },
+      // Their phone number in international form (+234…), saved when they connect WhatsApp to SOL (lib/profile/phone.ts). For support;
+      // it stays when WhatsApp is disconnected.
+      phone: { type: "string" },
+      phoneSavedAt: { type: "string" },
       // Light / Dark / System (default System when unset). Mirrored in the plexo-theme cookie.
       themePreference: { type: ["light", "dark", "system"] as const },
       // The product walkthrough (app/dashboard/_v3/tour): whether they've been asked, which tour

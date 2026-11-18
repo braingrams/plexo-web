@@ -4,6 +4,7 @@ import { prepareMessagesTurn, prepareConfirmTurn, humanizeToolName, type StreamF
 import { ASK_USER_QUESTION_TOOL_NAME } from "@/lib/ai/solToolSchema";
 import { resolveUserById } from "@/lib/auth/resolveUserById";
 import { SolConversation, SolMessage, SolPreferences } from "@/lib/db/solEntities";
+import { savePhoneToProfile } from "@/lib/profile/phone";
 import { WhatsAppLink, WhatsAppLinkCode, WhatsAppMessage, WhatsAppUserLink } from "@/lib/db/whatsappEntities";
 import { sendTypingIndicator, sendWhatsAppText, type InboundWhatsAppMessage } from "./cloudApi";
 import { appBaseUrl, SOL_SETTINGS_PATH } from "./config";
@@ -115,6 +116,8 @@ async function redeemCode(phone: string, code: string): Promise<string> {
   const conversationId = await createConversation(row.userId, row.organizationId);
   await WhatsAppLink.put({ phone, userId: row.userId, organizationId: row.organizationId, conversationId }).go();
   await WhatsAppUserLink.put({ userId: row.userId, phone }).go();
+  // The number is confirmed (the message came from it): keep it on their profile for support. It stays if they disconnect later.
+  await savePhoneToProfile(row.userId, phone);
   return "✅ You're connected! Ask me anything about your Plexo account and I'll get it done right here.\n\nTry: _How are my sites doing?_  — or send **HELP** any time.";
 }
 
