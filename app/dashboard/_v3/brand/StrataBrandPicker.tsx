@@ -55,6 +55,8 @@ type SiteProps = Common & {
   currentProjectId?: string | null;
   onDone: (state: Record<string, unknown> & { resolved?: ResolvedBrand | null }, message: string) => void;
   onCancel?: () => void;
+  /** Called once Strata has just been connected, so the screen can finish the set-up without another click. */
+  onConnected?: () => void;
   /** Dev preview only: pretend the link / create calls worked. */
   preview?: boolean;
 };
@@ -111,7 +113,10 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
       const st = await client.connect(switchAccount ? { switchAccount: true } : undefined);
       setConnected(st.connected);
       setAccount(st.user?.email ?? null);
-      if (st.connected) setProjects(await client.listProjects());
+      if (st.connected) {
+        setProjects(await client.listProjects());
+        if (props.mode === "site") props.onConnected?.();
+      }
     } catch (e) {
       setError(errMsg(e, "Strata wasn't connected. Please try again."));
     } finally {
@@ -206,7 +211,7 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
       <div className={cls}>
         <div className="plx-sbp__box">
           <h3>{PICKER_COPY.connectTitle}</h3>
-          <p>{PICKER_COPY.connectText}</p>
+          <p>{props.mode === "site" ? PICKER_COPY.connectSiteText : PICKER_COPY.connectText}</p>
           <Button leftIcon={<Link2 size={18} aria-hidden />} loading={busy === "connect"} onClick={() => void connect()}>{PICKER_COPY.connectButton}</Button>
           <p className="plx-sbp__note">{PICKER_COPY.notConnectedNote}</p>
         </div>

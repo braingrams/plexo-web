@@ -79,12 +79,12 @@ export function StrataBrand({ siteId, siteName, isRaw, client, preview, previewS
     return (
       <>
         <Card data-tour="hub-brand-pending">
-          <CardHeader title="Your brand is saved on Plexo for now" description="Your colours and logo are kept in Strata, the one place your brand lives. We're sending them there; this finishes by itself, or you can do it now." action={<Button size="sm" loading={busy === "send"} onClick={sendNow}>Send to Strata</Button>} />
+          <CardHeader title="Saving your brand in Strata" description="Your colours and logo live in Strata, the one place your brand is kept. Plexo does this for you; if you've signed in with Charisol it finishes in a moment, and you can also do it now." action={<Button size="sm" loading={busy === "send"} onClick={sendNow}>Send to Strata</Button>} />
           {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
         </Card>
       <Card tone="elevated" data-tour="hub-brand-connect">
-        <CardHeader title="Use a brand you already have in Strata" description="Keep your colours, fonts and logo in one place, Strata. Pick a brand, or make one from the colours you're using now, and every page on this site matches and stays up to date. SOL uses it too, without being asked." />
-        <StrataBrandPicker mode="site" siteId={siteId} siteName={siteName} client={client} canCreate={canCreate} preview={preview} onDone={onDone} />
+        <CardHeader title="Connect your Strata account" description="Sign in once and Plexo saves your brand in Strata for you. Already have a brand there? You can pick it here instead." />
+        <StrataBrandPicker mode="site" siteId={siteId} siteName={siteName} client={client} canCreate={canCreate} preview={preview} onDone={onDone} onConnected={() => void sendNow()} />
       </Card>
       </>
     );

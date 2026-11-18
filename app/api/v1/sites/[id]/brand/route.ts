@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
+import { healSiteBrandInBackground } from "@/lib/strata/autoSetupBackground";
 import { checkCommerceRateLimit } from "@/lib/commerceRateLimitDynamo";
 import { resolveSiteBrand } from "@/lib/brand/resolveSiteBrand";
 import { Template } from "@/lib/db/contentEntities";
@@ -48,7 +49,10 @@ export async function GET(request: NextRequest, ctx: Ctx): Promise<NextResponse>
   try {
     // Opening the Brand tab quietly finishes anything still waiting to reach Strata (never slows the page).
     void import("@/lib/brand/writeThrough").then(async ({ retryPendingSend }) => { await retryPendingSend(auth.site.id); }).catch(() => undefined);
-    return NextResponse.json(await stateWithBrand(auth.site.id, auth));
+    const body = await stateWithBrand(auth.site.id, auth);
+    // A site with no Strata project yet (made before the automatic set-up, or an earlier try didn't get through) gets one now, by itself.
+    if (!(body as { linked?: boolean }).linked) healSiteBrandInBackground({ siteId: auth.site.id, userId: auth.resolved.userId, organizationId: auth.resolved.organizationId });
+    return NextResponse.json(body);
   } catch (err) {
     return fail(err);
   }

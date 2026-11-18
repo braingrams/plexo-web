@@ -53,6 +53,8 @@ export const PICKER_COPY = {
   lead: "If you keep your colours, fonts and logo in Strata, use them here. Your website will look like your brand from the start and follow it when you change it.",
   connectTitle: "Connect Strata",
   connectText: "Sign in with your Charisol account to see your brands. This is optional: everything works without it.",
+  /** For a website that already exists: its brand has to live in Strata, so this is the one step left, not an option. */
+  connectSiteText: "Sign in with your Charisol account once. Plexo then saves your brand in Strata for you, and keeps it up to date.",
   connectButton: "Connect Strata",
   notConnectedNote: "You'll sign in with your Charisol account in a small window.",
   emptyTitle: "You don't have a brand in Strata yet",
