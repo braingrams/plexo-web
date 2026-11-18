@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { notFound } from "next/navigation";
 import { LmsEnrollment, LmsFunnel, LmsPage, LmsPageProgress, PublishedDomain, Template } from "@/lib/db/contentEntities";
 import { CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
@@ -70,7 +71,7 @@ export async function loadLearners(templateId: string, lessons: CourseLesson[]):
       email: e.email,
       name: e.name ?? null,
       status: e.status ?? "ACTIVE",
-      paymentStatus: e.paymentStatus ?? "FREE",
+      paymentStatus: e.paymentStatus ?? PLAN.FREE,
       enrolledAt: e.enrolledAt ?? new Date().toISOString(),
       lastActiveAt: e.lastActiveAt ?? null,
       completedPageCount: e.completedPageCount ?? 0,
@@ -97,7 +98,7 @@ export async function loadCourseSettings(templateId: string) {
   return {
     settings: {
       enabled: funnel?.enabled ?? false,
-      signupMode: funnel?.signupMode ?? "FREE",
+      signupMode: funnel?.signupMode ?? PLAN.FREE,
       signupProductId: funnel?.signupProductId ?? null,
       requireName: funnel?.requireName ?? true,
       collectPhone: funnel?.collectPhone ?? false,

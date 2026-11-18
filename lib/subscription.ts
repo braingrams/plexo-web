@@ -15,7 +15,7 @@ export type TierFeatures = {
   maxEmailTemplates: number;
   /** Maximum number of landing pages the user can create */
   maxLandingPages: number;
-  /** Maximum number of PUBLISHED blog posts per site. `null` means unlimited (Ultra). */
+  /** Maximum number of PUBLISHED blog posts per site. `null` means unlimited. */
   maxPublishedBlogPosts: number | null;
   /** Whether AI layout editing is allowed */
   aiEnabled: boolean;
@@ -37,13 +37,13 @@ export type TierFeatures = {
    * Whether the account may use Host-Managed AI access (an embedding host app
    * authorizes/bills its own end users for every AI action via a webhook,
    * instead of Plexo's own credit ledger — see lib/ai/hostAuthorization.ts).
-   * Gated to Ultra: it hands a host app control over every AI request Plexo
+   * Gated to Pro and Enterprise: it hands a host app control over every AI request Plexo
    * would otherwise meter/bill itself, so it's a paid-tier trust boundary,
    * not just a convenience feature.
    */
   hostManagedAiEnabled: boolean;
   /**
-   * Pro and Ultra. NOT a limit on building: every plan can add sub-pages and preview them
+   * Pro and above. NOT a limit on building: every plan can add sub-pages and preview them
    * (so an owner sees the whole site before upgrading) — what Free cannot do is put them live,
    * which is maxPublishedPagesPerSite below. Today this only gates the bulk "import a whole
    * site" flows (lib/siteImport), which crawl and create many pages at once.
@@ -51,7 +51,7 @@ export type TierFeatures = {
   multiPageSitesEnabled: boolean;
   /**
    * Whether the account can move a whole existing site in (WordPress migration,
-   * importing a site from another builder). Pro and Ultra (Free is a single
+   * importing a site from another builder). Pro and above (Free is a single
    * page). Its own switch so the two can be gated separately again if ever needed.
    */
   siteMigrationEnabled: boolean;
@@ -73,7 +73,7 @@ export type TierFeatures = {
   whiteLabelEnabled: boolean;
   /**
    * Number of Funnel/LMS funnels included at this plan for free (see lib/lms/funnelSlots.ts).
-   * Only Ultra ships one included funnel; every plan (including Ultra, beyond its one) can
+   * Included funnels: Starter 1, Pro 3, Enterprise 10 (Free 0). Every plan can
    * still buy additional funnels as a recurring per-slot add-on regardless of this number —
    * this is the free allotment, not a hard cap.
    */
@@ -332,7 +332,7 @@ export function canDo(
 /**
  * Collapses the raw, persisted `User.manageLandingPagePublishing` column with the
  * account's current plan. Even if the column is `true` (e.g. stale after a plan
- * downgrade), the effective value is `false` unless the plan is Ultra-tier — every
+ * downgrade), the effective value is `false` unless the plan is Pro-tier or above — every
  * route that reads this setting should call this instead of trusting the raw column.
  */
 export function resolveManageLandingPagePublishing(
@@ -345,7 +345,7 @@ export function resolveManageLandingPagePublishing(
 /**
  * Whether an account on the given plan may use Host-Managed AI access.
  * Enforced both where an ApiKey's aiAccessMode is saved (reject setting it to
- * HOST_MANAGED on a non-Ultra account) and at request time in
+ * HOST_MANAGED on a non-Pro account) and at request time in
  * app/api/v1/ai/generate/route.ts (reject even if the column somehow still
  * says HOST_MANAGED, e.g. after a downgrade) — the request-time check is the
  * one that actually matters; the save-time check just gives a clearer error
@@ -360,7 +360,7 @@ export function canUseHostManagedAi(
 /**
  * Collapses the raw, persisted `User.hideBranding` column with the account's current plan —
  * same pattern as resolveManageLandingPagePublishing: even if the column is `true` (e.g. stale
- * after a downgrade from Pro/Ultra), the effective value is `false` unless the plan currently
+ * after a downgrade from Pro or Enterprise), the effective value is `false` unless the plan currently
  * entitles branding removal.
  */
 export function resolveHideBranding(

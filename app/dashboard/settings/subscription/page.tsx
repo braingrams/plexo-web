@@ -14,7 +14,7 @@ import { BillingSection } from "../billing-section";
 import { PaymentHistory } from "../payment-history";
 import { listPaymentsForUser } from "@/lib/billing/payments";
 import { accessDaysLeft, canStartTrial, effectivePlan, paidAccess, storedPlan } from "@/lib/plan/entitlement";
-import { PLAN_LABELS } from "@/lib/plan/plans";
+import { PLAN_LABELS, PLAN } from "@/lib/plan/plans";
 import { loadPriceBook } from "@/lib/billing/priceBook";
 import { formatMoney, planPrice, regionById, regionForCurrency } from "@/lib/billing/pricing";
 
@@ -43,7 +43,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
   if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
 
   const plan = effectivePlan(user);
-  const access = plan === "FREE" ? null : paidAccess(user);
+  const access = plan === PLAN.FREE ? null : paidAccess(user);
   const paying = !!access?.entitled && (access.basis === "SUBSCRIPTION" || access.basis === "SUBSCRIPTION_UNVERIFIED");
   const daysLeft = accessDaysLeft(user);
   const planName = PLAN_LABELS[plan];
@@ -61,7 +61,7 @@ export default async function SubscriptionPage({ searchParams }: { searchParams:
   } else if (paying && user.subscriptionCancelAtPeriodEnd && user.subscriptionPeriodEnd) {
     const when = new Date(user.subscriptionPeriodEnd).toLocaleDateString("en-US", { day: "numeric", month: "long", year: "numeric" });
     planNote = { text: `Your ${planName} plan won't renew. Everything keeps working until ${when}; after that one site stays live with its homepage, and nothing is deleted.`, tone: "info" };
-  } else if (plan === "FREE" && user.planDowngradedAt) {
+  } else if (plan === PLAN.FREE && user.planDowngradedAt) {
     const before = PLAN_LABELS[storedPlan({ subscriptionPlan: user.planBeforeDowngrade, planVersion: user.planVersion })];
     planNote = { text: `Your ${before} plan has ended. Your other pages, sites and custom domains are saved, not deleted — upgrade and they're all back straight away.`, tone: "warning" };
   }

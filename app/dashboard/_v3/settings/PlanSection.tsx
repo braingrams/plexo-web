@@ -8,7 +8,7 @@ import { getStripePromise } from "@/lib/stripeClientPromise";
 import { startTrial } from "../../_components/trial";
 import { usePricing } from "../../_components/usePricing";
 import { startCheckout, type CheckoutBody } from "@/lib/billing/clientCheckout";
-import { isPaidPlanId, type PaidPlanId } from "@/lib/plan/plans";
+import { isPaidPlanId, type PaidPlanId, PLAN, RETIRED_PLAN, TrialPlanId } from "@/lib/plan/plans";
 import { packLabel, useTopupPacks, type TopupPackInfo } from "../../_components/useTopupPacks";
 import { Badge, Button, ButtonLink, Card, Modal } from "../ui";
 import { getTierFeatures } from "@/lib/subscription";
@@ -173,8 +173,8 @@ export function PlanSection(props: PlanSectionProps) {
           } else setStatus({ tone: "info", text: "Your payment is still going through. Check back in a moment." });
         })
         .catch((e) => setStatus({ tone: "bad", text: errMsg(e) }));
-    } else if (isPaidPlanId(upgrade) || upgrade === "ULTRA") {
-      void checkout({ kind: "subscription", plan: upgrade === "ULTRA" ? "PRO" : upgrade }, `sub-${upgrade}`, safeReturn(returnTo) ? returnTo : null);
+    } else if (isPaidPlanId(upgrade) || upgrade === RETIRED_PLAN.ULTRA) {
+      void checkout({ kind: "subscription", plan: upgrade === RETIRED_PLAN.ULTRA ? PLAN.PRO : upgrade }, `sub-${upgrade}`, safeReturn(returnTo) ? returnTo : null);
     } else if (addon === "funnel_slot") {
       void checkout({ kind: "funnel_addon_slot" }, "addon", safeReturn(returnTo) ? returnTo : null);
     }
@@ -231,7 +231,7 @@ export function PlanSection(props: PlanSectionProps) {
             <span className="plx-eyebrow">Your plan</span>
             <div className="plx-planhero__name">
               <h3>{current.name}</h3>
-              <Badge tone={state.plan === "FREE" ? "neutral" : state.pastDue ? "danger" : "success"} dot>{state.pastDue ? "Payment needed" : state.basis === "TRIAL" ? "Free trial" : state.plan === "FREE" ? "Free" : "Active"}</Badge>
+              <Badge tone={state.plan === PLAN.FREE ? "neutral" : state.pastDue ? "danger" : "success"} dot>{state.pastDue ? "Payment needed" : state.basis === "TRIAL" ? "Free trial" : state.plan === PLAN.FREE ? "Free" : "Active"}</Badge>
             </div>
             <p className="plx-body" style={{ maxWidth: 560 }}>{planStatusLine(state)}</p>
             {cardLine ? <p className="plx-small" style={{ margin: 0, display: "flex", gap: 8, alignItems: "center" }}><CreditCard size={16} aria-hidden /> {cardLine}</p> : null}
@@ -240,7 +240,7 @@ export function PlanSection(props: PlanSectionProps) {
             {state.paying ? (
               <Button loading={busy === "portal"} onClick={portal}>{state.pastDue ? "Update my card" : "Manage payment & invoices"}</Button>
             ) : nextPlan ? (
-              <ButtonLink href="#plans" rightIcon={<ArrowRight size={18} aria-hidden />}>{state.plan === "FREE" ? "Upgrade my plan" : "See plans"}</ButtonLink>
+              <ButtonLink href="#plans" rightIcon={<ArrowRight size={18} aria-hidden />}>{state.plan === PLAN.FREE ? "Upgrade my plan" : "See plans"}</ButtonLink>
             ) : null}
             {state.paying && nextPlan ? <ButtonLink href="#plans" variant="ghost" size="sm">See bigger plans</ButtonLink> : null}
           </div>
@@ -256,7 +256,7 @@ export function PlanSection(props: PlanSectionProps) {
       {upgrades.length ? (
         <section id="plans" className="plx-sp__main" data-tour="plan-upgrade" aria-labelledby="up-h" style={{ scrollMarginTop: 90 }}>
           <div>
-            <h3 className="plx-h2" id="up-h">{state.plan === "FREE" ? "Pick a plan that fits" : "Want even more?"}</h3>
+            <h3 className="plx-h2" id="up-h">{state.plan === PLAN.FREE ? "Pick a plan that fits" : "Want even more?"}</h3>
             <p className="plx-body" style={{ marginTop: 4 }}>Prices are in your own currency. Change or cancel any time.</p>
           </div>
           <div className="plx-plans">
@@ -276,9 +276,9 @@ export function PlanSection(props: PlanSectionProps) {
                   </ul>
                   <div className="plx-plan__actions">
                     <Button variant={i === 0 ? "primary" : "secondary"} loading={busy === `sub-${id}`} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => checkout({ kind: "subscription", plan: id as PaidPlanId }, `sub-${id}`)}>
-                      {state.plan === "FREE" ? `Choose ${v.name}` : `Switch to ${v.name}`}
+                      {state.plan === PLAN.FREE ? `Choose ${v.name}` : `Switch to ${v.name}`}
                     </Button>
-                    {state.plan === "FREE" && trialAvailable && id !== "ENTERPRISE" ? (
+                    {state.plan === PLAN.FREE && trialAvailable && id !== PLAN.ENTERPRISE ? (
                       <Button
                         variant="ghost"
                         loading={busy === `trial-${id}`}
@@ -286,7 +286,7 @@ export function PlanSection(props: PlanSectionProps) {
                           if (mock) return;
                           setBusy(`trial-${id}`);
                           try {
-                            await startTrial(id as "STARTER" | "PRO");
+                            await startTrial(id as TrialPlanId);
                           } catch (e) {
                             setError(errMsg(e));
                             setBusy(null);

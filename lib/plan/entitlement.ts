@@ -1,15 +1,16 @@
+import { PLAN, RETIRED_PLAN } from "@/lib/plan/plans";
 // Whether an account is still entitled to the paid plan stored on it, and what the plan
 // lifecycle (lib/plan/lifecycle.ts) has to do about it. Pure: every caller passes the
 // User row it already loaded, so this costs nothing on the hot paths that use it
 // (resolveSite on every public request, resolveUser on every API call).
 
 import { MARKETPLACE_OWNER_EMAIL } from "@/lib/marketplaceOwnerEmail";
-import { isPaidPlanId, normalizeStoredPlan, type PaidPlanId, type PlanId } from "./plans";
+import { isPaidPlanId, normalizeStoredPlan, TRIAL_PLAN_IDS, type PaidPlanId, type PlanId, type TrialPlanId } from "./plans";
 
 export const TRIAL_DAYS = 14;
 /** Plans the free trial can be taken on. Enterprise is arranged with us, not trialled. */
-export const TRIAL_PLANS = ["STARTER", "PRO"] as const;
-export type TrialPlan = (typeof TRIAL_PLANS)[number];
+export const TRIAL_PLANS = TRIAL_PLAN_IDS;
+export type TrialPlan = TrialPlanId;
 
 export type DowngradeReason = "PAYMENT_ENDED" | "TRIAL_ENDED" | "GRANT_ENDED" | "NO_PAYMENT" | "ADMIN";
 
@@ -42,7 +43,7 @@ const LIVE_SUBSCRIPTION = new Set(["ACTIVE", "TRIALING", "PAST_DUE"]);
 
 /** True for any paid plan value, stored or current (STARTER/PRO/ENTERPRISE, and the retired ULTRA). */
 export function isPaidPlan(plan: string | null | undefined): boolean {
-  return plan === "ULTRA" || isPaidPlanId(plan);
+  return plan === RETIRED_PLAN.ULTRA || isPaidPlanId(plan);
 }
 
 /** The account's plan in today's terms, whatever era wrote it (no entitlement check — see effectivePlan). */
@@ -95,15 +96,15 @@ export function paidAccess(user: PlanUser, now: Date = new Date()): PaidAccess {
  * even before the downgrade has been written.
  */
 export function effectivePlan(user: PlanUser | null | undefined, now: Date = new Date()): PlanId {
-  if (!user) return "FREE";
+  if (!user) return PLAN.FREE;
   const plan = storedPlan(user);
-  if (plan === "FREE") return "FREE";
-  return paidAccess(user, now).entitled ? (plan as PaidPlanId) : "FREE";
+  if (plan === PLAN.FREE) return PLAN.FREE;
+  return paidAccess(user, now).entitled ? (plan as PaidPlanId) : PLAN.FREE;
 }
 
 /** True while the account's paid plan comes only from its free trial (custom domains, live payments and white-label wait for the first payment). */
 export function isOnTrial(user: PlanUser | null | undefined, now: Date = new Date()): boolean {
-  if (!user || effectivePlan(user, now) === "FREE") return false;
+  if (!user || effectivePlan(user, now) === PLAN.FREE) return false;
   const access = paidAccess(user, now);
   return access.entitled && access.basis === "TRIAL";
 }
@@ -115,7 +116,7 @@ export function planEntitlement(user: PlanUser | null | undefined, now: Date = n
 
 /** The plan whose monthly AI allowance the account gets: its effective plan — except a trial, which adds no AI credits (Free's allowance). */
 export function allowancePlan(user: PlanUser | null | undefined, now: Date = new Date()): PlanId {
-  return isOnTrial(user, now) ? "FREE" : effectivePlan(user, now);
+  return isOnTrial(user, now) ? PLAN.FREE : effectivePlan(user, now);
 }
 
 export type PlanSyncAction = "downgrade" | "restore" | "enforce_free";
@@ -153,7 +154,7 @@ export function shouldOfferTrial(
   now: Date = new Date(),
 ): boolean {
   if (user.trialStartedAt || user.trialOfferSeenAt || subscriptionRef(user) || user.planDowngradedAt) return false;
-  if ((user.subscriptionPlan ?? "FREE") !== "FREE") return false;
+  if ((user.subscriptionPlan ?? PLAN.FREE) !== PLAN.FREE) return false;
   const created = Date.parse(user.createdAt ?? "");
   return Number.isFinite(created) && now.getTime() - created < TRIAL_OFFER_WINDOW_MS;
 }
@@ -165,5 +166,5 @@ export function shouldOfferTrial(
  */
 export function canStartTrial(user: PlanUser & { trialStartedAt?: string | null }, now: Date = new Date()): boolean {
   if (user.trialStartedAt) return false;
-  return effectivePlan(user, now) === "FREE";
+  return effectivePlan(user, now) === PLAN.FREE;
 }

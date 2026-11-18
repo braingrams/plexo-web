@@ -8,7 +8,7 @@ import type { SolBuildGoal, SolBuildProfile } from "@/lib/ai/solBuildContext";
 import { pickDesigns, type DesignChoice } from "@/lib/onboarding/designs";
 import { siteCreateArgs } from "@/lib/onboarding/complete";
 import { getTierFeatures } from "@/lib/subscription";
-import { nextPlanUp, planLabel, toPlanId } from "@/lib/plan/plans";
+import { nextPlanUp, planLabel, toPlanId, PLAN } from "@/lib/plan/plans";
 
 export const NEW_SITE_PATH = "/dashboard/sites/new";
 export const DESIGNS_PATH = "/dashboard/marketplace";
@@ -147,7 +147,7 @@ export function limitNote(plan: string, liveSiteNames: string[], opts: { trial?:
   const upgradeLabel = up ? `See ${planLabel(up)}` : "See plans";
   const first = liveSiteNames[0];
   const text =
-    id === "FREE"
+    id === PLAN.FREE
       ? `You can make this website now. The Free plan keeps one website online at a time, and "${first}" is online. This one stays private while you build it. To put it online, upgrade${up ? ` to ${planLabel(up)}` : ""} or switch which website is online (nothing is deleted).`
       : `You can make this website now. Your ${planLabel(plan)} plan keeps ${max} website${max === 1 ? "" : "s"} online at a time and ${max === 1 ? `"${first}" is` : "they are all"} online. This one stays private while you build it. To put it online, upgrade or take one offline first (nothing is deleted).`;
   return { text, upgradeHref: UPGRADE_PATH, upgradeLabel };

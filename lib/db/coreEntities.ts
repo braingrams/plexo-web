@@ -1,3 +1,4 @@
+import { PAID_PLAN_IDS, PLAN, RETIRED_PLAN, STORED_PLAN_VALUES } from "@/lib/plan/plans";
 import { Entity, Service } from "electrodb";
 import { docClient, TABLES } from "./client";
 
@@ -33,7 +34,7 @@ export const User = new Entity(
       // FREE | STARTER | PRO | ENTERPRISE. ULTRA is the retired top plan — still a valid stored
       // value until scripts/billing/migrate-plans.ts rewrites it. Read it with planVersion
       // (lib/plan/plans.ts normalizeStoredPlan): before the 2026 rename PRO meant today's STARTER.
-      subscriptionPlan: { type: ["FREE", "STARTER", "PRO", "ULTRA", "ENTERPRISE"] as const, default: "FREE" },
+      subscriptionPlan: { type: STORED_PLAN_VALUES, default: PLAN.FREE },
       // Which meaning subscriptionPlan/pendingPlan/planBeforeDowngrade were written with.
       // Missing = before the rename; 2 = today's plans. Always written via planFields().
       planVersion: { type: "number", default: 2 },
@@ -63,7 +64,7 @@ export const User = new Entity(
       billingRegionLockedAt: { type: "string" },
       // A plan change already booked for the next renewal (the 2026 plan move: old Pro → Starter
       // price). Shown on the billing page; cleared once the renewal goes through.
-      scheduledPlan: { type: ["STARTER", "PRO", "ENTERPRISE"] as const },
+      scheduledPlan: { type: PAID_PLAN_IDS },
       scheduledPlanAt: { type: "string" },
       // Price changes for people who already subscribe (lib/billing/priceChanges.ts, priceMove.ts).
       // What each renewal charges now, in minor units (kept up to date by the provider webhooks and
@@ -105,7 +106,7 @@ export const User = new Entity(
       manageLandingPagePublishing: { type: "boolean", default: false },
       // Plan picked at signup before email verification completes — see server/auth.ts's
       // databaseHooks and app/auth/complete-subscription. Null once resolved.
-      pendingPlan: { type: ["STARTER", "PRO", "ULTRA", "ENTERPRISE"] as const },
+      pendingPlan: { type: [PLAN.STARTER, PLAN.PRO, RETIRED_PLAN.ULTRA, PLAN.ENTERPRISE] as const },
       // Per-user override of the plan-default published-domain cap — null defers to
       // getDomainLimit()'s plan-based default (app/api/v1/domains/route.ts).
       customDomainLimit: { type: "number" },
@@ -179,7 +180,7 @@ export const User = new Entity(
       // explains, and what tells the lifecycle there's an archive to restore on upgrade.
       planDowngradedAt: { type: "string" },
       planDowngradeReason: { type: ["PAYMENT_ENDED", "TRIAL_ENDED", "GRANT_ENDED", "NO_PAYMENT", "ADMIN"] as const },
-      planBeforeDowngrade: { type: ["STARTER", "PRO", "ULTRA", "ENTERPRISE"] as const },
+      planBeforeDowngrade: { type: [PLAN.STARTER, PLAN.PRO, RETIRED_PLAN.ULTRA, PLAN.ENTERPRISE] as const },
       // When Free's limits (one live site, homepage only, no custom domain) were last
       // applied to this account's sites. Cleared on upgrade, so a later downgrade re-applies.
       freeLimitsAppliedAt: { type: "string" },

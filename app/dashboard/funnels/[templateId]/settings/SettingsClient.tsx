@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 "use client";
 
 import { useState } from "react";
@@ -120,7 +121,7 @@ export function SettingsClient({
           <SegmentedChoice
             value={funnel.signupMode}
             onChange={(mode) => patchFunnel({ signupMode: mode })}
-            options={[{ value: "FREE", label: "Free" }, { value: "PAID", label: "Paid" }]}
+            options={[{ value: PLAN.FREE, label: "Free" }, { value: "PAID", label: "Paid" }]}
           />
         </div>
 

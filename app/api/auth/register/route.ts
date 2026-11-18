@@ -1,3 +1,4 @@
+import { PLAN, RETIRED_PLAN, PaidPlanId } from "@/lib/plan/plans";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { passwordProblem } from "@/lib/passwordPolicy";
@@ -39,8 +40,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const password = typeof body.password === "string" ? body.password : "";
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : email.split("@")[0] || "Plexo User";
   // ULTRA: a signup page loaded before the plan rename (today's Pro).
-  const pendingPlan: "STARTER" | "PRO" | "ENTERPRISE" | undefined =
-    body.pendingPlan === "ULTRA" ? "PRO" : body.pendingPlan === "STARTER" || body.pendingPlan === "PRO" || body.pendingPlan === "ENTERPRISE" ? body.pendingPlan : undefined;
+  const pendingPlan: PaidPlanId | undefined =
+    body.pendingPlan === RETIRED_PLAN.ULTRA ? PLAN.PRO : body.pendingPlan === PLAN.STARTER || body.pendingPlan === PLAN.PRO || body.pendingPlan === PLAN.ENTERPRISE ? body.pendingPlan : undefined;
 
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: { message: "Enter a valid email address." } }, { status: 400 });

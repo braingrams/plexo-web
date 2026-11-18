@@ -1,3 +1,4 @@
+import { PLAN, RETIRED_PLAN, PaidPlanId } from "@/lib/plan/plans";
 /** Google Tag Manager container ID (GTM-…). GA4 and other tags are configured inside the container. */
 export const GTM_CONTAINER_ID = "GTM-N5VXD9KB";
 
@@ -12,8 +13,7 @@ export function trackEvent(payload: DataLayerEvent): void {
   w.dataLayer.push(payload);
 }
 
-// The plan names the analytics spec uses. Ultra isn't in the spec's list yet; it's sent as "ultra" until
-// the analyst confirms. Change it in this one place if that changes.
+// The plan names the analytics spec uses: free, starter, pro, enterprise (the spec's plan list).
 export function analyticsPlan(plan: string): string {
   return plan.toLowerCase();
 }
@@ -26,15 +26,22 @@ export function trackUserIdentifiedOnce(params: { user_id: string; plan_name: st
   trackEvent({ event: "user_identified", ...params });
 }
 
-/** The ecommerce item for a subscription plan. Prices are the list prices shown on the trial offer (USD). */
-export function subscriptionItem(plan: "PRO" | "ULTRA"): { item_id: string; item_name: string; item_category: string; item_variant: string; price: number; quantity: number } {
-  const listPrice = plan === "PRO" ? 19 : 49;
+const PLAN_ITEMS = {
+  STARTER: { name: "Starter", price: 9 },
+  PRO: { name: "Pro", price: 19 },
+  // Enterprise is a custom plan, so $99 is only the list-price starting point, not a fixed charge.
+  ENTERPRISE: { name: "Enterprise", price: 99 },
+} as const;
+
+/** The ecommerce item for a subscription plan, with the spec's item IDs. Prices are the USD list prices. */
+export function subscriptionItem(plan: PaidPlanId): { item_id: string; item_name: string; item_category: string; item_variant: string; price: number; quantity: number } {
+  const item = PLAN_ITEMS[plan];
   return {
-    item_id: plan === "PRO" ? "pro_monthly" : "ultra_monthly",
-    item_name: plan === "PRO" ? "Pro" : "Ultra",
+    item_id: `${plan.toLowerCase()}_monthly`,
+    item_name: item.name,
     item_category: "subscription",
     item_variant: "monthly",
-    price: listPrice,
+    price: item.price,
     quantity: 1,
   };
 }
@@ -44,9 +51,10 @@ export function templateNameFor(name: string): string {
   return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
-/** purchase_type: an upgrade when the account already had a paid plan, otherwise a new subscription. */
+/** purchase_type: an upgrade when the account already had a paid plan, otherwise a new subscription.
+ * ULTRA is only accepted because it's a value stored before the plan rename (it reads as Pro). */
 export function purchaseTypeFor(previousPlan: string | null | undefined): "new_subscription" | "upgrade" {
-  return previousPlan === "PRO" || previousPlan === "ULTRA" ? "upgrade" : "new_subscription";
+  return previousPlan === PLAN.STARTER || previousPlan === PLAN.PRO || previousPlan === PLAN.ENTERPRISE || previousPlan === RETIRED_PLAN.ULTRA ? "upgrade" : "new_subscription";
 }
 
 /** create_project, with is_first_project from the backend count. Omitted if the count can't be read. */

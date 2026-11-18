@@ -14,7 +14,7 @@ import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 import { CountrySelect } from "@/app/_components/country/CountrySelect";
 import { usePricing } from "@/app/dashboard/_components/usePricing";
 
-import { PLAN_LABELS, type PlanId } from "@/lib/plan/plans";
+import { PLAN_LABELS, type PlanId, PLAN, RETIRED_PLAN } from "@/lib/plan/plans";
 
 type Plan = PlanId;
 
@@ -24,7 +24,7 @@ function RegisterForm() {
   const requestedPlan = searchParams.get("plan")?.toUpperCase();
   // ?plan= from the pricing page. ULTRA: a link from before the plan rename (today's Pro).
   const plan: Plan =
-    requestedPlan === "ULTRA" ? "PRO" : requestedPlan === "STARTER" || requestedPlan === "PRO" || requestedPlan === "ENTERPRISE" ? requestedPlan : "FREE";
+    requestedPlan === RETIRED_PLAN.ULTRA ? PLAN.PRO : requestedPlan === PLAN.STARTER || requestedPlan === PLAN.PRO || requestedPlan === PLAN.ENTERPRISE ? requestedPlan : PLAN.FREE;
 
   // Their country decides the currency prices show in. We guess it from where they are (only
   // as a starting point) and they confirm it.
@@ -74,7 +74,7 @@ function RegisterForm() {
         password,
         country,
         callbackURL: "/dashboard",
-        ...(plan !== "FREE" ? { pendingPlan: plan } : {}),
+        ...(plan !== PLAN.FREE ? { pendingPlan: plan } : {}),
       });
 
       if (result?.error) {
@@ -100,7 +100,7 @@ function RegisterForm() {
     <>
       <PageHead title="Create your account">Free to start. No card needed.</PageHead>
 
-      {plan !== "FREE" && (
+      {plan !== PLAN.FREE && (
         <p className="ax-center-text" style={{ marginTop: -12, marginBottom: 20 }}>
           <span className="ax-chip">
             <span className="ax-chip-dot" aria-hidden="true" />

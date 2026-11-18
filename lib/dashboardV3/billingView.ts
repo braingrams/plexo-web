@@ -7,7 +7,7 @@
  */
 import { getTierFeatures } from "@/lib/subscription";
 import { PLAN_MONTHLY_AI_USD } from "@/lib/credits/value";
-import { PLAN_IDS, PLAN_LABELS, PLAN_RANK, toPlanId, type PlanId } from "@/lib/plan/plans";
+import { PLAN_IDS, PLAN_LABELS, PLAN_RANK, toPlanId, type PlanId, PLAN, PAID_PLAN_IDS } from "@/lib/plan/plans";
 import type { PricingView } from "@/lib/billing/pricing";
 
 export type { PlanId };
@@ -36,7 +36,7 @@ const count = (n: number, one: string, many: string) => `${n.toLocaleString("en-
 export function priceSourceFrom(pricing: PricingView | null | undefined): PriceSource {
   if (!pricing) return {};
   const out: PriceSource = {};
-  for (const id of ["STARTER", "PRO", "ENTERPRISE"] as const) {
+  for (const id of PAID_PLAN_IDS) {
     const p = pricing.plans[id];
     if (p) out[id] = `${p.isFromPrice ? "from " : ""}${p.monthlyLabel} a month`;
   }
@@ -81,7 +81,7 @@ const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "n
 /** One plain sentence on where the plan stands. */
 export function planStatusLine(s: PlanState): string {
   const name = PLAN_LABELS[s.plan];
-  if (s.plan === "FREE") return "You're on the Free plan. It's yours for as long as you like.";
+  if (s.plan === PLAN.FREE) return "You're on the Free plan. It's yours for as long as you like.";
   if (s.pastDue) return `We couldn't take your last payment. ${name} stays on while we try again. You can update your card below.`;
   if (s.basis === "TRIAL") return `You're trying ${name} free${s.daysLeft != null ? `. ${s.daysLeft} day${s.daysLeft === 1 ? "" : "s"} left` : ""}. Nothing is charged unless you subscribe.`;
   if (s.basis === "GRANT") return `${name} is on us${s.daysLeft != null ? ` for ${s.daysLeft} more day${s.daysLeft === 1 ? "" : "s"}` : ""}. There's nothing to pay.`;

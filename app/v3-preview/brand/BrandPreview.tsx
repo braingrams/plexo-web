@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 "use client";
 
 import { useSearchParams } from "next/navigation";
@@ -48,7 +49,7 @@ export function BrandPreview() {
   const client = useMemo(() => fake({ connected: state !== "not-connected", projects: state === "empty" ? [] : PROJECTS, error: state === "error", slow: state === "loading" }), [state]);
 
   if (state === "newsite") {
-    return <NewSiteFlow mode="page" preview={{ screen: "brand", goal: "store", mock: true, strata: client }} context={{ plan: "PRO", brand: { name: "Ama's Kitchen", colors: ["#E4572E"] }, siteNames: [], liveSiteNames: [] }} />;
+    return <NewSiteFlow mode="page" preview={{ screen: "brand", goal: "store", mock: true, strata: client }} context={{ plan: PLAN.PRO, brand: { name: "Ama's Kitchen", colors: ["#E4572E"] }, siteNames: [], liveSiteNames: [] }} />;
   }
   if (state === "linked") {
     return <div className="plx-page" style={{ maxWidth: 760 }}><StrataBrand siteId="s1" siteName="Ama's Kitchen" isRaw={false} client={client} preview previewState={LINKED} /></div>;

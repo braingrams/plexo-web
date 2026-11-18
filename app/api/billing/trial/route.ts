@@ -1,3 +1,4 @@
+import { PLAN, RETIRED_PLAN, TrialPlanId } from "@/lib/plan/plans";
 import { NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/server/authDynamo";
@@ -15,7 +16,7 @@ export async function GET(): Promise<NextResponse> {
 
 /**
  * POST /api/billing/trial
- *   { plan: "STARTER" | "PRO" } — start the account's one 14-day trial (no card).
+ *   { plan: TrialPlanId } — start the account's one 14-day trial (no card).
  *   { dismiss: true }         — "Continue on Free": don't offer it again after signup.
  */
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -30,7 +31,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // A page loaded before the plan rename may still send ULTRA (= today's Pro).
-  const plan = body.plan === "ULTRA" ? "PRO" : body.plan;
+  const plan = body.plan === RETIRED_PLAN.ULTRA ? PLAN.PRO : body.plan;
   if (!TRIAL_PLANS.includes(plan as TrialPlan)) {
     return NextResponse.json({ error: "Choose Starter or Pro to try." }, { status: 400 });
   }
