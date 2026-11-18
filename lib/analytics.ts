@@ -1,6 +1,8 @@
 import { PLAN, RETIRED_PLAN, PaidPlanId } from "@/lib/plan/plans";
 /** Google Tag Manager container ID (GTM-…). GA4 and other tags are configured inside the container. */
 export const GTM_CONTAINER_ID = "GTM-N5VXD9KB";
+/** The only deployment that sends GTM and Clarity data. Staging and PR previews build with other URLs. */
+export const PRODUCTION_APP_URL = "https://plexo.charisol.io";
 
 /** A dataLayer push. Most have an event name; the ecommerce clear does not. */
 type DataLayerEvent = Record<string, unknown>;
