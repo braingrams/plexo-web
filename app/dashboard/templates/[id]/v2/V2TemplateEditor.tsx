@@ -442,6 +442,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             headerRight={props.headerRight}
             // The simple screen keeps saving by itself and has one "Make it live" button; the buttons passed in headerRight match the editor's own.
             experience={props.beginner ? "beginner" : undefined}
+            projectName={name}
             headerSlotStyle={props.beginner ? "editor" : undefined}
           />
         </div>

@@ -5,7 +5,8 @@ import { User } from "@/lib/db/coreEntities";
 import { getTierFeatures } from "@/lib/subscription";
 import { effectivePlan } from "@/lib/plan/entitlement";
 import { parseExperience, type Experience } from "@/lib/dashboardV3/nav";
-import { sanitizeBuildProfile } from "@/lib/dashboardV3/profile";
+import { sanitizeBuildProfile, userExperience } from "@/lib/dashboardV3/profile";
+import { modeOf, recordExperienceEvent } from "@/lib/experienceStats";
 import { parseThemePreference, type ThemePreference } from "@/lib/dashboardV3/theme";
 import { sanitizeTourState, type TourState } from "@/lib/dashboardV3/tour";
 import { CURRENT_ONBOARDING_VERSION } from "@/lib/dashboardV3/flag";
@@ -203,9 +204,16 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     if (clearPendingPlan) remove.push("pendingPlan");
     if (clearDashboardV3) remove.push("dashboardV3");
     if (clearImage) remove.push("image");
+    // An explicit change between the simple and full view (not onboarding's answer) is counted for the admin's Experience page.
+    const before = body.experience !== undefined && data.experience ? (await User.get({ id: session.user.id }).go()).data : null;
     let patch = User.patch({ id: session.user.id }).set(data);
     if (remove.length) patch = patch.remove(remove);
     await patch.go();
+    if (before && data.experience) {
+      const from = modeOf(userExperience(before));
+      const to = modeOf(data.experience);
+      if (from !== to) void recordExperienceEvent({ type: "switch", from, to });
+    }
     const { data: updatedUser } = await User.get({ id: session.user.id }).go();
 
     return NextResponse.json({ user: updatedUser });

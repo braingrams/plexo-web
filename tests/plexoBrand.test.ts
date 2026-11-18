@@ -25,7 +25,12 @@ describe("token mapping", () => {
     expect(vars["color-action-primary"]).toBe("#B8F34A");
     const t = mapStrataTokens(vars);
     expect(t.light["color-action-primary-bg"]).toBe("#B8F34A");
-    expect(t.light["color-brand-deep"]).toBe("#517A12");
+    expect(t.light["color-focus-ring"]).toBe("#517A12");
+    // Links and the deep accent stay neutral: the brand colours are for the main action only.
+    for (const set of [t.light, t.dark]) {
+      expect(set["color-brand-deep"]).toBeUndefined();
+      expect(set["color-text-link"]).toBeUndefined();
+    }
     expect(t.light["color-brand-accent"]).toBe("#F5AC05");
     expect(t.light["color-action-primary-text"]).toBe("#121212");
     expect(t.dark["color-brand-primary"]).toBe("#B8F34A");
@@ -46,7 +51,7 @@ describe("token mapping", () => {
     expect(t.light["color-brand-accent"]).toBeUndefined();
     expect(t.light["font-family-base"]).toBeUndefined();
     expect(t.light["radius-control"]).toBeUndefined();
-    expect(t.light["color-brand-deep"]).toBe("#517A12");
+    expect(t.light["color-focus-ring"]).toBe("#517A12");
     expect(t.light["radius-card"]).toBe("20px");
   });
   it("flips the on-colour for a dark primary and keeps bundled text pairs that fail contrast", () => {

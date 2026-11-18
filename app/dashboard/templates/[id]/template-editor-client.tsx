@@ -9,7 +9,7 @@
  */
 
 import { SolOutOfCredits } from "../../_components/sol/SolTopUp";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { emailsListHref } from "@/lib/dashboardV3/emails";
 import { useEditorBackHref, useEditorBeginner, useEditorColors, useEditorV3 } from "../../_components/EditorTheme";
@@ -387,6 +387,31 @@ function EditorHeaderLeft({
   );
 }
 
+/** Switches the owner between the simple editor and the full one (their dashboard view), after saving what they were doing. */
+function ViewSwitch({ to, saveFirst }: { to: "beginner" | "pro"; saveFirst: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const label = to === "pro" ? "Switch to full editor" : "Switch to simple editor";
+  async function go() {
+    setBusy(true);
+    setFailed(false);
+    try {
+      await saveFirst().catch(() => undefined);
+      const res = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ experience: to }) });
+      if (!res.ok) throw new Error("not saved");
+      window.location.reload();
+    } catch {
+      setBusy(false);
+      setFailed(true);
+    }
+  }
+  return (
+    <button type="button" onClick={() => void go()} disabled={busy} title={to === "pro" ? "Every tool, for people who like to be in control. You can switch back any time." : "A simpler screen with fewer tools. You can switch back any time."}>
+      {busy ? "Switching…" : failed ? "Try again" : label}
+    </button>
+  );
+}
+
 function EditorHeaderRight({
   saveMessage,
   saveError,
@@ -405,10 +430,15 @@ function EditorHeaderRight({
   autoSaveNotification,
   compact,
   beginner,
+  v3,
+  saveFirst,
 }: {
   compact?: boolean;
   /** The simple screen has its own status and "Make it live"; only comments and problems are shown here, in the editor's own button style. */
   beginner?: boolean;
+  /** On the new dashboard: show the switch between the simple and full editor. */
+  v3?: boolean;
+  saveFirst: () => Promise<void>;
   saveMessage: string | null;
   saveError: string | null;
   subscriptionPlan: string;
@@ -430,6 +460,7 @@ function EditorHeaderRight({
     return (
       <>
         {problem && <span role="alert" style={{ fontSize: "0.75rem", color: "var(--ed-danger)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={problem}>{problem}</span>}
+        <ViewSwitch to="pro" saveFirst={saveFirst} />
         <button type="button" onClick={onToggleComments} aria-pressed={commentsOpen}>
           <IconComment />
           Comments
@@ -446,6 +477,7 @@ function EditorHeaderRight({
         flexShrink: 0,
       }}
     >
+      {v3 && <ViewSwitch to="beginner" saveFirst={saveFirst} />}
       <div
         style={{
           display: compact ? "none" : "inline-flex",
@@ -725,6 +757,11 @@ export function TemplateEditorClient({
   const backToSiteHref = useEditorBackHref(rootTemplateId);
   const editorColors = useEditorColors();
   const isV2 = designFormat === "v2" && !!initialV2Design;
+  // Counted once per opening of the editor, for the admin's simple-vs-full usage page (the server works out which view they are on).
+  useEffect(() => {
+    if (!v3 || !isV2) return;
+    void fetch("/api/experience/event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "open" }), keepalive: true }).catch(() => undefined);
+  }, [v3, isV2]);
   const v2Ref = useRef<V2TemplateEditorHandle>(null);
   const [tryOpen, setTryOpen] = useState(false);
   const searchParams = useSearchParams();
@@ -997,6 +1034,7 @@ export function TemplateEditorClient({
       liveDesignJsonRef.current = JSON.stringify(exported.json);
       setHasUnpublishedChanges(false);
       setPublishMessage("Published — now live.");
+      if (v3 && isV2) void fetch("/api/experience/event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "publish" }), keepalive: true }).catch(() => undefined);
       setTimeout(() => setPublishMessage(null), 3000);
       router.refresh();
 
@@ -1122,6 +1160,8 @@ export function TemplateEditorClient({
     <EditorHeaderRight
       compact={isV2}
       beginner={beginner && isV2}
+      v3={v3 && isV2}
+      saveFirst={() => handleSave()}
       saveMessage={saveMessage}
       saveError={saveError}
       subscriptionPlan={subscriptionPlan}

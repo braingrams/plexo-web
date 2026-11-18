@@ -1,7 +1,7 @@
 "use client";
 
 import "./onboarding.css";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Check } from "lucide-react";
 import { Button, Stepper, StatusPill, Avatar, Textarea, useToast } from "@/app/dashboard/_v3/ui";
@@ -11,6 +11,33 @@ import type { SiteSummary } from "@/lib/dashboardV3/sites";
 import { EXPERIENCES, GOALS } from "@/lib/onboarding/flow";
 import { CURRENT_SITE_COOKIE, TUNE_ACTIONS, defaultTuneSite, tuneSolHref, type TuneActionId } from "@/lib/onboarding/tune";
 import { ContinueLaterButton } from "./ContinueLater";
+
+const THUMB_W = 1280;
+
+/** What the site really looks like, shrunk to fit. The owner's own initials show underneath until it loads (or if there is nothing to show yet). */
+function SiteThumb({ site, mock }: { site: SiteSummary; mock: boolean }) {
+  const box = useRef<HTMLSpanElement>(null);
+  const [scale, setScale] = useState(0.25);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const fit = () => setScale(el.clientWidth / THUMB_W);
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // Apps are previewed in their own builder, not as a page.
+  const showFrame = !mock && site.kind !== "App with sign-in";
+  return (
+    <span className="ob-site__thumb" ref={box} aria-hidden>
+      <span className="ob-site__fallback"><Avatar name={site.name} size={56} square /></span>
+      {showFrame ? (
+        <iframe className="ob-site__shot" src={`/api/v1/templates/${site.id}/draft-preview?thumb=1`} title="" tabIndex={-1} loading="lazy" referrerPolicy="no-referrer" style={{ width: THUMB_W, height: Math.round((THUMB_W * 10) / 16), transform: `scale(${scale})` }} />
+      ) : null}
+    </span>
+  );
+}
 
 /** "Let's tune Plexo to you": for owners who already have sites. Nothing is created and no design is picked. */
 export function TuneWizard({ initialProfile, sites, currentSiteId, mock = false }: { initialProfile?: SolBuildProfile; sites: SiteSummary[]; currentSiteId?: string | null; mock?: boolean }) {
@@ -62,7 +89,7 @@ export function TuneWizard({ initialProfile, sites, currentSiteId, mock = false 
         {mock ? <span /> : <ContinueLaterButton />}
       </header>
       <main className="ob-main">
-        <div className="ob-col">
+        <div className={`ob-col${stepKind === "site" ? " ob-col--wide" : ""}`}>
           {stepKind === "you" ? (
             <div className="ob-stack">
               <div>
@@ -103,10 +130,7 @@ export function TuneWizard({ initialProfile, sites, currentSiteId, mock = false 
               <div className="ob-sites" role="radiogroup" aria-label="Your sites">
                 {sites.slice(0, 12).map((s) => (
                   <button key={s.id} type="button" role="radio" aria-checked={siteId === s.id} className="ob-site" onClick={() => setSiteId(s.id)}>
-                    <span className="ob-site__thumb" aria-hidden>
-                      <span className="ob-site__bar"><i /><i /><i /></span>
-                      <span className="ob-site__body"><Avatar name={s.name} size={44} square /></span>
-                    </span>
+                    <SiteThumb site={s} mock={mock} />
                     <span className="ob-site__meta">
                       <span className="ob-site__name" title={s.name}>{s.name}</span>
                       <span className="plx-small">{s.kind}</span>

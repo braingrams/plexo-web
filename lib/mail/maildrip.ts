@@ -112,7 +112,13 @@ export const EMAIL_SITE_URL = SITE_URL;
  * whatever logo is current in Strata (replace it there and every email follows) and falls back to
  * the bundled PNGs. See app/api/brand/logo/[kind] and docs/PLEXO_BRAND_FROM_STRATA.md.
  */
-export const EMAIL_LOGO = { onLight: `${SITE_URL}/api/brand/logo/email-on-light`, onDark: `${SITE_URL}/api/brand/logo/email-on-dark` };
+/**
+ * Mail apps (Gmail's image proxy especially) fetch the logo from the internet, so its address must be reachable from there.
+ * An email sent from a local or private app (http://localhost:3000, a plain-http or loopback address) would carry a logo
+ * link nobody outside can open, and the logo would be blank in the inbox. Those fall back to the live site's address.
+ */
+export const logoOrigin = (site: string): string => (/^https:\/\//i.test(site) && !/^https:\/\/(localhost|127\.|0\.0\.0\.0|\[::1\])/i.test(site) ? site : "https://plexo.charisol.io");
+export const EMAIL_LOGO = { onLight: `${logoOrigin(SITE_URL)}/api/brand/logo/email-on-light`, onDark: `${logoOrigin(SITE_URL)}/api/brand/logo/email-on-dark` };
 
 // Warm the live brand as soon as the mail code loads (the first email after a cold start still
 // goes out with the bundled colours; every later one has Strata's).
