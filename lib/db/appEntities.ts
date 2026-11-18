@@ -35,7 +35,7 @@ export const DeployedApp = new Entity(
       alwaysOnFunctionUrl: { type: "string" },
       // Always-on (provisioned) requests. The owner asks; Plexo approves before it's switched on, because
       // a warm copy costs about $11 a month, more than the plan's SSR budget. NONE = never asked.
-      alwaysOnRequest: { type: ["NONE", "REQUESTED", "APPROVED", "DECLINED"] as const, default: "NONE" },
+      alwaysOnRequest: { type: ["NONE", "REQUESTED", "APPROVED", "DECLINED", "REVOKED"] as const, default: "NONE" },
       alwaysOnRequestedAt: { type: "string" },
       alwaysOnDecidedAt: { type: "string" },
       // The warm copy's state, written by the finalizer: OFF, STARTING (switching on), ON, or FAILED (with alwaysOnError).

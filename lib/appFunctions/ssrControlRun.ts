@@ -29,7 +29,7 @@ export async function runSsrControl(message: SsrControlMessage): Promise<void> {
   if (message.kind === "alwaysOn") {
     // Retried by the queue on failure; both steps are safe to repeat.
     try {
-      return await (message.enabled ? enableAlwaysOn(message.templateId) : disableAlwaysOn(message.templateId));
+      return await (message.enabled ? enableAlwaysOn(message.templateId) : disableAlwaysOn(message.templateId, message.finalRequest ?? "NONE"));
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       await DeployedApp.patch({ templateId: message.templateId })
