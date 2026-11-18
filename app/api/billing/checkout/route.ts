@@ -16,9 +16,10 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { LmsFunnelAddonSlot } from "@/lib/db/contentEntities";
 import { PlanChangeError, changePlanInPlace } from "@/lib/billing/planChange";
+import { hasRecurringPlan } from "@/lib/billing/oneTime";
 
 type CheckoutRequest =
-  | { kind: "subscription"; plan: PaidPlanId | typeof RETIRED_PLAN.ULTRA; interval?: BillingInterval }
+  | { kind: "subscription"; plan: PaidPlanId | typeof RETIRED_PLAN.ULTRA; interval?: BillingInterval; oneTime?: boolean }
   | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE" }
   | { kind: "funnel_addon_slot" };
 
@@ -27,6 +28,7 @@ function isValidBody(value: unknown): value is CheckoutRequest {
   const body = value as Record<string, unknown>;
   if (body.kind === "subscription") {
     if (body.interval !== undefined && body.interval !== "monthly" && body.interval !== "yearly") return false;
+    if (body.oneTime !== undefined && typeof body.oneTime !== "boolean") return false;
     // ULTRA: a page loaded before the plan rename (it means today's Pro).
     return body.plan === PLAN.STARTER || body.plan === PLAN.PRO || body.plan === PLAN.ENTERPRISE || body.plan === RETIRED_PLAN.ULTRA;
   }
@@ -110,13 +112,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         return NextResponse.json({ error: `The ${PLAN_LABELS[plan]} plan is only available monthly. Please choose monthly billing.` }, { status: 400 });
       }
 
+      const oneTime = body.oneTime === true;
+      if (oneTime && !usesPaystack) {
+        return NextResponse.json({ error: "Paying once is available when you pay in your local currency. You can subscribe instead." }, { status: 400 });
+      }
+      if (oneTime && hasRecurringPlan(user)) {
+        return NextResponse.json({ error: "Your plan renews by itself right now. Cancel it first (it keeps working until the end of what you've paid for), and then you can pay once instead." }, { status: 400 });
+      }
+
       if (usesPaystack) {
         // Local currency: Paystack plan billing. Changing plan starts the new subscription and
         // stops the old one once the payment goes through (lib/billing/paystackBilling.ts).
-        if (user.subscriptionProvider === "PAYSTACK" && user.subscriptionStatus !== "CANCELED" && user.subscriptionId && storedPlan(user) === plan && user.subscriptionInterval === interval) {
+        if (!oneTime && user.subscriptionProvider === "PAYSTACK" && user.subscriptionStatus !== "CANCELED" && user.subscriptionId && storedPlan(user) === plan && user.subscriptionInterval === interval) {
           return NextResponse.json({ error: `You're already on the ${PLAN_LABELS[plan]} plan.` }, { status: 400 });
         }
-        const checkout = await startPaystackPlanCheckout({ user, region, plan, interval, callbackUrl: paystackCallbackUrl });
+        const checkout = await startPaystackPlanCheckout({ user, region, plan, interval, callbackUrl: paystackCallbackUrl, oneTime });
         return NextResponse.json(checkout);
       }
 

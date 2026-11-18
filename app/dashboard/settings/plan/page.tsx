@@ -1,3 +1,4 @@
+import { isOneTimePlan } from "@/lib/billing/oneTime";
 import { PLAN } from "@/lib/plan/plans";
 import { redirect } from "next/navigation";
 import { ensureCreditPeriod } from "@/lib/db/ledgerOperations";
@@ -41,6 +42,8 @@ export default async function PlanPage() {
           endsAt: paying && user.subscriptionCancelAtPeriodEnd ? (user.subscriptionPeriodEnd ?? null) : null,
           renewsAt: paying && !user.subscriptionCancelAtPeriodEnd ? (user.subscriptionPeriodEnd ?? null) : null,
           pastDue: paying && user.subscriptionStatus === "PAST_DUE",
+          oneTime: paying && isOneTimePlan(user),
+          ...(paying && isOneTimePlan(user) ? { oneTimeInterval: user.subscriptionInterval === "yearly" ? ("yearly" as const) : ("monthly" as const) } : {}),
         }}
         trialAvailable={canStartTrial(user)}
         allowanceBalance={balance.allowanceBalance}

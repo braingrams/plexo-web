@@ -161,8 +161,10 @@ export function PlanSection(props: PlanSectionProps) {
     const sessionId = search.get("session_id");
     const upgrade = search.get("upgrade");
     const addon = search.get("addon");
+    const payOnce = search.get("payOnce");
+    const payOnceInterval = search.get("interval") === "yearly" ? ("yearly" as const) : ("monthly" as const);
     const returnTo = search.get("returnTo");
-    if (!sessionId && !upgrade && !addon) return;
+    if (!sessionId && !upgrade && !addon && !payOnce) return;
     router.replace(pathname);
     if (sessionId) {
       void hubApi<{ status?: string }>(`/api/billing/checkout/session?session_id=${encodeURIComponent(sessionId)}`, undefined, "We couldn't confirm your payment.")
@@ -173,6 +175,9 @@ export function PlanSection(props: PlanSectionProps) {
           } else setStatus({ tone: "info", text: "Your payment is still going through. Check back in a moment." });
         })
         .catch((e) => setStatus({ tone: "bad", text: errMsg(e) }));
+    } else if (isPaidPlanId(payOnce)) {
+      // The "pay again" link in the reminder email: straight to paying once for that plan.
+      void checkout({ kind: "subscription", plan: payOnce, interval: payOnceInterval, oneTime: true }, `once-${payOnce}`, safeReturn(returnTo) ? returnTo : null);
     } else if (isPaidPlanId(upgrade) || upgrade === RETIRED_PLAN.ULTRA) {
       void checkout({ kind: "subscription", plan: upgrade === RETIRED_PLAN.ULTRA ? PLAN.PRO : upgrade }, `sub-${upgrade}`, safeReturn(returnTo) ? returnTo : null);
     } else if (addon === "funnel_slot") {
@@ -182,6 +187,8 @@ export function PlanSection(props: PlanSectionProps) {
   }, []);
 
   const upgrades = plansAbove(state.plan);
+  // Local-currency (Paystack) customers can also pay for one period, by transfer or card, with no automatic renewal. Not offered on top of a plan that renews by itself.
+  const payOnceOffered = pricing?.provider === "PAYSTACK" && (!state.paying || !!state.oneTime);
   const shownPayments = showAll ? payments : payments.slice(0, 5);
   const cardLine = card.cardLast4 ? `${BRANDS[card.cardBrand ?? ""] ?? "Card"} ending ${card.cardLast4}${card.cardExpMonth && card.cardExpYear ? `, expires ${String(card.cardExpMonth).padStart(2, "0")}/${String(card.cardExpYear).slice(-2)}` : ""}` : null;
 
@@ -237,7 +244,9 @@ export function PlanSection(props: PlanSectionProps) {
             {cardLine ? <p className="plx-small" style={{ margin: 0, display: "flex", gap: 8, alignItems: "center" }}><CreditCard size={16} aria-hidden /> {cardLine}</p> : null}
           </div>
           <div className="plx-planhero__act">
-            {state.paying ? (
+            {state.oneTime && state.plan !== PLAN.FREE ? (
+              <Button loading={busy === `once-${state.plan}`} onClick={() => checkout({ kind: "subscription", plan: state.plan as PaidPlanId, interval: state.oneTimeInterval ?? "monthly", oneTime: true }, `once-${state.plan}`)}>Pay again to keep {planName(state.plan)}</Button>
+            ) : state.paying ? (
               <Button loading={busy === "portal"} onClick={portal}>{state.pastDue ? "Update my card" : "Manage payment & invoices"}</Button>
             ) : nextPlan ? (
               <ButtonLink href="#plans" rightIcon={<ArrowRight size={18} aria-hidden />}>{state.plan === PLAN.FREE ? "Upgrade my plan" : "See plans"}</ButtonLink>
@@ -257,7 +266,7 @@ export function PlanSection(props: PlanSectionProps) {
         <section id="plans" className="plx-sp__main" data-tour="plan-upgrade" aria-labelledby="up-h" style={{ scrollMarginTop: 90 }}>
           <div>
             <h3 className="plx-h2" id="up-h">{state.plan === PLAN.FREE ? "Pick a plan that fits" : "Want even more?"}</h3>
-            <p className="plx-body" style={{ marginTop: 4 }}>Prices are in your own currency. Change or cancel any time.</p>
+            <p className="plx-body" style={{ marginTop: 4 }}>Prices are in your own currency. Change or cancel any time.{payOnceOffered ? " Not ready to commit? Pay for a month or a year by transfer or card, with no automatic renewal. We'll remind you a week before it ends." : ""}</p>
           </div>
           <div className="plx-plans">
             {upgrades.map((id: PlanId, i) => {
@@ -278,6 +287,21 @@ export function PlanSection(props: PlanSectionProps) {
                     <Button variant={i === 0 ? "primary" : "secondary"} loading={busy === `sub-${id}`} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => checkout({ kind: "subscription", plan: id as PaidPlanId }, `sub-${id}`)}>
                       {state.plan === PLAN.FREE ? `Choose ${v.name}` : `Switch to ${v.name}`}
                     </Button>
+                    {payOnceOffered ? (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
+                        <span className="plx-small">Or pay once, no auto-renew (transfer or card):</span>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <Button variant="ghost" size="sm" loading={busy === `once-${id}`} onClick={() => checkout({ kind: "subscription", plan: id as PaidPlanId, oneTime: true }, `once-${id}`)}>
+                            1 month{pricing?.plans[id as PaidPlanId]?.monthlyLabel ? `: ${pricing.plans[id as PaidPlanId].monthlyLabel}` : ""}
+                          </Button>
+                          {pricing?.plans[id as PaidPlanId]?.yearlyLabel ? (
+                            <Button variant="ghost" size="sm" loading={busy === `once-y-${id}`} onClick={() => checkout({ kind: "subscription", plan: id as PaidPlanId, interval: "yearly", oneTime: true }, `once-y-${id}`)}>
+                              1 year: {pricing.plans[id as PaidPlanId].yearlyLabel}{pricing.plans[id as PaidPlanId].yearlyMonthsFree ? ` (${pricing.plans[id as PaidPlanId].yearlyMonthsFree} months free)` : ""}
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ) : null}
                     {state.plan === PLAN.FREE && trialAvailable && id !== PLAN.ENTERPRISE ? (
                       <Button
                         variant="ghost"

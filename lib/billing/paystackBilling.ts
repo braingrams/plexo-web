@@ -34,6 +34,7 @@ import {
   type PaystackTransaction,
 } from "@/lib/paystack";
 import { loadPriceBook } from "./priceBook";
+import { ONE_TIME_CHANNELS } from "./oneTime";
 import {
   DEFAULT_PRICE_BOOK,
   creditsForTopupAmount,
@@ -122,10 +123,12 @@ export async function startPaystackPlanCheckout(input: {
   plan: PaidPlanId;
   interval: BillingInterval;
   callbackUrl: string;
+  /** Pay for one period with no automatic renewal (bank transfer, card or USSD): no Paystack plan is attached. */
+  oneTime?: boolean;
 }): Promise<PaystackCheckout> {
   const secretKey = requireKey();
-  const planCode = await paystackPlanCode(input.region, input.plan, input.interval, secretKey);
-  const reference = newReference("plx_plan");
+  const planCode = input.oneTime ? undefined : await paystackPlanCode(input.region, input.plan, input.interval, secretKey);
+  const reference = newReference(input.oneTime ? "plx_once" : "plx_plan");
   const result = await initializePaystackTransaction({
     secretKey,
     email: input.user.email,
@@ -134,7 +137,9 @@ export async function startPaystackPlanCheckout(input: {
     reference,
     callbackUrl: input.callbackUrl,
     plan: planCode,
+    ...(input.oneTime ? { channels: [...ONE_TIME_CHANNELS] } : {}),
     metadata: {
+      ...(input.oneTime ? { oneTime: true } : {}),
       kind: PAYSTACK_PLAN_KIND,
       plexoUserId: input.user.id,
       plan: input.plan,
@@ -265,7 +270,10 @@ export async function applyPaystackTransaction(tx: PaystackTransaction, deps: Ap
   const interval: BillingInterval = (meta.interval === "yearly" || meta.interval === "monthly" ? meta.interval : fromName?.interval) ?? "monthly";
   const book = await loadPriceBook();
   const region = regionById(book, meta.region as string) ?? regionById(book, user.billingRegion) ?? regionForCurrency(book, tx.currency) ?? regionForCurrency(DEFAULT_PRICE_BOOK, tx.currency)!;
-  const periodEnd = addInterval(paidAt, interval);
+  // Paying once again while a one-time plan is still running adds a period to the end, instead of starting again from today.
+  const oneTime = isFirstPayment && meta.oneTime === true;
+  const extendFrom = oneTime && user.subscriptionStatus === "ACTIVE" && storedPlan(user) === plan && user.subscriptionPeriodEnd && Date.parse(user.subscriptionPeriodEnd) > Date.parse(paidAt) ? user.subscriptionPeriodEnd : paidAt;
+  const periodEnd = addInterval(extendFrom, interval);
 
   // Already applied (verify + webhook, or a webhook retry): nothing more to do.
   const { data: alreadyRecorded } = await Payment.get({ id: `paystack_${tx.reference}` }).go();
@@ -276,7 +284,7 @@ export async function applyPaystackTransaction(tx: PaystackTransaction, deps: Ap
   const previousAllowance = allowancePlan(user);
   // Moving to a different plan on Paystack = a new subscription; the old one stops renewing now.
   const replacingOld =
-    isFirstPayment && user.subscriptionProvider === "PAYSTACK" && user.subscriptionId && !user.subscriptionId.startsWith("pending:") && user.paystackEmailToken;
+    isFirstPayment && !oneTime && user.subscriptionProvider === "PAYSTACK" && user.subscriptionId && !user.subscriptionId.startsWith("pending:") && user.paystackEmailToken;
   if (replacingOld) {
     await disablePaystackSubscription({ secretKey: requireKey(), code: user.subscriptionId!, emailToken: user.paystackEmailToken! }).catch((err) =>
       console.error(`couldn't stop the previous Paystack subscription ${user.subscriptionId}`, err),
@@ -293,7 +301,8 @@ export async function applyPaystackTransaction(tx: PaystackTransaction, deps: Ap
       subscriptionStatus: "ACTIVE",
       subscriptionInterval: interval,
       subscriptionPeriodEnd: laterEnd,
-      subscriptionCancelAtPeriodEnd: false,
+      // A one-time payment ends at the period's end on purpose (that is what the reminders and the move to Free key off).
+      subscriptionCancelAtPeriodEnd: oneTime,
       ...(isFirstPayment ? { subscriptionStartedAt: paidAt } : {}),
       // What this charge was, so the next renewal's price is known; a booked price move is done once it renews.
       subscriptionAmountMinor: tx.amount,

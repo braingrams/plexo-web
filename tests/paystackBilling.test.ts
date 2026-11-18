@@ -54,7 +54,8 @@ vi.mock("@/lib/billing/priceBook", async () => {
   return { loadPriceBook: async () => DEFAULT_PRICE_BOOK };
 });
 
-import { applyPaystackTransaction, handlePaystackBillingEvent, parsePaystackPlanName, addInterval } from "@/lib/billing/paystackBilling";
+import { applyPaystackTransaction, handlePaystackBillingEvent, parsePaystackPlanName, addInterval, startPaystackPlanCheckout } from "@/lib/billing/paystackBilling";
+import { initializePaystackTransaction } from "@/lib/paystack";
 import { disablePaystackSubscription } from "@/lib/paystack";
 import { effectivePlan } from "@/lib/plan/entitlement";
 
@@ -178,5 +179,49 @@ describe("another Charisol product on the same Paystack account is never mistake
     const reconcilePriceMove = vi.fn(async () => undefined);
     expect(await handlePaystackBillingEvent({ event: "invoice.create", data: { subscription: { subscription_code: "SUB_PLEXO" }, customer: { email: "ada@example.com" } } }, { reconcilePriceMove })).toBe(true);
     expect(reconcilePriceMove).toHaveBeenCalledWith("u1");
+  });
+});
+
+describe("pay once (bank transfer, no automatic renewal)", () => {
+  const once = (extra: Record<string, unknown> = {}) => firstPayment({ reference: "once1", metadata: { kind: "plexo_plan", plexoUserId: "u1", plan: "STARTER", interval: "monthly", region: "NG", oneTime: true }, ...extra });
+
+  it("starts a payment with no Paystack plan attached (so transfer is offered), with transfer first, tagged as pay-once", async () => {
+    vi.mocked(initializePaystackTransaction).mockResolvedValue({ authorizationUrl: "u", accessCode: "a", reference: "plx_once_x" } as never);
+    const { DEFAULT_PRICE_BOOK, regionById } = await import("@/lib/billing/pricing");
+    const region = regionById(DEFAULT_PRICE_BOOK, "NG");
+    expect(region).toBeTruthy();
+    await startPaystackPlanCheckout({ user: { id: "u1", email: "ada@example.com" }, region: region!, plan: "STARTER", interval: "monthly", callbackUrl: "https://x/cb", oneTime: true });
+    const sent = vi.mocked(initializePaystackTransaction).mock.calls.at(-1)![0] as Record<string, any>;
+    expect(sent.plan).toBeUndefined();
+    expect(sent.channels[0]).toBe("bank_transfer");
+    expect(sent.metadata).toMatchObject({ kind: "plexo_plan", oneTime: true, plan: "STARTER", interval: "monthly" });
+    expect(String(sent.reference)).toMatch(/^plx_once/);
+  });
+
+  it("a payment puts the account on the plan for one period and marks it to end there (so reminders and the move to Free work)", async () => {
+    await applyPaystackTransaction(once() as never, { syncPlanLifecycle: sync });
+    expect(user()).toMatchObject({ subscriptionPlan: "STARTER", subscriptionStatus: "ACTIVE", subscriptionCancelAtPeriodEnd: true, subscriptionId: "pending:once1", subscriptionPeriodEnd: "2026-12-01T00:00:00.000Z" });
+  });
+
+  it("does not stop a subscription that already exists (that would have been blocked at checkout)", async () => {
+    db.users.set("u1", { id: "u1", email: "ada@example.com", subscriptionPlan: "STARTER", subscriptionProvider: "PAYSTACK", subscriptionId: "SUB_real", paystackEmailToken: "tok", subscriptionStatus: "ACTIVE" });
+    await applyPaystackTransaction(once() as never, { syncPlanLifecycle: sync });
+    expect(disablePaystackSubscription).not.toHaveBeenCalled();
+  });
+
+  it("paying again while the plan is still running adds a period to its end instead of starting from today", async () => {
+    db.users.set("u1", { id: "u1", email: "ada@example.com", subscriptionPlan: "STARTER", subscriptionProvider: "PAYSTACK", subscriptionId: "pending:once0", subscriptionStatus: "ACTIVE", subscriptionCancelAtPeriodEnd: true, subscriptionPeriodEnd: "2026-11-20T00:00:00.000Z", planVersion: 2 });
+    await applyPaystackTransaction(once({ reference: "once2", paid_at: "2026-11-10T00:00:00.000Z" }) as never, { syncPlanLifecycle: sync });
+    expect(user().subscriptionPeriodEnd).toBe("2026-12-20T00:00:00.000Z");
+  });
+
+  it("a yearly pay-once payment puts the end a year out", async () => {
+    await applyPaystackTransaction(once({ reference: "once3", metadata: { kind: "plexo_plan", plexoUserId: "u1", plan: "STARTER", interval: "yearly", region: "NG", oneTime: true } }) as never, { syncPlanLifecycle: sync });
+    expect(user()).toMatchObject({ subscriptionInterval: "yearly", subscriptionCancelAtPeriodEnd: true, subscriptionPeriodEnd: "2027-11-01T00:00:00.000Z" });
+  });
+
+  it("an ordinary subscription payment is not marked to end", async () => {
+    await applyPaystackTransaction(firstPayment() as never, { syncPlanLifecycle: sync });
+    expect(user().subscriptionCancelAtPeriodEnd).toBe(false);
   });
 });

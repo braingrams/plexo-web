@@ -355,7 +355,7 @@ export async function sendAccessEndingReminder(user: UserItem, now: Date = new D
     endsAt: due.endsAt,
     kind: due.kind,
     stage: due.stage,
-    upgradeUrl: due.kind === "CANCELLING" ? `${appUrl()}/dashboard/settings/subscription` : `${appUrl()}/dashboard/settings/subscription?upgrade=${plan}`,
+    upgradeUrl: due.kind === "CANCELLING" ? `${appUrl()}/dashboard/settings/subscription` : due.kind === "ONE_TIME" ? `${appUrl()}/dashboard/settings/subscription?payOnce=${plan}&interval=${user.subscriptionInterval === "yearly" ? "yearly" : "monthly"}` : `${appUrl()}/dashboard/settings/subscription?upgrade=${plan}`,
   });
   await sendEmail(user.email, subject, html);
   return true;

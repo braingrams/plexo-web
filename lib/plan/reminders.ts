@@ -5,14 +5,16 @@
 // Who has an end date:
 //  • a free trial (planAccessUntil, source TRIAL) and an admin grant with an end date (ADMIN);
 //  • a paying subscriber who has cancelled and so ends at the period's end;
+//  • someone who paid once (Paystack regions, "pay once by transfer"): their paid period simply ends;
 //  • a paying subscriber who is renewing (kind RENEWING — the date is the next charge).
 // A subscriber who is simply renewing gets one different, calmer email a week before the charge
 // ("your plan renews on …, make sure your card can cover it") — never an "ends" warning.
 
 import { paidAccess, isPaidPlan, type PlanUser } from "./entitlement";
+import { isOneTimePlan } from "@/lib/billing/oneTime";
 
 export type ReminderStage = "WEEK" | "DAY" | "TODAY";
-export type ReminderKind = "TRIAL" | "GRANT" | "CANCELLING" | "RENEWING";
+export type ReminderKind = "TRIAL" | "GRANT" | "CANCELLING" | "ONE_TIME" | "RENEWING";
 
 export const STAGE_ORDER: Record<ReminderStage, number> = { WEEK: 1, DAY: 2, TODAY: 3 };
 
@@ -26,6 +28,8 @@ export type ReminderUser = PlanUser & {
   subscriptionStatus?: string | null;
   subscriptionPeriodEnd?: string | null;
   subscriptionCancelAtPeriodEnd?: boolean | null;
+  subscriptionProvider?: string | null;
+  subscriptionId?: string | null;
 };
 
 export type DueReminder = { stage: ReminderStage; kind: ReminderKind; endsAt: string; key: string };
@@ -43,7 +47,8 @@ export function accessEnd(user: ReminderUser, now: Date): { endsAt: string; kind
     user.subscriptionPeriodEnd &&
     (user.subscriptionStatus === "ACTIVE" || user.subscriptionStatus === "TRIALING")
   ) {
-    return { endsAt: user.subscriptionPeriodEnd, kind: user.subscriptionCancelAtPeriodEnd ? "CANCELLING" : "RENEWING" };
+    // Someone who paid once (no subscription behind it) gets the same week / day / today reminders, worded for "pay again" rather than "you cancelled".
+    return { endsAt: user.subscriptionPeriodEnd, kind: user.subscriptionCancelAtPeriodEnd ? (isOneTimePlan(user) ? "ONE_TIME" : "CANCELLING") : "RENEWING" };
   }
   return null;
 }

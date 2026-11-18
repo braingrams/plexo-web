@@ -10,6 +10,8 @@ export interface PaystackInitializeParams {
   reference: string;
   callbackUrl: string;
   metadata?: Record<string, unknown>;
+  /** Which payment methods to offer (e.g. bank transfer). Paystack only shows the ones switched on for the account. */
+  channels?: string[];
   /** A Paystack plan code — the transaction then also starts a recurring subscription on that plan. */
   plan?: string;
 }
@@ -44,6 +46,7 @@ export async function initializePaystackTransaction(
       // Charisol's shared account: tag the charge with the product so the one webhook can be routed (see lib/paystackProduct.ts).
       metadata: process.env.PLATFORM_PAYSTACK_SECRET_KEY && params.secretKey === process.env.PLATFORM_PAYSTACK_SECRET_KEY ? withProduct(params.metadata) : params.metadata,
       ...(params.plan ? { plan: params.plan } : {}),
+      ...(params.channels?.length ? { channels: params.channels } : {}),
     }),
   });
 

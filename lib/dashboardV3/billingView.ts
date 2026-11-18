@@ -74,6 +74,10 @@ export type PlanState = {
   endsAt?: string | null;
   renewsAt?: string | null;
   pastDue?: boolean;
+  /** Paid once (no automatic renewal): the plan simply runs to `endsAt`. */
+  oneTime?: boolean;
+  /** For a one-time plan: whether they paid for a month or a year, so "pay again" repeats it. */
+  oneTimeInterval?: "monthly" | "yearly";
 };
 
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
@@ -86,6 +90,7 @@ export function planStatusLine(s: PlanState): string {
   if (s.basis === "TRIAL") return `You're trying ${name} free${s.daysLeft != null ? `. ${s.daysLeft} day${s.daysLeft === 1 ? "" : "s"} left` : ""}. Nothing is charged unless you subscribe.`;
   if (s.basis === "GRANT") return `${name} is on us${s.daysLeft != null ? ` for ${s.daysLeft} more day${s.daysLeft === 1 ? "" : "s"}` : ""}. There's nothing to pay.`;
   if (s.basis === "ADMIN_KEPT") return `Your ${name} plan is provided by Plexo. There's nothing to pay.`;
+  if (s.oneTime && s.endsAt) return `You've paid for ${name} until ${day(s.endsAt)}. It won't renew by itself, so pay again before then to keep it.`;
   if (s.endsAt) return `You've cancelled. ${name} keeps working until ${day(s.endsAt)}.`;
   if (s.renewsAt) return `Your ${name} plan renews on ${day(s.renewsAt)}.`;
   return `You're on the ${name} plan.`;

@@ -15,7 +15,7 @@ import { PaidPlanId } from "@/lib/plan/plans";
 import type { BillingInterval } from "./pricing";
 
 export type CheckoutBody =
-  | { kind: "subscription"; plan: PaidPlanId; interval?: BillingInterval; returnTo?: string }
+  | { kind: "subscription"; plan: PaidPlanId; interval?: BillingInterval; /** Pay for one period by transfer, card or USSD, with no automatic renewal (Paystack regions). */ oneTime?: boolean; returnTo?: string }
   | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE"; stayInPage?: boolean; returnTo?: string }
   | { kind: "funnel_addon_slot"; returnTo?: string };
 

@@ -129,3 +129,25 @@ describe("the email", () => {
     expect(cancelling.html).toContain("You've chosen to cancel");
   });
 });
+
+describe("someone who paid once (no automatic renewal)", () => {
+  const paidOnce = (extra: Partial<ReminderUser> = {}): ReminderUser => ({
+    email: "a@b.co", subscriptionPlan: "STARTER", subscriptionStatus: "ACTIVE", subscriptionPeriodEnd: END,
+    subscriptionProvider: "PAYSTACK", subscriptionId: "pending:plx_once_1", subscriptionCancelAtPeriodEnd: true, ...extra,
+  });
+  it("gets the same week / day / today reminders as a plan that ends, as their own kind", () => {
+    expect(dueReminder(paidOnce(), at("2026-11-10T09:00:00Z"))).toMatchObject({ stage: "WEEK", kind: "ONE_TIME", endsAt: END });
+    expect(dueReminder(paidOnce(), at("2026-11-13T16:00:00Z"))).toMatchObject({ stage: "DAY", kind: "ONE_TIME" });
+    expect(dueReminder(paidOnce(), at("2026-11-14T08:00:00Z"))).toMatchObject({ stage: "TODAY", kind: "ONE_TIME" });
+  });
+  it("a subscriber who cancelled still reads as cancelling (a real subscription is behind it)", () => {
+    expect(dueReminder(paidOnce({ subscriptionId: "SUB_real" }), at("2026-11-10T09:00:00Z"))).toMatchObject({ kind: "CANCELLING" });
+  });
+  it("the email says it won't renew by itself and offers to pay again, not 'you cancelled'", () => {
+    const e = buildPlanEndingSoonEmail({ plan: "STARTER", endsAt: END, kind: "ONE_TIME", stage: "WEEK", upgradeUrl: "https://x/pay" });
+    expect(e.subject).toContain("ends in 7 days");
+    expect(e.html).toContain("doesn't renew by itself");
+    expect(e.html).toContain("Pay again");
+    expect(e.html).not.toContain("chosen to cancel");
+  });
+});

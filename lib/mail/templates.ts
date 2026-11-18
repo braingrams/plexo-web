@@ -809,7 +809,7 @@ const PLAN_NAME = (plan: string): string => planLabel(plan);
 export function buildPlanEndingSoonEmail(input: {
   plan: string;
   endsAt: string;
-  kind: "TRIAL" | "GRANT" | "CANCELLING";
+  kind: "TRIAL" | "GRANT" | "CANCELLING" | "ONE_TIME";
   stage: "WEEK" | "DAY" | "TODAY";
   upgradeUrl: string;
 }): { subject: string; html: string } {
@@ -821,8 +821,10 @@ export function buildPlanEndingSoonEmail(input: {
   const intro =
     input.kind === "CANCELLING"
       ? `You've chosen to cancel, so ${what.toLowerCase()} runs until ${date} and then stops.`
-      : `${what} runs until ${date} and then stops.`;
-  const cta = `Keep ${plan}`;
+      : input.kind === "ONE_TIME"
+        ? `You paid for ${plan} for a set time, so it runs until ${date} and then stops. It doesn't renew by itself.`
+        : `${what} runs until ${date} and then stops.`;
+  const cta = input.kind === "ONE_TIME" ? "Pay again" : `Keep ${plan}`;
   const html = emailShell({
     title: headline,
     bodyHtml: `
@@ -831,7 +833,7 @@ export function buildPlanEndingSoonEmail(input: {
       </h1>
       <p style="margin:0 0 12px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${intro}</p>
       <p style="margin:0 0 20px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">
-        Keep everything working exactly as it is by choosing a plan before then. If you don't, your account moves to Free:
+        Keep everything working exactly as it is by ${input.kind === "ONE_TIME" ? "paying again" : "choosing a plan"} before then. If you don't, your account moves to Free:
         one site stays live with just its homepage, on a Plexo address. Nothing is deleted — upgrading later brings it all back.
       </p>
       ${CTA_BUTTON(input.upgradeUrl, cta)}
