@@ -472,6 +472,30 @@ export const SolDailyStat = new Entity(
   { table, client: docClient },
 );
 
+// ExperienceDailyStat: how the simple vs full editor view is used. Same sparse-dimension, atomic-`.add()` pattern as
+// PageViewDailyStat/SolDailyStat above. Written by lib/experienceStats.ts (the only writer); read by plexo-admin's
+// /experience page. Counts only — no page content, no personal data beyond the account id on the ACTIVE rows.
+export const ExperienceDailyStat = new Entity(
+  {
+    model: { entity: "experienceDailyStat", version: "1", service: "plexoOps" },
+    attributes: {
+      date: { type: "string", required: true }, // "YYYY-MM-DD", UTC
+      // "OPEN#simple|full" (editor opened) | "PUBLISH#simple|full" | "SWITCH#simple>full" | "SWITCH#full>simple" |
+      // "ACTIVE#simple|full#<userId>" (sparse: one row per person per day, for distinct counts).
+      dimension: { type: "string", required: true },
+      count: { type: "number", default: 0 },
+      ttl: { type: "number", default: () => days(400) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["date"], template: "XPDAY#${date}" },
+        sk: { field: "sk", composite: ["dimension"], template: "DIM#${dimension}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoOpsService = new Service(
   {
     PageView,
@@ -485,6 +509,7 @@ export const plexoOpsService = new Service(
     SolUsageEvent,
     SolUsageEventContent,
     SolDailyStat,
+    ExperienceDailyStat,
   },
   { table, client: docClient },
 );

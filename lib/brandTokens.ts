@@ -39,22 +39,27 @@ export const SHARED_TOKENS: TokenSet = {
   "logo-mark": "#B8F34A",
 };
 
+/*
+ * Colour discipline: the lime brand colour is for the ONE main action on a screen (and a single highlight such
+ * as today's bar or the progress fill). Links, active menu items, tinted cards and icon tiles stay neutral, so
+ * nothing competes with it.
+ */
 export const LIGHT_TOKENS: TokenSet = {
   "color-bg-canvas": "#F7F8F3",
   "color-bg-surface": "#FFFFFF",
   "color-bg-elevated": "#F4F5F0",
   "color-bg-sunken": "#EEEFE9",
-  "color-bg-tint": "#F0F6DF",
+  "color-bg-tint": "#ECEDE6",
   "color-border-default": "#E8E8E4",
   "color-border-subtle": "#EFEFEB",
   "color-border-strong": "#CFCFC9",
   "color-text-primary": "#121212",
   "color-text-secondary": "#5B5B58",
   "color-text-muted": "#6B6B67",
-  "color-text-link": "#517A12",
+  "color-text-link": "#121212",
   "color-text-inverse": "#F7F8F3",
   "color-brand-primary": "#B8F34A",
-  "color-brand-deep": "#517A12",
+  "color-brand-deep": "#121212",
   "color-brand-accent": "#F5AC05",
   "color-brand-secondary": "#5545D6",
   "color-brand-secondary-subtle": "#EEECFF",
@@ -94,17 +99,17 @@ export const DARK_TOKENS: TokenSet = {
   "color-bg-surface": "#15161C",
   "color-bg-elevated": "#1D1F26",
   "color-bg-sunken": "#101118",
-  "color-bg-tint": "#1F2614",
+  "color-bg-tint": "#23252D",
   "color-border-default": "#2C2E35",
   "color-border-subtle": "#22242B",
   "color-border-strong": "#3E414A",
   "color-text-primary": "#F4F5F0",
   "color-text-secondary": "#A6A7A2",
   "color-text-muted": "#8E8F8A",
-  "color-text-link": "#B8F34A",
+  "color-text-link": "#F4F5F0",
   "color-text-inverse": "#121212",
   "color-brand-primary": "#B8F34A",
-  "color-brand-deep": "#B8F34A",
+  "color-brand-deep": "#F4F5F0",
   "color-brand-accent": "#F5AC05",
   "color-brand-secondary": "#8A7BFF",
   "color-brand-secondary-subtle": "#22203A",

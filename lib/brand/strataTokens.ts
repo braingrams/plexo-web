@@ -181,19 +181,17 @@ export function mapStrataTokens(vars: Record<string, string>): BrandTokens {
     // Dark mode derives hover from the primary itself (Strata's hover is a light-theme value).
     dark["color-action-primary-hover"] = primary.toLowerCase() === bundledPrimary.toLowerCase() ? DARK_TOKENS["color-action-primary-hover"] : mix(primary, 85, "#FFFFFF");
     if (primary.toLowerCase() === bundledPrimary.toLowerCase()) delete dark["color-action-primary-active"];
-    // Primary as text/link/deep colour on the dark canvas only if it is readable there.
+    // Primary as the focus ring and "Live" green on the dark canvas, only if it is readable there. It is NOT used for
+    // links or the "deep" accent: lime everywhere was overwhelming, so those stay neutral (colour is for the main action).
     if (contrastRatio(primary, DARK_TOKENS["color-bg-canvas"]) >= 4.5) {
-      for (const k of ["color-text-link", "color-brand-deep", "color-focus-ring", "color-status-success"]) dark[k] = primary;
+      for (const k of ["color-focus-ring", "color-status-success"]) dark[k] = primary;
     }
   }
   if (secondary) {
-    // The deep brand colour is link text and the light focus ring: needs 4.5:1 on white and the page.
+    // The secondary colour is the light focus ring (needs 4.5:1 on white and the page). Links and the "deep" accent stay neutral.
     if (contrastRatio(secondary, eff.surface) >= 4.5 && contrastRatio(secondary, eff.page) >= 4.5) {
-      light["color-brand-deep"] = secondary;
-      light["color-text-link"] = secondary;
       light["color-focus-ring"] = secondary;
     }
-    if (contrastRatio(secondary, DARK_TOKENS["color-bg-canvas"]) >= 4.5) dark["color-text-link"] = secondary;
   }
   if (focus && contrastRatio(focus, eff.page) >= 3) light["color-focus-ring"] = focus;
   if (accent) {

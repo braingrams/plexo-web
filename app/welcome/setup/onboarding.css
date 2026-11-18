@@ -92,14 +92,14 @@
 }
 
 /* Tune flow: pick which existing site to work on. */
-.ob-sites { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
-.ob-site { font: inherit; position: relative; text-align: left; display: flex; flex-direction: column; padding: 0; border-radius: var(--plx-radius-card); border: 2px solid var(--plx-border); background: var(--plx-surface); color: var(--plx-text); cursor: pointer; overflow: hidden; }
-.ob-site:hover { border-color: var(--plx-border-strong); }
+.ob-col--wide { max-width: min(1240px, 100%); padding-left: clamp(20px, 4vw, 48px); padding-right: clamp(20px, 4vw, 48px); }
+.ob-sites { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 20px; }
+.ob-site { font: inherit; position: relative; text-align: left; display: flex; flex-direction: column; padding: 0; border-radius: var(--plx-radius-card); border: 2px solid var(--plx-border); background: var(--plx-surface); color: var(--plx-text); cursor: pointer; overflow: hidden; transition: border-color .15s, box-shadow .15s, transform .15s; }
+.ob-site:hover { border-color: var(--plx-border-strong); transform: translateY(-2px); }
 .ob-site[aria-checked="true"] { border-color: var(--plx-deep); box-shadow: 0 0 0 4px color-mix(in srgb, var(--plx-brand) 35%, transparent); }
-.ob-site__thumb { display: flex; flex-direction: column; height: 96px; background: var(--plx-sunken); border-bottom: 1px solid var(--plx-border); }
-.ob-site__bar { display: flex; gap: 4px; padding: 8px 10px; background: var(--plx-elevated); }
-.ob-site__bar i { width: 7px; height: 7px; border-radius: 50%; background: var(--plx-border-strong); }
-.ob-site__body { flex: 1; display: grid; place-items: center; }
+.ob-site__thumb { position: relative; display: block; aspect-ratio: 16 / 10; overflow: hidden; background: var(--plx-sunken); border-bottom: 1px solid var(--plx-border); }
+.ob-site__fallback { position: absolute; inset: 0; display: grid; place-items: center; }
+.ob-site__shot { position: absolute; left: 0; top: 0; border: 0; transform-origin: 0 0; pointer-events: none; }
 .ob-site__meta { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px 16px; min-width: 0; }
 .ob-site__name { font-size: 16px; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ob-site__check { position: absolute; top: 8px; right: 8px; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--plx-brand); color: var(--plx-on-brand); }
