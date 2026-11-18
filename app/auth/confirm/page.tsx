@@ -10,9 +10,11 @@ export default async function ConfirmPage({
   const token = params.token;
   const email = params.email;
 
-  if (token && email) {
-    const target = `/api/auth/verify-email?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
-    redirect(target);
+  if (token) {
+    // Links sent before the change still carry email; the verify route accepts both shapes.
+    const query = new URLSearchParams({ token });
+    if (email) query.set("email", email);
+    redirect(`/api/auth/verify-email?${query.toString()}`);
   }
 
   return (

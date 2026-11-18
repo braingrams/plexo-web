@@ -89,7 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         mode: "subscription",
         customer: customerId,
         line_items: [{ price: priceId, quantity: 1 }],
-        subscription_data: { metadata: { plexoUserId: session.user.id, plan: body.plan } },
+        subscription_data: { metadata: { plexoUserId: session.user.id, plan: body.plan, previous_plan: user.subscriptionPlan ?? "FREE" } },
         return_url: returnUrl,
       });
       return NextResponse.json({ clientSecret: checkoutSession.client_secret });

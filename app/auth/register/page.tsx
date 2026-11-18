@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useState } from "react";
 import { ArrowLeft, Sparkles, ShieldCheck, CheckCircle2, Eye, EyeOff, Zap } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
-import { trackEvent } from "@/lib/analytics";
+import { trackEvent, trackUserIdentifiedOnce } from "@/lib/analytics";
 import { PASSWORD_MIN_LENGTH, PASSWORD_RULES_TEXT, passwordProblem } from "@/lib/passwordPolicy";
 import { mulish } from "@/lib/mulish";
 import { PlexoLogo } from "@/app/plexo-logo";
@@ -64,8 +64,11 @@ function RegisterForm() {
         return;
       }
 
-      // Account was created (server returned 201). Fired here, not on button click.
-      trackEvent({ event: "sign_up", method: "email" });
+      // Account was created (server returned 201). Fired here, not on button click. The id is the
+      // internal account id from the register response; it's only sent when the response has it.
+      const newUserId = (result as { data?: { id?: string } } | undefined)?.data?.id;
+      trackEvent({ event: "sign_up", method: "email", ...(newUserId ? { user_id: newUserId } : {}) });
+      if (newUserId) trackUserIdentifiedOnce({ user_id: newUserId, plan_name: "free", plan_status: "free" });
       router.push(`/auth/confirm?email=${encodeURIComponent(email)}`);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Registration failed.";

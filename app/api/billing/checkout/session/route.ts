@@ -28,13 +28,25 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!user) throw new Error(`Session user ${session.user.id} has no matching User record`);
 
   try {
-    const checkoutSession = await getStripe().checkout.sessions.retrieve(sessionId);
+    const checkoutSession = await getStripe().checkout.sessions.retrieve(sessionId, { expand: ["subscription", "subscription.latest_invoice"] });
     // Never let a caller probe an arbitrary session id — only their own checkout, tied to
     // their own Stripe customer.
     if (!user.stripeCustomerId || checkoutSession.customer !== user.stripeCustomerId) {
       return NextResponse.json({ error: "Not found." }, { status: 404 });
     }
-    return NextResponse.json({ status: checkoutSession.status, paymentStatus: checkoutSession.payment_status });
+    // The invoice (subscriptions) or payment intent (one-time) is the transaction ID the analytics purchase needs.
+    const subscription = typeof checkoutSession.subscription === "object" && checkoutSession.subscription ? checkoutSession.subscription : null;
+    const invoice = subscription && typeof subscription.latest_invoice === "object" && subscription.latest_invoice ? subscription.latest_invoice : null;
+    const paymentIntent = typeof checkoutSession.payment_intent === "string" ? checkoutSession.payment_intent : null;
+    return NextResponse.json({
+      status: checkoutSession.status,
+      paymentStatus: checkoutSession.payment_status,
+      transactionId: invoice?.id ?? paymentIntent ?? null,
+      amount: invoice?.amount_paid ?? checkoutSession.amount_total ?? null,
+      currency: invoice?.currency ?? checkoutSession.currency ?? null,
+      plan: subscription?.metadata?.plan ?? null,
+      previousPlan: subscription?.metadata?.previous_plan ?? null,
+    });
   } catch {
     return NextResponse.json({ error: "Couldn't look up that checkout session." }, { status: 502 });
   }

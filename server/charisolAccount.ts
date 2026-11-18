@@ -79,6 +79,7 @@ export async function resolveCharisolUser(
     if (!winner) throw err;
     return signInExisting(winner, email, link);
   }
+  await User.patch({ id }).set({ signupEventPendingAt: new Date().toISOString() }).go();
   await recordCharisolLink(id, {}, link);
   syncSignupToAlps({ id, email, name, image }, "charisol");
   return { id, email, name, image: image ?? null };

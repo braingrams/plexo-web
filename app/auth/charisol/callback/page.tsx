@@ -6,6 +6,7 @@ import { CharisolAuth, POST_LOGIN_REDIRECT_KEY, initialAuthError } from "@/lib/c
 import { authClient } from "@/lib/auth-client";
 import { clearStrataConnect, finishStrataConnect, isAnotherStrataAccount, takeStrataConnect } from "@/lib/strataConnect";
 import { DashboardSkeleton } from "./dashboard-skeleton";
+import { trackOnce } from "@/lib/analytics";
 
 // redirectUri target registered for Plexo's Charisol app client (Developer Portal) and
 // passed to CharisolAuth.init() in lib/charisolAuth.ts. CharisolAuth.init() already saw
@@ -82,6 +83,12 @@ export default function CharisolCallbackPage() {
         return;
       }
 
+      // Analytics: sign_up for an account this sign-in just created, login otherwise. The server decides which.
+      const newAccount = await lookupNewAccount(session.idToken);
+      const analyticsKey = "google_auth_" + session.idToken.slice(-16);
+      if (newAccount.isNew) trackOnce(analyticsKey, { event: "sign_up", method: "google", user_id: newAccount.userId });
+      else trackOnce(analyticsKey, { event: "login", method: "google" });
+
       // Keep this Charisol sign-in on the server so other Charisol products (Strata) can open as them without another login.
       if (session.refreshToken) {
         await fetch("/api/v1/charisol/link", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refreshToken: session.refreshToken }) }).catch(() => undefined);
@@ -96,4 +103,24 @@ export default function CharisolCallbackPage() {
   }, [router]);
 
   return <DashboardSkeleton />;
+}
+
+// One lookup per sign-in, shared by any repeat run of the effect (React StrictMode runs it twice in dev),
+// so the server's one-time marker is read once.
+const newAccountLookups = new Map<string, Promise<{ isNew: boolean; userId?: string }>>();
+function lookupNewAccount(idToken: string): Promise<{ isNew: boolean; userId?: string }> {
+  const key = idToken.slice(-16);
+  let lookup = newAccountLookups.get(key);
+  if (!lookup) {
+    lookup = (async () => {
+      try {
+        const res = await fetch("/api/auth/signup-event");
+        return res.ok ? ((await res.json()) as { isNew: boolean; userId?: string }) : { isNew: false };
+      } catch {
+        return { isNew: false };
+      }
+    })();
+    newAccountLookups.set(key, lookup);
+  }
+  return lookup;
 }

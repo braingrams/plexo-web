@@ -9,6 +9,7 @@ import { mulish } from "@/lib/mulish";
 import { PlexoLogo } from "@/app/plexo-logo";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 import { DashboardSkeleton } from "@/app/auth/charisol/callback/dashboard-skeleton";
+import { trackEvent } from "@/lib/analytics";
 
 function LoginForm() {
   const router = useRouter();
@@ -82,6 +83,7 @@ function LoginForm() {
         return;
       }
 
+      trackEvent({ event: "login", method: "email" });
       if (redirectTo.startsWith("/dashboard")) setRedirecting(true);
       // A full page load, not a client-side push: the sign-in cookie is fresh, and a client-side push can reuse a copy of the
       // destination fetched while signed out (which just bounces back here) and leave the person on this screen for good.

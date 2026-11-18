@@ -3,8 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { passwordProblem } from "@/lib/passwordPolicy";
 import { hashPassword } from "@better-auth/utils/password";
 
-import { dynamoAdapter } from "@/server/authDynamo";
-import { User } from "@/lib/db/coreEntities";
+import { EmailVerifyLink, User } from "@/lib/db/coreEntities";
 import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
 import { syncSignupToAlps } from "@/lib/alps";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
@@ -69,12 +68,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   syncSignupToAlps({ id, email, name }, "email");
 
+  // The link carries only this random token; the row maps it to the account (see EmailVerifyLink).
   const token = randomUUID();
-  await dynamoAdapter.createVerificationToken?.({
-    identifier: `verify-email:${email}`,
+  await EmailVerifyLink.create({
     token,
-    expires: new Date(Date.now() + VERIFY_TOKEN_TTL_MS),
-  });
+    userId: id,
+    expiresAt: new Date(Date.now() + VERIFY_TOKEN_TTL_MS).toISOString(),
+  }).go();
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const verifySubject = "Verify your Plexo account";
@@ -82,7 +82,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await sendMaildripEmail({
       to: email,
       subject: verifySubject,
-      html: buildVerificationEmail(`${baseUrl}/auth/confirm?token=${token}&email=${encodeURIComponent(email)}`),
+      html: buildVerificationEmail(`${baseUrl}/auth/confirm?token=${token}`),
     });
     logEmailDelivery({ kind: "maildrip", to: email, subject: verifySubject, status: "sent", context: "verification_email" });
   } catch (err) {

@@ -7,6 +7,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { EmbeddedCheckoutProvider, EmbeddedCheckout } from "@stripe/react-stripe-js";
 import { getStripePromise } from "@/lib/stripeClientPromise";
 import { useTopupPacks, packLabel } from "../_components/useTopupPacks";
+import { trackEvent, trackPurchaseOnce, subscriptionItem, purchaseTypeFor, analyticsPlan } from "@/lib/analytics";
 
 type LedgerEntryType = "MONTHLY_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
 
@@ -190,6 +191,20 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           return;
         }
         if (data.status === "complete") {
+          // Purchase: only once the payment is paid and Stripe has given the invoice (transaction) ID.
+          if (data.paymentStatus === "paid" && data.transactionId && (data.plan === "PRO" || data.plan === "ULTRA")) {
+            trackPurchaseOnce(String(data.transactionId), {
+              event: "purchase",
+              purchase_type: purchaseTypeFor(data.previousPlan),
+              previous_plan: analyticsPlan(data.previousPlan ?? "FREE"),
+              ecommerce: {
+                transaction_id: String(data.transactionId),
+                currency: String(data.currency ?? "").toUpperCase(),
+                value: Number(data.amount ?? 0) / 100,
+                items: [subscriptionItem(data.plan)],
+              },
+            });
+          }
           setCheckoutStatus({ kind: "success", text: "Payment received — your plan is updating now." });
           setTimeout(() => {
             if (cancelled) return;
@@ -263,6 +278,15 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
       }
       if (!data.clientSecret) throw new Error(data.error ?? "Could not start checkout.");
       setCheckoutSecret(data.clientSecret);
+      if (body.kind === "subscription") {
+        // The payment form is open now. Clear the previous ecommerce object first, as the spec requires.
+        trackEvent({ ecommerce: null });
+        trackEvent({
+          event: "begin_checkout",
+          checkout_type: "subscription",
+          ecommerce: { currency: "USD", value: body.plan === "PRO" ? 19 : 49, items: [subscriptionItem(body.plan)] },
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not start checkout.");
     } finally {

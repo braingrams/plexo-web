@@ -88,6 +88,11 @@ export const User = new Entity(
       // password and the local `passwordHash` is never accepted again (see authDynamo.ts).
       charisolSub: { type: "string" },
       charisolPasswordAt: { type: "string" },
+      // Set when Charisol sign-in creates this account (server/charisolAccount.ts). Read once by
+      // /api/auth/signup-event for the sign_up analytics event, then cleared.
+      signupEventPendingAt: { type: "string" },
+      // The account's first successful app publish (set once by /api/analytics/publish-success).
+      firstPublishedAt: { type: "string" },
       // Self-selected once on first visit to /dashboard/funnels (Funnel/LMS module) —
       // reshapes both the funnel-creation flow and the ongoing page-builder's guidance
       // density (see the Funnel/LMS plan's "Experience-level onboarding" section). Null
@@ -186,6 +191,27 @@ export const UserEmailLock = new Entity(
       primary: {
         pk: { field: "pk", composite: ["email"], template: "EMAILLOCK#${email}" },
         sk: { field: "sk", composite: [], template: "EMAILLOCK#METADATA" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// A pending email-confirmation link. The emailed link carries only the random token; this row
+// maps that token to the account, so the email address never has to appear in the URL.
+// Single use: the verify route deletes it when it's used. Expired rows are ignored by checking expiresAt.
+export const EmailVerifyLink = new Entity(
+  {
+    model: { entity: "emailVerifyLink", version: "1", service: "plexoCore" },
+    attributes: {
+      token: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      expiresAt: { type: "string", required: true },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["token"], template: "EMAILVERIFY#${token}" },
+        sk: { field: "sk", composite: [], template: "EMAILVERIFY#METADATA" },
       },
     },
   },

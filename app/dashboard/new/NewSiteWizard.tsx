@@ -14,6 +14,7 @@ import type { MarketplaceListItem } from "@/lib/marketplace";
 import { MarketplaceRowExpandGrid } from "@/app/marketplace/MarketplaceRowExpandGrid";
 import { MarketplaceSkeletonGrid } from "@/app/marketplace/MarketplaceBrowse";
 import { CustomSelect } from "../../_components/CustomSelect";
+import { trackProjectCreated, templateNameFor } from "@/lib/analytics";
 
 // Same four tiers/labels as Settings → AI's own Creativity Tier picker (AiSettingsClient.tsx)
 // — kept here as its own small copy rather than a shared import since that file's TIER_OPTIONS
@@ -371,7 +372,9 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
     }
   }
 
-  function advanceToConnect(created: CreatedTemplate) {
+  function advanceToConnect(created: CreatedTemplate, creationMethod: "blank_canvas" | "template" | "ai" | "upload", templateName?: string) {
+    // The site is saved at this point. The spec counts a project when it's saved, not when the picker opens.
+    void trackProjectCreated({ projectId: created.id, projectType: "site", creationMethod, templateName });
     setTemplate(created);
     if (!slugTouched) setSlug(slugify(created.name));
     setStep(2);
@@ -391,7 +394,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         setError(data.error ?? "Couldn't create the site. Please try again.");
         return;
       }
-      advanceToConnect(data.template);
+      advanceToConnect(data.template, "blank_canvas");
     } finally {
       setCreatingBlank(false);
     }
@@ -516,7 +519,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         setError(data.error ?? "Failed to use this template.");
         return;
       }
-      advanceToConnect(data.template);
+      advanceToConnect(data.template, "template", templateNameFor(item.name));
     } finally {
       setBusyId(null);
     }
@@ -590,7 +593,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         setError(publishData.error ?? "Generated the page, but couldn't save it.");
         return;
       }
-      advanceToConnect({ id: publishData.templateId, name: publishData.name });
+      advanceToConnect({ id: publishData.templateId, name: publishData.name }, "ai");
     } catch {
       // The request never got an answer (connection dropped, or the browser gave up).
       setError(AI_UNREACHABLE);
@@ -624,7 +627,7 @@ export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void
         setError(data.error ?? "Upload failed.");
         return;
       }
-      advanceToConnect({ id: data.templateId, name: data.name });
+      advanceToConnect({ id: data.templateId, name: data.name }, "upload");
     } finally {
       setUploading(false);
     }

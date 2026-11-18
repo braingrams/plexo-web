@@ -56,7 +56,8 @@ describe("Charisol callback page", () => {
     await renderPage();
     expect(mocks.signInCharisol).toHaveBeenCalledWith({ idToken: "id.tok" });
     expect(mocks.push).toHaveBeenCalledWith("/dashboard/sites");
-    expect(fetchMock).not.toHaveBeenCalled();
+    // The only request is the new-account lookup (sign_up vs login); no Strata link is made.
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(["/api/auth/signup-event"]);
   });
 
   it("keeps the Charisol sign-in on the server after signing in, so other Charisol products open without another login", async () => {

@@ -5,6 +5,8 @@ import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { ensureActiveOrganization, getOrgBrandDynamo } from "@/server/orgDynamo";
 import { DashboardShell } from "./dashboard-shell";
+import { AnalyticsIdentity } from "./_components/AnalyticsIdentity";
+import { analyticsPlan } from "@/lib/analytics";
 import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
 import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
 import { AppLiveDialog } from "./_components/AppLiveDialog";
@@ -67,12 +69,20 @@ export default async function DashboardLayout({
         {/* A WordPress site moving in the background: progress on every page, not just the migration tab. */}
         <MigrationBanner />
         {planBanner ? <PlanBanner state={planBanner} /> : null}
+        {dbUser ? <AnalyticsIdentity userId={dbUser.id} plan={analyticsPlan(plan)} status={planStatusFor(dbUser)} /> : null}
         {children}
         {/* "Your app is live", opened from any page once a server app goes live. */}
         <AppLiveDialog />
       </DashboardShell>
     </ThemeProvider>
   );
+}
+
+// free | trial | paid, from the same entitlement rules the plan banner uses.
+function planStatusFor(user: Parameters<typeof paidAccess>[0]): "free" | "trial" | "paid" {
+  const access = paidAccess(user);
+  if (access.entitled) return access.basis === "TRIAL" ? "trial" : "paid";
+  return "free";
 }
 
 function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngradedAt?: string | null; planBeforeDowngrade?: string | null; planDowngradeReason?: string | null; trialStartedAt?: string | null }): PlanBannerState | null {
