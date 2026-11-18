@@ -15,6 +15,8 @@ export type DragEdit =
   | { type: "insert"; kind: BlockKind; target: number | null; pos: Pos }
   | { type: "insertImage"; url: string; alt: string; target: number | null; pos: Pos }
   | { type: "text"; id: number; html: string }
+  /** Put a merge tag after the last text on the page (when there is no cursor to put it at). */
+  | { type: "appendTag"; tag: string }
   | { type: "remove"; id: number }
   | { type: "duplicate"; id: number };
 
@@ -76,6 +78,22 @@ export function applyEdit(code: string, edit: DragEdit): string | null {
     const el = at(edit.id);
     if (!el) return null;
     el.remove();
+  } else if (edit.type === "appendTag") {
+    const NOTEXT = "table,tr,p,div,h1,h2,h3,h4,h5,h6,ul,ol,li,hr,blockquote";
+    let target: Element | null = null;
+    for (let i = els.length - 1; i >= 0; i--) {
+      const el = els[i];
+      // A link is skipped (the tag would become part of the link); its surrounding text takes it instead.
+      if (!/^(P|H[1-6]|LI|TD|TH|DIV|BLOCKQUOTE|SPAN)$/.test(el.tagName) || el.querySelector(NOTEXT) || !(el.textContent ?? "").trim()) continue;
+      target = el;
+      break;
+    }
+    if (target) target.appendChild(doc.createTextNode(`${/\s$/.test(target.textContent ?? "") ? "" : " "}${edit.tag}`));
+    else {
+      const p = doc.createElement("p");
+      p.textContent = edit.tag;
+      doc.body.appendChild(p);
+    }
   } else if (edit.type === "text") {
     const el = at(edit.id);
     if (!el) return null;
@@ -162,6 +180,7 @@ const PREVIEW_CSS = `
 #plx-bar button{all:unset;cursor:pointer;color:#fff;padding:4px 8px;border-radius:6px;font:600 12px system-ui,sans-serif;white-space:nowrap}
 #plx-bar button:hover,#plx-bar button:focus-visible{background:#3b4254}
 #plx-bar [data-grab]{cursor:grab}
+#plx-ghost{position:fixed;z-index:2147483647;display:none;pointer-events:none;background:#b8f34a;color:#0b0b12;font:600 12px system-ui,sans-serif;padding:4px 10px;border-radius:999px;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 #plx-line{position:fixed;z-index:2147483646;height:3px;background:#7c6cf0;border-radius:2px;pointer-events:none;display:none}
 #plx-box{position:fixed;z-index:2147483646;border:2px solid #7c6cf0;background:rgba(124,108,240,.12);pointer-events:none;display:none}
 `;
@@ -172,7 +191,7 @@ const PREVIEW_SCRIPT = `
 var BLOCK="tr,p,h1,h2,h3,h4,h5,h6,img,hr,ul,ol,blockquote,table,div,a";
 var post=function(m){parent.postMessage(Object.assign({plx:1},m),"*")};
 var bar=document.createElement("div");bar.id="plx-bar";
-bar.innerHTML='<button data-grab draggable="true" title="Drag to move">&#10303; Move</button><button data-up title="Select the section around it">Section</button><button data-dup title="Copy">Copy</button><button data-del title="Delete">Delete</button>';
+bar.innerHTML='<button data-grab title="Drag to move" style="touch-action:none">&#10303; Move</button><button data-up title="Select the section around it">Section</button><button data-dup title="Copy">Copy</button><button data-del title="Delete">Delete</button>';
 var line=document.createElement("div");line.id="plx-line";var box=document.createElement("div");box.id="plx-box";
 document.body.appendChild(bar);document.body.appendChild(line);document.body.appendChild(box);
 var cur=null,dragId=null,dropTo=null,overBar=false,editing=null,before="";
@@ -182,10 +201,10 @@ function clean(el){var c=el.cloneNode(true);
   c.querySelectorAll("[data-plx-tag]").forEach(function(s){s.replaceWith(document.createTextNode("{{"+s.getAttribute("data-plx-tag")+"}}"))});
   [c].concat([].slice.call(c.querySelectorAll("*"))).forEach(function(n){[].slice.call(n.attributes).forEach(function(a){if(a.name.indexOf("data-plx")===0||(n===c&&(a.name==="contenteditable")))n.removeAttribute(a.name)})});
   return c.innerHTML}
-function finish(save){if(!editing)return;var el=editing;editing=null;el.removeAttribute("contenteditable");el.removeAttribute("data-plx-editing");
+function finish(save){if(!editing)return;var el=editing;editing=null;post({editing:false});el.removeAttribute("contenteditable");el.removeAttribute("data-plx-editing");
   var html=clean(el);if(save&&html!==before)post({edit:{type:"text",id:idOf(el),html:html}})}
 document.addEventListener("dblclick",function(e){var el=editable(e.target);if(!el||bar.contains(e.target))return;finish(true);show(null);
-  editing=el;el.setAttribute("contenteditable","true");el.setAttribute("data-plx-editing","");before=clean(el);el.focus();
+  editing=el;el.setAttribute("contenteditable","true");el.setAttribute("data-plx-editing","");before=clean(el);el.focus();post({editing:true});
   var sel=getSelection(),r=document.createRange();r.selectNodeContents(el);sel.removeAllRanges();sel.addRange(r)});
 document.addEventListener("focusout",function(e){if(editing&&e.target===editing)finish(true)});
 document.addEventListener("keydown",function(e){if(!editing)return;if(e.key==="Escape"){editing.innerHTML=before;finish(false)}else if(e.key==="Enter"&&!e.shiftKey&&!/^(P|DIV|BLOCKQUOTE|LI|TD|TH)$/.test(editing.tagName)){e.preventDefault();editing.blur()}});
@@ -198,8 +217,56 @@ function show(el){
   var r=el.getBoundingClientRect();
   bar.style.display="flex";bar.style.left=Math.max(4,Math.min(r.right-236,innerWidth-244))+"px";bar.style.top=Math.max(4,r.top-34)+"px";
 }
-document.addEventListener("mouseover",function(e){if(dragId!==null||editing)return;if(bar.contains(e.target)){overBar=true;return}overBar=false;show(blockOf(e.target))});
-document.addEventListener("mouseleave",function(){if(!overBar&&dragId===null)show(null)});
+var switchT=0,hideT=0;
+/* The bar sits just above its block, so reaching it means crossing other blocks. Switching waits a moment, and entering the bar cancels it. */
+document.addEventListener("mouseover",function(e){
+  if(dragId!==null||editing)return;
+  if(bar.contains(e.target)){overBar=true;clearTimeout(switchT);clearTimeout(hideT);return}
+  overBar=false;clearTimeout(hideT);
+  var b=blockOf(e.target);
+  if(b===cur){clearTimeout(switchT);return}
+  clearTimeout(switchT);
+  if(!cur){show(b);return}
+  switchT=setTimeout(function(){if(!overBar)show(b)},260);
+});
+document.addEventListener("mouseleave",function(){clearTimeout(switchT);hideT=setTimeout(function(){if(!overBar&&dragId===null)show(null)},500)});
+bar.addEventListener("mouseenter",function(){overBar=true;clearTimeout(switchT);clearTimeout(hideT)});
+bar.addEventListener("mouseleave",function(){overBar=false});
+var lastRange=null;
+document.addEventListener("selectionchange",function(){if(!editing)return;var s=getSelection();if(s&&s.rangeCount&&editing.contains(s.anchorNode))lastRange=s.getRangeAt(0).cloneRange()});
+addEventListener("message",function(e){
+  var m=e.data;if(!m||e.source!==parent)return;
+  if(m.plx==="insertTag"){
+    if(!editing)return;
+    editing.focus();var s=getSelection();
+    /* The caret is wherever it is now; only if it has left the text (focus moved away) is the last known spot put back. */
+    if((!s.rangeCount||!editing.contains(s.anchorNode))&&lastRange){s.removeAllRanges();s.addRange(lastRange)}
+    document.execCommand("insertText",false,m.text);
+  }else if(m.plx==="dragStart"){
+    carry={kind:m.kind,label:m.label||""};
+  }else if(m.plx==="dragMove"||m.plx==="dragDrop"){
+    /* A block from the strip above is being carried over this page (coordinates arrive in the strip's own scale). */
+    if(carry===null)return;
+    if(!m.inside){if(m.plx==="dragMove")mark(null);else endCarry();return}
+    var sc=m.w?innerWidth/m.w:1,pt={clientX:m.x*sc,clientY:m.y*sc};
+    if(m.plx==="dragMove"){show(null);dropTo=spot(pt);mark(dropTo)}
+    else{var sp=spot(pt),k=carry.kind;endCarry();if(sp)post({edit:{type:"insert",kind:k,target:sp.el?idOf(sp.el):null,pos:sp.pos}})}
+  }
+});
+/* The strip normally keeps reporting the mouse. If the browser hands the mouse to this page instead, this page finishes the drop itself. Whichever sees the drop first wins; the other finds nothing left to do. */
+var carry=null,ghostEl=document.createElement("div");ghostEl.id="plx-ghost";document.body.appendChild(ghostEl);
+function endCarry(){carry=null;ghostEl.style.display="none";mark(null);dropTo=null}
+document.addEventListener("pointermove",function(e){
+  if(carry===null)return;
+  if(e.buttons===0){endCarry();return}
+  show(null);dropTo=spot(e);mark(dropTo);
+  ghostEl.textContent=carry.label;ghostEl.style.display="block";ghostEl.style.left=(e.clientX+12)+"px";ghostEl.style.top=(e.clientY+12)+"px";
+});
+document.addEventListener("pointerup",function(e){
+  if(carry===null)return;
+  var k=carry.kind,sp=spot(e);endCarry();
+  if(sp)post({edit:{type:"insert",kind:k,target:sp.el?idOf(sp.el):null,pos:sp.pos}});
+});
 document.addEventListener("click",function(e){var a=e.target.closest&&e.target.closest("a");if(a)e.preventDefault()},true);
 bar.addEventListener("click",function(e){
   var b=e.target.closest("button");if(!b||!cur)return;
@@ -207,11 +274,21 @@ bar.addEventListener("click",function(e){
   else if(b.hasAttribute("data-dup")){post({edit:{type:"duplicate",id:idOf(cur)}})}
   else if(b.hasAttribute("data-up")){var p=blockOf(cur.parentNode);if(p)show(p)}
 });
-bar.querySelector("[data-grab]").addEventListener("dragstart",function(e){
-  if(!cur)return;dragId=idOf(cur);cur.setAttribute("data-plx-drag","");
-  e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("text/plain","plx-move:"+dragId);
-  try{e.dataTransfer.setDragImage(cur,10,10)}catch(_){}
+/* Moving a block follows the mouse itself instead of the browser's drag-and-drop, which doesn't reliably cross into this sandboxed page. */
+var grab=bar.querySelector("[data-grab]");
+grab.addEventListener("pointerdown",function(e){
+  if(!cur||e.button!==0)return;e.preventDefault();
+  dragId=idOf(cur);cur.setAttribute("data-plx-drag","");
+  document.documentElement.style.cursor="grabbing";
+  bar.style.pointerEvents="none";try{grab.setPointerCapture(e.pointerId)}catch(_){}
 });
+grab.addEventListener("pointermove",function(e){if(dragId===null)return;dropTo=spot(e);mark(dropTo)});
+grab.addEventListener("pointerup",function(e){
+  if(dragId===null)return;
+  var id=dragId,s=spot(e);reset();
+  if(s&&s.el)post({edit:{type:"move",id:id,target:idOf(s.el),pos:s.pos}});
+});
+grab.addEventListener("pointercancel",function(){reset()});
 function spot(e){
   var moving=dragId!==null?document.querySelector('[data-plx-id="'+dragId+'"]'):null;
   var t=document.elementFromPoint(e.clientX,e.clientY);
@@ -230,7 +307,7 @@ function mark(s){
   else{box.style.display="none";line.style.display="block";line.style.left=r.left+"px";line.style.width=r.width+"px";line.style.top=(s.pos==="before"?r.top-1:r.bottom-1)+"px"}
 }
 document.addEventListener("dragover",function(e){e.preventDefault();dropTo=spot(e);mark(dropTo)});
-function reset(){dragId=null;dropTo=null;mark(null);var d=document.querySelector("[data-plx-drag]");if(d)d.removeAttribute("data-plx-drag")}
+function reset(){dragId=null;dropTo=null;mark(null);document.documentElement.style.cursor="";bar.style.pointerEvents="";var d=document.querySelector("[data-plx-drag]");if(d)d.removeAttribute("data-plx-drag")}
 document.addEventListener("dragend",reset);
 document.addEventListener("drop",function(e){
   e.preventDefault();var s=dropTo||spot(e);var t=s&&s.el?idOf(s.el):null,pos=s?s.pos:"inside";

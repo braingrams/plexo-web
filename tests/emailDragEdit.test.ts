@@ -52,4 +52,12 @@ describe("drag and drop on email HTML", () => {
     expect(doc).toContain('href="https://example.com/unsubscribe"');
     expect(buildPreviewDoc("<p>{{first_name}}</p>", { filled: false, scrollY: 0, interactive: false })).toContain("{{first_name}}");
   });
+
+  it("puts a merge tag after the last text on the page, not at the top, and never inside a link", () => {
+    const html = "<table><tr><td>Hi there</td></tr><tr><td>Thanks <a href=\"#\">Unsubscribe</a></td></tr></table>";
+    const out = applyEdit(html, { type: "appendTag", tag: "{{first_name}}" })!;
+    expect(out).toContain("Thanks <a href=\"#\">Unsubscribe</a> {{first_name}}");
+    expect(out.indexOf("{{first_name}}")).toBeGreaterThan(out.indexOf("Hi there"));
+    expect(applyEdit("", { type: "appendTag", tag: "{{email}}" })).toBe("<p>{{email}}</p>");
+  });
 });

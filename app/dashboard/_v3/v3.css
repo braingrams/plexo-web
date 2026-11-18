@@ -624,3 +624,18 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 .plx-banners__more { font: inherit; font-size: 13px; font-weight: 700; align-self: flex-end; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--plx-border-strong); background: var(--plx-surface); color: var(--plx-text); cursor: pointer; }
 .plx-banners__more:hover { background: var(--plx-elevated); }
 .plx-banners__more:focus-visible { outline: 2px solid var(--plx-focus); outline-offset: 2px; }
+
+/* The sidebar can fold down to icons (the toggle at its top); a full-width editor starts folded. */
+.plx-sidebar__top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 22px; }
+.plx-sidebar__top .plx-sidebar__brand { margin-bottom: 0; min-width: 0; }
+.plx-sidebar__fold { font: inherit; flex-shrink: 0; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; border: none; background: none; color: var(--plx-muted); cursor: pointer; }
+.plx-sidebar__fold:hover { background: var(--plx-ghost-hover); color: var(--plx-text); }
+.plx-sidebar__fold:focus-visible { outline: 2px solid var(--plx-focus); outline-offset: 2px; }
+.plx-shell[data-collapsed] { padding-left: 76px; }
+.plx-shell[data-collapsed] .plx-sidebar { width: 76px; padding: 18px 12px 14px; align-items: stretch; }
+.plx-shell[data-collapsed] .plx-sidebar__top { flex-direction: column; gap: 12px; margin-bottom: 18px; }
+.plx-shell[data-collapsed] .plx-sidebar__brand { padding: 0; justify-content: center; }
+.plx-shell[data-collapsed] .plx-nav__link { justify-content: center; padding: 0; }
+.plx-shell[data-collapsed] .plx-nav__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.plx-content.plx-content--editor { padding: 0; display: flex; flex-direction: column; }
+@media (max-width: 1023px) { .plx-sidebar__fold { display: none; } }

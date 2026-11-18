@@ -19,6 +19,8 @@ import {
   LogOut,
   Mail,
   MessageCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
   Search,
   Settings,
   ShoppingBag,
@@ -124,9 +126,32 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
   const beginner = experience === "beginner";
   const [moreOpen, setMoreOpen] = useState(false);
 
+  // The sidebar can fold to icons. It remembers the choice, and on a full-width editor it starts folded to leave room.
+  const editorRoute = /^\/dashboard\/emails\/[^/]+$/.test(pathname);
+  const [folded, setFolded] = useState<boolean | null>(null);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem("plx-sidebar-folded");
+      if (v === "1" || v === "0") setFolded(v === "1");
+    } catch {
+      /* private mode: just the default */
+    }
+  }, []);
+  const toggleFold = () => {
+    const next = !collapsed;
+    setFolded(next);
+    try {
+      localStorage.setItem("plx-sidebar-folded", next ? "1" : "0");
+    } catch {
+      /* fine */
+    }
+  };
+
   // Inside SOL the left column is the conversations, with a Chats | Menu switch. The choice is
   // remembered while in SOL; arriving at SOL from elsewhere starts on Chats, and leaving restores the menu.
   const mode = sidebarModeForPath(pathname);
+  // Inside SOL the left column is the conversations, so it never folds there.
+  const collapsed = mode === "sol" ? false : (folded ?? editorRoute);
   const [choice, setChoice] = useState<SidebarView | null>(null);
   useEffect(() => {
     if (mode !== "sol") {
@@ -161,12 +186,19 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
   const moreItems = nav.filter((n) => !tabs.includes(n));
 
   return (
-    <div className="plx-shell">
+    <div className="plx-shell" data-collapsed={collapsed ? "" : undefined}>
       <NavProgress />
       <aside className="plx-sidebar" aria-label={view === "chats" ? "Your conversations" : "Main"} data-mode={mode} data-view={view}>
-        <Link href="/dashboard" className="plx-sidebar__brand" aria-label={`${orgBranding?.name ?? "Plexo"} home`}>
-          {brand}
-        </Link>
+        <div className="plx-sidebar__top">
+          <Link href="/dashboard" className="plx-sidebar__brand" aria-label={`${orgBranding?.name ?? "Plexo"} home`}>
+            {collapsed ? (orgBranding?.logoUrl ? <OrgLogo branding={orgBranding} small /> : <PlexoLogo markOnly height={28} />) : brand}
+          </Link>
+          {mode === "sol" ? null : (
+            <button type="button" className="plx-sidebar__fold" onClick={toggleFold} aria-label={collapsed ? "Expand the menu" : "Collapse the menu"} aria-pressed={collapsed} title={collapsed ? "Expand the menu" : "Collapse the menu"}>
+            {collapsed ? <PanelLeftOpen size={18} aria-hidden /> : <PanelLeftClose size={18} aria-hidden />}
+          </button>
+          )}
+        </div>
         {mode === "sol" ? (
           <SegmentedControl<SidebarView>
             label="Show"
@@ -183,21 +215,21 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
           <SolChatsColumn />
         ) : (
           <>
-            <WorkspaceSwitcher workspaces={workspaces} currentId={currentWorkspaceId} onSwitch={onWorkspaceSwitch} />
-            {switcher}
+            {collapsed ? null : <WorkspaceSwitcher workspaces={workspaces} currentId={currentWorkspaceId} onSwitch={onWorkspaceSwitch} />}
+            {collapsed ? null : switcher}
             <nav className="plx-nav" aria-label="Main menu" data-tour="main-nav">
               {nav.map((item) => {
                 const Icon = ICONS[item.icon];
                 return (
-                  <Link key={item.id} href={item.href} className="plx-nav__link" aria-current={active === item.id ? "page" : undefined}>
+                  <Link key={item.id} href={item.href} className="plx-nav__link" aria-current={active === item.id ? "page" : undefined} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>
                     <Icon size={20} aria-hidden />
-                    {item.label}
+                    <span className="plx-nav__label">{item.label}</span>
                     <LinkPending />
                   </Link>
                 );
               })}
             </nav>
-            <HelpCard />
+            {collapsed ? null : <HelpCard />}
           </>
         )}
       </aside>
@@ -222,7 +254,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
             <AccountMenu user={user} experience={experience} persist={persist} onExperienceChange={onExperienceChange} workspaces={workspaces} currentWorkspaceId={currentWorkspaceId} onWorkspaceSwitch={onWorkspaceSwitch} />
           </div>
         </header>
-        <main id="main" className={pathname.startsWith("/dashboard/sol") || pathname.startsWith("/v3-preview/sol") ? "plx-content plx-content--bleed" : "plx-content"}>
+        <main id="main" className={pathname.startsWith("/dashboard/sol") || pathname.startsWith("/v3-preview/sol") ? "plx-content plx-content--bleed" : editorRoute ? "plx-content plx-content--editor" : "plx-content"}>
           {children}
         </main>
       </div>

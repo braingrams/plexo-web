@@ -1,4 +1,5 @@
 import { effectivePlan } from "@/lib/plan/entitlement";
+import { usesNewShell } from "@/lib/dashboardVersions/state";
 import { lockedTierFor } from "@/lib/ai/solEngine";
 import { notFound, redirect } from "next/navigation";
 import type { TemplateJSON } from "@charisol/plexo-sdk";
@@ -94,6 +95,8 @@ export default async function TemplateEditorPage(props: {
   const tierFeatures = getTierFeatures(effectivePlan(user));
 
   if (template.sourceType === "RAW_UPLOAD" && template.kind === "EMAIL") {
+    // On the new dashboard an HTML email opens inside the dashboard (sidebar around it), not full screen.
+    if (await usesNewShell(user)) redirect(`/dashboard/emails/${template.id}`);
     return <EmailHtmlEditor templateId={template.id} templateName={template.name} initialHtml={template.compiledHtml ?? ""} useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled} />;
   }
 
