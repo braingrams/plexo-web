@@ -16,7 +16,7 @@
 
 import type Stripe from "stripe";
 
-import { mapLegacyPlan, CURRENT_PLAN_VERSION, PLAN_LABELS, type PaidPlanId, type PlanId } from "@/lib/plan/plans";
+import { mapLegacyPlan, CURRENT_PLAN_VERSION, PLAN_LABELS, type PaidPlanId, type PlanId, PLAN, RETIRED_PLAN } from "@/lib/plan/plans";
 import { formatMoney, planPrice, resolvePriceRegion, usdAlternative, type BillingInterval, type PriceBook, type PriceGroup } from "./pricing";
 import { stripePlanMetadata } from "./stripePlans";
 
@@ -44,11 +44,11 @@ export type UserRewrite = {
 /** The User fields to rewrite, or null when the row is already in today's terms. */
 export function userRewrite(user: LegacyUser): UserRewrite | null {
   if ((user.planVersion ?? 0) >= CURRENT_PLAN_VERSION) return null;
-  const out: UserRewrite = { subscriptionPlan: mapLegacyPlan(user.subscriptionPlan ?? "FREE"), planVersion: CURRENT_PLAN_VERSION };
+  const out: UserRewrite = { subscriptionPlan: mapLegacyPlan(user.subscriptionPlan ?? PLAN.FREE), planVersion: CURRENT_PLAN_VERSION };
   const pending = user.pendingPlan ? mapLegacyPlan(user.pendingPlan) : null;
-  if (pending && pending !== "FREE") out.pendingPlan = pending;
+  if (pending && pending !== PLAN.FREE) out.pendingPlan = pending;
   const before = user.planBeforeDowngrade ? mapLegacyPlan(user.planBeforeDowngrade) : null;
-  if (before && before !== "FREE") out.planBeforeDowngrade = before;
+  if (before && before !== PLAN.FREE) out.planBeforeDowngrade = before;
   return out;
 }
 
@@ -85,10 +85,10 @@ export async function runPlanMigration(deps: MigrationDeps): Promise<MigrationRe
       r.alreadyDone++;
       continue;
     }
-    const oldName = user.subscriptionPlan === "ULTRA" ? "Ultra" : user.subscriptionPlan === "PRO" ? "Pro" : "Free";
+    const oldName = user.subscriptionPlan === RETIRED_PLAN.ULTRA ? "Ultra" : user.subscriptionPlan === PLAN.PRO ? "Pro" : "Free";
     try {
       let schedule: { renewsAt: string; price: string; group: PriceGroup; plan: PaidPlanId } | null = null;
-      if (deps.stripe && user.stripeSubscriptionId && rewrite.subscriptionPlan !== "FREE") {
+      if (deps.stripe && user.stripeSubscriptionId && rewrite.subscriptionPlan !== PLAN.FREE) {
         schedule = await scheduleStripeMove(deps, user, rewrite.subscriptionPlan as PaidPlanId, r);
       }
       const fields: Record<string, unknown> = { ...rewrite };
@@ -98,7 +98,7 @@ export async function runPlanMigration(deps: MigrationDeps): Promise<MigrationRe
         fields.billingRegion = schedule.group.id;
         if (!user.billingCurrency) fields.billingCurrency = "USD";
       }
-      deps.log(`${deps.apply ? "rewrite" : "would rewrite"} ${user.email}: ${user.subscriptionPlan ?? "FREE"} → ${rewrite.subscriptionPlan}${schedule ? ` (renews ${schedule.renewsAt.slice(0, 10)} at ${schedule.price})` : ""}`);
+      deps.log(`${deps.apply ? "rewrite" : "would rewrite"} ${user.email}: ${user.subscriptionPlan ?? PLAN.FREE} → ${rewrite.subscriptionPlan}${schedule ? ` (renews ${schedule.renewsAt.slice(0, 10)} at ${schedule.price})` : ""}`);
       if (deps.apply) {
         const wrote = await deps.patchUser(user.id, fields, true);
         if (!wrote) {
@@ -107,7 +107,7 @@ export async function runPlanMigration(deps: MigrationDeps): Promise<MigrationRe
         }
       }
       r.rewritten++;
-      if (deps.notify && deps.sendEmail && rewrite.subscriptionPlan !== "FREE" && deps.apply) {
+      if (deps.notify && deps.sendEmail && rewrite.subscriptionPlan !== PLAN.FREE && deps.apply) {
         await deps.sendEmail(user, { oldPlanName: oldName, newPlan: rewrite.subscriptionPlan as PaidPlanId, renewsAt: schedule?.renewsAt ?? null, newPrice: schedule?.price ?? null });
         r.emailed++;
       }

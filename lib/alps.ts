@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 // One-way sync of Plexo accounts into Alps (Charisol's CRM) so every signup and plan change
 // shows up there without anyone exporting a CSV. https://help.tryalps.com/contacts/syncing-contacts-into-alps-automatically
 //
@@ -115,7 +116,7 @@ export function syncSignupToAlps(contact: AlpsContact, via: "email" | "charisol"
     syncContactToAlps(contact, {
       idempotencyKey: `signup-${contact.id}`,
       lifecycleStage: process.env.ALPS_LEAD_STAGE || undefined,
-      customProperties: { plexoPlan: "FREE", signupMethod: via },
+      customProperties: { plexoPlan: PLAN.FREE, signupMethod: via },
     }),
   );
 }
@@ -126,7 +127,7 @@ export function syncPlanChangeToAlps(contact: AlpsContact, plan: string, eventId
   runInBackground(() =>
     syncContactToAlps(contact, {
       idempotencyKey: `plan-${contact.id}-${plan}-${eventId}`,
-      lifecycleStage: plan !== "FREE" ? process.env.ALPS_CUSTOMER_STAGE || undefined : undefined,
+      lifecycleStage: plan !== PLAN.FREE ? process.env.ALPS_CUSTOMER_STAGE || undefined : undefined,
       customProperties: { plexoPlan: plan },
     }),
   );

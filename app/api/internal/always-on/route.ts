@@ -28,17 +28,27 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = await request.json().catch(() => ({}));
   const templateId = typeof body.templateId === "string" ? body.templateId : "";
   if (!/^[A-Za-z0-9_-]{1,50}$/.test(templateId)) return NextResponse.json({ error: "templateId is required." }, { status: 400 });
-  if (body.decision !== "approve" && body.decision !== "decline") {
-    return NextResponse.json({ error: 'decision must be "approve" or "decline".' }, { status: 400 });
+  if (body.decision !== "approve" && body.decision !== "decline" && body.decision !== "revoke") {
+    return NextResponse.json({ error: 'decision must be "approve", "decline" or "revoke".' }, { status: 400 });
   }
 
   const { data: app } = await DeployedApp.get({ templateId }).go({ attributes: ["alwaysOnRequest"] });
   if (!app) return NextResponse.json({ error: "Server app not found." }, { status: 404 });
+  const now = new Date().toISOString();
+  // Revoke: an approved app's warm copy is released and the request is recorded as REVOKED.
+  // The record stays, so the admin list keeps it under Revoked.
+  if (body.decision === "revoke") {
+    if (app.alwaysOnRequest !== "APPROVED") {
+      return NextResponse.json({ error: "Only an approved always-on request can be revoked." }, { status: 400 });
+    }
+    await DeployedApp.patch({ templateId }).set({ alwaysOnDecidedAt: now }).go();
+    await queueSsrControl({ kind: "alwaysOn", templateId, enabled: false, finalRequest: "REVOKED" });
+    return NextResponse.json({ alwaysOnRequest: "APPROVED", message: "Revoking. The warm copy is being released." }, { status: 202 });
+  }
   if (app.alwaysOnRequest !== "REQUESTED") {
     return NextResponse.json({ error: "There is no pending always-on request for this app." }, { status: 400 });
   }
 
-  const now = new Date().toISOString();
   if (body.decision === "decline") {
     await DeployedApp.patch({ templateId }).set({ alwaysOnRequest: "DECLINED", alwaysOnDecidedAt: now }).go();
     return NextResponse.json({ alwaysOnRequest: "DECLINED" });

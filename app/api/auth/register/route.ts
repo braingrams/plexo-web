@@ -1,10 +1,10 @@
+import { PLAN, RETIRED_PLAN, PaidPlanId } from "@/lib/plan/plans";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { passwordProblem } from "@/lib/passwordPolicy";
 import { hashPassword } from "@better-auth/utils/password";
 
-import { dynamoAdapter } from "@/server/authDynamo";
-import { User } from "@/lib/db/coreEntities";
+import { EmailVerifyLink, User } from "@/lib/db/coreEntities";
 import { createUserWithEmailLock, EmailAlreadyInUseError } from "@/lib/db/coreOperations";
 import { normalizeCountryCode } from "@/lib/countries";
 import { syncSignupToAlps } from "@/lib/alps";
@@ -40,8 +40,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const password = typeof body.password === "string" ? body.password : "";
   const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : email.split("@")[0] || "Plexo User";
   // ULTRA: a signup page loaded before the plan rename (today's Pro).
-  const pendingPlan: "STARTER" | "PRO" | "ENTERPRISE" | undefined =
-    body.pendingPlan === "ULTRA" ? "PRO" : body.pendingPlan === "STARTER" || body.pendingPlan === "PRO" || body.pendingPlan === "ENTERPRISE" ? body.pendingPlan : undefined;
+  const pendingPlan: PaidPlanId | undefined =
+    body.pendingPlan === RETIRED_PLAN.ULTRA ? PLAN.PRO : body.pendingPlan === PLAN.STARTER || body.pendingPlan === PLAN.PRO || body.pendingPlan === PLAN.ENTERPRISE ? body.pendingPlan : undefined;
 
   if (!email || !email.includes("@")) {
     return NextResponse.json({ error: { message: "Enter a valid email address." } }, { status: 400 });
@@ -76,12 +76,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   syncSignupToAlps({ id, email, name }, "email");
 
+  // The link carries only this random token; the row maps it to the account (see EmailVerifyLink).
   const token = randomUUID();
-  await dynamoAdapter.createVerificationToken?.({
-    identifier: `verify-email:${email}`,
+  await EmailVerifyLink.create({
     token,
-    expires: new Date(Date.now() + VERIFY_TOKEN_TTL_MS),
-  });
+    userId: id,
+    expiresAt: new Date(Date.now() + VERIFY_TOKEN_TTL_MS).toISOString(),
+  }).go();
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const verifySubject = "Verify your Plexo account";
@@ -89,7 +90,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await sendMaildripEmail({
       to: email,
       subject: verifySubject,
-      html: buildVerificationEmail(`${baseUrl}/auth/confirm?token=${token}&email=${encodeURIComponent(email)}`),
+      html: buildVerificationEmail(`${baseUrl}/auth/confirm?token=${token}`),
     });
     logEmailDelivery({ kind: "maildrip", to: email, subject: verifySubject, status: "sent", context: "verification_email" });
   } catch (err) {

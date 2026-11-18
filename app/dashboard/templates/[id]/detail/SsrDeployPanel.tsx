@@ -67,7 +67,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
   }, [git?.linked]);
   // Always-on: the owner asks, Plexo approves by hand. Once approved, the owner can turn it off. The
   // server reports whether the warm copy is starting, on, or failed (and why).
-  type AlwaysOnState = { request: "NONE" | "REQUESTED" | "APPROVED" | "DECLINED"; status: "OFF" | "STARTING" | "ON" | "FAILED"; error: string | null };
+  type AlwaysOnState = { request: "NONE" | "REQUESTED" | "APPROVED" | "DECLINED" | "REVOKED"; status: "OFF" | "STARTING" | "ON" | "FAILED"; error: string | null };
   const [alwaysOn, setAlwaysOn] = useState<AlwaysOnState | null>(null);
   const [alwaysOnBusy, setAlwaysOnBusy] = useState(false);
   const [alwaysOnTurningOff, setAlwaysOnTurningOff] = useState(false);
@@ -193,6 +193,8 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
                         ? "Requested. Plexo reviews these by hand, then turns it on."
                         : alwaysOn?.request === "DECLINED"
                           ? "Not approved for this app. Ask Plexo support if you need it."
+                          : alwaysOn?.request === "REVOKED"
+                            ? "Turned off by Plexo. You can request it again."
                           : "Keep one warm copy running so visitors never wait for a cold start. Plexo reviews each request by hand."}
           </p>
           {alwaysOn?.request === "APPROVED" && alwaysOn.status === "FAILED" && alwaysOn.error ? (
@@ -204,7 +206,7 @@ export function SsrDeployPanel({ templateId }: { templateId: string }) {
           <button type="button" onClick={() => void turnOffAlwaysOn()} disabled={alwaysOnBusy || alwaysOnTurningOff || building} style={button(!alwaysOnBusy && !alwaysOnTurningOff && !building)}>
             {alwaysOnTurningOff ? "Turning off…" : "Turn off always on"}
           </button>
-        ) : alwaysOn && (alwaysOn.request === "NONE" || alwaysOn.request === "DECLINED") ? (
+        ) : alwaysOn && (alwaysOn.request === "NONE" || alwaysOn.request === "DECLINED" || alwaysOn.request === "REVOKED") ? (
           <button type="button" onClick={() => void requestAlwaysOn()} disabled={alwaysOnBusy || building} style={button(!alwaysOnBusy && !building)}>
             {alwaysOnBusy ? "Requesting…" : "Request always on"}
           </button>

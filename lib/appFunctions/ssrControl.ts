@@ -10,7 +10,8 @@ const REGION = process.env.AWS_REGION || "us-east-1";
 export type SsrControlMessage =
   | { kind: "publish"; templateId: string }
   | { kind: "variables"; templateId: string; env: VariableEnv }
-  | { kind: "alwaysOn"; templateId: string; enabled: boolean };
+  /** finalRequest is the request state left after a switch-off: NONE (owner turn-off) or REVOKED (admin). */
+  | { kind: "alwaysOn"; templateId: string; enabled: boolean; finalRequest?: "NONE" | "REVOKED" };
 
 const TEMPLATE_ID = /^[A-Za-z0-9_-]{1,50}$/;
 
@@ -28,7 +29,9 @@ export function parseSsrControlMessage(body: string): SsrControlMessage | null {
   if (kind === "publish") return { kind, templateId };
   if (kind === "variables" && (env === "dev" || env === "live")) return { kind, templateId, env };
   if (kind === "alwaysOn" && typeof (data as Record<string, unknown>).enabled === "boolean") {
-    return { kind, templateId, enabled: (data as { enabled: boolean }).enabled };
+    const finalRequest = (data as { finalRequest?: unknown }).finalRequest;
+    if (finalRequest !== undefined && finalRequest !== "NONE" && finalRequest !== "REVOKED") return null;
+    return { kind, templateId, enabled: (data as { enabled: boolean }).enabled, finalRequest: finalRequest as "NONE" | "REVOKED" | undefined };
   }
   return null;
 }

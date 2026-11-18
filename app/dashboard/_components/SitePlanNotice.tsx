@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { startTrial } from "./trial";
-import { PLAN_LABELS, PLAN_RANK, toPlanId, type PaidPlanId } from "@/lib/plan/plans";
+import { PLAN_LABELS, PLAN_RANK, toPlanId, type PaidPlanId, PLAN, TrialPlanId } from "@/lib/plan/plans";
 
 // A slim strip at the top of the site and app editors saying what the owner's plan means
 // for THIS site, with the one action that fixes it. Silent whenever there's nothing to say
@@ -42,8 +42,8 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
 
   if (!status || !status.homeOnly || !status.site) return null;
 
-  const previousId = status.previousPlan ? (toPlanId(status.previousPlan) as PaidPlanId | "FREE") : null;
-  const previousPaid: PaidPlanId | null = previousId && previousId !== "FREE" ? previousId : null;
+  const previousId = status.previousPlan ? (toPlanId(status.previousPlan) as PaidPlanId | typeof PLAN.FREE) : null;
+  const previousPaid: PaidPlanId | null = previousId && previousId !== PLAN.FREE ? previousId : null;
   const previous = previousPaid ? PLAN_LABELS[previousPaid] : "Starter";
   // The plan that fixes each notice: more than one live site needs Pro; pages, a domain or a
   // whole app need Starter. Coming back from a paid plan, that plan (if it's enough).
@@ -71,9 +71,9 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
   }
 
   // With the free trial still unused, every upgrade button here starts it instead (no card).
-  const Upgrade = ({ label, need = "STARTER" }: { label: string; need?: PaidPlanId }) => {
+  const Upgrade = ({ label, need = PLAN.STARTER }: { label: string; need?: PaidPlanId }) => {
     const target = planFor(need);
-    const trialPlan: "STARTER" | "PRO" = target === "STARTER" ? "STARTER" : "PRO";
+    const trialPlan: TrialPlanId = target === PLAN.STARTER ? PLAN.STARTER : PLAN.PRO;
     return status.trialAvailable ? (
       <button
         type="button"
@@ -111,7 +111,7 @@ export function SitePlanNotice({ templateId, refreshKey }: { templateId: string;
           <button type="button" onClick={() => void makeLive()} disabled={busy} style={secondaryButton}>
             {busy ? "Switching…" : "Make this my live site"}
           </button>
-          <Upgrade label={"Upgrade to Pro to keep both"} need="PRO" />
+          <Upgrade label={"Upgrade to Pro to keep both"} need={PLAN.PRO} />
         </span>
       </Strip>,
     );

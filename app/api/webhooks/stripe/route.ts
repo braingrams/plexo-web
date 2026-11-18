@@ -267,7 +267,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       // second one exists (two checkouts at once, an old client, a manual Stripe edit) the
       // older is cancelled with its unused time credited. If THIS event is for the one that
       // was just cancelled it must not touch the account — it would overwrite the plan the
-      // newer subscription already set (an old Pro renewing once reset an Ultra account to Pro).
+      // newer subscription already set (an old Pro renewing once reset an Enterprise account to Pro).
       const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id;
       if (customerId) {
         const retired = await retireSupersededPlanSubscriptions(stripe, customerId).catch((err) => {
@@ -327,8 +327,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (previousPlan !== plan || previousAllowancePlan !== plan) {
         syncPlanChangeToAlps({ id: plexoUserId, email: userBeforeUpdate.email, name: userBeforeUpdate.name, image: userBeforeUpdate.image }, plan, subscription.id);
         await grantPlanChangeAllowance(plexoUserId, plan);
-        // A downgrade can drop the plan's included funnel-slot allotment (only Ultra ships
-        // one) — reconcile every org this user owns, same mechanism an addon-slot
+        // A downgrade can drop the plan's included funnel-slot allotment (Starter 1, Pro 3,
+        // Enterprise 10) — reconcile every org this user owns, same mechanism an addon-slot
         // cancellation uses. A same-or-higher plan change is a harmless no-op here (nothing
         // is over budget), so this isn't gated further on which direction the change went.
         await reconcileFunnelSlotsForOwnedOrgs(plexoUserId);

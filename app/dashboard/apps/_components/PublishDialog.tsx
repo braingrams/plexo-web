@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Copy, ExternalLink, Check } from "lucide-react";
 import { appsApi, pollBuild, ApiError, type AppSummary, type BuildReport } from "./api";
 import { C, Button, Notice, inputStyle } from "./ui";
+import { trackAppPublished } from "@/lib/analytics";
 
 // Preview → live. A clean release build, then the live database gets new changes, server
 // functions deploy, and visitors switch over — with a failed database change leaving the
@@ -72,7 +73,10 @@ export function PublishDialog(props: { appId: string; summary: AppSummary | null
       const final = await pollBuild(appId, buildId, setReport, abort.current.signal);
       setReport(final);
       setPhase(final.ok ? "done" : "failed");
-      if (final.ok) props.onPublished(final);
+      if (final.ok) {
+        void trackAppPublished(appId, buildId);
+        props.onPublished(final);
+      }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
       setError(err instanceof ApiError ? err.message : "Publishing couldn't start.");

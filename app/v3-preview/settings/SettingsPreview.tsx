@@ -1,4 +1,5 @@
 "use client";
+import { PLAN } from "@/lib/plan/plans";
 
 import { useSearchParams } from "next/navigation";
 import { SettingsFrame } from "@/app/dashboard/_v3/settings/SettingsFrame";
@@ -37,7 +38,7 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
         <PlanSection
           mock
           prices={{ STARTER: "$9 a month", PRO: "$19 a month", ENTERPRISE: "from $99 a month" }}
-          state={free ? { plan: "FREE", paying: false } : trial ? { plan: "STARTER", paying: true, basis: "TRIAL", daysLeft: 9 } : near ? { plan: "PRO", paying: true, basis: "SUBSCRIPTION", renewsAt: inDays(6) } : { plan: "STARTER", paying: true, basis: "SUBSCRIPTION", renewsAt: inDays(19) }}
+          state={free ? { plan: PLAN.FREE, paying: false } : trial ? { plan: PLAN.STARTER, paying: true, basis: "TRIAL", daysLeft: 9 } : near ? { plan: PLAN.PRO, paying: true, basis: "SUBSCRIPTION", renewsAt: inDays(6) } : { plan: PLAN.STARTER, paying: true, basis: "SUBSCRIPTION", renewsAt: inDays(19) }}
           usage={free ? { sites: 1, products: 0, teammates: 0 } : near ? { sites: 4, products: 960, teammates: 4 } : { sites: 1, products: 12, teammates: 1 }}
           trialAvailable={free}
           allowanceBalance={near ? 60 : 1240}

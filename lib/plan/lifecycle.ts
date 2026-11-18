@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { randomUUID } from "node:crypto";
 import type { EntityItem } from "electrodb";
 
@@ -107,13 +108,13 @@ async function downgrade(user: UserItem, now: Date): Promise<void> {
   const access = paidAccess(user, now);
   const reason: DowngradeReason = access.entitled ? "ADMIN" : access.reason;
   const before = storedPlan(user);
-  const previousPlan = before === "FREE" ? "STARTER" : before;
+  const previousPlan = before === PLAN.FREE ? PLAN.STARTER : before;
   await User.patch({ id: user.id })
-    .set({ ...planFields("FREE"), planDowngradedAt: now.toISOString(), planDowngradeReason: reason, planBeforeDowngrade: previousPlan })
+    .set({ ...planFields(PLAN.FREE), planDowngradedAt: now.toISOString(), planDowngradeReason: reason, planBeforeDowngrade: previousPlan })
     // freeLimitsAppliedAt is cleared so the very next step applies Free's limits afresh.
     .remove(["planAccessUntil", "planAccessSource", "pendingPlan", "freeLimitsAppliedAt", "planAccessReminderSentAt"])
     .go();
-  await grantPlanChangeAllowance(user.id, "FREE").catch((err) => console.error("plan lifecycle: allowance reset failed", err));
+  await grantPlanChangeAllowance(user.id, PLAN.FREE).catch((err) => console.error("plan lifecycle: allowance reset failed", err));
   const summary = await applyFreePlanLimits(user.id, { now });
   await reconcileOwnedFunnelSlots(user.id);
   await notifyPlanEnded(user, previousPlan, reason, summary);
@@ -134,7 +135,7 @@ async function enforceFree(user: UserItem, now: Date): Promise<void> {
   // An account moved to Free by an admin, or already on Free when enforcement arrived, is
   // told what changed too — but only if something actually did.
   if (summary.changed) {
-    await notifyPlanEnded(user, user.planBeforeDowngrade ? storedPlanOf(user.planBeforeDowngrade, user.planVersion) : "FREE", user.planDowngradeReason ?? "ADMIN", summary);
+    await notifyPlanEnded(user, user.planBeforeDowngrade ? storedPlanOf(user.planBeforeDowngrade, user.planVersion) : PLAN.FREE, user.planDowngradeReason ?? "ADMIN", summary);
   }
 }
 
@@ -376,7 +377,7 @@ async function currentSubscriptionPrice(user: UserItem): Promise<{ amountMinor?:
     const book = await loadPriceBook();
     const region = regionById(book, user.billingRegion) ?? regionForCurrency(book, user.billingCurrency ?? "USD");
     const interval = user.subscriptionInterval ?? "monthly";
-    if (nextPlan === "FREE" || !region || !yearlyOfferedFor(region, nextPlan, interval)) return {};
+    if (nextPlan === PLAN.FREE || !region || !yearlyOfferedFor(region, nextPlan, interval)) return {};
     return { amountMinor: planPriceMinor(region, nextPlan, interval), currency: region.currency.toLowerCase() };
   }
   const subscriptionId = user.stripeSubscriptionId;
@@ -405,7 +406,7 @@ export async function sendPaymentDeclinedEmail(
 }
 
 async function notifyPlanEnded(user: UserItem, previousPlan: string, reason: DowngradeReason, summary: FreeLimitsSummary): Promise<void> {
-  const subject = previousPlan === "FREE" ? "Your sites now follow the Free plan" : "Your Plexo plan has ended — nothing was deleted";
+  const subject = previousPlan === PLAN.FREE ? "Your sites now follow the Free plan" : "Your Plexo plan has ended — nothing was deleted";
   await sendEmail(user.email, subject, buildPlanEndedEmail({
     previousPlan,
     reason,

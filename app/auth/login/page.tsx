@@ -1,5 +1,6 @@
 "use client";
 
+import { trackEvent } from "@/lib/analytics";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FormEvent, Suspense, useEffect, useState } from "react";
@@ -88,6 +89,7 @@ function LoginForm() {
         return;
       }
 
+      trackEvent({ event: "login", method: "email" });
       if (redirectTo.startsWith("/dashboard")) setRedirecting(true);
       // A full page load, not a client-side push: the sign-in cookie is fresh, and a client-side push can reuse a copy of the
       // destination fetched while signed out (which just bounces back here) and leave the person on this screen for good.

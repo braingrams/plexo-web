@@ -1,4 +1,5 @@
 "use client";
+import { PLAN } from "@/lib/plan/plans";
 
 import { useSearchParams } from "next/navigation";
 import { CourseFrame, type CourseLite } from "@/app/dashboard/_v3/learners/CourseFrame";
@@ -20,7 +21,7 @@ const lessons: LessonLite[] = TITLES.map((title, i) => ({
   unlockRules: i === 0 ? rulesFromChoice("open", null) : i === 4 ? rulesFromChoice("approve", `l${i - 1}`) : i === 5 ? rulesFromChoice("days", null, 7) : rulesFromChoice("after_previous", `l${i - 1}`),
 }));
 
-const L = (email: string, name: string | null, p: Partial<LearnerRow>): LearnerRow => ({ email, name, status: "ACTIVE", paymentStatus: "FREE", enrolledAt: day(20), lastActiveAt: day(1), completedPageCount: 0, completedAt: null, waitingLessonId: null, ...p });
+const L = (email: string, name: string | null, p: Partial<LearnerRow>): LearnerRow => ({ email, name, status: "ACTIVE", paymentStatus: PLAN.FREE, enrolledAt: day(20), lastActiveAt: day(1), completedPageCount: 0, completedAt: null, waitingLessonId: null, ...p });
 const learners: LearnerRow[] = [
   L("kofi.mensah@gmail.com", "Kofi Mensah", { paymentStatus: "PAID", completedPageCount: 6, completedAt: day(2), lastActiveAt: day(2), enrolledAt: day(40) }),
   L("adaeze@northwind.ng", "Adaeze Okafor", { paymentStatus: "PAID", completedPageCount: 4, waitingLessonId: "l4", lastActiveAt: day(0) }),

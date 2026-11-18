@@ -1,15 +1,16 @@
 "use client";
 
+import { trackEvent } from "@/lib/analytics";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check } from "lucide-react";
 import { AuthShell } from "@/app/auth/_kit/AuthShell";
 import { Alert, Button, PageHead } from "@/app/auth/_kit/ui";
 import { getTierFeatures } from "@/lib/subscription";
-import { PLAN_LABELS } from "@/lib/plan/plans";
+import { PLAN_LABELS, PLAN, TRIAL_PLAN_IDS, TrialPlanId } from "@/lib/plan/plans";
 import { usePricing } from "@/app/dashboard/_components/usePricing";
 
-type TrialPlan = "STARTER" | "PRO";
+type TrialPlan = TrialPlanId;
 
 // What each trial plan is for, from the plan table itself (lib/subscription.ts). Prices come
 // from the price list in the visitor's own currency (usePricing), never written here.
@@ -17,12 +18,12 @@ const PLANS: Record<TrialPlan, { name: string; tagline: string; perks: string[] 
   STARTER: {
     name: PLAN_LABELS.STARTER,
     tagline: "One full website for your business.",
-    perks: ["Every page live, plus a blog", `A store with ${getTierFeatures("STARTER").maxCommerceProducts.toLocaleString("en-US")} products`, "Your own domain"],
+    perks: ["Every page live, plus a blog", `A store with ${getTierFeatures(PLAN.STARTER).maxCommerceProducts.toLocaleString("en-US")} products`, "Your own domain"],
   },
   PRO: {
     name: PLAN_LABELS.PRO,
     tagline: "Several websites, room to grow.",
-    perks: [`Up to ${getTierFeatures("PRO").maxPublishedSites} websites live`, `${getTierFeatures("PRO").includedFunnelSlots} funnels and a store`, "No “Hosted with Plexo” badge"],
+    perks: [`Up to ${getTierFeatures(PLAN.PRO).maxPublishedSites} websites live`, `${getTierFeatures(PLAN.PRO).includedFunnelSlots} funnels and a store`, "No “Hosted with Plexo” badge"],
   },
 };
 
@@ -43,6 +44,8 @@ export function TrialOffer({ firstName, highlighted, trialDays }: { firstName: s
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Something went wrong. Please try again.");
+      // Only after the server confirms the trial.
+      if (choice !== "free") trackEvent({ event: "trial_start", plan_name: choice.toLowerCase(), trial_days: trialDays, source_page: "welcome" });
       router.push(choice === "free" ? "/dashboard" : "/dashboard?trial=started");
       router.refresh();
     } catch (err) {
@@ -57,7 +60,7 @@ export function TrialOffer({ firstName, highlighted, trialDays }: { firstName: s
         <PageHead title={`${firstName ? `${firstName}, try` : "Try"} Plexo free for ${trialDays} days`}>No card needed. Cancel any time.</PageHead>
 
         <div className="ax-plans">
-          {(["STARTER", "PRO"] as const).map((key) => {
+          {(TRIAL_PLAN_IDS).map((key) => {
             const plan = PLANS[key];
             const isHighlighted = key === highlighted;
             const price = pricing ? pricing.plans[key] : null;

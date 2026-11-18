@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { getTierFeatures } from "@/lib/subscription";
 import { planMonthlyCredits } from "@/lib/credits/value";
-import { PLAN_LABELS, PLAN_RANK, type PaidPlanId, type PlanId } from "@/lib/plan/plans";
+import { PLAN_LABELS, PLAN_RANK, type PaidPlanId, type PlanId, PLAN, PAID_PLAN_IDS, TrialPlanId } from "@/lib/plan/plans";
 import type { BillingInterval, PricingView } from "@/lib/billing/pricing";
 import { startCheckout, type CheckoutResult } from "@/lib/billing/clientCheckout";
 import { StripeCheckoutModal } from "./StripeCheckoutModal";
@@ -16,7 +16,7 @@ import { startTrial } from "./trial";
 // Which payment provider runs the checkout (Stripe in US dollars, Paystack in naira/cedis/
 // shillings/rand) is decided by the server from where they are — the button is the same.
 
-const PLANS: PlanId[] = ["FREE", "STARTER", "PRO", "ENTERPRISE"];
+const PLANS: PlanId[] = [PLAN.FREE, PLAN.STARTER, PLAN.PRO, PLAN.ENTERPRISE];
 
 const TAGLINES: Record<PlanId, string> = {
   FREE: "Try Plexo with a one-page site.",
@@ -26,7 +26,7 @@ const TAGLINES: Record<PlanId, string> = {
 };
 
 function custom(plan: PlanId, text: string): string {
-  return plan === "ENTERPRISE" ? "Custom" : text;
+  return plan === PLAN.ENTERPRISE ? "Custom" : text;
 }
 
 /** The comparison rows — read from the plan table itself, so they can't drift from what's enforced. */
@@ -72,7 +72,7 @@ const secondaryButton: CSSProperties = {
 };
 
 export function priceLine(pricing: PricingView | null, plan: PlanId, interval: BillingInterval): { main: string; sub: string | null } {
-  if (plan === "FREE") return { main: "Free", sub: "forever" };
+  if (plan === PLAN.FREE) return { main: "Free", sub: "forever" };
   if (!pricing) return { main: "…", sub: null };
   const p = pricing.plans[plan as PaidPlanId];
   const from = p.isFromPrice ? "from " : "";
@@ -107,12 +107,12 @@ export function PlanPicker({
   // Yearly is optional per plan: no switch at all when nothing is offered yearly, and the saving is only ever
   // stated when there is one (information, never assumed).
   const yearlyAvailable = pricing ? pricing.yearlyAvailable : false;
-  const bestSaving = pricing ? Math.max(...(["STARTER", "PRO", "ENTERPRISE"] as const).map((p) => pricing.plans[p].yearlySavingPercent)) : 0;
+  const bestSaving = pricing ? Math.max(...(PAID_PLAN_IDS).map((p) => pricing.plans[p].yearlySavingPercent)) : 0;
   const effectiveInterval: BillingInterval = yearlyAvailable ? interval : "monthly";
 
   // A plan with no yearly price is always bought monthly, even while "Yearly" is selected.
   const intervalFor = (plan: PlanId): BillingInterval =>
-    effectiveInterval === "yearly" && (plan === "FREE" || (pricing?.plans[plan as PaidPlanId]?.yearly ?? null) !== null) ? "yearly" : "monthly";
+    effectiveInterval === "yearly" && (plan === PLAN.FREE || (pricing?.plans[plan as PaidPlanId]?.yearly ?? null) !== null) ? "yearly" : "monthly";
 
   async function upgrade(plan: PaidPlanId): Promise<void> {
     setBusy(plan);
@@ -122,7 +122,7 @@ export function PlanPicker({
     else onResult?.(result);
   }
 
-  function tryFree(plan: "STARTER" | "PRO"): void {
+  function tryFree(plan: TrialPlanId): void {
     setBusy(`trial-${plan}`);
     void startTrial(plan, returnTo ?? undefined).catch((err) => {
       onResult?.({ kind: "error", message: err instanceof Error ? err.message : "Couldn't start your trial." });
@@ -161,10 +161,10 @@ export function PlanPicker({
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: "0.75rem" }}>
         {PLANS.map((plan) => {
-          const isCurrent = plan === currentPlan && (plan === "FREE" || paying) && (plan === "FREE" || !currentInterval || currentInterval === intervalFor(plan));
+          const isCurrent = plan === currentPlan && (plan === PLAN.FREE || paying) && (plan === PLAN.FREE || !currentInterval || currentInterval === intervalFor(plan));
           const price = priceLine(pricing, plan, intervalFor(plan));
           const higher = PLAN_RANK[plan] > PLAN_RANK[currentPlan];
-          const canTrial = trialAvailable && currentPlan === "FREE" && (plan === "STARTER" || plan === "PRO");
+          const canTrial = trialAvailable && currentPlan === PLAN.FREE && (plan === PLAN.STARTER || plan === PLAN.PRO);
           return (
             <div
               key={plan}
@@ -194,14 +194,14 @@ export function PlanPicker({
                   </li>
                 ))}
               </ul>
-              {plan === "FREE" ? (
-                currentPlan === "FREE" ? <p style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.5))", textAlign: "center" }}>Your plan</p> : null
+              {plan === PLAN.FREE ? (
+                currentPlan === PLAN.FREE ? <p style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.5))", textAlign: "center" }}>Your plan</p> : null
               ) : isCurrent ? (
                 <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--plx-success, #34d399)", textAlign: "center" }}>Your plan</p>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem" }}>
                   {canTrial && (
-                    <button type="button" disabled={busy !== null} onClick={() => tryFree(plan as "STARTER" | "PRO")} style={{ ...secondaryButton, opacity: busy === `trial-${plan}` ? 0.7 : 1 }}>
+                    <button type="button" disabled={busy !== null} onClick={() => tryFree(plan as TrialPlanId)} style={{ ...secondaryButton, opacity: busy === `trial-${plan}` ? 0.7 : 1 }}>
                       {busy === `trial-${plan}` ? "Starting your trial…" : "Try free for 14 days"}
                     </button>
                   )}
@@ -222,7 +222,7 @@ export function PlanPicker({
           );
         })}
       </div>
-      {trialAvailable && currentPlan === "FREE" && (
+      {trialAvailable && currentPlan === PLAN.FREE && (
         <p style={{ fontSize: "0.72rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", marginTop: "0.6rem" }}>
           The free trial gives you Starter or Pro for 14 days, no card needed. Custom domains, taking real payments and your own branding switch on once you pay. The trial doesn&apos;t add AI credits.
         </p>

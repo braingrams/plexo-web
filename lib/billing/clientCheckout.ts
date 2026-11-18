@@ -1,4 +1,5 @@
 "use client";
+import { PaidPlanId } from "@/lib/plan/plans";
 
 // One "Upgrade" (or "Buy credits") button for everyone: the server picks Stripe (US dollars) or
 // Paystack (naira, cedis, shillings, rand) from the person's region (POST /api/billing/checkout),
@@ -14,7 +15,7 @@
 import type { BillingInterval } from "./pricing";
 
 export type CheckoutBody =
-  | { kind: "subscription"; plan: "STARTER" | "PRO" | "ENTERPRISE"; interval?: BillingInterval; returnTo?: string }
+  | { kind: "subscription"; plan: PaidPlanId; interval?: BillingInterval; returnTo?: string }
   | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE"; stayInPage?: boolean; returnTo?: string }
   | { kind: "funnel_addon_slot"; returnTo?: string };
 

@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { Entity, Service } from "electrodb";
 import { docClient, TABLES } from "./client";
 import { packHtml, packJson, unpackHtml, unpackJson } from "./packed";
@@ -1549,7 +1550,7 @@ export const LmsEnrollment = new Entity(
       status: { type: ["ACTIVE", "REVOKED"] as const, default: "ACTIVE" },
       paymentStatus: {
         type: ["FREE", "PAID", "REFUNDED"] as const,
-        default: "FREE",
+        default: PLAN.FREE,
       },
       commerceOrderId: { type: "string" },
       enrolledAt: {

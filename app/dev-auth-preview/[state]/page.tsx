@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { notFound } from "next/navigation";
 import { MailX, Users } from "lucide-react";
 import { AuthShell } from "@/app/auth/_kit/AuthShell";
@@ -52,8 +53,8 @@ export default async function Preview({ params }: { params: Promise<{ state: str
   if (state === "learn") return <SignupClient templateId="demo" funnelName="Baking Basics" errorMessage={null} paidReturn={false} />;
   if (state === "learn-error") return <SignupClient templateId="demo" funnelName="Baking Basics" errorMessage="That sign-up link has expired. Sign up again to get a new one." paidReturn={false} />;
   if (state === "learn-paid") return <SignupClient templateId="demo" funnelName="Baking Basics" errorMessage={null} paidReturn />;
-  if (state === "trial") return <TrialOffer firstName="Alex" highlighted="PRO" trialDays={14} />;
-  if (state === "subscription") return <CompleteSubscriptionClient plan="PRO" canTrial trialDays={14} />;
-  if (state === "subscription-pay") return <CompleteSubscriptionClient plan="PRO" canTrial={false} trialDays={14} />;
+  if (state === "trial") return <TrialOffer firstName="Alex" highlighted={PLAN.PRO} trialDays={14} />;
+  if (state === "subscription") return <CompleteSubscriptionClient plan={PLAN.PRO} canTrial trialDays={14} />;
+  if (state === "subscription-pay") return <CompleteSubscriptionClient plan={PLAN.PRO} canTrial={false} trialDays={14} />;
   notFound();
 }

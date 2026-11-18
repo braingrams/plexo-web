@@ -1,4 +1,5 @@
 "use client";
+import { PLAN } from "@/lib/plan/plans";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { aiErrorMessage } from "@/lib/ai/requestErrors";
@@ -1388,7 +1389,7 @@ export function BlogPostEditor({
             ? `Your plan allows ${publishedLimit} published blog posts on this site. Upgrade for unlimited posts.`
             : "Your posts are saved. Upgrade to Starter to publish your blog — with unlimited posts — alongside a full multi-page site."
         }
-        targetPlan={plan === "FREE" ? "STARTER" : "PRO"}
+        targetPlan={plan === PLAN.FREE ? PLAN.STARTER : PLAN.PRO}
         returnTo={
           postId
             ? `/dashboard/templates/${templateId}/blog/${postId}`

@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Archive, CalendarClock, Clock, CreditCard } from "lucide-react";
 import { DashboardNotice, type NoticeAction } from "./DashboardNotice";
 import { startTrial } from "./trial";
-import { PLAN_LABELS, type PaidPlanId } from "@/lib/plan/plans";
+import { PLAN_LABELS, type PaidPlanId, PLAN, TrialPlanId } from "@/lib/plan/plans";
 
 // One quiet notice above dashboard pages about where the account's plan stands: a trial's
 // days left, a card that needs updating, or — after a downgrade — that nothing was deleted
@@ -94,7 +94,7 @@ export function PlanBanner({ state }: { state: PlanBannerState }) {
 
   const name = NAME[state.previousPlan];
   // Enterprise isn't trialled — the trial offered after it is Pro's.
-  const trialPlan: "STARTER" | "PRO" = state.previousPlan === "STARTER" ? "STARTER" : "PRO";
+  const trialPlan: TrialPlanId = state.previousPlan === PLAN.STARTER ? PLAN.STARTER : PLAN.PRO;
   const actions: NoticeAction[] = state.trialAvailable
     ? [
         {

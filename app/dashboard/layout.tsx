@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { redirect } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 
@@ -5,6 +6,8 @@ import { auth } from "@/server/authDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { ensureActiveOrganization, getOrgBrandDynamo, getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
 import { DashboardShell } from "./dashboard-shell";
+import { AnalyticsIdentity } from "./_components/AnalyticsIdentity";
+import { analyticsPlan } from "@/lib/analytics";
 import { MigrationBanner } from "./migrate/wordpress/MigrationBanner";
 import { PlanBanner, type PlanBannerState } from "./_components/PlanBanner";
 import { CountryPrompt } from "@/app/_components/country/CountryPrompt";
@@ -101,6 +104,7 @@ export default async function DashboardLayout({
         {/* A WordPress site moving in the background: progress on every page, not just the migration tab. */}
         <MigrationBanner />
         {planBanner ? <PlanBanner state={planBanner} /> : null}
+        {dbUser ? <AnalyticsIdentity userId={dbUser.id} plan={analyticsPlan(plan)} status={planStatusFor(dbUser)} /> : null}
         {children}
         {/* "Your app is live", opened from any page once a server app goes live. */}
         <AppLiveDialog />
@@ -113,9 +117,16 @@ export default async function DashboardLayout({
   );
 }
 
+// free | trial | paid, from the same entitlement rules the plan banner uses.
+function planStatusFor(user: Parameters<typeof paidAccess>[0]): "free" | "trial" | "paid" {
+  const access = paidAccess(user);
+  if (access.entitled) return access.basis === "TRIAL" ? "trial" : "paid";
+  return "free";
+}
+
 function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngradedAt?: string | null; planBeforeDowngrade?: string | null; planDowngradeReason?: string | null; trialStartedAt?: string | null }): PlanBannerState | null {
   const plan = effectivePlan(user);
-  if (plan !== "FREE") {
+  if (plan !== PLAN.FREE) {
     const access = paidAccess(user);
     const daysLeft = accessDaysLeft(user);
     if (access.entitled && (access.basis === "TRIAL" || access.basis === "GRANT") && daysLeft !== null) {
@@ -126,7 +137,7 @@ function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngrad
   }
   if (user.planDowngradedAt) {
     const before = storedPlan({ subscriptionPlan: user.planBeforeDowngrade, planVersion: user.planVersion });
-    return { kind: "downgraded", previousPlan: before === "FREE" ? "STARTER" : before, since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
+    return { kind: "downgraded", previousPlan: before === PLAN.FREE ? PLAN.STARTER : before, since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
   }
   return null;
 }

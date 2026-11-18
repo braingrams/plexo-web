@@ -1,4 +1,5 @@
 "use client";
+import { TrialPlanId } from "@/lib/plan/plans";
 
 import { useEffect, useState } from "react";
 
@@ -23,7 +24,7 @@ export function useTrialAvailable(): { available: boolean; trialDays: number } {
 }
 
 /** Starts the trial, then reloads `returnTo` (default: this page) so everything unlocked shows at once. */
-export async function startTrial(plan: "STARTER" | "PRO", returnTo?: string): Promise<void> {
+export async function startTrial(plan: TrialPlanId, returnTo?: string): Promise<void> {
   const res = await fetch("/api/billing/trial", {
     method: "POST",
     headers: { "Content-Type": "application/json" },

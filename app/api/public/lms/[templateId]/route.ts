@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { NextRequest, NextResponse } from "next/server";
 import { Template, LmsFunnel } from "@/lib/db/contentEntities";
 import { CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
@@ -26,7 +27,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
 
   return NextResponse.json({
     name: site.name,
-    signupMode: funnel.signupMode ?? "FREE",
+    signupMode: funnel.signupMode ?? PLAN.FREE,
     requireName: funnel.requireName ?? true,
     collectPhone: funnel.collectPhone ?? false,
     price,

@@ -1,3 +1,4 @@
+import { PLAN, PAID_PLAN_IDS } from "@/lib/plan/plans";
 // Price changes and the people who already subscribe.
 //
 // A price change affects EVERYONE: new subscribers pay the new price straight away (the price
@@ -57,7 +58,7 @@ export type PriceChangeRow = {
   entries: PriceChangeEntry[];
 };
 
-const PLANS: PaidPlanId[] = ["STARTER", "PRO", "ENTERPRISE"];
+const PLANS: PaidPlanId[] = [...PAID_PLAN_IDS];
 const INTERVALS: BillingInterval[] = ["monthly", "yearly"];
 
 /** When a change takes effect for people who already subscribe. */

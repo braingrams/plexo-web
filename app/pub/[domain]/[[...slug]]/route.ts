@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { createHash, randomUUID } from "node:crypto";
 import { workspaceOwner } from "@/lib/plan/workspacePlan";
 import { effectivePlan } from "@/lib/plan/entitlement";
@@ -402,7 +403,7 @@ async function servePreviewHost(request: NextRequest, host: string, templateId: 
     host,
     isPreview: true,
     noindex: true,
-    owner: { subscriptionPlan: user?.subscriptionPlan ?? "FREE", hideBranding: user?.hideBranding ?? false },
+    owner: { subscriptionPlan: user?.subscriptionPlan ?? PLAN.FREE, hideBranding: user?.hideBranding ?? false },
     organization: { id: template.organizationId, logo: organization?.logo ?? null, whiteLabelEnabled: organization?.whiteLabelEnabled ?? false },
   });
 }
