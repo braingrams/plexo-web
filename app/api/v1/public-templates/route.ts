@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { findMergeTags } from "@/lib/email/mergeTags";
 import type { EntityItem } from "electrodb";
 import { Template } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
@@ -74,6 +75,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       previewImage: null;
       designJson: unknown;
       compiledHtml: string;
+      mergeTags: { key: string; known: boolean }[];
       authorName: string;
       createdAt: string;
       updatedAt: string;
@@ -99,6 +101,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
         previewImage: null,
         designJson: t.designJson,
         compiledHtml: t.compiledHtml,
+        mergeTags: t.kind === "EMAIL" ? findMergeTags(t.compiledHtml ?? "") : [],
         authorName: authorNames[i],
         createdAt: t.createdAt ?? new Date().toISOString(),
         updatedAt: t.updatedAt ?? new Date().toISOString(),

@@ -11,6 +11,7 @@ import { rawUploadLimitMessage } from "@/server/rawUploadLimit";
 import { isTemplateNameTaken } from "@/server/templateNameDynamo";
 import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutDynamo";
 import { compileTemplate } from "@/lib/compileTemplate";
+import { cleanEmailHtml } from "@/lib/email/mergeTags";
 import { blankV2Design, defaultDesignFormat, designFormatOf, starterV2EmailDesign, v2DesignFromTemplate, type DesignFormat } from "@/lib/v2/design";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
@@ -177,10 +178,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const rawHtmlContent = typeof body.htmlContent === "string" ? body.htmlContent : null;
-  if (rawHtmlContent !== null) {
-    if (kind !== "LANDING_PAGE") {
-      return NextResponse.json({ error: "htmlContent is only supported for landing pages, not email templates." }, { status: 400 });
-    }
+  // An email made from pasted HTML: scripts are stripped (email never runs them) and it needs none of the website
+  // hosting checks below, so it skips straight to being created.
+  const emailHtml = kind === "EMAIL" && rawHtmlContent !== null ? cleanEmailHtml(rawHtmlContent) : null;
+  if (emailHtml !== null && emailHtml.length > 400_000) {
+    return NextResponse.json({ error: "This email is too large to send. Gmail cuts off long emails, so use less HTML or smaller pictures." }, { status: 400 });
+  }
+  if (rawHtmlContent !== null && emailHtml === null) {
     try {
       validateRawHtmlContent(rawHtmlContent);
     } catch (err) {
@@ -243,7 +247,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     slug: slug ?? undefined,
     order,
     ...(rawHtmlContent !== null
-      ? { sourceType: "RAW_UPLOAD" as const, designJson: {}, compiledHtml: rawHtmlContent }
+      ? { sourceType: "RAW_UPLOAD" as const, designJson: {}, compiledHtml: emailHtml ?? rawHtmlContent }
       : v2Design
         ? { designFormat: "v2" as const, designJson: v2Design, compiledHtml: v2Html }
         : { designJson: BLANK_TEMPLATE_SHELL, compiledHtml: "" }),

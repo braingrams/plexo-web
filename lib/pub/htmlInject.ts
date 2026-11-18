@@ -1,4 +1,3 @@
-import { BRAND } from "@/lib/theme";
 import type { CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 // Serve-time HTML injection shared by every kind of published site — builder pages,
 // raw uploads (app/pub/[domain]/[[...slug]]/route.ts) and React projects
@@ -71,10 +70,29 @@ export function injectFormsScript(html: string, templateId: string, opts: { auto
   );
 }
 
+/** The new Plexo brand on the badge: lime action on a near-black bar (same values as plexopages.com and the dashboard). */
+const BAR = { bg: "#0b0b12", text: "#f4f5f0", action: "#b8f34a", onAction: "#0b0b12" };
+
+/** The logo is served by Plexo itself, so on a customer's own domain it needs Plexo's full address. */
+function logoUrl(ctaHref: string): string {
+  let origin = "https://plexo.charisol.io";
+  try {
+    const u = new URL(ctaHref);
+    if (u.protocol === "https:" && !/^(localhost|127\.|0\.0\.0\.0|\[::1\])/.test(u.hostname)) origin = u.origin;
+  } catch {
+    /* keep the default */
+  }
+  return `${origin}/api/brand/logo/wordmark-on-dark`;
+}
+
+/**
+ * The "Hosted with Plexo" bar. The word Plexo shows straight away and is swapped for the logo once the logo has loaded,
+ * so the bar never looks empty or jumps; if the logo can't load, the word simply stays.
+ */
 export function injectBrandingBar(html: string, ctaHref: string): string {
-  const bar = `<div style="position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 16px;background:#0b0f19;color:#f0f2ff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1;border-top:1px solid rgba(255,255,255,0.08);box-shadow:0 -4px 20px rgba(0,0,0,0.35);">
-  <span>Hosted with <strong>Plexo</strong>.</span>
-  <a href="${ctaHref}" target="_blank" rel="noopener" style="background:linear-gradient(135deg,${BRAND.primary},${BRAND.deep});color:#fff;padding:6px 14px;border-radius:8px;font-weight:700;text-decoration:none;">Host yours now</a>
+  const bar = `<div data-plexo-badge style="position:fixed;left:0;right:0;bottom:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;gap:12px;padding:10px 16px;background:${BAR.bg};color:${BAR.text};font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;font-size:13px;line-height:1;border-top:1px solid rgba(255,255,255,0.08);box-shadow:0 -4px 20px rgba(0,0,0,0.35);">
+  <span style="display:inline-flex;align-items:center;gap:6px;">Hosted with <span style="display:inline-flex;align-items:center;min-height:18px;"><strong>Plexo</strong><img src="${logoUrl(ctaHref)}" alt="" height="18" style="display:none;height:18px;width:auto;" onload="this.style.display='block';this.previousElementSibling.style.display='none'"></span></span>
+  <a href="${ctaHref}" target="_blank" rel="noopener" style="background:${BAR.action};color:${BAR.onAction};padding:6px 14px;border-radius:8px;font-weight:700;text-decoration:none;">Host yours now</a>
 </div>`;
   return insertBeforeBodyEnd(html, bar);
 }

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cleanEmailHtml } from "@/lib/email/mergeTags";
 import { uploadObject, StorageError } from "@/lib/storage";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
@@ -68,7 +69,7 @@ export async function PUT(
   }
 
   if (filePath === "index.html") {
-    await Template.patch({ id: template.id }).set({ compiledHtml: content }).go();
+    await Template.patch({ id: template.id }).set({ compiledHtml: template.kind === "EMAIL" ? cleanEmailHtml(content) : content }).go();
   } else {
     if (!isEditableExtension(filePath)) {
       return NextResponse.json({ error: "This file type isn't text-editable." }, { status: 400 });

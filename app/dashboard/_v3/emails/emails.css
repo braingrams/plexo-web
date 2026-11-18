@@ -60,3 +60,24 @@
 .plx-emsearch .plx-input { padding-left: 42px; }
 .plx-pick__t > :last-child { align-self: flex-start; margin-top: 4px; }
 .plx-newem .plx-emsearch { flex: none; max-width: none; }
+
+.plx-emprev { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--plx-border); border-radius: var(--plx-radius-card-lg); background: var(--plx-sunken); overflow: hidden; }
+.plx-emprev__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--plx-border); background: var(--plx-surface); }
+.plx-emprev__fill { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--plx-muted); cursor: pointer; }
+.plx-emprev__stage { flex: 1; min-height: 0; overflow: auto; display: flex; justify-content: center; padding: 16px; }
+.plx-emprev__frame { border: 0; background: white; /* an email is read on white, in light and dark */  border-radius: 10px; box-shadow: var(--plx-shadow-card); height: 100%; min-height: 420px; width: 100%; max-width: 680px; }
+.plx-emprev__frame--phone { max-width: 375px; }
+.plx-emprev__empty { align-self: center; text-align: center; max-width: 280px; }
+
+.plx-emhtml { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: stretch; }
+@media (max-width: 820px) { .plx-emhtml { grid-template-columns: 1fr; } }
+.plx-emhtml__code { width: 100%; min-height: 360px; resize: vertical; font: 13px/1.5 var(--plx-font-mono, ui-monospace, monospace); padding: 12px 14px; border-radius: var(--plx-radius); border: 1px solid var(--plx-border-strong); background: var(--plx-surface); color: var(--plx-text); }
+.plx-emhtml__code:focus-visible { outline: 3px solid var(--plx-focus); outline-offset: 2px; }
+.plx-emwarn { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.5; color: var(--plx-muted); }
+.plx-emtags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.plx-emtags > span { font-size: 13px; color: var(--plx-muted); }
+.plx-emtag { font: inherit; font-size: 13px; font-weight: 600; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--plx-border-strong); background: var(--plx-surface); color: var(--plx-text); cursor: pointer; }
+.plx-emtag:hover { border-color: var(--plx-text); background: var(--plx-elevated); }
+.plx-emtag:focus-visible { outline: 3px solid var(--plx-focus); outline-offset: 2px; }
+.plx-echoices--two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 720px) { .plx-echoices--two { grid-template-columns: 1fr; } }

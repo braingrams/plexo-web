@@ -40,6 +40,8 @@ export function ProViewNudge({ experience, demo }: { experience: Experience; dem
       toast.show({ tone: "danger", title: "We couldn't switch just now", description: "Check your connection and try again." });
       return;
     }
+    // They took the offer, so the card never returns, even after they come back to the simple view.
+    try { localStorage.setItem(NUDGE_KEY, JSON.stringify({ ...readNudgeState(localStorage.getItem(NUDGE_KEY)), tried: true })); } catch { /* fine */ }
     toast.show({ tone: "success", title: "You're on the full view", description: "Switch back any time from your profile picture." });
     router.refresh();
   };

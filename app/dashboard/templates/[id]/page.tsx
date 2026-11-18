@@ -14,6 +14,7 @@ import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
 
 import { TemplateEditorDynamic } from "./template-editor-dynamic";
 import { RawFileEditor } from "./raw-file-editor";
+import { EmailHtmlEditor } from "./email-html-editor";
 import { migratedPreviewBase } from "@/lib/wpMigration/previewBase";
 import { canMoveToV2 } from "@/lib/v2/convertV1";
 import { designFormatOf, parseV2Design } from "@/lib/v2/design";
@@ -91,6 +92,10 @@ export default async function TemplateEditorPage(props: {
   }).go();
 
   const tierFeatures = getTierFeatures(effectivePlan(user));
+
+  if (template.sourceType === "RAW_UPLOAD" && template.kind === "EMAIL") {
+    return <EmailHtmlEditor templateId={template.id} templateName={template.name} initialHtml={template.compiledHtml ?? ""} useAi={activeApiKey?.useAi ?? tierFeatures.aiEnabled} />;
+  }
 
   if (template.sourceType === "RAW_UPLOAD") {
     return (

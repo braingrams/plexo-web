@@ -111,7 +111,10 @@ describe("a Free site serves its homepage only", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("<h1>home</h1>");
-    expect(html).toContain("Hosted with <strong>Plexo</strong>"); // hideBranding is ignored on Free
+    expect(html).toContain("data-plexo-badge"); // hideBranding is ignored on Free
+    expect(html).toContain("<strong>Plexo</strong>"); // shown until the logo has loaded
+    expect(html).toContain("/api/brand/logo/wordmark-on-dark");
+    expect(html).toContain("#b8f34a"); // the new brand colour, not the old violet
   });
 
   it("former sub-pages send visitors back to / with a clean, uncached 302", async () => {

@@ -5,6 +5,11 @@ const DAY = 86_400_000;
 const now = 100 * DAY;
 
 describe("the 'ready for more control?' card", () => {
+  it("never comes back once they have tried the full view", () => {
+    expect(shouldShowProNudge({ experience: "beginner", state: { visits: 9, tried: true }, now })).toBe(false);
+    expect(readNudgeState('{"visits":4,"tried":true}')).toEqual({ visits: 4, tried: true });
+  });
+
   it("only for the guided view, and only after a few visits", () => {
     expect(shouldShowProNudge({ experience: "beginner", state: { visits: NUDGE_AFTER_VISITS - 1 }, now })).toBe(false);
     expect(shouldShowProNudge({ experience: "beginner", state: { visits: NUDGE_AFTER_VISITS }, now })).toBe(true);

@@ -12,6 +12,7 @@ import { SolOutOfCredits } from "../../_components/sol/SolTopUp";
 import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { emailsListHref } from "@/lib/dashboardV3/emails";
+import { editorMergeTags } from "@/lib/email/mergeTags";
 import { useEditorBackHref, useEditorBeginner, useEditorColors, useEditorV3 } from "../../_components/EditorTheme";
 import {
   PlexoBuilder,
@@ -1272,6 +1273,7 @@ export function TemplateEditorClient({
           apiKey="workspace-internal"
           onAiCreditsExhausted={() => setSolOutOfCredits(true)}
           mode={isEmail ? "email" : "landing_page"}
+          mergeTags={isEmail ? editorMergeTags() : undefined}
           isBlogLayout={isBlogLayout}
           commerceEnabled={commerceEnabled}
           maildripConnected={maildripConnected}

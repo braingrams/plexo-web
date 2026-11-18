@@ -1,5 +1,6 @@
 "use client";
 
+import { otherDialogOpen } from "@/lib/dashboardV3/dialogs";
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Compass, ListChecks, Route } from "lucide-react";
@@ -81,6 +82,15 @@ export function TourProvider({ initialState, onPersist, steps: registry = TOUR_S
   const pathname = usePathname() ?? "/";
   const [state, setState] = useState<TourState>(initialState);
   const [offerOpen, setOfferOpen] = useState(false);
+  // The offer opens by itself, so it steps aside while any other dialog is open and returns once that one closes.
+  const [otherOpen, setOtherOpen] = useState(false);
+  useEffect(() => {
+    const check = () => setOtherOpen(otherDialogOpen(document, "plx-tour-offer"));
+    check();
+    const mo = new MutationObserver(check);
+    mo.observe(document.body, { childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, []);
   // Only drive navigation once the person has pressed something in this visit; a tour left
   // "active" on another page offers to resume instead of whisking them away on load.
   const [driving, setDriving] = useState(initialDriving);
@@ -97,15 +107,33 @@ export function TourProvider({ initialState, onPersist, steps: registry = TOUR_S
     });
   }, []);
 
-  // First arrival: ask once.
+  // First arrival: ask once, and only when the screen itself is showing. /dashboard sometimes sends a returning person on to the
+  // "Customize Plexo" setup first, so counting from the moment the route loads made the offer pop up and then vanish. Waiting
+  // for the Home screen to appear (it marks itself with data-tour-ready) means the offer only ever shows where it belongs.
+  const offeredRef = useRef(false);
+  const stateRef = useRef(state);
+  stateRef.current = state;
   useEffect(() => {
-    if (shouldOfferTour(initialState) && offerOn.some((p) => sameRoute(p, pathname))) {
-      const t = window.setTimeout(() => setOfferOpen(true), 600);
-      return () => window.clearTimeout(t);
-    }
-    // Only on first mount.
+    if (offeredRef.current || !shouldOfferTour(stateRef.current) || !offerOn.some((p) => sameRoute(p, pathname))) return;
+    let timer: number | undefined;
+    const arm = () => {
+      offeredRef.current = true;
+      timer = window.setTimeout(() => setOfferOpen(true), 600);
+    };
+    const mo = new MutationObserver(() => {
+      if (document.querySelector("[data-tour-ready]")) {
+        mo.disconnect();
+        arm();
+      }
+    });
+    if (document.querySelector("[data-tour-ready]")) arm();
+    else mo.observe(document.body, { childList: true, subtree: true });
+    return () => {
+      mo.disconnect();
+      window.clearTimeout(timer);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [pathname]);
 
   const start = useCallback(
     (mode: TourMode) => {
@@ -137,7 +165,7 @@ export function TourProvider({ initialState, onPersist, steps: registry = TOUR_S
     <TourCtx.Provider value={api}>
       {children}
       <TourOffer
-        open={offerOpen}
+        open={offerOpen && !otherOpen}
         canResume={canResume}
         onPick={start}
         onResume={resume}

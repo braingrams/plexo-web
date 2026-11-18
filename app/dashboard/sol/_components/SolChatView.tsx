@@ -668,7 +668,7 @@ export function SolChatView({
                         key={suggestion}
                         type="button"
                         onClick={() => void handleSend(suggestion, [])}
-                        style={{ padding: "0.5rem 0.85rem", borderRadius: 12, border: "1px solid rgba(var(--brand-rgb), 0.25)", background: "rgba(var(--brand-rgb), 0.08)", color: "rgba(240,242,255,0.88)", fontSize: "0.8rem", textAlign: "left", cursor: "pointer" }}
+                        style={{ padding: "0.5rem 0.85rem", borderRadius: 12, border: "1px solid var(--ed-chip-border)", background: "var(--ed-chip-bg)", color: "var(--ed-chip-text)", fontSize: "0.8rem", textAlign: "left", cursor: "pointer" }}
                       >
                         {suggestion}
                       </button>
@@ -697,7 +697,7 @@ export function SolChatView({
                       key={suggestion}
                       type="button"
                       onClick={() => void handleSend(suggestion, [])}
-                      style={{ padding: "0.45rem 0.8rem", borderRadius: 999, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.04)", color: "rgba(240,242,255,0.8)", fontSize: "0.78rem", cursor: "pointer" }}
+                      style={{ padding: "0.45rem 0.8rem", borderRadius: 999, border: "1px solid var(--ed-w-100)", background: "var(--ed-w-040)", color: "var(--ed-t-800)", fontSize: "0.78rem", cursor: "pointer" }}
                     >
                       {suggestion}
                     </button>

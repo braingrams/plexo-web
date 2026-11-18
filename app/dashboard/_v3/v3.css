@@ -603,3 +603,14 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 /* Tailwind's base makes every <svg> block-level, so an icon written after text (a link icon after a web address, "Visit ↗") dropped onto its own
    line. Icons are inline in the new dashboard; components that need a block icon already say so with their own rule. */
 :where([data-plexo-v3]) svg.lucide { display: inline-block; vertical-align: -0.15em; }
+
+/* One banner at a time: the rest fold behind "N more". Hidden before the script runs so nothing flashes. */
+.plx-banners { display: flex; flex-direction: column; align-items: stretch; gap: 8px; margin: 0 0 24px; }
+.plx-banners[data-count="0"] { display: none; }
+.plx-banners__list { display: flex; flex-direction: column; gap: 16px; }
+.plx-banners__list > * { margin: 0; }
+.plx-banners__list [data-banner-folded] { display: none !important; }
+.plx-banners:not([data-ready]) .plx-banners__list > * + * { display: none; }
+.plx-banners__more { font: inherit; font-size: 13px; font-weight: 700; align-self: flex-end; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--plx-border-strong); background: var(--plx-surface); color: var(--plx-text); cursor: pointer; }
+.plx-banners__more:hover { background: var(--plx-elevated); }
+.plx-banners__more:focus-visible { outline: 2px solid var(--plx-focus); outline-offset: 2px; }

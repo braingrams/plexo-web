@@ -18,6 +18,7 @@ import { syncPlanLifecycle } from "@/lib/plan/lifecycle";
 import { getDashboardVersionState } from "@/lib/dashboardVersions/state";
 import { VersionProvider } from "./_versions/VersionUi";
 import { ServerPromo } from "./_v3/promo/ServerPromo";
+import { BannerStack } from "./_v3/ui/BannerStack";
 import { V3DashboardLayout } from "./_v3/V3DashboardLayout";
 
 export default async function DashboardLayout({
@@ -74,11 +75,19 @@ export default async function DashboardLayout({
         orgBranding={orgBranding}
         plan={plan}
       >
-        <MigrationBanner />
-        {planBanner ? <PlanBanner state={planBanner} /> : null}
-        {/* Admin "what's new" strip: yields to the plan notice (and, in CSS, to the migration one). */}
-        <ServerPromo user={dbUser} yieldTo={!!planBanner} />
-        {children}
+        {/* Every banner in one stack: the first shows, the rest fold behind "more" (pages add their own with InBannerStack). */}
+        <BannerStack
+          banners={
+            <>
+              <MigrationBanner />
+              {planBanner ? <PlanBanner state={planBanner} /> : null}
+              {/* Admin "what's new" strip: yields to the plan notice (and, in CSS, to the migration one). */}
+              <ServerPromo user={dbUser} yieldTo={!!planBanner} />
+            </>
+          }
+        >
+          {children}
+        </BannerStack>
         <AppLiveDialog />
       </V3DashboardLayout>
     );

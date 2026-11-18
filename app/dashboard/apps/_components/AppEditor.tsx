@@ -4,11 +4,13 @@ import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useAppBackHref, useEditorV3 } from "../../_components/EditorTheme";
-import { ArrowLeft, Check, ChevronDown, Code2, ExternalLink, MessageSquare, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, ChevronDown, Code2, ExternalLink, MessageSquare, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
 import { SolChatView } from "../../sol/_components/SolChatView";
 import type { ConversationSummary, ModelTier, SolMessage } from "../../sol/_components/types";
 import { appsApi, pollBuild, ApiError, type AppSummary, type BuildReport, type BuildError } from "./api";
 import { C, Button } from "./ui";
+import { advancedHref } from "@/lib/dashboardV3/hubAdvanced";
+import { HUB_SECTION_FOR_PANEL } from "@/lib/dashboardV3/appEditorLinks";
 import { PreviewPane, type Viewport, type SelectedElement, type PreviewError } from "./PreviewPane";
 import { CodePane } from "./CodePane";
 import { DiffView } from "./DiffView";
@@ -64,6 +66,8 @@ const seg = (active: boolean) => ({
 
 export function AppEditor(props: {
   appId: string;
+  /** Full view on the new dashboard: Data, People, Settings and More link to the app's own page instead of repeating them here. */
+  hubLinks?: boolean;
   initialSummary: AppSummary;
   conversation: ConversationSummary;
   initialMessages: SolMessage[];
@@ -653,23 +657,36 @@ export function AppEditor(props: {
 
         {!firstBuild && <nav className="ed-tabs" aria-label="App tools" style={{ marginLeft: 28, display: "flex", alignItems: "center", gap: 8 }}>
           <div role="tablist" style={{ display: "inline-flex", gap: 3, padding: 4, borderRadius: 12, background: "var(--ed-w-050)" }}>
-            {MAIN_TABS.map((t) => (
-              <button key={t.id} type="button" role="tab" aria-selected={!codeMode && tab === t.id} onClick={() => openTab(t.id)} style={seg(!codeMode && tab === t.id)}>
-                {t.label}
-              </button>
-            ))}
+            {MAIN_TABS.map((t) =>
+              props.hubLinks && HUB_SECTION_FOR_PANEL[t.id] ? (
+                <Link key={t.id} href={advancedHref(appId, HUB_SECTION_FOR_PANEL[t.id])} title={`Opens ${t.label} on your app's page`} style={{ ...seg(false), display: "inline-flex", alignItems: "center", gap: 4, textDecoration: "none" }}>
+                  {t.label} <ArrowUpRight size={12} aria-hidden />
+                </Link>
+              ) : (
+                <button key={t.id} type="button" role="tab" aria-selected={!codeMode && tab === t.id} onClick={() => openTab(t.id)} style={seg(!codeMode && tab === t.id)}>
+                  {t.label}
+                </button>
+              ),
+            )}
             <div ref={moreRef} style={{ position: "relative" }}>
               <button type="button" aria-haspopup="menu" aria-expanded={moreOpen} onClick={() => setMoreOpen((v) => !v)} style={{ ...seg(!!moreActive), display: "inline-flex", alignItems: "center", gap: 4 }}>
                 {moreActive ? moreActive.label : "More"} <ChevronDown size={13} />
               </button>
               {moreOpen && (
                 <div role="menu" style={{ position: "absolute", top: "calc(100% + 8px)", left: 0, zIndex: 80, width: 260, padding: 6, borderRadius: 12, background: C.panelSolid, border: `1px solid ${C.borderStrong}`, boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)" }}>
-                  {MORE_TABS.map((t) => (
-                    <button key={t.id} type="button" role="menuitem" onClick={() => openTab(t.id)} style={{ width: "100%", textAlign: "left", padding: "0.55rem 0.65rem", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", background: tab === t.id && !codeMode ? "var(--ed-w-080)" : "transparent", color: C.text }}>
+                  {MORE_TABS.map((t) =>
+                    props.hubLinks && HUB_SECTION_FOR_PANEL[t.id] ? (
+                      <Link key={t.id} href={advancedHref(appId, HUB_SECTION_FOR_PANEL[t.id])} role="menuitem" style={{ display: "block", textDecoration: "none", padding: "0.55rem 0.65rem", borderRadius: 9, color: C.text }}>
                       <span style={{ display: "block", fontSize: "0.84rem", fontWeight: 600 }}>{t.label}</span>
                       <span style={{ display: "block", fontSize: "0.74rem", color: C.muted }}>{t.hint}</span>
-                    </button>
-                  ))}
+                      </Link>
+                    ) : (
+                      <button key={t.id} type="button" role="menuitem" onClick={() => openTab(t.id)} style={{ width: "100%", textAlign: "left", padding: "0.55rem 0.65rem", borderRadius: 9, border: "none", cursor: "pointer", fontFamily: "inherit", background: tab === t.id && !codeMode ? "var(--ed-w-080)" : "transparent", color: C.text }}>
+                      <span style={{ display: "block", fontSize: "0.84rem", fontWeight: 600 }}>{t.label}</span>
+                      <span style={{ display: "block", fontSize: "0.74rem", color: C.muted }}>{t.hint}</span>
+                      </button>
+                    ),
+                  )}
                 </div>
               )}
             </div>

@@ -40,11 +40,6 @@ export function SitePreviewCard({ site, brand }: { site: SiteSummary; brand: Hom
             <div className="plx-small" style={{ overflowWrap: "anywhere" }}>{site.address ?? "No web address yet"}</div>
           </div>
         </div>
-        <div aria-hidden style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-          {[0, 1, 2].map((i) => (
-            <span key={i} style={{ height: 36, borderRadius: 8, background: brand.color || "var(--plx-tint)", opacity: 0.25 + i * 0.2 }} />
-          ))}
-        </div>
       </div>
       <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
@@ -54,11 +49,15 @@ export function SitePreviewCard({ site, brand }: { site: SiteSummary; brand: Hom
           {/* Preview is always the private working copy. Open my site is only the live address. */}
           <PreviewButton site={site} style={{ flex: "1 1 130px" }} />
         </div>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <OpenSiteButton site={site} style={{ flex: "1 1 150px" }} />
-          <CopyLinkButton address={href ? site.address : null} disabled={!href} style={{ flex: "1 1 130px" }} />
-        </div>
-        {!href ? <span className="plx-small">{OPEN_SITE_HINT}. Until then, Preview shows what you have so far.</span> : null}
+        {/* Open and Copy only mean something once there is a live address, so they appear then instead of sitting greyed out. */}
+        {href ? (
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+            <OpenSiteButton site={site} style={{ flex: "1 1 150px" }} />
+            <CopyLinkButton address={site.address} style={{ flex: "1 1 130px" }} />
+          </div>
+        ) : (
+          <span className="plx-small">{OPEN_SITE_HINT}. Until then, Preview shows what you have so far.</span>
+        )}
       </div>
     </Card>
   );

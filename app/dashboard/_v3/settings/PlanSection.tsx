@@ -9,8 +9,8 @@ import { startTrial } from "../../_components/trial";
 import { usePricing } from "../../_components/usePricing";
 import { startCheckout, type CheckoutBody } from "@/lib/billing/clientCheckout";
 import { isPaidPlanId, type PaidPlanId, PLAN, RETIRED_PLAN, TrialPlanId } from "@/lib/plan/plans";
-import { packLabel, useTopupPacks, type TopupPackInfo } from "../../_components/useTopupPacks";
-import { Badge, Button, ButtonLink, Card, Modal } from "../ui";
+import { useTopupPacks, type TopupPackInfo } from "../../_components/useTopupPacks";
+import { Badge, Button, ButtonLink, Card, Modal, SegmentedControl } from "../ui";
 import { getTierFeatures } from "@/lib/subscription";
 import { planMonthlyCredits } from "@/lib/credits/value";
 import { creditMeter, usageMeter } from "@/lib/dashboardV3/settingsUsage";
@@ -112,11 +112,20 @@ export function PlanSection(props: PlanSectionProps) {
   const [status, setStatus] = useState<{ tone: "info" | "bad"; text: string } | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
+  const [picking, setPicking] = useState<PaidPlanId | null>(null);
+  const [pickInterval, setPickInterval] = useState<"monthly" | "yearly">("monthly");
+  const [pickRenew, setPickRenew] = useState<"auto" | "once">("auto");
 
   const current = planView(state.plan, prices);
   const credits = creditView(allowanceBalance, topupBalance, allowanceResetAt);
   const cancelText = cancelExplanation(state);
   const packs: TopupPackInfo[] = Object.keys(packsLive).length ? Object.values(packsLive) : FALLBACK_PACKS;
+
+  function openPicker(id: PaidPlanId) {
+    setPickInterval("monthly");
+    setPickRenew("auto");
+    setPicking(id);
+  }
 
   async function checkout(body: CheckoutBody, key: string, returnTo: string | null = null) {
     if (mock) return;
@@ -266,7 +275,7 @@ export function PlanSection(props: PlanSectionProps) {
         <section id="plans" className="plx-sp__main" data-tour="plan-upgrade" aria-labelledby="up-h" style={{ scrollMarginTop: 90 }}>
           <div>
             <h3 className="plx-h2" id="up-h">{state.plan === PLAN.FREE ? "Pick a plan that fits" : "Want even more?"}</h3>
-            <p className="plx-body" style={{ marginTop: 4 }}>Prices are in your own currency. Change or cancel any time.{payOnceOffered ? " Not ready to commit? Pay for a month or a year by transfer or card, with no automatic renewal. We'll remind you a week before it ends." : ""}</p>
+            <p className="plx-body" style={{ marginTop: 4 }}>Prices are in your own currency. Change or cancel any time.{payOnceOffered ? " Choose monthly or yearly, and whether it renews by itself." : ""}</p>
           </div>
           <div className="plx-plans">
             {upgrades.map((id: PlanId, i) => {
@@ -284,24 +293,9 @@ export function PlanSection(props: PlanSectionProps) {
                     ))}
                   </ul>
                   <div className="plx-plan__actions">
-                    <Button variant={i === 0 ? "primary" : "secondary"} loading={busy === `sub-${id}`} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => checkout({ kind: "subscription", plan: id as PaidPlanId }, `sub-${id}`)}>
+                    <Button variant={i === 0 ? "primary" : "secondary"} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => openPicker(id as PaidPlanId)}>
                       {state.plan === PLAN.FREE ? `Choose ${v.name}` : `Switch to ${v.name}`}
                     </Button>
-                    {payOnceOffered ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 4 }}>
-                        <span className="plx-small">Or pay once, no auto-renew (transfer or card):</span>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <Button variant="ghost" size="sm" loading={busy === `once-${id}`} onClick={() => checkout({ kind: "subscription", plan: id as PaidPlanId, oneTime: true }, `once-${id}`)}>
-                            1 month{pricing?.plans[id as PaidPlanId]?.monthlyLabel ? `: ${pricing.plans[id as PaidPlanId].monthlyLabel}` : ""}
-                          </Button>
-                          {pricing?.plans[id as PaidPlanId]?.yearlyLabel ? (
-                            <Button variant="ghost" size="sm" loading={busy === `once-y-${id}`} onClick={() => checkout({ kind: "subscription", plan: id as PaidPlanId, interval: "yearly", oneTime: true }, `once-y-${id}`)}>
-                              1 year: {pricing.plans[id as PaidPlanId].yearlyLabel}{pricing.plans[id as PaidPlanId].yearlyMonthsFree ? ` (${pricing.plans[id as PaidPlanId].yearlyMonthsFree} months free)` : ""}
-                            </Button>
-                          ) : null}
-                        </div>
-                      </div>
-                    ) : null}
                     {state.plan === PLAN.FREE && trialAvailable && id !== PLAN.ENTERPRISE ? (
                       <Button
                         variant="ghost"
@@ -328,6 +322,70 @@ export function PlanSection(props: PlanSectionProps) {
         </section>
       ) : null}
 
+      {picking ? (() => {
+        const row = pricing?.plans[picking];
+        const hasYear = !!row?.yearlyLabel;
+        const interval = hasYear ? pickInterval : "monthly";
+        const price = interval === "yearly" ? row?.yearlyLabel : row?.monthlyLabel;
+        const per = interval === "yearly" ? "a year" : "a month";
+        const free = row?.yearlyMonthsFree;
+        const once = payOnceOffered && pickRenew === "once";
+        const verb = state.plan === PLAN.FREE ? "Choose" : "Switch to";
+        return (
+          <Modal
+            open
+            onClose={() => (busy ? undefined : setPicking(null))}
+            title={`${verb} ${planName(picking)}`}
+            description="Pick how you'd like to pay."
+            width={520}
+            footer={
+              <>
+                <Button variant="ghost" disabled={busy !== null} onClick={() => setPicking(null)}>Cancel</Button>
+                <Button
+                  loading={busy === `pick-${picking}`}
+                  rightIcon={<ArrowRight size={18} aria-hidden />}
+                  onClick={async () => {
+                    await checkout({ kind: "subscription", plan: picking, interval, ...(once ? { oneTime: true } : {}) }, `pick-${picking}`);
+                    setPicking(null);
+                  }}
+                >
+                  Continue to payment
+                </Button>
+              </>
+            }
+          >
+            <div className="plx-sppay">
+              {hasYear ? (
+                <SegmentedControl
+                  label="How often you pay"
+                  value={interval}
+                  onChange={setPickInterval}
+                  options={[
+                    { value: "monthly", label: "Monthly" },
+                    { value: "yearly", label: free ? `Yearly · ${free} months free` : "Yearly" },
+                  ]}
+                />
+              ) : null}
+              <div className="plx-sppay__price">
+                {price ?? ""} <small>{per}</small>
+              </div>
+              <div role="radiogroup" aria-label="Renewal" className="plx-sppay__opts">
+                <button type="button" role="radio" aria-checked={!once} className="plx-sppay__opt" onClick={() => setPickRenew("auto")}>
+                  <b>Renews automatically</b>
+                  <span>We charge your card each {interval === "yearly" ? "year" : "month"}. Cancel any time.</span>
+                </button>
+                {payOnceOffered ? (
+                  <button type="button" role="radio" aria-checked={once} className="plx-sppay__opt" onClick={() => setPickRenew("once")}>
+                    <b>Pay once</b>
+                    <span>Pay for one {interval === "yearly" ? "year" : "month"} by bank transfer or card. It won&apos;t renew, and we&apos;ll remind you a week before it ends.</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </Modal>
+        );
+      })() : null}
+
       <Panel title="AI credits" description="Credits are what SOL uses when it builds or writes for you." data-tour="plan-credits" flush>
         <div style={{ padding: "0 28px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -341,10 +399,16 @@ export function PlanSection(props: PlanSectionProps) {
             <h3 className="plx-h3" style={{ margin: "0 0 12px" }}>Add more credits</h3>
             <div className="plx-packs">
               {packs.map((p) => (
-                <button key={p.pack} type="button" className="plx-pack" disabled={busy !== null} onClick={() => checkout({ kind: "topup", pack: p.pack }, `topup-${p.pack}`)}>
-                  <b>{busy === `topup-${p.pack}` ? "Opening…" : packLabel(p)}</b>
-                  <span>{p.price}</span>
-                </button>
+                <div key={p.pack} className="plx-sppack">
+                  <div className="plx-sppack__amt">
+                    <b>{p.credits.toLocaleString("en-US")}</b>
+                    <span>credits</span>
+                  </div>
+                  <div className="plx-sppack__price">{p.price}</div>
+                  <Button variant="secondary" fullWidth disabled={busy !== null && busy !== `topup-${p.pack}`} loading={busy === `topup-${p.pack}`} onClick={() => checkout({ kind: "topup", pack: p.pack }, `topup-${p.pack}`)}>
+                    Buy
+                  </Button>
+                </div>
               ))}
             </div>
           </div>

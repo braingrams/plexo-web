@@ -1,5 +1,7 @@
 "use client";
 
+import { InBannerStack } from "../ui/BannerStack";
+import { callIt, homeTitle } from "@/lib/dashboardV3/homeTitle";
 import { useState } from "react";
 import { ArrowRight, PartyPopper } from "lucide-react";
 import type { HomeProps } from "./homeTypes";
@@ -52,7 +54,7 @@ export function HomeView(props: HomeProps) {
   const showGuide = !progress.allDone || celebrate;
 
   if (showGuide) {
-    const title = progress.allDone ? `${site.site.name} is online` : `Let's get ${site.site.name} online`;
+    const title = homeTitle({ name: site.site.name, kind: site.site.kind, allDone: progress.allDone });
     return (
       <Page tuneHref={tuneHref} experience={experience} demo={demo} eyebrow={`${greeting()}, ${firstName}`} title={title}>
         <div className="plx-page__grid">
@@ -61,7 +63,7 @@ export function HomeView(props: HomeProps) {
               <Card tone="tint" padding="lg" style={{ display: "flex", flexDirection: "column", gap: 16, borderColor: "var(--plx-brand)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
                   <PartyPopper size={28} aria-hidden style={{ color: "var(--plx-deep)", flexShrink: 0 }} />
-                  <span className="plx-h2">You&apos;re live! {site.site.name} is on the internet.</span>
+                  <span className="plx-h2">You&apos;re live! {callIt(site.site.name, site.site.kind)} is on the internet.</span>
                 </div>
                 <span className="plx-body" style={{ overflowWrap: "anywhere" }}>
                   Share it with your customers: <strong>{site.site.address}</strong>
@@ -118,27 +120,30 @@ export function HomeView(props: HomeProps) {
 
 function Page({ eyebrow, title, tuneHref, experience, demo, children }: { eyebrow: string; title: string; tuneHref?: string; experience?: HomeProps["experience"]; demo?: boolean; children: React.ReactNode }) {
   return (
-    <div className="plx-page">
+    <div className="plx-page" data-tour-ready="">
       <div>
         <p className="plx-eyebrow">{eyebrow}</p>
         <h1 className="plx-h1">{title}</h1>
       </div>
-      {tuneHref ? <FineTuneCard href={tuneHref} /> : null}
-      {experience ? <ProViewNudge experience={experience} demo={demo} /> : null}
+      {/* These join the page's one banner stack (the plan notice, what's new…): one shows, the rest fold behind "more". */}
+      <InBannerStack>
+        {tuneHref ? <CustomizeCard href={tuneHref} /> : null}
+        {experience ? <ProViewNudge experience={experience} demo={demo} /> : null}
+      </InBannerStack>
       {children}
     </div>
   );
 }
 
-/** For people who already have sites: a quick way to tell Plexo (and SOL) how they work, then start on a site. */
-function FineTuneCard({ href }: { href: string }) {
+/** For people who already have sites: a short setup so Plexo shows what suits how they work. Not about SOL, about the whole experience. */
+function CustomizeCard({ href }: { href: string }) {
   return (
     <Card tone="tint" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 4, maxWidth: 560 }}>
-        <span className="plx-h3">Fine-tune with SOL</span>
-        <span className="plx-body">Two quick questions, then SOL can start on any of your sites: a fresh look, better words or a new page.</span>
+        <span className="plx-h3">Customize your experience</span>
+        <span className="plx-body">Answer two quick questions and Plexo sets itself up for how you work: the tools you see first and the help you get.</span>
       </div>
-      <ButtonLink href={href} rightIcon={<ArrowRight size={18} aria-hidden />}>Tune Plexo to me</ButtonLink>
+      <ButtonLink href={href} rightIcon={<ArrowRight size={18} aria-hidden />}>Customize Plexo</ButtonLink>
     </Card>
   );
 }

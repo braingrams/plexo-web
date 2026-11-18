@@ -94,7 +94,7 @@ export function TuneWizard({ initialProfile, sites, currentSiteId, mock = false 
             <div className="ob-stack">
               <div>
                 <p className="ob-eyebrow">Welcome back</p>
-                <h1 className="ob-title">Let&apos;s tune Plexo to you</h1>
+                <h1 className="ob-title">Let&apos;s customize Plexo for you</h1>
                 <p className="ob-lead">Two quick answers, and your dashboard shows just what you need. You already have {sites.length === 1 ? "a site" : `${sites.length} sites`}, so there&apos;s nothing to set up.</p>
               </div>
               <div className="ob-group">

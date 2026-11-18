@@ -16,6 +16,9 @@
   --ed-on-brand: #fff;
   --ed-on-danger: #fff;
   --ed-accent-text: var(--brand);
+  --ed-chip-border: rgba(var(--brand-rgb), 0.25);
+  --ed-chip-bg: rgba(var(--brand-rgb), 0.08);
+  --ed-chip-text: rgba(240, 242, 255, 0.88);
   --ed-cta: linear-gradient(135deg, var(--brand), var(--brand-deep));
   --ed-cta-wide: linear-gradient(135deg, var(--brand-light), var(--brand) 55%, var(--brand-deep));
   --ed-danger: #f87171;
@@ -78,6 +81,10 @@
   --ed-on-brand: var(--plx-on-brand);
   --ed-on-danger: var(--plx-on-danger);
   --ed-accent-text: var(--plx-link);
+  /* Quiet, neutral suggestion chips: lime is kept for the one main action. */
+  --ed-chip-border: var(--plx-border);
+  --ed-chip-bg: var(--plx-surface);
+  --ed-chip-text: var(--plx-text);
   --ed-cta: var(--plx-brand);
   --ed-cta-wide: var(--plx-brand);
   --ed-danger: var(--plx-danger);
@@ -136,6 +143,7 @@
 /* The old brand / surface / text names, re-pointed so code that still uses them looks right in the new dashboard. */
 [data-editor-theme][data-editor-v3] {
   --brand: var(--plx-brand);
+  --brand-rgb: 184, 243, 74; /* the old violet triplet, re-pointed to the new lime for the few places that tint with it */
   --brand-deep: var(--plx-deep);
   --brand-deeper: var(--plx-brand-active);
   --brand-light: var(--plx-brand-hover);

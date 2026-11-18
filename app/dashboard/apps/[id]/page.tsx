@@ -9,6 +9,11 @@ import { appSummary } from "@/lib/projects/summary";
 import { SolSidebarProvider } from "../../sol/_components/SolSidebarContext";
 import type { ConversationSummary, SolMessage as SolMessageShape } from "../../sol/_components/types";
 import { AppEditor } from "../_components/AppEditor";
+import { User } from "@/lib/db/coreEntities";
+import { usesNewShell } from "@/lib/dashboardVersions/state";
+import { userExperience } from "@/lib/dashboardV3/profile";
+import { advancedHref } from "@/lib/dashboardV3/hubAdvanced";
+import { HUB_SECTION_FOR_PANEL } from "@/lib/dashboardV3/appEditorLinks";
 
 export const dynamic = "force-dynamic";
 
@@ -24,6 +29,13 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
   const { data: app } = await Template.get({ id }).go();
   if (!app || app.organizationId !== org.organizationId) notFound();
   if (app.sourceType !== "REACT_PROJECT") redirect(`/dashboard/templates/${id}`);
+
+  // On the new dashboard, people on the full view already have Data, People, Settings and the rest on the app's own page,
+  // so the editor links there instead of showing them a second time.
+  const { data: me } = await User.get({ id: session.user.id }).go();
+  const hubLinks = (await usesNewShell(me)) && userExperience(me) === "pro";
+  const hubSection = query.panel ? HUB_SECTION_FOR_PANEL[query.panel] : undefined;
+  if (hubLinks && hubSection) redirect(advancedHref(id, hubSection));
 
   const record = await ensureAppConversation({ userId: session.user.id, organizationId: org.organizationId, appId: id, appName: app.name });
   const conversation: ConversationSummary = {
@@ -66,6 +78,7 @@ export default async function AppEditorPage({ params, searchParams }: { params: 
         lockedModelTier={lockedModelTier}
        
         initialPanel={query.panel ?? null}
+        hubLinks={hubLinks}
         addSecretName={query.add ?? null}
         // Stock photo search in the Design tab — the same keys the site editor uses.
         stockKeys={{ unsplash: process.env.UNSPLASH_KEY || undefined, pexels: process.env.PEXELS_KEY || undefined, pixabay: process.env.PIXABAY_KEY || undefined }}

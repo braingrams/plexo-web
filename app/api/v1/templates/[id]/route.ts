@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { SiteDeletionBlockedError, deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
 import { compileToHTML } from "@/lib/compiler";
 import { TemplateJSONSchema, hydrateStructuralDefaults, formatValidationIssues, sanitizeHtml } from "@/server/sanitizer";
+import { findMergeTags } from "@/lib/email/mergeTags";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
@@ -55,6 +56,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     designJson: await resolveDesignSystem(template.designJson),
     editableUrl: `${baseAppUrl}/dashboard/templates/${template.id}`,
     publishedUrl,
+    ...(template.kind === "EMAIL" ? { compiledHtml: template.compiledHtml ?? "", mergeTags: findMergeTags(template.compiledHtml ?? "") } : {}),
   });
 }
 

@@ -145,13 +145,8 @@
 .plx-plan__price small { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--plx-muted); }
 .plx-plan .plx-ticks { flex: 1; }
 .plx-plan__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+/* "Pay once" under a plan: a quiet section of its own, two tidy options side by side. */
 .plx-bigstat { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
-.plx-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 130px), 1fr)); gap: 12px; }
-.plx-pack { font: inherit; text-align: left; display: flex; flex-direction: column; gap: 2px; min-height: 76px; justify-content: center; padding: 12px 16px; border-radius: 14px; border: 2px solid var(--plx-border); background: var(--plx-surface); color: var(--plx-text); cursor: pointer; }
-.plx-pack:hover:not(:disabled) { border-color: var(--plx-deep); background: var(--plx-tint); }
-.plx-pack:disabled { opacity: .6; cursor: default; }
-.plx-pack b { font-size: 16px; font-weight: 800; }
-.plx-pack span { color: var(--plx-muted); font-size: 13px; }
 .plx-receipt { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 8px 16px; padding: 16px 28px; border-top: 1px solid var(--plx-border); min-height: 72px; }
 .plx-receipt__main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .plx-receipt__amt { font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; }
@@ -306,3 +301,21 @@
 .plx-sprow__sub { color: var(--plx-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plx-sprow__price { font-weight: 800; font-variant-numeric: tabular-nums; }
 @media (max-width: 560px) { .plx-sprow { padding: 14px 16px; gap: 12px; } }
+
+.plx-sppay { display: flex; flex-direction: column; gap: 18px; }
+.plx-sppay__price { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; color: var(--plx-text); }
+.plx-sppay__price small { font-size: 14px; font-weight: 600; color: var(--plx-muted); letter-spacing: 0; }
+.plx-sppay__opts { display: flex; flex-direction: column; gap: 10px; }
+.plx-sppay__opt { font: inherit; text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; border-radius: var(--plx-radius); border: 1px solid var(--plx-border-strong); background: var(--plx-surface); color: var(--plx-text); cursor: pointer; transition: border-color .15s ease, background-color .15s ease; }
+.plx-sppay__opt b { font-size: 15px; font-weight: 700; }
+.plx-sppay__opt span { font-size: 13px; line-height: 1.45; color: var(--plx-muted); }
+.plx-sppay__opt:hover { border-color: var(--plx-text); }
+.plx-sppay__opt[aria-checked="true"] { border-color: var(--plx-text); box-shadow: inset 0 0 0 1px var(--plx-text); background: var(--plx-elevated); }
+.plx-sppay__opt:focus-visible { outline: 3px solid var(--plx-focus); outline-offset: 2px; }
+.plx-sppack { display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 16px; border: 1px solid var(--plx-border); background: var(--plx-elevated); color: var(--plx-text); transition: border-color .15s ease; }
+.plx-sppack:hover { border-color: var(--plx-border-strong); }
+.plx-sppack__amt { display: flex; flex-direction: column; gap: 2px; }
+.plx-sppack__amt b { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; }
+.plx-sppack__amt span { font-size: 13px; color: var(--plx-muted); }
+.plx-sppack__price { font-size: 15px; font-weight: 700; }
+.plx-packs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 14px; }

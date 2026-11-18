@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Template } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
+import { findMergeTags } from "@/lib/email/mergeTags";
 import { resolveApiKey } from "../_lib/apiKeyAuthDynamo";
 
 type TemplateKind = "EMAIL" | "LANDING_PAGE";
@@ -48,6 +49,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       kind: TemplateKind;
       designJson: unknown;
       compiledHtml: string;
+      mergeTags?: { key: string; known: boolean }[];
       createdAt: string;
       updatedAt: string;
     }> = [];
@@ -87,6 +89,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       designJson: t.designJson,
       compiledHtml: t.compiledHtml,
       authorName: ownerName,
+      /** For an email: the merge tags it uses, so a sender knows what to fill ({ key, known }). */
+      mergeTags: t.kind === "EMAIL" ? findMergeTags(t.compiledHtml ?? "") : [],
       createdAt: t.createdAt,
       updatedAt: t.updatedAt,
     }));
