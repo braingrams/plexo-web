@@ -30,9 +30,19 @@ export async function saveSiteLook(who: Who, siteId: string, input: unknown, rev
     } catch (err) {
       console.error("applying a site look failed", err);
     }
+    // The brand lives in Strata: send this change there (Plexo's copy above stays as the fallback). Never fails the save.
+    let strata: { state: string; message: string } | undefined;
+    if (look.colors?.length) {
+      try {
+        const { sendBrandWithin } = await import("@/lib/brand/writeThrough");
+        strata = await sendBrandWithin({ siteId, userId: who.userId, organizationId: who.organizationId });
+      } catch (err) {
+        console.warn("sending the look to Strata failed", err);
+      }
+    }
     revalidate?.("/dashboard");
     revalidate?.(`/dashboard/sites/${siteId}`);
-    return { status: 200, body: { brand, applied, ...lookOutcomeMessage(applied, !!look.logoUrl) } };
+    return { status: 200, body: { brand, applied, ...(strata ? { strata } : {}), ...lookOutcomeMessage(applied, !!look.logoUrl) } };
   } catch (err) {
     console.error("saving a site look failed", err);
     return { status: 500, body: { error: "We couldn't save your logo and colours. Please try again in a moment." } };

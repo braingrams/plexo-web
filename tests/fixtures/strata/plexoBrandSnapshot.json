@@ -1,0 +1,1006 @@
+{
+ "components": {
+  "button": {
+   "props": {},
+   "nodes": [
+    {
+     "tag": "button",
+     "role": "root",
+     "properties": {
+      "display": {
+       "value": "inline-flex",
+       "type": "string"
+      },
+      "align-items": {
+       "value": "center",
+       "type": "string"
+      },
+      "justify-content": {
+       "value": "center",
+       "type": "string"
+      },
+      "gap": {
+       "value": "var(--space-2)",
+       "type": "string"
+      },
+      "padding": {
+       "value": "var(--space-3) var(--space-5)",
+       "type": "string"
+      },
+      "border-radius": {
+       "value": "var(--radius-md)",
+       "type": "string"
+      },
+      "border": {
+       "value": "1px solid transparent",
+       "type": "string"
+      },
+      "background-color": {
+       "value": "var(--color-action-primary)",
+       "type": "color"
+      },
+      "color": {
+       "value": "var(--color-text-inverse)",
+       "type": "color"
+      },
+      "font-size": {
+       "value": "var(--font-size-md)",
+       "type": "string"
+      },
+      "font-weight": {
+       "value": "var(--font-weight-bold)",
+       "type": "string"
+      },
+      "line-height": {
+       "value": "var(--line-height-tight)",
+       "type": "string"
+      },
+      "cursor": {
+       "value": "pointer",
+       "type": "string"
+      }
+     },
+     "variants": {
+      "primary": {
+       "properties": {
+        "background-color": {
+         "value": "var(--color-action-primary)",
+         "type": "color"
+        },
+        "color": {
+         "value": "var(--color-text-inverse)",
+         "type": "color"
+        }
+       }
+      },
+      "secondary": {
+       "properties": {
+        "background-color": {
+         "value": "var(--color-bg-surface)",
+         "type": "color"
+        },
+        "color": {
+         "value": "var(--color-text-primary)",
+         "type": "color"
+        },
+        "border": {
+         "value": "1px solid var(--color-border-strong)",
+         "type": "string"
+        }
+       }
+      },
+      "ghost": {
+       "properties": {
+        "background-color": {
+         "value": "transparent",
+         "type": "string"
+        },
+        "color": {
+         "value": "var(--color-text-primary)",
+         "type": "color"
+        }
+       }
+      }
+     },
+     "children": [
+      {
+       "tag": "span",
+       "role": "label",
+       "textContent": "Button"
+      }
+     ]
+    }
+   ],
+   "children": {}
+  },
+  "card": {
+   "props": {},
+   "nodes": [
+    {
+     "tag": "div",
+     "role": "root",
+     "properties": {
+      "display": {
+       "value": "flex",
+       "type": "string"
+      },
+      "flex-direction": {
+       "value": "column",
+       "type": "string"
+      },
+      "gap": {
+       "value": "var(--space-3)",
+       "type": "string"
+      },
+      "padding": {
+       "value": "var(--space-5)",
+       "type": "string"
+      },
+      "background-color": {
+       "value": "var(--color-bg-surface)",
+       "type": "color"
+      },
+      "color": {
+       "value": "var(--color-text-primary)",
+       "type": "color"
+      },
+      "border": {
+       "value": "1px solid var(--color-border-default)",
+       "type": "string"
+      },
+      "border-radius": {
+       "value": "var(--radius-lg)",
+       "type": "string"
+      },
+      "box-shadow": {
+       "value": "var(--shadow-sm)",
+       "type": "string"
+      }
+     },
+     "variants": {
+      "raised": {
+       "properties": {
+        "box-shadow": {
+         "value": "var(--shadow-md)",
+         "type": "string"
+        }
+       }
+      },
+      "muted": {
+       "properties": {
+        "background-color": {
+         "value": "var(--color-bg-muted)",
+         "type": "color"
+        },
+        "box-shadow": {
+         "value": "none",
+         "type": "string"
+        }
+       }
+      }
+     },
+     "children": [
+      {
+       "tag": "h3",
+       "role": "title",
+       "textContent": "Card title",
+       "properties": {
+        "margin": {
+         "value": "0",
+         "type": "string"
+        },
+        "font-size": {
+         "value": "var(--font-size-lg)",
+         "type": "string"
+        },
+        "font-weight": {
+         "value": "var(--font-weight-bold)",
+         "type": "string"
+        },
+        "color": {
+         "value": "var(--color-text-primary)",
+         "type": "color"
+        }
+       }
+      },
+      {
+       "tag": "p",
+       "role": "body",
+       "textContent": "A short line that says what this is about.",
+       "properties": {
+        "margin": {
+         "value": "0",
+         "type": "string"
+        },
+        "font-size": {
+         "value": "var(--font-size-md)",
+         "type": "string"
+        },
+        "line-height": {
+         "value": "var(--line-height-normal)",
+         "type": "string"
+        },
+        "color": {
+         "value": "var(--color-text-secondary)",
+         "type": "color"
+        }
+       }
+      }
+     ]
+    }
+   ],
+   "children": {}
+  }
+ },
+ "contract": {
+  "version": 1,
+  "hash": "b8de4cd03ce1108048cb6c40a54b0c033589bf3e869408c55d71957900e9e0fc"
+ },
+ "_meta": {
+  "projectId": "01a1e54e-ab9a-779c-be4f-dba969d7bb45",
+  "publishedAt": "2026-11-18T15:10:09.040Z",
+  "schemaVersion": "2.0"
+ },
+ "variables": {
+  "--color-brand-primary": {
+   "value": "#B8F34A",
+   "resolvedValue": "#B8F34A",
+   "type": "color",
+   "unit": null,
+   "comment": "Main brand color. Buttons, links and the focus ring use its ramp (color-brand-primary-50 to -950).",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "ramp": true,
+   "description": "Main brand color. Buttons, links and the focus ring use its ramp (color-brand-primary-50 to -950)."
+  },
+  "--color-brand-secondary": {
+   "value": "#517A12",
+   "resolvedValue": "#517A12",
+   "type": "color",
+   "unit": null,
+   "comment": "Second brand color, for supporting brand moments. Its ramp is color-brand-secondary-50 to -950.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "ramp": true,
+   "description": "Second brand color, for supporting brand moments. Its ramp is color-brand-secondary-50 to -950."
+  },
+  "--color-brand-accent": {
+   "value": "#F5AC05",
+   "resolvedValue": "#F5AC05",
+   "type": "color",
+   "unit": null,
+   "comment": "Accent color for highlights and decoration. Its ramp is color-brand-accent-50 to -950.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "ramp": true,
+   "description": "Accent color for highlights and decoration. Its ramp is color-brand-accent-50 to -950."
+  },
+  "--color-brand-neutral": {
+   "value": "#5B5B58",
+   "resolvedValue": "#5B5B58",
+   "type": "color",
+   "unit": null,
+   "comment": "Neutral color. Backgrounds, text and borders use its ramp (color-brand-neutral-50 to -950).",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "ramp": true,
+   "description": "Neutral color. Backgrounds, text and borders use its ramp (color-brand-neutral-50 to -950)."
+  },
+  "--color-white": {
+   "value": "#FFFFFF",
+   "resolvedValue": "#FFFFFF",
+   "type": "color",
+   "unit": null,
+   "comment": "Pure white.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Pure white."
+  },
+  "--color-black": {
+   "value": "#000000",
+   "resolvedValue": "#000000",
+   "type": "color",
+   "unit": null,
+   "comment": "Pure black.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Pure black."
+  },
+  "--color-bg-page": {
+   "value": "#F7F8F3",
+   "resolvedValue": "#F7F8F3",
+   "type": "color",
+   "unit": null,
+   "comment": "The main page background.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "The main page background."
+  },
+  "--color-bg-surface": {
+   "value": "#FFFFFF",
+   "resolvedValue": "#FFFFFF",
+   "type": "color",
+   "unit": null,
+   "comment": "Cards, modals, panels.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Cards, modals, panels."
+  },
+  "--color-bg-muted": {
+   "value": "#F4F5F0",
+   "resolvedValue": "#F4F5F0",
+   "type": "color",
+   "unit": null,
+   "comment": "Subtle areas, disabled fields.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Subtle areas, disabled fields."
+  },
+  "--color-text-primary": {
+   "value": "#121212",
+   "resolvedValue": "#121212",
+   "type": "color",
+   "unit": null,
+   "comment": "Main text and headings.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Main text and headings."
+  },
+  "--color-text-secondary": {
+   "value": "#5B5B58",
+   "resolvedValue": "#5B5B58",
+   "type": "color",
+   "unit": null,
+   "comment": "Supporting text, hints.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Supporting text, hints."
+  },
+  "--color-text-inverse": {
+   "value": "#121212",
+   "resolvedValue": "#121212",
+   "type": "color",
+   "unit": null,
+   "comment": "Text on dark or colored backgrounds, including on color-action-primary.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Text on dark or colored backgrounds, including on color-action-primary."
+  },
+  "--color-border-default": {
+   "value": "#E8E8E4",
+   "resolvedValue": "#E8E8E4",
+   "type": "color",
+   "unit": null,
+   "comment": "Normal borders and dividers.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Normal borders and dividers."
+  },
+  "--color-border-strong": {
+   "value": "#D7D8D3",
+   "resolvedValue": "#D7D8D3",
+   "type": "color",
+   "unit": null,
+   "comment": "Emphasis, inputs on hover.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Emphasis, inputs on hover."
+  },
+  "--color-action-primary": {
+   "value": "var(--color-brand-primary)",
+   "resolvedValue": "#B8F34A",
+   "type": "color",
+   "unit": null,
+   "comment": "Main buttons and links.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "VARIABLE_REFERENCE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Main buttons and links."
+  },
+  "--color-action-primary-hover": {
+   "value": "#A6E03A",
+   "resolvedValue": "#A6E03A",
+   "type": "color",
+   "unit": null,
+   "comment": "Main action when hovered.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Main action when hovered."
+  },
+  "--color-action-secondary": {
+   "value": "#F4F5F0",
+   "resolvedValue": "#F4F5F0",
+   "type": "color",
+   "unit": null,
+   "comment": "Secondary buttons.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Secondary buttons."
+  },
+  "--color-feedback-success": {
+   "value": "#16A34A",
+   "resolvedValue": "#16A34A",
+   "type": "color",
+   "unit": null,
+   "comment": "Success messages and states. Its ramp (-50 to -950) gives tints for backgrounds and borders.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "ramp": true,
+   "description": "Success messages and states. Its ramp (-50 to -950) gives tints for backgrounds and borders."
+  },
+  "--color-feedback-warning": {
+   "value": "#D97706",
+   "resolvedValue": "#D97706",
+   "type": "color",
+   "unit": null,
+   "comment": "Warnings. Its ramp (-50 to -950) gives tints for backgrounds and borders.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "ramp": true,
+   "description": "Warnings. Its ramp (-50 to -950) gives tints for backgrounds and borders."
+  },
+  "--color-feedback-error": {
+   "value": "#DC2626",
+   "resolvedValue": "#DC2626",
+   "type": "color",
+   "unit": null,
+   "comment": "Errors and destructive actions. Its ramp (-50 to -950) gives tints for backgrounds and borders.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "ramp": true,
+   "description": "Errors and destructive actions. Its ramp (-50 to -950) gives tints for backgrounds and borders."
+  },
+  "--color-feedback-info": {
+   "value": "#1D4ED8",
+   "resolvedValue": "#1D4ED8",
+   "type": "color",
+   "unit": null,
+   "comment": "Neutral information. Its ramp (-50 to -950) gives tints for backgrounds and borders.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "ramp": true,
+   "description": "Neutral information. Its ramp (-50 to -950) gives tints for backgrounds and borders."
+  },
+  "--color-focus-ring": {
+   "value": "#517A12",
+   "resolvedValue": "#517A12",
+   "type": "color",
+   "unit": null,
+   "comment": "Outline shown on keyboard focus.",
+   "layer": null,
+   "category": "color",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Outline shown on keyboard focus."
+  },
+  "--space-1": {
+   "value": "4px",
+   "resolvedValue": "4px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Gap between tightly related items, such as an icon and its label.",
+   "layer": null,
+   "category": "space",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Gap between tightly related items, such as an icon and its label."
+  },
+  "--space-2": {
+   "value": "8px",
+   "resolvedValue": "8px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Default small gap; padding inside compact controls.",
+   "layer": null,
+   "category": "space",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Default small gap; padding inside compact controls."
+  },
+  "--space-3": {
+   "value": "12px",
+   "resolvedValue": "12px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Padding inside inputs and buttons.",
+   "layer": null,
+   "category": "space",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Padding inside inputs and buttons."
+  },
+  "--space-4": {
+   "value": "16px",
+   "resolvedValue": "16px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Default padding inside cards; gap between form fields.",
+   "layer": null,
+   "category": "space",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Default padding inside cards; gap between form fields."
+  },
+  "--space-5": {
+   "value": "20px",
+   "resolvedValue": "20px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Gap between related groups.",
+   "layer": null,
+   "category": "space",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Gap between related groups."
+  },
+  "--space-6": {
+   "value": "24px",
+   "resolvedValue": "24px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Padding inside large cards and modals.",
+   "layer": null,
+   "category": "space",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Padding inside large cards and modals."
+  },
+  "--space-7": {
+   "value": "28px",
+   "resolvedValue": "28px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Gap between sections inside a panel.",
+   "layer": null,
+   "category": "space",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Gap between sections inside a panel."
+  },
+  "--space-8": {
+   "value": "32px",
+   "resolvedValue": "32px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Gap between page sections.",
+   "layer": null,
+   "category": "space",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Gap between page sections."
+  },
+  "--radius-sm": {
+   "value": "6px",
+   "resolvedValue": "6px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Small elements: checkboxes, tags.",
+   "layer": null,
+   "category": "radius",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Small elements: checkboxes, tags."
+  },
+  "--radius-md": {
+   "value": "12px",
+   "resolvedValue": "12px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Buttons and inputs.",
+   "layer": null,
+   "category": "radius",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Buttons and inputs."
+  },
+  "--radius-lg": {
+   "value": "20px",
+   "resolvedValue": "20px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Cards, modals, popovers.",
+   "layer": null,
+   "category": "radius",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "Cards, modals, popovers."
+  },
+  "--radius-full": {
+   "value": "9999px",
+   "resolvedValue": "9999px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Pills and circles (avatars, badges).",
+   "layer": null,
+   "category": "radius",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Pills and circles (avatars, badges)."
+  },
+  "--font-family-base": {
+   "value": "\"Plus Jakarta Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+   "resolvedValue": "\"Plus Jakarta Sans\", system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif",
+   "type": "fontFamily",
+   "unit": null,
+   "comment": "The one font family used for all text in v1.",
+   "layer": null,
+   "category": "typography",
+   "classification": {
+    "confidence": "high",
+    "rule": "LITERAL_VALUE",
+    "autoClassified": true
+   },
+   "set": "primary",
+   "description": "The one font family used for all text in v1."
+  },
+  "--font-size-sm": {
+   "value": "14px",
+   "resolvedValue": "14px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Supporting text, labels, captions.",
+   "layer": null,
+   "category": "typography",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Supporting text, labels, captions."
+  },
+  "--font-size-md": {
+   "value": "16px",
+   "resolvedValue": "16px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Body text. The default.",
+   "layer": null,
+   "category": "typography",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Body text. The default."
+  },
+  "--font-size-lg": {
+   "value": "20px",
+   "resolvedValue": "20px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Section headings, card titles.",
+   "layer": null,
+   "category": "typography",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Section headings, card titles."
+  },
+  "--font-size-xl": {
+   "value": "24px",
+   "resolvedValue": "24px",
+   "type": "dimension",
+   "unit": null,
+   "comment": "Page titles.",
+   "layer": null,
+   "category": "typography",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Page titles."
+  },
+  "--font-weight-regular": {
+   "value": "400",
+   "resolvedValue": "400",
+   "type": "fontWeight",
+   "unit": null,
+   "comment": "Body text.",
+   "layer": null,
+   "category": "typography",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Body text."
+  },
+  "--font-weight-bold": {
+   "value": "700",
+   "resolvedValue": "700",
+   "type": "fontWeight",
+   "unit": null,
+   "comment": "Headings, emphasis, button labels.",
+   "layer": null,
+   "category": "typography",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Headings, emphasis, button labels."
+  },
+  "--line-height-tight": {
+   "value": "1.25",
+   "resolvedValue": "1.25",
+   "type": "number",
+   "unit": null,
+   "comment": "Headings.",
+   "layer": null,
+   "category": "typography",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Headings."
+  },
+  "--line-height-normal": {
+   "value": "1.5",
+   "resolvedValue": "1.5",
+   "type": "number",
+   "unit": null,
+   "comment": "Body text.",
+   "layer": null,
+   "category": "typography",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Body text."
+  },
+  "--shadow-sm": {
+   "value": "0 1px 2px 0 rgb(16 24 40 / 0.06), 0 1px 3px 0 rgb(16 24 40 / 0.10)",
+   "resolvedValue": "0 1px 2px 0 rgb(16 24 40 / 0.06), 0 1px 3px 0 rgb(16 24 40 / 0.10)",
+   "type": "shadow",
+   "unit": null,
+   "comment": "Cards.",
+   "layer": null,
+   "category": "shadow",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Cards."
+  },
+  "--shadow-md": {
+   "value": "0 4px 8px -2px rgb(16 24 40 / 0.10), 0 2px 4px -2px rgb(16 24 40 / 0.06)",
+   "resolvedValue": "0 4px 8px -2px rgb(16 24 40 / 0.10), 0 2px 4px -2px rgb(16 24 40 / 0.06)",
+   "type": "shadow",
+   "unit": null,
+   "comment": "Popups, dropdowns, modals.",
+   "layer": null,
+   "category": "shadow",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Popups, dropdowns, modals."
+  },
+  "--duration-fast": {
+   "value": "150ms",
+   "resolvedValue": "150ms",
+   "type": "duration",
+   "unit": null,
+   "comment": "Hover and small state changes.",
+   "layer": null,
+   "category": "motion",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Hover and small state changes."
+  },
+  "--duration-normal": {
+   "value": "250ms",
+   "resolvedValue": "250ms",
+   "type": "duration",
+   "unit": null,
+   "comment": "Opening and closing panels, modals, menus.",
+   "layer": null,
+   "category": "motion",
+   "classification": {
+    "confidence": "explicit",
+    "rule": "TOKEN_CONTRACT_V1",
+    "autoClassified": false
+   },
+   "set": "primary",
+   "description": "Opening and closing panels, modals, menus."
+  }
+ }
+}

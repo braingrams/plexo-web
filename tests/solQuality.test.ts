@@ -132,6 +132,17 @@ describe("each check catches its own defect (one change to the pristine page)", 
     must(mutate("Crumb &amp; Co, 14 Oxford", "Crumb and Co, 14 Oxford").replace(/Crumb &amp; Co/g, "Crumb and Co"), "brand-name-spelling", { brief: parseBrief({ text: "Landing page for Crumb & Co." }) });
     expect(ids(mutate(/Fraunces/g, "Georgia"), { brief: crumb })).toContain("brand-fonts");
   });
+  it("a hand-built button on a site whose brand has a button is a soft warning, never a failure; the brand's own button clears it", () => {
+    const linked = { ...crumb, brandComponents: ["button", "card"] };
+    const report = checkPage({ html: good, brief: linked });
+    const f = report.findings.find((x) => x.id === "brand-component-button");
+    expect(f?.severity).toBe("should");
+    expect(f?.message).toMatch(/owner's brand already has its own button/);
+    expect(report.findings.find((x) => x.id === "brand-component-card")).toBeUndefined();
+    const adopted = good.replace(/class="plx-btn cta-primary"/g, 'class="plx-brand-button plx-brand-button--primary"');
+    expect(ids(adopted, { brief: linked })).not.toContain("brand-component-button");
+    expect(ids(good, { brief: crumb })).not.toContain("brand-component-button");
+  });
   it("the owner's uploaded logo must be in the header", () => {
     const withLogo = parseBrief({ text: "Landing page for Crumb & Co", attachments: [{ type: "image", filename: "logo.png" }] });
     must(good, "brand-logo", { brief: withLogo });

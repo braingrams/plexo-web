@@ -142,7 +142,7 @@ describe("Paystack plan billing (mocked Paystack)", () => {
 describe("pre-renewal webhook: invoice.create moves the subscriber to a changed price", () => {
   it("asks the price-move job to reconcile just that person, and handles nobody else's event", async () => {
     const { handlePaystackBillingEvent } = await import("@/lib/billing/paystackBilling");
-    db.users.set("u-pm", { id: "u-pm", email: "pm@x.com", subscriptionProvider: "PAYSTACK" });
+    db.users.set("u-pm", { id: "u-pm", email: "pm@x.com", subscriptionProvider: "PAYSTACK", subscriptionId: "SUB_1" });
     const reconcilePriceMove = vi.fn(async () => undefined);
     const handled = await handlePaystackBillingEvent({ event: "invoice.create", data: { customer: { email: "pm@x.com" }, subscription: { subscription_code: "SUB_1" } } }, { reconcilePriceMove });
     expect(handled).toBe(true);
@@ -150,5 +150,33 @@ describe("pre-renewal webhook: invoice.create moves the subscriber to a changed 
     const none = await handlePaystackBillingEvent({ event: "invoice.create", data: { customer: { email: "nobody@x.com" }, subscription: { subscription_code: "S" } } }, { reconcilePriceMove });
     expect(none).toBe(false);
     expect(reconcilePriceMove).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("another Charisol product on the same Paystack account is never mistaken for Plexo", () => {
+  const MAILDRIP = "Maildrip Pro monthly NGN 9000";
+  beforeEach(() => {
+    // The same person can be a customer of both products.
+    db.users.set("u1", { id: "u1", email: "ada@example.com", subscriptionPlan: "STARTER", subscriptionProvider: "PAYSTACK", subscriptionId: "SUB_PLEXO", subscriptionStatus: "ACTIVE" });
+  });
+  it("ignores a charge, new subscription, cancellation and failed invoice on another product's plan", async () => {
+    const deps = { syncPlanLifecycle: sync, reconcilePriceMove: vi.fn(async () => undefined), sendPaymentDeclinedEmail: vi.fn(async () => undefined) };
+    const customer = { email: "ada@example.com", customer_code: "CUS_1" };
+    const plan = { name: MAILDRIP, plan_code: "PLN_maildrip" };
+    expect(await handlePaystackBillingEvent({ event: "charge.success", data: { status: "success", reference: "md1", amount: 900_000, currency: "NGN", customer, plan, metadata: {} } }, deps)).toBe(false);
+    expect(await handlePaystackBillingEvent({ event: "subscription.create", data: { subscription_code: "SUB_MD", email_token: "t", plan, customer } }, deps)).toBe(false);
+    expect(await handlePaystackBillingEvent({ event: "subscription.disable", data: { subscription_code: "SUB_MD", plan, customer } }, deps)).toBe(false);
+    expect(await handlePaystackBillingEvent({ event: "invoice.create", data: { subscription: { subscription_code: "SUB_MD" }, customer } }, deps)).toBe(false);
+    expect(await handlePaystackBillingEvent({ event: "invoice.payment_failed", data: { subscription: { subscription_code: "SUB_MD" }, customer, amount: 900_000, currency: "NGN" } }, deps)).toBe(true); // matches nothing, changes nothing
+    expect(user()).toMatchObject({ subscriptionPlan: "STARTER", subscriptionId: "SUB_PLEXO", subscriptionStatus: "ACTIVE" });
+    expect(deps.reconcilePriceMove).not.toHaveBeenCalled();
+    expect(deps.sendPaymentDeclinedEmail).not.toHaveBeenCalled();
+    expect(sync).not.toHaveBeenCalled();
+    expect(db.grants).toHaveLength(0);
+  });
+  it("still handles the person's own Plexo invoice", async () => {
+    const reconcilePriceMove = vi.fn(async () => undefined);
+    expect(await handlePaystackBillingEvent({ event: "invoice.create", data: { subscription: { subscription_code: "SUB_PLEXO" }, customer: { email: "ada@example.com" } } }, { reconcilePriceMove })).toBe(true);
+    expect(reconcilePriceMove).toHaveBeenCalledWith("u1");
   });
 });

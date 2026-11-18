@@ -70,6 +70,32 @@ export const PICKER_COPY = {
   retry: "Try again",
 } as const;
 
+/**
+ * Changing the brand a website follows is a big change (colours, fonts and logo on the live site), so it is confirmed first.
+ * Choosing the brand the site already uses, or the first brand for a site that has none, needs no question.
+ */
+export function needsSwitchConfirmation(input: { currentProjectId?: string | null; selection: PickerSelection }): boolean {
+  const { currentProjectId, selection } = input;
+  if (!currentProjectId) return false;
+  if (selection.kind === "create") return true;
+  return selection.kind === "project" && selection.id !== currentProjectId;
+}
+
+/** What switching will do, in plain words, for the confirmation. */
+export function switchWarning(input: { siteName: string; toName: string; created?: boolean; autoSync: boolean }): { title: string; lines: string[]; confirm: string } {
+  const to = input.toName.trim() || "this brand";
+  return {
+    title: input.created ? "Make a new brand from this website?" : `Switch ${input.siteName}'s brand to "${to}"?`,
+    lines: [
+      `${input.siteName} will use the colours, fonts and logo from ${input.created ? "the new brand" : `"${to}"`}. If the website is online, you will see the change there within a couple of minutes.`,
+      "Your words, pictures and pages stay exactly as they are.",
+      input.autoSync ? "From now on, the website follows this brand when you publish a change in Strata." : "The website will not follow later changes in Strata until you turn \"Keep my website up to date\" back on.",
+      "You can switch back any time.",
+    ],
+    confirm: input.created ? "Yes, make it" : "Yes, switch my brand",
+  };
+}
+
 /** One plain sentence for after a brand was linked or created, e.g. for a toast or the panel's confirmation. */
 export function confirmationText(input: { projectName?: string | null; created?: boolean; autoSync: boolean; notes?: string[] }): string {
   const name = input.projectName?.trim();

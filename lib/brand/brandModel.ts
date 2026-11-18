@@ -12,6 +12,7 @@ import type { DesignSystem } from "@charisol/plexo-sdk/v2/compile";
 
 import { displayBrand, normalizeHex, type SiteBrand } from "@/lib/dashboardV3/brandLook";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
+import { catalogueFromDesignSystem, componentLine, usageHint, type BrandComponentInfo } from "./brandComponents";
 
 type DesignToken = DesignSystem["tokens"][number];
 
@@ -49,6 +50,8 @@ export type ResolvedBrand = {
   colours: BrandColour[];
   fonts: { heading?: string; body?: string };
   radius?: string;
+  /** The brand's ready-made components (a button, a card...) from the linked Strata project's published design system; empty when none. */
+  components: BrandComponentInfo[];
   logoUrl?: string;
   /** "I don't have a logo": a wordmark is made from the name. */
   noLogo?: boolean;
@@ -143,6 +146,17 @@ const fontStack = (family: string) => `${family}, ui-sans-serif, system-ui, -app
  * site's brand: second colour, accent and fonts. Existing tokens keep their layer and name; missing ones are added on the brand layer.
  * Pure. `sent` is the plain-words list of what went across.
  */
+/**
+ * The main colour, for a project that already has one: updates the project's own `--color-brand-primary` token (Strata computes its
+ * ramp). Only ever changes a token that exists, so it can't invent keys in a project it doesn't know the shape of. Pure.
+ */
+export function strataPushPrimary(existing: DesignToken[], primary: string | undefined): { tokens: DesignToken[]; sent: string[] } {
+  if (!primary || !/^#[0-9a-f]{6}$/i.test(primary)) return { tokens: [], sent: [] };
+  const cur = existing.find((t) => t.key === "--color-brand-primary");
+  if (!cur || cur.value.toLowerCase() === primary.toLowerCase()) return { tokens: [], sent: [] };
+  return { tokens: [{ ...cur, value: primary }], sent: ["main colour"] };
+}
+
 export function strataPushTokens(existing: DesignToken[], brand: Pick<ResolvedBrand, "colours" | "fonts">): { tokens: DesignToken[]; sent: string[] } {
   const byKey = new Map(existing.map((t) => [t.key, t]));
   const out: DesignToken[] = [];
@@ -161,6 +175,120 @@ export function strataPushTokens(existing: DesignToken[], brand: Pick<ResolvedBr
   if (brand.fonts.heading) put("--font-family-heading", fontStack(brand.fonts.heading), "font family", "Font Family Heading", "heading font");
   if (brand.fonts.body) put("--font-family-body", fontStack(brand.fonts.body), "font family", "Font Family Body", "body font");
   return { tokens: out, sent };
+}
+
+// ---------------------------------------------------------------- changing a project's tokens (colours, fonts, corners, spacing)
+
+/** What an owner (or an AI for them) may set on a linked brand. Anything else is left alone: only tokens the project has, or the standard ones, change. */
+export type TokenRequest = {
+  colours?: Partial<Record<BrandRole, string>>;
+  fonts?: { heading?: string; body?: string };
+  /** Corner radius in px (the "medium" corner every component uses). */
+  radius?: number | string;
+  /** Spacing steps in px, keyed by step: { "4": 16 } or { "space-4": "16px" }. */
+  spacing?: Record<string, number | string>;
+};
+
+const COLOUR_KEYS: Record<BrandRole, { keys: string[]; label: string }> = {
+  primary: { keys: ["--color-brand-primary", "--color-brand-primary-500"], label: "main colour" },
+  secondary: { keys: ["--color-brand-secondary", "--color-brand-secondary-500"], label: "second colour" },
+  accent: { keys: ["--color-brand-accent", "--color-brand-accent-500"], label: "accent colour" },
+  text: { keys: ["--color-text-primary"], label: "text colour" },
+  background: { keys: ["--color-bg-page", "--color-bg-canvas"], label: "page background" },
+  surface: { keys: ["--color-bg-surface"], label: "card and panel colour" },
+};
+
+const HEX6 = /^#[0-9a-f]{6}$/i;
+const toPx = (v: unknown, max: number): number | null => {
+  const n = typeof v === "number" ? v : typeof v === "string" && /^\s*\d{1,3}(\.\d+)?\s*(px)?\s*$/i.test(v) ? parseFloat(v) : NaN;
+  return Number.isFinite(n) && n >= 0 && n <= max ? Math.round(n * 100) / 100 : null;
+};
+/** A dimension token's value in the project's own style: "12px" when the project writes the unit in the value, "12" with a unit field otherwise. */
+const dimensionLike = (cur: DesignToken | undefined, n: number): Pick<DesignToken, "value" | "unit"> => (cur?.unit ? { value: String(n), unit: cur.unit } : { value: `${n}px`, unit: null });
+const tokenName = (key: string) => key.replace(/^--/, "").replace(/-/g, " ");
+
+/**
+ * The token changes a request makes against a project's current tokens. Pure. `tokens` are only the ones that CHANGE (ready for a push),
+ * `sent` is the plain-words list of what changed, `skipped` is plain words for what could not be applied (a colour that isn't a hex value...).
+ */
+export function planTokenChanges(existing: DesignToken[], req: TokenRequest): { tokens: DesignToken[]; sent: string[]; skipped: string[] } {
+  const byKey = new Map(existing.map((t) => [t.key, t]));
+  const tokens: DesignToken[] = [];
+  const sent: string[] = [];
+  const skipped: string[] = [];
+  const put = (key: string, patch: Partial<DesignToken>, fresh: DesignToken, label: string, same: (cur: DesignToken) => boolean) => {
+    const cur = byKey.get(key);
+    if (cur && same(cur)) return;
+    tokens.push(cur ? { ...cur, ...patch } : fresh);
+    sent.push(label);
+  };
+  const firstExisting = (keys: string[]) => keys.find((k) => byKey.has(k)) ?? keys[0];
+
+  for (const [role, raw] of Object.entries(req.colours ?? {}) as Array<[BrandRole, string | undefined]>) {
+    const spec = COLOUR_KEYS[role];
+    if (!spec || raw === undefined) continue;
+    if (!HEX6.test(String(raw).trim())) {
+      skipped.push(`The ${spec.label} must be a hex colour like #E4572E.`);
+      continue;
+    }
+    const value = String(raw).trim().toUpperCase();
+    const key = firstExisting(spec.keys);
+    put(key, { value }, { key, name: tokenName(key), value, type: "color", unit: null, layer: "brand", comment: null }, spec.label, (c) => c.value.toLowerCase() === value.toLowerCase());
+  }
+
+  // Fonts. A project with one shared font (--font-family-base) takes the body font there; the heading font is added separately.
+  const wanted = new Map<string, string>();
+  for (const which of ["heading", "body"] as const) {
+    const family = req.fonts?.[which];
+    if (family === undefined) continue;
+    const clean = String(family).trim();
+    if (!/^[A-Za-z0-9 .-]{1,60}$/.test(clean)) {
+      skipped.push(`The ${which} font "${clean.slice(0, 40)}" isn't a font name Plexo can use.`);
+      continue;
+    }
+    const key =
+      which === "heading"
+        ? byKey.has("--font-family-heading") || !byKey.has("--font-family-base") || req.fonts?.body !== undefined ? "--font-family-heading" : "--font-family-base"
+        : byKey.has("--font-family-body") ? "--font-family-body" : byKey.has("--font-family-base") ? "--font-family-base" : "--font-family-body";
+    wanted.set(key, clean);
+  }
+  for (const [key, family] of wanted) {
+    const label = key === "--font-family-heading" ? "heading font" : key === "--font-family-body" ? "body font" : "font";
+    const value = fontStack(family);
+    put(key, { value }, { key, name: tokenName(key), value, type: "font family", unit: null, layer: "brand", comment: null }, label, (c) => primaryFontOf(c.value) === family);
+  }
+
+  if (req.radius !== undefined) {
+    const n = toPx(req.radius, 64);
+    if (n === null) skipped.push("The corner radius must be a number of pixels between 0 and 64.");
+    else {
+      const d = dimensionLike(byKey.get("--radius-md"), n);
+      put("--radius-md", d, { key: "--radius-md", name: "radius md", ...d, type: "dimension", layer: "brand", comment: null }, "corner roundness", (c) => toPx(c.value, 64) === n);
+    }
+  }
+
+  for (const [rawKey, rawVal] of Object.entries(req.spacing ?? {}).slice(0, 12)) {
+    const m = /^(?:--)?(?:space-)?(\d{1,2})$/.exec(rawKey.trim());
+    const n = toPx(rawVal, 160);
+    const key = m ? `--space-${m[1]}` : "";
+    if (!m || n === null || (!byKey.has(key) && Number(m[1]) > 12)) {
+      skipped.push(`Spacing "${rawKey}" isn't a step Plexo can set (use a step like 4 and a size in px).`);
+      continue;
+    }
+    const d = dimensionLike(byKey.get(key), n);
+    put(key, d, { key, name: tokenName(key), ...d, type: "dimension", layer: "brand", comment: null }, `spacing step ${m[1]}`, (c) => toPx(c.value, 160) === n);
+  }
+  return { tokens, sent, skipped };
+}
+
+/** The project's tokens as an AI client reads them (references resolved). Capped. */
+export function tokensForClient(ds: Pick<DesignSystem, "tokens"> | null | undefined): Array<{ key: string; value: string; resolved?: string; type: string }> {
+  if (!ds || !Array.isArray(ds.tokens)) return [];
+  const map = new Map(ds.tokens.map((t) => [t.key, t]));
+  return ds.tokens.slice(0, 400).map((t) => {
+    const resolved = REF.test(t.value.trim()) ? resolveToken(map, t.key) : undefined;
+    return { key: t.key, value: t.unit && /^-?\d+(\.\d+)?$/.test(t.value) ? `${t.value}${t.unit}` : t.value, ...(resolved && resolved !== t.value ? { resolved } : {}), type: t.type };
+  });
 }
 
 // ---------------------------------------------------------------- the precedence rule
@@ -219,6 +347,7 @@ export function mergeBrand(input: { siteId?: string | null; siteName?: string; l
     colours: dedupeColours(colours).slice(0, 8),
     fonts: strata?.fonts ?? (ownFonts as ResolvedBrand["fonts"]),
     ...(strata?.radius ? { radius: strata.radius } : {}),
+    components: linked ? catalogueFromDesignSystem(linked.designSystem) : [],
     ...(logoUrl ? { logoUrl } : {}),
     ...(noLogo ? { noLogo } : {}),
     stylesheet: linked?.stylesheet ?? null,
@@ -264,9 +393,14 @@ export function brandPromptBlock(b: ResolvedBrand | null | undefined, siteName?:
   if (b.logoUrl) lines.push(`- Logo: ${b.logoUrl}`);
   else if (b.noLogo) lines.push("- Logo: none, set the business name as a clean wordmark");
   if (b.voice) lines.push(`- Voice: "${b.voice}"`);
+  if (b.linked && !b.components.length) lines.push("- Ready-made components: none yet. When you build something reusable (a button, a card, a banner), offer once to save it to the brand (create_brand_component), so it is in Strata for every page.");
   const how = b.linked
     ? `Pages of this site already link to the brand sheet, so colours and fonts come from it: in the visual editor you do not need setBrand (it would only repeat these values); in raw HTML, apps and emails use these exact values, or the variables from ${b.stylesheet ?? "/__plexo/brand/<siteId>.css"} (var(--color-action-primary-bg), var(--color-text-primary), var(--font-family-heading), var(--font-family-body), var(--radius-md)).`
     : "Use these exact values on every page, section, email and app screen you make (setBrand on visual pages).";
+  if (b.components.length) {
+    lines.push(`- Ready-made components (from the brand): ${b.components.slice(0, 12).map(componentLine).join("; ")}. Each is a class on the brand sheet: .plx-brand-<name>, .plx-brand-<name>--<look>.`);
+    lines.push(`Use the brand's ready-made components (buttons, cards...) before inventing your own: where you need one of them, use it, and say once "I'll use your brand's <name>" (e.g. "I'll use your brand's button"). When you build something reusable that the brand doesn't have (a banner, a pricing card), offer once to save it to the brand (create_brand_component), so it is in Strata and every page and tool can use it.`);
+  }
   lines.push(
     `Use this brand on EVERYTHING you build or change for this site (new pages, new sections, restyles, emails, blog and store layouts, funnel and course pages, apps), automatically. ${how} Never ask the owner for colours, fonts or a logo while this brand exists. Tell them plainly once: "I'll use your ${name ?? "saved"} brand." Don't mention it again unless they ask. If they ask for something off-brand, do it for that item only and say so.`,
   );
@@ -274,7 +408,7 @@ export function brandPromptBlock(b: ResolvedBrand | null | undefined, siteName?:
 }
 
 /** The shape SOL's brief reads (lib/ai/solBrief.ts KnownBrand) for this site: the linked brand wins over the site's saved one. */
-export function knownBrandFromResolved(b: ResolvedBrand): { colors?: string[]; logoUrl?: string; noLogo?: boolean; fonts?: string[]; strataProject?: string } {
+export function knownBrandFromResolved(b: ResolvedBrand): { colors?: string[]; logoUrl?: string; noLogo?: boolean; fonts?: string[]; strataProject?: string; brandComponents?: string[] } {
   const colors = brandHexList(b);
   const fonts = [b.fonts.heading, b.fonts.body].filter((f, i, a): f is string => !!f && a.indexOf(f) === i);
   return {
@@ -282,6 +416,7 @@ export function knownBrandFromResolved(b: ResolvedBrand): { colors?: string[]; l
     ...(b.logoUrl ? { logoUrl: b.logoUrl } : b.noLogo ? { noLogo: true } : {}),
     ...(fonts.length ? { fonts } : {}),
     ...(b.project?.name ? { strataProject: b.project.name } : {}),
+    ...(b.components.length ? { brandComponents: b.components.map((c) => c.name) } : {}),
   };
 }
 
@@ -298,6 +433,7 @@ export function brandForClient(b: ResolvedBrand): Record<string, unknown> {
     colours: b.colours,
     fonts: b.fonts,
     radius: b.radius ?? null,
+    components: b.components.map((c) => ({ ...c, howToUse: usageHint(c) })),
     logoUrl: b.logoUrl ?? null,
     noLogo: b.noLogo ?? false,
     voice: b.voice ?? null,

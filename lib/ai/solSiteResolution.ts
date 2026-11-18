@@ -9,7 +9,7 @@ export type OwnerSite = {
   id: string;
   name?: string;
   updatedAt?: string;
-  brand?: Pick<KnownBrand, "colors" | "logoUrl" | "noLogo" | "fonts" | "strataProject">;
+  brand?: Pick<KnownBrand, "colors" | "logoUrl" | "noLogo" | "fonts" | "strataProject" | "brandComponents">;
   /** The brand this site really uses (lib/brand/resolveSiteBrand.ts), ready for SOL's prompt; only set when it is the site's own or linked from Strata. */
   resolvedBrand?: import("@/lib/brand/brandModel").ResolvedBrand;
 };

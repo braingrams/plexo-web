@@ -30,6 +30,9 @@ import { User } from "@/lib/db/coreEntities";
 import { chromeFor } from "@/lib/v2/siteFormat";
 import { addPageToSiteMenu } from "@/lib/sites/siteNav";
 import { htmlOutline } from "@/lib/sites/htmlOutline";
+import { BRAND_COMPONENT_COMMANDS_READY, BRAND_COMPONENT_OPS, brandComponentCommandMessage } from "@/lib/brand/brandComponentCommands";
+import { sendComponentsToStrata } from "@/lib/brand/extrasWriteThrough";
+import { newBrandComponents, type DesignComponent } from "@/lib/brand/brandComponents";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 
 // The V2 page workflow behind page_describe / page_edit / page_create_from_template /
@@ -186,7 +189,7 @@ export async function describePages(resolved: ResolvedUser, args: { templateId?:
 
 export type CommandReport = { n: number; change: string; ok: boolean; message: string };
 
-type Applied = { design: V2Design; results: CommandResult[]; reports: CommandReport[]; anyOk: boolean; renamed: boolean };
+type Applied = { design: V2Design; results: CommandResult[]; reports: CommandReport[]; anyOk: boolean; renamed: boolean; /** Brand components this call made (saveAsBrandComponent), to be sent to the site's Strata project. */ newComponents: DesignComponent[] };
 
 /** Runs section commands against a one-page design. Pure apart from reading the SDK. Never throws. */
 export function applyToDesign(design: V2Design, rawCommands: unknown[], opts: { allowAddPage?: boolean } = {}): Applied {
@@ -206,6 +209,11 @@ export function applyToDesign(design: V2Design, rawCommands: unknown[], opts: { 
         ok: false,
         message: `Pages of a site are separate pages: use page_create_from_template (with this site's siteId) to add "${typeof cmd.name === "string" ? cmd.name : "the new page"}", then fill it in with page_edit.`,
       });
+      return;
+    }
+    // Brand-component commands are part of the SDK since 2.0.33 (lib/brand/brandComponentCommands.ts).
+    if (typeof cmd.op === "string" && BRAND_COMPONENT_OPS.has(cmd.op) && !BRAND_COMPONENT_COMMANDS_READY) {
+      preResults.set(i, { ok: false, message: brandComponentCommandMessage(cmd.op) });
       return;
     }
     // One page per call, so any page reference (missing, a slug, a name) means "this page".
@@ -235,7 +243,9 @@ export function applyToDesign(design: V2Design, rawCommands: unknown[], opts: { 
 
   const renamed = rawCommands.some((c, i) => results[i].ok && (c as { op?: unknown })?.op === "renamePage");
   const next: V2Design = { ...design, pages: applied.pages.slice(0, 1) as PageDefinition[], designSystem: applied.designSystem };
-  return { design: next, results, reports, anyOk: results.some((r) => r.ok), renamed };
+  // saveAsBrandComponent adds a component to the brand: the ones that were not there before are the new ones (the SDK keeps the others as they were).
+  const newComponents = newBrandComponents(systemOf(design).components, applied.designSystem.components);
+  return { design: next, results, reports, anyOk: results.some((r) => r.ok), renamed, newComponents };
 }
 
 function checkCommands(raw: unknown): unknown[] {
@@ -262,7 +272,7 @@ async function validateAndCompile(row: Row, design: V2Design): Promise<{ design:
 
 export async function editPage(resolved: ResolvedUser, args: { templateId?: unknown; slug?: unknown; commands?: unknown }) {
   const commands = checkCommands(args.commands);
-  const { row } = await resolveTargetRow(resolved, args.templateId, args.slug);
+  const { row, rootId } = await resolveTargetRow(resolved, args.templateId, args.slug);
   const kind = formatLabel(row);
   if (kind !== "v2") {
     throw new PageToolError(
@@ -271,11 +281,11 @@ export async function editPage(resolved: ResolvedUser, args: { templateId?: unkn
         : `"${row.name}" was built in the classic editor, so page_edit can't change it. Use update_template for it, or create a new visual page with page_create_from_template.`,
     );
   }
-  return saveEdit(row, commands, { live: false });
+  return saveEdit(row, commands, { live: false, who: { siteId: rootId, userId: resolved.userId, organizationId: resolved.organizationId } });
 }
 
 /** Applies commands to a V2 row and saves (draft for pages, live for layout fragments). */
-export async function saveEdit(row: Row, commands: unknown[], opts: { live: boolean }) {
+export async function saveEdit(row: Row, commands: unknown[], opts: { live: boolean; /** Who is editing, so a brand component saved from the page can be sent to the site's Strata project. */ who?: { siteId: string; userId: string; organizationId: string } }) {
   const before = await currentDesign(row);
   const applied = applyToDesign(before, commands);
 
@@ -312,10 +322,14 @@ export async function saveEdit(row: Row, commands: unknown[], opts: { live: bool
       .go();
   }
 
+  // A part saved to the brand goes to the site's Strata project (kept as a copy and retried if Strata can't be reached).
+  const brand = opts.who && applied.newComponents.length ? await sendComponentsToStrata({ ...opts.who, components: applied.newComponents }) : undefined;
+
   const failed = applied.reports.filter((r) => !r.ok).length;
   return {
     ok: true,
     saved: true,
+    ...(brand ? { brand: { components: applied.newComponents.map((c) => c.name), state: brand.state, message: brand.message } } : {}),
     partial: failed > 0,
     templateId: row.id,
     name: name ?? row.name,

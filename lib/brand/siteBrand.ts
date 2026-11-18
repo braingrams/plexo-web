@@ -52,6 +52,8 @@ export type SiteBrandState = {
   stylesheet: string | null;
   /** The Strata project has no published version yet: the owner presses Publish in Strata once and syncing starts. */
   awaitingPublish: boolean;
+  /** The owner's latest colours/logo are saved on Plexo but have not reached Strata yet (retried automatically). */
+  sendPending?: boolean;
 };
 
 export class BrandError extends Error {
@@ -81,7 +83,7 @@ function base(): string {
   return url;
 }
 
-async function strataFetch(path: string, token: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
+export async function strataFetch(path: string, token: string, init: { method?: string; body?: unknown } = {}): Promise<Response> {
   try {
     return await fetch(`${base()}${path}`, {
       method: init.method ?? "GET",
@@ -93,7 +95,7 @@ async function strataFetch(path: string, token: string, init: { method?: string;
   }
 }
 
-const pid = (projectId: string) => encodeURIComponent(projectId);
+export const pid = (projectId: string) => encodeURIComponent(projectId);
 
 /**
  * The design system as last PUBLISHED in Strata (never in-progress edits). `allowDraft` (linking only) falls back to the latest
@@ -308,6 +310,7 @@ export async function getSiteBrandState(siteId: string): Promise<SiteBrandState>
     ...(serverApp ? { serverApp, brandInApp: row.injectServerApp === true } : {}),
     stylesheet: row.revision ? `/__plexo/brand/${siteId}.css` : null,
     awaitingPublish: row.awaitingPublish === true,
+    ...(row.pendingPush === true ? { sendPending: true } : {}),
   };
 }
 
@@ -860,7 +863,7 @@ export async function applyPublishedEvent(projectId: string, revision: string | 
 
 /** The 15-minute fallback: every linked site with "Keep in sync" on, longest-unchecked first, within a time budget. */
 export async function runAllSiteBrandSyncs(opts: { concurrency?: number; budgetMs?: number } = {}): Promise<{ checked: number; counts: Record<string, number>; deferred: number }> {
-  type Item = { siteId: string; strataProjectId: string; keyId: string; ciphertext: string; lastCheckedAt?: string };
+  type Item = { siteId: string; strataProjectId: string; keyId: string; ciphertext: string; lastCheckedAt?: string; pendingPush?: boolean };
   const rows: Item[] = [];
   let cursor: string | null = null;
   do {
@@ -884,7 +887,9 @@ export async function runAllSiteBrandSyncs(opts: { concurrency?: number; budgetM
   await Promise.all(
     Array.from({ length: Math.min(opts.concurrency ?? 4, rows.length) }, async () => {
       while (next < rows.length && Date.now() < deadline) {
-        const { siteId } = rows[next++];
+        const { siteId, pendingPush } = rows[next++];
+        // Colours/logo the owner saved while Strata was out of reach are sent first, then the usual pull.
+        if (pendingPush) await (await import("./writeThrough")).retryPendingSend(siteId).catch(() => undefined);
         const { outcome } = await runSiteBrandUpdate(siteId, { source: "schedule" });
         counts[outcome] = (counts[outcome] ?? 0) + 1;
         checked++;

@@ -19,7 +19,19 @@ describe("the MCP catalogue knows about the brand", () => {
     for (const name of ["get_site_brand", "list_strata_projects", "link_site_brand", "create_strata_project_from_brand"]) {
       expect(PLEXO_MCP_TOOLS.filter((t: { name: string }) => t.name === name)).toHaveLength(1);
     }
-    expect(BRAND_MCP_TOOLS).toHaveLength(4);
+    expect(BRAND_MCP_TOOLS).toHaveLength(8);
+  });
+  it("has the component and token tools, once each, and tells the AI to use the brand's components first", () => {
+    for (const name of ["list_brand_components", "create_brand_component", "get_brand_tokens", "set_brand_tokens"]) {
+      expect(PLEXO_MCP_TOOLS.filter((t: { name: string }) => t.name === name), name).toHaveLength(1);
+    }
+    expect(byName.get("create_brand_component")!.inputSchema).toMatchObject({ required: ["name", "styles"] });
+    expect(byName.get("list_brand_components")!.description).toMatch(/USE THEM FIRST/);
+    expect(MCP_SERVER_INSTRUCTIONS).toMatch(/THE BRAND LIVES IN STRATA/);
+    expect(MCP_SERVER_INSTRUCTIONS).toContain("list_brand_components");
+    expect(MCP_SERVER_INSTRUCTIONS).toContain("create_brand_component");
+    expect(MCP_SERVER_INSTRUCTIONS).toContain("set_brand_tokens");
+    expect(BRAND_NOTE).toContain("list_brand_components");
   });
   it("every tool that makes or restyles something carries the brand sentence exactly once", () => {
     for (const name of BRAND_AWARE_TOOLS) {

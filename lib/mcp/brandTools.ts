@@ -1,9 +1,11 @@
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { checkCommerceRateLimit } from "@/lib/commerceRateLimitDynamo";
 import { Template } from "@/lib/db/contentEntities";
-import { brandForClient } from "@/lib/brand/brandModel";
+import { brandForClient, tokensForClient, type TokenRequest } from "@/lib/brand/brandModel";
+import { buildComponentRow, ComponentInputError, usageHint } from "@/lib/brand/brandComponents";
+import { sendComponentsToStrata, sendTokensToStrata } from "@/lib/brand/extrasWriteThrough";
 import { resolveSiteBrand, siteIdOfPage } from "@/lib/brand/resolveSiteBrand";
-import { BrandError, createStrataProjectFromSiteBrand, getSiteBrandState, linkSiteBrand, listOwnerStrataProjects } from "@/lib/brand/siteBrand";
+import { BrandError, createStrataProjectFromSiteBrand, getSiteBrandState, linkedDesignSystem, linkSiteBrand, listOwnerStrataProjects } from "@/lib/brand/siteBrand";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
 
@@ -61,6 +63,67 @@ export const BRAND_MCP_TOOLS = [
       },
     },
   },
+  {
+    name: "list_brand_components",
+    title: "List a Site's Brand Components",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      "Lists the ready-made components of a site's brand (a button, a card, a banner...): their names, looks (variants) and the parts you fill in (slots), and exactly how to use each on a page. The brand lives in Strata and these come from the linked Strata project, so they are the owner's own design. " +
+      "USE THEM FIRST: before you hand-build a button, card or similar, call this and use the brand's own; tell the owner once \"I'll use your brand's <name>\". On a page a component is an element with the class plx-brand-<name> (and plx-brand-<name>--<look>), styled by the site's hosted brand sheet. When you build something reusable that isn't here, offer to save it with create_brand_component.",
+    inputSchema: { type: "object", properties: { siteId: siteIdProp } },
+  },
+  {
+    name: "create_brand_component",
+    title: "Save a Component to a Site's Brand",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    description:
+      "Saves a reusable component (a button, a card, a banner, a pricing box...) to the site's brand in Strata, so every page and every tool can use it and it goes live on the site straight away. Needs a site whose brand is linked to a Strata project. " +
+      "Describe it with the brand's own variables rather than fixed colours: styles {\"padding\":\"var(--space-5)\",\"background-color\":\"var(--color-bg-surface)\",\"border-radius\":\"var(--radius-lg)\"} (read them with get_brand_tokens). variants are other looks that change only some styles, e.g. {\"raised\":{\"box-shadow\":\"var(--shadow-md)\"}}. slots are the text parts inside it: [{\"role\":\"title\",\"tag\":\"h3\",\"text\":\"Card title\",\"styles\":{...}}]. Only plain structure and text are allowed (no scripts, embeds or images yet). " +
+      "If the brand already has a component with that name, nothing is overwritten unless you pass replace:true, and only do that when the owner agreed. Offer to save things you built (\"Want me to save this card to your brand so you can reuse it?\") instead of saving without asking. If Strata can't be reached the component is kept and sent automatically.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        siteId: siteIdProp,
+        name: { type: "string", description: "Short name, letters and numbers: button, card, banner. It becomes the class plx-brand-<name>." },
+        tag: { type: "string", description: "The outer element: div (default), section, article, button, a, span, p, ul, li..." },
+        styles: { type: "object", description: "CSS for the outer element, property -> value. Prefer var(--token) values." },
+        variants: { type: "object", description: "Other looks: name -> the styles that change, e.g. {\"secondary\": {\"background-color\": \"transparent\"}}." },
+        slots: {
+          type: "array",
+          maxItems: 12,
+          description: "The text parts inside: role (title, body, label...), tag (h1-h6, p, span, a, small, strong, em, li, label, button), text (sample words), styles.",
+          items: { type: "object", properties: { role: { type: "string" }, tag: { type: "string" }, text: { type: "string" }, styles: { type: "object" } }, required: ["role"] },
+        },
+        replace: { type: "boolean", description: "Update the component if the brand already has one with this name. Only with the owner's agreement." },
+      },
+      required: ["name", "styles"],
+    },
+  },
+  {
+    name: "get_brand_tokens",
+    title: "Get a Site's Brand Tokens",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      "Reads the linked Strata project's design tokens for a site (colours, fonts, corner radius, spacing, shadows...) as Plexo holds them, with references resolved. Use the variable names in styles (var(--color-action-primary)) so what you make follows the brand. For the plain summary (main colour, fonts, logo) use get_site_brand. Returns linked:false when the site has no Strata project; then use get_site_brand.",
+    inputSchema: { type: "object", properties: { siteId: siteIdProp } },
+  },
+  {
+    name: "set_brand_tokens",
+    title: "Change a Site's Brand Colours, Fonts, Corners or Spacing",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    description:
+      "Changes the brand in the site's Strata project and publishes it, so the whole site (and every other tool that uses the brand) follows: colours by role (primary, secondary, accent, text, background, surface as hex), fonts (heading, body: a font name like Inter), radius (corner roundness in px) and spacing (steps in px). Only existing tokens and the standard ones are changed; ramps are computed by Strata. Plexo keeps its copy and sends it automatically if Strata can't be reached. Only change the brand when the owner asked; to just read it use get_brand_tokens.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        siteId: siteIdProp,
+        colours: { type: "object", description: "Role -> hex, e.g. {\"primary\":\"#E4572E\",\"background\":\"#FFF8F0\"}. Roles: primary, secondary, accent, text, background, surface." },
+        fonts: { type: "object", description: "{\"heading\":\"Playfair Display\",\"body\":\"Inter\"}" },
+        radius: { type: "number", description: "Corner roundness in px (0 to 64)." },
+        spacing: { type: "object", description: "Step -> px, e.g. {\"4\": 16, \"6\": 24}." },
+      },
+    },
+  },
 ];
 
 export const BRAND_TOOL_NAMES = new Set(BRAND_MCP_TOOLS.map((t) => t.name));
@@ -84,6 +147,22 @@ export async function pickSiteId(resolved: ResolvedUser, given: unknown): Promis
 const limited = async (resolved: ResolvedUser, bucket: string, limit: number) => {
   if (!(await checkCommerceRateLimit(`${bucket}:${resolved.userId}`, limit))) throw new BrandError("That's a lot of brand changes in a short time. Wait a few minutes and try again.", 429);
 };
+
+/** What set_brand_tokens was asked, checked for shape (the values themselves are checked where they are applied). */
+function readTokenRequest(args: any): TokenRequest {
+  const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : undefined);
+  const req: TokenRequest = {};
+  const colours = obj(args?.colours);
+  if (colours) req.colours = Object.fromEntries(Object.entries(colours).filter(([, v]) => typeof v === "string")) as TokenRequest["colours"];
+  const fonts = obj(args?.fonts);
+  if (fonts) req.fonts = Object.fromEntries(Object.entries(fonts).filter(([k, v]) => (k === "heading" || k === "body") && typeof v === "string"));
+  if (typeof args?.radius === "number" || typeof args?.radius === "string") req.radius = args.radius;
+  const spacing = obj(args?.spacing);
+  if (spacing) req.spacing = Object.fromEntries(Object.entries(spacing).filter(([, v]) => typeof v === "number" || typeof v === "string")) as TokenRequest["spacing"];
+  const nothing = !Object.keys(req.colours ?? {}).length && !Object.keys(req.fonts ?? {}).length && req.radius === undefined && !Object.keys(req.spacing ?? {}).length;
+  if (nothing) throw new BrandError("Say what to change: colours (like primary), fonts (heading, body), radius or spacing.", 400);
+  return req;
+}
 
 export async function handleBrandTool(toolName: string, args: any, resolved: ResolvedUser): Promise<any> {
   try {
@@ -117,6 +196,87 @@ export async function handleBrandTool(toolName: string, args: any, resolved: Res
         const made = await createStrataProjectFromSiteBrand({ siteId, userId: resolved.userId, organizationId: resolved.organizationId, name: typeof args?.name === "string" ? args.name : undefined, autoSync: args?.autoSync !== false });
         const brand = await resolveSiteBrand({ siteId, organizationId: resolved.organizationId, userId: resolved.userId });
         return { success: true, project: made.project, sent: made.sent, notes: made.notes, ...(brand ? brandForClient(brand) : {}), next: "The brand is now in their Strata and linked to the site with auto-sync on. Tell the owner in one plain line." };
+      }
+      case "list_brand_components": {
+        await limited(resolved, "brand:read", 120);
+        const siteId = await pickSiteId(resolved, args?.siteId);
+        const brand = await resolveSiteBrand({ siteId, organizationId: resolved.organizationId, userId: resolved.userId });
+        if (!brand) throw new BrandError("That site wasn't found in this account.", 404);
+        return {
+          success: true,
+          siteId,
+          linked: brand.linked,
+          stylesheet: brand.stylesheet,
+          components: brand.components.map((c) => ({ ...c, howToUse: usageHint(c) })),
+          next: !brand.linked
+            ? "This site's brand isn't in Strata, so it has no ready-made components. Carry on building; if the owner wants their brand kept in Strata, create_strata_project_from_brand does it."
+            : brand.components.length
+              ? "Use these before building your own, and tell the owner once \"I'll use your brand's <name>\". When you build something reusable that isn't here, offer to save it with create_brand_component."
+              : "The brand has no components yet. When you build something reusable (a button, a card, a banner), offer to save it with create_brand_component so it is in Strata for every page.",
+        };
+      }
+      case "create_brand_component": {
+        const siteId = await pickSiteId(resolved, args?.siteId);
+        await limited(resolved, "site-brand", 20);
+        await limited(resolved, "brand:components", 20);
+        const before = await resolveSiteBrand({ siteId, organizationId: resolved.organizationId, userId: resolved.userId });
+        if (!before) throw new BrandError("That site wasn't found in this account.", 404);
+        if (!before.linked) throw new BrandError("This site's brand isn't in Strata yet, so there is nowhere to keep a component. Use create_strata_project_from_brand (or link_site_brand) first.", 409);
+        const tokens = ((await linkedDesignSystem(siteId))?.tokens ?? []).map((t) => t.key);
+        let row;
+        try {
+          row = buildComponentRow(args ?? {}, tokens.length ? tokens : null);
+        } catch (err) {
+          if (err instanceof ComponentInputError) throw new BrandError(err.message, 400);
+          throw err;
+        }
+        if (before.components.some((c) => c.name.toLowerCase() === row.name.toLowerCase()) && args?.replace !== true) {
+          throw new BrandError(`The brand already has a "${row.name}". Use that one, pick another name, or pass replace:true to update it (only if the owner agreed).`, 409);
+        }
+        const sent = await sendComponentsToStrata({ siteId, userId: resolved.userId, organizationId: resolved.organizationId, components: [row] });
+        if (sent.state === "refused" || sent.state === "not-set-up") throw new BrandError(sent.message, 409);
+        const after = await resolveSiteBrand({ siteId, organizationId: resolved.organizationId, userId: resolved.userId });
+        const info = after?.components.find((c) => c.name.toLowerCase() === row.name.toLowerCase());
+        const className = `plx-brand-${row.name}`;
+        return {
+          success: true,
+          state: sent.state,
+          message: sent.state === "in-strata" ? `Saved "${row.name}" to the brand in Strata. It is live on the site.` : `Saved "${row.name}" here; it will go to Strata automatically.`,
+          component: info ? { ...info, howToUse: usageHint(info) } : { name: row.name, className },
+          next: `Use it as an element with class "${className}". Tell the owner in one plain line that it is saved to their brand${sent.state === "waiting" ? " and will reach Strata shortly" : " and in Strata"}.`,
+        };
+      }
+      case "get_brand_tokens": {
+        await limited(resolved, "brand:read", 120);
+        const siteId = await pickSiteId(resolved, args?.siteId);
+        const brand = await resolveSiteBrand({ siteId, organizationId: resolved.organizationId, userId: resolved.userId });
+        if (!brand) throw new BrandError("That site wasn't found in this account.", 404);
+        if (!brand.linked) return { success: true, linked: false, tokens: [], next: "This site's brand isn't in Strata. Use get_site_brand for its colours, or create_strata_project_from_brand to keep the brand in Strata." };
+        const ds = await linkedDesignSystem(siteId);
+        return {
+          success: true,
+          linked: true,
+          project: brand.project,
+          tokens: tokensForClient(ds),
+          next: "Use these variables in your styles, e.g. var(--color-action-primary). To change the brand use set_brand_tokens (colours, fonts, radius, spacing), and only when the owner asked.",
+        };
+      }
+      case "set_brand_tokens": {
+        const request = readTokenRequest(args);
+        const siteId = await pickSiteId(resolved, args?.siteId);
+        await limited(resolved, "site-brand", 20);
+        const sent = await sendTokensToStrata({ siteId, userId: resolved.userId, organizationId: resolved.organizationId, request });
+        if (sent.state === "refused" || sent.state === "not-set-up") throw new BrandError(sent.message, 409);
+        const brand = await resolveSiteBrand({ siteId, organizationId: resolved.organizationId, userId: resolved.userId });
+        return {
+          success: true,
+          state: sent.state,
+          message: sent.message,
+          changed: sent.changed,
+          ...(sent.skipped.length ? { skipped: sent.skipped } : {}),
+          ...(brand ? brandForClient(brand) : {}),
+          next: sent.state === "waiting" ? "Plexo is keeping the change and will send it to Strata by itself. Tell the owner in one plain line." : "The brand is changed in Strata and the site follows it. Tell the owner in one plain line what changed.",
+        };
       }
       default:
         throw new Error(`Unknown tool: ${toolName}`);

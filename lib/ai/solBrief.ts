@@ -27,6 +27,8 @@ export type KnownBrand = {
   fonts?: string[];
   /** The Strata project this site's brand is linked to (lib/brand/brandModel.ts): its colours and fonts are the owner's, always. */
   strataProject?: string;
+  /** Names of the brand's ready-made components (button, card...). */
+  brandComponents?: string[];
 };
 
 export type BriefAttachment = { type?: string; filename?: string; url?: string; /** Main colours read from a logo image (lib/onboarding/logoColors.ts dominantColors). */ colors?: string[] };
@@ -73,6 +75,8 @@ export type Brief = {
   fonts: Field<string>;
   /** The site's brand is linked to this Strata project: pages get it from the hosted brand sheet. */
   strataProject?: string;
+  /** Names of the brand's ready-made components (button, card...), when the site's brand has any: SOL uses them before inventing its own. */
+  brandComponents?: string[];
   sections: Field<string[]>;
   language: Field<string>;
   content: BriefContent;
@@ -369,6 +373,7 @@ export function parseBrief(input: BriefInput): Brief {
   else if (account.logoUrl) brief.logo = known<LogoState>("uploaded", "account");
   if (site.fonts?.length) brief.fonts = known(site.fonts.slice(0, 2).join(" + "), "site");
   if (site.strataProject) brief.strataProject = site.strataProject;
+  if (site.brandComponents?.length) brief.brandComponents = site.brandComponents;
 
   // --- what the owner wrote now (the message overrides stored defaults)
   const name = extractName(current) ?? extractName(all);

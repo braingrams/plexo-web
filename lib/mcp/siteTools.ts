@@ -6,6 +6,7 @@ import { createSite, SiteBuildError } from "@/lib/sites/siteBuilder";
 import { applyBriefDefaults, mergeBrand } from "@/lib/brand/brandModel";
 import { loadProfileBrand } from "@/lib/brand/resolveSiteBrand";
 import { applyNewSiteBrandChoice } from "@/lib/brand/siteBrand";
+import { setUpBrandInBackground } from "@/lib/strata/autoSetupBackground";
 import { findPageCandidates, howToChange, pickPage, rankPages } from "@/lib/sites/findPage";
 import { listSiteTemplates } from "@/lib/sites/siteTemplates";
 import { MarketplaceUseError, useMarketplaceTemplate } from "@/lib/marketplaceUse";
@@ -216,6 +217,7 @@ export async function handleSiteTool(toolName: string, args: any, resolved: Reso
           blogTool: (name, toolArgs) => handleBlogTool(name, toolArgs, resolved),
         });
         const strataProjectId = typeof args?.strataProjectId === "string" ? args.strataProjectId.trim() : "";
+        if (!strataProjectId) setUpBrandInBackground({ siteId: result.siteId, userId: resolved.userId, organizationId: resolved.organizationId });
         const brand = strataProjectId ? await applyNewSiteBrandChoice({ siteId: result.siteId, userId: resolved.userId, organizationId: resolved.organizationId, choice: { projectId: strataProjectId } }) : undefined;
         return {
           success: true,

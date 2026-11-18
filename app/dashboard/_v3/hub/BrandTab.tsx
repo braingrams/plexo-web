@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ImagePlus, RefreshCw } from "lucide-react";
+import { ExternalLink, ImagePlus, RefreshCw } from "lucide-react";
+import { strataBrandBibleUrl } from "@/lib/strata/appUrl";
 import { Button, Card, CardHeader, Input, Modal, Skeleton, Textarea, useToast } from "../ui";
 import { StrataBrandPicker, type StrataPickerClient } from "../brand/StrataBrandPicker";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
@@ -67,18 +68,32 @@ export function StrataBrand({ siteId, siteName, isRaw, client, preview, previewS
     show({ title: message, tone: "success" });
   };
 
+  const sendNow = () => run("send", async () => {
+    const out = await call({ method: "POST", json: { sendToStrata: true } });
+    const sent = (out as unknown as { sent?: { message?: string } }).sent;
+    if (sent?.message) show({ title: sent.message, tone: "success" });
+    return out;
+  });
+
   if (!state.linked) {
     return (
+      <>
+        <Card data-tour="hub-brand-pending">
+          <CardHeader title="Your brand is saved on Plexo for now" description="Your colours and logo are kept in Strata, the one place your brand lives. We're sending them there; this finishes by itself, or you can do it now." action={<Button size="sm" loading={busy === "send"} onClick={sendNow}>Send to Strata</Button>} />
+          {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+        </Card>
       <Card tone="elevated" data-tour="hub-brand-connect">
-        <CardHeader title="Use your brand from Strata" description="Keep your colours, fonts and logo in one place, Strata. Pick a brand, or make one from the colours you're using now, and every page on this site matches and stays up to date. SOL uses it too, without being asked." />
+        <CardHeader title="Use a brand you already have in Strata" description="Keep your colours, fonts and logo in one place, Strata. Pick a brand, or make one from the colours you're using now, and every page on this site matches and stays up to date. SOL uses it too, without being asked." />
         <StrataBrandPicker mode="site" siteId={siteId} siteName={siteName} client={client} canCreate={canCreate} preview={preview} onDone={onDone} />
       </Card>
+      </>
     );
   }
 
   const headline = brandHeadline(state);
   const tone = headline.tone === "bad" ? "inlinemsg--bad" : headline.tone === "warn" ? "inlinemsg--warn" : "";
   return (
+    <>
     <Card data-tour="hub-brand-strata">
       <CardHeader
         title={state.projectName ?? "Your brand"}
@@ -109,6 +124,14 @@ export function StrataBrand({ siteId, siteName, isRaw, client, preview, previewS
         {resolved?.logoUrl ? <img src={resolved.logoUrl} alt="Your logo" style={{ maxHeight: 48, maxWidth: 200, objectFit: "contain", alignSelf: "flex-start" }} /> : null}
       </div>
       <div className={`plx-inlinemsg ${tone ? "plx-" + tone : ""}`} role="status">{headline.text}</div>
+      {/* The brand lives in Strata: say so, show whether the latest change has arrived, and open it there in one click. */}
+      <div className="plx-inlinemsg" role="status" style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between" }}>
+        <span>{state.sendPending ? "Your latest change is saved here and is on its way to Strata. This finishes by itself." : `Your brand is saved in Strata${state.projectName ? ` as “${state.projectName}”` : ""}.`}</span>
+        <span style={{ display: "inline-flex", gap: 8, flexWrap: "wrap" }}>
+          {state.sendPending ? <Button size="sm" variant="secondary" loading={busy === "send"} onClick={sendNow}>Send to Strata now</Button> : null}
+          {state.projectId ? <a className="plx-btn plx-btn--secondary plx-btn--sm" href={strataBrandBibleUrl(state.projectId)} target="_blank" rel="noreferrer">View in Strata <ExternalLink size={14} aria-hidden /></a> : null}
+        </span>
+      </div>
 
       <div className="plx-settings">
         <label className="plx-toggle">
@@ -176,6 +199,35 @@ export function StrataBrand({ siteId, siteName, isRaw, client, preview, previewS
       >
         <span />
       </Modal>
+    </Card>
+    <BrandComponents components={resolved?.components ?? []} projectId={state.projectId} />
+    </>
+  );
+}
+
+/** The brand's ready-made components (buttons, cards...), kept in Strata. SOL and any AI helper use them before inventing their own. */
+export function BrandComponents({ components, projectId }: { components: Array<{ name: string; variants: string[]; slots: Array<{ role: string }> }>; projectId: string | null }) {
+  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  return (
+    <Card data-tour="hub-brand-components">
+      <CardHeader
+        title="Ready-made pieces"
+        description={components.length ? "Buttons, cards and other pieces from your brand. SOL and your AI helpers use these first, so everything you build matches." : "Your brand has no ready-made pieces yet. When SOL or your AI helper builds something you want to reuse, like a button or a card, they can save it here for you."}
+        action={projectId ? <a className="plx-btn plx-btn--secondary plx-btn--sm" href={strataBrandBibleUrl(projectId)} target="_blank" rel="noreferrer">View in Strata <ExternalLink size={14} aria-hidden /></a> : undefined}
+      />
+      {components.length ? (
+        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
+          {components.map((c) => (
+            <li key={c.name} style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap", justifyContent: "space-between" }}>
+              <b>{cap(c.name)}</b>
+              <span className="plx-small">
+                {c.variants.length ? `Looks: ${c.variants.join(", ")}` : "One look"}
+                {c.slots.length ? ` · You fill in: ${c.slots.map((s) => s.role).join(", ")}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </Card>
   );
 }

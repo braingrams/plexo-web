@@ -7,6 +7,7 @@ import { MarketplaceUseError } from "@/lib/marketplaceUse";
 import { makeSiteFromKit, makeSiteFromMarketDesign } from "@/lib/onboarding/siteMaking";
 import { completeOnboarding, OnboardingError } from "@/lib/onboarding/complete";
 import { applyNewSiteBrandChoice } from "@/lib/brand/siteBrand";
+import { setUpBrandInBackground } from "@/lib/strata/autoSetupBackground";
 import { parseBrandChoice } from "@/lib/brand/brandModel";
 
 /** "Use this design" / "Skip, just personalise": save the answers, build the site with site_create, finish onboarding. */
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // The brand step of the look screen: link the chosen Strata project (or make one from their brand) to the site just made.
     const choice = parseBrandChoice(body.brand);
     const brand = choice && result.site ? await applyNewSiteBrandChoice({ siteId: result.site.id, userId: resolved.userId, organizationId: resolved.organizationId, choice }) : undefined;
+    // No choice made: set the brand up in Strata by itself, in the background.
+    if (!choice && result.site) setUpBrandInBackground({ siteId: result.site.id, userId: resolved.userId, organizationId: resolved.organizationId });
     return NextResponse.json(brand ? { ...result, brand } : result);
   } catch (err) {
     if (err instanceof MarketplaceUseError) return NextResponse.json({ error: err.message, ...err.extra, needsPurchase: err.status === 403 && !err.extra.plan }, { status: err.status });

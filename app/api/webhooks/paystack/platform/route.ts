@@ -5,6 +5,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
 import { handlePaystackBillingEvent } from "@/lib/billing/paystackBilling";
+import { isOtherProduct } from "@/lib/paystackProduct";
 import { creditCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { CommerceOrder, CommerceBooking, CommerceSettings, PlatformPaystackWebhookEvent } from "@/lib/db/commerceEntities";
 
@@ -40,11 +41,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 
-  let event: { event?: string; data?: { id?: number | string; reference?: string; subscription_code?: string; plan?: { plan_code?: string } | null } };
+  let event: { event?: string; data?: { id?: number | string; reference?: string; subscription_code?: string; plan?: { plan_code?: string } | null; metadata?: unknown } };
   try {
     event = JSON.parse(rawBody);
   } catch {
     return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+
+  // The same Paystack account serves other Charisol products: a charge tagged for another product is acknowledged and left alone
+  // (before anything is recorded), so it is never mistaken for a Plexo payment. Untagged events are Plexo's, as before.
+  if (isOtherProduct(event.data?.metadata)) {
+    return NextResponse.json({ received: true, ignored: "another product" });
   }
 
   // Invoice events are per billing period (their own code); subscription events per subscription.

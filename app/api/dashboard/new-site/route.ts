@@ -7,6 +7,7 @@ import { readBuildProfile } from "@/lib/dashboardV3/profile";
 import { CURRENT_SITE_COOKIE } from "@/lib/dashboardV3/sites";
 import { createArgs, parseCreateRequest } from "@/lib/dashboardV3/newSite";
 import { applyNewSiteBrandChoice } from "@/lib/brand/siteBrand";
+import { setUpBrandInBackground } from "@/lib/strata/autoSetupBackground";
 import { parseBrandChoice } from "@/lib/brand/brandModel";
 
 /**
@@ -41,6 +42,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     // "Your brand" step: the owner's chosen Strata project (or "make one from my brand") is linked to the new site, so it follows that brand from the start.
     const brandChoice = parseBrandChoice((body as { brand?: unknown })?.brand);
     const brandResult = brandChoice ? await applyNewSiteBrandChoice({ siteId: made.siteId, userId: resolved.userId, organizationId: resolved.organizationId, choice: brandChoice }) : undefined;
+    // No choice made: the brand is set up in Strata by itself, in the background (a project named after the site), without holding up the website.
+    if (!brandChoice) setUpBrandInBackground({ siteId: made.siteId, userId: resolved.userId, organizationId: resolved.organizationId });
     const res = NextResponse.json({ site: { id: made.siteId, name: made.name }, warnings: made.warnings ?? [], ...(brandResult ? { brand: brandResult } : {}) });
     res.cookies.set(CURRENT_SITE_COOKIE, made.siteId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
     return res;

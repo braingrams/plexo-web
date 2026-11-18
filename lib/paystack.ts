@@ -1,3 +1,5 @@
+import { withProduct } from "./paystackProduct";
+
 const PAYSTACK_BASE_URL = "https://api.paystack.co";
 
 export interface PaystackInitializeParams {
@@ -39,7 +41,8 @@ export async function initializePaystackTransaction(
       currency: params.currency,
       reference: params.reference,
       callback_url: params.callbackUrl,
-      metadata: params.metadata,
+      // Charisol's shared account: tag the charge with the product so the one webhook can be routed (see lib/paystackProduct.ts).
+      metadata: process.env.PLATFORM_PAYSTACK_SECRET_KEY && params.secretKey === process.env.PLATFORM_PAYSTACK_SECRET_KEY ? withProduct(params.metadata) : params.metadata,
       ...(params.plan ? { plan: params.plan } : {}),
     }),
   });

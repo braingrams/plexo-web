@@ -46,6 +46,8 @@ export async function GET(request: NextRequest, ctx: Ctx): Promise<NextResponse>
   const auth = await authorize(request, ctx);
   if (auth.error) return auth.error;
   try {
+    // Opening the Brand tab quietly finishes anything still waiting to reach Strata (never slows the page).
+    void import("@/lib/brand/writeThrough").then(async ({ retryPendingSend }) => { await retryPendingSend(auth.site.id); }).catch(() => undefined);
     return NextResponse.json(await stateWithBrand(auth.site.id, auth));
   } catch (err) {
     return fail(err);
@@ -55,7 +57,17 @@ export async function GET(request: NextRequest, ctx: Ctx): Promise<NextResponse>
 export async function POST(request: NextRequest, ctx: Ctx): Promise<NextResponse> {
   const auth = await authorize(request, ctx, 20);
   if (auth.error) return auth.error;
-  const body = (await request.json().catch(() => null)) as { projectId?: unknown; projectName?: unknown; autoSync?: unknown; createProject?: unknown; name?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { projectId?: unknown; projectName?: unknown; autoSync?: unknown; createProject?: unknown; name?: unknown; sendToStrata?: unknown } | null;
+  // "Send to Strata": the owner's button for anything still waiting (or a site that has no Strata project yet).
+  if (body?.sendToStrata === true) {
+    try {
+      const { sendBrandWithin } = await import("@/lib/brand/writeThrough");
+      const sent = await sendBrandWithin({ siteId: auth.site.id, userId: auth.resolved.userId, organizationId: auth.resolved.organizationId }, 20000);
+      return NextResponse.json({ ...(await stateWithBrand(auth.site.id, auth)), sent });
+    } catch (err) {
+      return fail(err);
+    }
+  }
   if (body?.createProject === true) {
     try {
       const made = await createStrataProjectFromSiteBrand({

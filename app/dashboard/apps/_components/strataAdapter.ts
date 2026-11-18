@@ -51,7 +51,7 @@ const POPUP = { width: 440, height: 600 };
 const POPUP_TIMEOUT_MS = 5 * 60 * 1000;
 const BLOCKED = "Your browser blocked the sign-in window. Allow pop-ups for Plexo and try again.";
 
-export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoStrataAdapter {
+export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoStrataAdapter & { connectQuietly(): Promise<StrataStatus> } {
   const win = options.win ?? (window as unknown as StrataAdapterWindow);
   const doFetch = options.fetchFn ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
   let availability: boolean | undefined;
@@ -153,6 +153,15 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
   return {
     status,
     connect,
+    /** Connects as the person already signed in with Charisol, in the background: no window, no password. Never opens a sign-in window. */
+    async connectQuietly(): Promise<StrataStatus> {
+      try {
+        await call("/session", { method: "POST", body: { silent: true } });
+      } catch {
+        /* no saved Charisol sign-in, or Strata said no: the picker falls back to its Connect button */
+      }
+      return status();
+    },
     async available() {
       if (availability === undefined) await status().catch(() => undefined);
       return availability === true;

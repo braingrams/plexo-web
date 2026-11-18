@@ -7,7 +7,7 @@ import { Button, Skeleton } from "../ui";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import { brandFromDesignSystem, type ResolvedBrand } from "@/lib/brand/brandModel";
 import {
-  canLink, confirmationText, NO_SELECTION, PICKER_COPY, projectInitial, sortProjects, stageFor, toggleSelection,
+  canLink, confirmationText, needsSwitchConfirmation, NO_SELECTION, switchWarning, PICKER_COPY, projectInitial, sortProjects, stageFor, toggleSelection,
   type PickerProject, type PickerSelection,
 } from "@/lib/dashboardV3/strataPicker";
 import { errMsg, hubApi } from "../hub/hubApi";
@@ -15,8 +15,10 @@ import { errMsg, hubApi } from "../hub/hubApi";
 /** What the picker needs from Strata (the real one is the editor's adapter; the dev preview passes a fake). */
 export type StrataPickerClient = {
   available(): Promise<boolean>;
-  status(): Promise<{ connected: boolean }>;
-  connect(): Promise<{ connected: boolean }>;
+  status(): Promise<{ connected: boolean; user?: { email?: string; name?: string } }>;
+  connect(options?: { switchAccount?: boolean }): Promise<{ connected: boolean; user?: { email?: string; name?: string } }>;
+  /** Connects in the background as the person already signed in with Charisol (never opens a window). */
+  connectQuietly?(): Promise<{ connected: boolean; user?: { email?: string; name?: string } }>;
   listProjects(): Promise<PickerProject[]>;
   /** A project's colours and fonts, to preview them before the website is made. */
   pull?(projectId: string): Promise<{ tokens: unknown[] }>;
@@ -69,6 +71,8 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
   const [local, setLocal] = useState<PickerSelection>(NO_SELECTION);
   const [autoSync, setAutoSync] = useState(true);
   const [done, setDone] = useState<string | null>(null);
+  const [account, setAccount] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
@@ -84,9 +88,12 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
       setAvailable(on);
       onAvailable?.(on);
       if (!on) return;
-      const st = await client.status().catch(() => ({ connected: false }));
+      let st: { connected: boolean; user?: { email?: string } } = await client.status().catch(() => ({ connected: false }));
+      // Charisol sign-in already tells us who they are, so connect for them in the background instead of asking.
+      if (!st.connected && client.connectQuietly) st = await client.connectQuietly().catch(() => ({ connected: false }));
       if (!alive.current) return;
       setConnected(st.connected);
+      setAccount(st.user?.email ?? null);
       if (st.connected) setProjects(await client.listProjects());
     } catch (e) {
       if (alive.current) setError(errMsg(e, "We couldn't load your brands from Strata. Please try again."));
@@ -97,12 +104,13 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
   }, [client]);
   useEffect(() => { void load(); }, [load]);
 
-  const connect = async () => {
+  const connect = async (switchAccount = false) => {
     setBusy("connect");
     setError(null);
     try {
-      const st = await client.connect();
+      const st = await client.connect(switchAccount ? { switchAccount: true } : undefined);
       setConnected(st.connected);
+      setAccount(st.user?.email ?? null);
       if (st.connected) setProjects(await client.listProjects());
     } catch (e) {
       setError(errMsg(e, "Strata wasn't connected. Please try again."));
@@ -134,6 +142,7 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
     if (props.mode !== "site") return;
     const sel = selection;
     if (sel.kind !== "project" && sel.kind !== "create") return;
+    setConfirming(false);
     setBusy(sel.kind === "create" ? "create" : "link");
     setError(null);
     try {
@@ -198,7 +207,7 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
         <div className="plx-sbp__box">
           <h3>{PICKER_COPY.connectTitle}</h3>
           <p>{PICKER_COPY.connectText}</p>
-          <Button leftIcon={<Link2 size={18} aria-hidden />} loading={busy === "connect"} onClick={connect}>{PICKER_COPY.connectButton}</Button>
+          <Button leftIcon={<Link2 size={18} aria-hidden />} loading={busy === "connect"} onClick={() => void connect()}>{PICKER_COPY.connectButton}</Button>
           <p className="plx-sbp__note">{PICKER_COPY.notConnectedNote}</p>
         </div>
         {error ? <p className="plx-sbp__err" role="alert">{error}</p> : null}
@@ -244,8 +253,16 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
     </div>
   );
 
+  const accountLine = account || connected ? (
+    <p className="plx-sbp__note" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: 0 }}>
+      <span>{account ? <>Showing the brands of <b>{account}</b>.</> : "Strata is connected."}</span>
+      <Button variant="ghost" size="sm" loading={busy === "connect"} onClick={() => void connect(true)}>Use a different Strata account</Button>
+    </p>
+  ) : null;
+
   return (
     <div className={cls}>
+      {accountLine}
       {list}
       {createOption}
       {props.mode === "site" ? (
@@ -255,11 +272,24 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
             <input type="checkbox" className="plx-switch" checked={autoSync} aria-label={PICKER_COPY.syncTitle} onChange={(e) => setAutoSync(e.target.checked)} />
           </label>
           {error ? <p className="plx-sbp__err" role="alert">{error}</p> : null}
+          {confirming && (selection.kind === "project" || selection.kind === "create") ? (() => {
+            const w = switchWarning({ siteName: props.siteName, toName: selection.kind === "project" ? selection.name : props.siteName, created: selection.kind === "create", autoSync });
+            return (
+              <div className="plx-sbp__box" role="alertdialog" aria-label={w.title}>
+                <h3>{w.title}</h3>
+                {w.lines.map((l) => <p key={l}>{l}</p>)}
+                <div className="plx-sbp__foot">
+                  <Button variant="ghost" onClick={() => setConfirming(false)}>Keep my current brand</Button>
+                  <Button loading={busy === "link" || busy === "create"} onClick={() => void apply()}>{w.confirm}</Button>
+                </div>
+              </div>
+            );
+          })() : null}
           {done ? <p className="plx-sbp__done" role="status"><Check size={18} aria-hidden />{done}</p> : null}
           <div className="plx-sbp__foot">
             {props.onCancel ? <Button variant="ghost" onClick={props.onCancel}>Cancel</Button> : <span />}
-            <Button loading={busy === "link" || busy === "create"} disabled={selection.kind !== "project" && selection.kind !== "create"} onClick={apply}>
-              {selection.kind === "create" ? "Create my brand in Strata" : "Use this brand"}
+            <Button loading={busy === "link" || busy === "create"} disabled={selection.kind !== "project" && selection.kind !== "create"} onClick={() => (needsSwitchConfirmation({ currentProjectId: currentId, selection }) ? setConfirming(true) : void apply())}>
+              {selection.kind === "create" ? "Create my brand in Strata" : currentId ? "Switch to this brand" : "Use this brand"}
             </Button>
           </div>
         </>

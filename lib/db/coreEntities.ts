@@ -413,6 +413,17 @@ export const SiteBrand = new Entity(
       // before this existed serves exactly what it did; only the owner's switch (or linking from now on) turns it on.
       injectServerApp: { type: "boolean" },
       awaitingPublish: { type: "boolean" },
+      // The owner's latest colours/logo are saved on Plexo but not in Strata yet (it was unreachable). Retried on the next save, by the
+      // 15-minute sweep, and by the owner's "Send to Strata" button. Absent = nothing waiting.
+      pendingPush: { type: "boolean" },
+      // What is waiting besides colours/logo (same retry: next save, the sweep, "Send to Strata"): components made in Plexo (a JSON list of
+      // component rows) and token changes (a JSON request: colours, fonts, radius, spacing). Absent = nothing waiting. pendingBrand says the
+      // colours/logo themselves are waiting (rows from before this existed that are pendingPush with none of these count as brand).
+      pendingComponents: { type: "string" },
+      pendingTokens: { type: "string" },
+      pendingBrand: { type: "boolean" },
+      pushError: { type: "string" },
+      pushTriedAt: { type: "string" },
       keyId: { type: "string", required: true },
       ciphertext: { type: "string", required: true },
       // "Keep in sync with Strata": publishes in Strata go live on their own.

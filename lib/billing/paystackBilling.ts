@@ -422,7 +422,10 @@ export async function handlePaystackBillingEvent(
     // subscriber to a changed price now if one is due — idempotent; the scheduled job is the backstop.
     case "invoice.create": {
       const user = await findUserByEmail(data.customer?.email);
-      if (!user || !data.subscription?.subscription_code) return !!user;
+      // Only an invoice for THIS person's Plexo subscription. The same Paystack account serves other Charisol products, and the same
+      // person can be a customer of both: their other product's invoice must not touch their Plexo plan.
+      if (!user || !data.subscription?.subscription_code) return false;
+      if (user.subscriptionProvider !== "PAYSTACK" || user.subscriptionId !== data.subscription.subscription_code) return false;
       await (deps.reconcilePriceMove ?? (async (id: string) => (await import("./priceMoveLive")).reconcileOnePriceMove(id)))(user.id);
       return true;
     }

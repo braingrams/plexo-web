@@ -39,6 +39,7 @@ const RESOLVED: ResolvedBrand = {
     { role: "background", label: "Page background", value: "#FFF8F0" },
   ],
   fonts: { heading: "Plus Jakarta Sans", body: "Inter" }, radius: "12px", stylesheet: "/__plexo/brand/s1.css",
+  components: [{ name: "button", variants: ["primary", "secondary", "ghost"], slots: [{ role: "label", kind: "text" }], className: "plx-brand-button" }, { name: "card", variants: ["raised", "muted"], slots: [{ role: "title", kind: "text" }, { role: "body", kind: "text" }], className: "plx-brand-card" }],
 };
 const LINKED: BrandState = { linked: true, projectId: "p1", projectName: "Ama's Kitchen brand", autoSync: true, status: "active", updatedAt: new Date().toISOString(), lastCheckedAt: null, lastResult: null, lastResultKind: "updated", lastSource: "webhook", useOnSite: false, canUseOnSite: false, resolved: RESOLVED };
 

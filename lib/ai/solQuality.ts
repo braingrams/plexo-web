@@ -19,7 +19,7 @@ export type GateReport = {
 export type GateInput = {
   /** The page's compiled document (draftHtml or compiledHtml). */
   html: string;
-  brief?: Pick<Brief, "name" | "colors" | "logo" | "fonts" | "cta" | "language" | "content" | "strataProject">;
+  brief?: Pick<Brief, "name" | "colors" | "logo" | "fonts" | "cta" | "language" | "content" | "strataProject" | "brandComponents">;
   /** Paths that exist on the site ("/", "/about" ...). When given, internal links are checked against it. */
   knownRoutes?: string[];
   /** Layout fragments (header/footer) are checked less strictly. */
@@ -407,6 +407,18 @@ export function checkPage(input: GateInput): GateReport {
       const header = sectionEls.find(isHeaderSec) ?? sectionEls[0];
       const hasLogo = !!header && (function find(e: El): boolean { return e.tag === "img" || e.children.some(find); })(header);
       if (!hasLogo) add("brand-logo", "must", "The owner's logo isn't in the header.", "Place their logo image in the header (use_attached_image gives a public address for an attached file).");
+    }
+    // The brand's ready-made components come first: a button or card made by hand on a site whose brand has one is a nudge, never a failure.
+    const brandComps = new Set((brief.brandComponents ?? []).map((n) => n.toLowerCase()));
+    const usesBrandComponent = (n: string) => doc.all.some((e) => e.classes.some((c) => c === `plx-brand-${n}` || c.startsWith(`plx-brand-${n}--`)));
+    const looksLike: Record<string, (e: El) => boolean> = {
+      button: (e) => e.tag === "button" || (e.tag === "a" && e.classes.some((c) => /^(btn|button|cta)\b|(?:^|-)(btn|button)(?:-|$)/i.test(c))),
+      card: (e) => e.classes.some((c) => /(?:^|-)card(?:-|$)/i.test(c)),
+    };
+    for (const kind of ["button", "card"]) {
+      if (brandComps.has(kind) && !usesBrandComponent(kind) && doc.all.some(looksLike[kind])) {
+        add(`brand-component-${kind}`, "should", `A ${kind} was built by hand, but the owner's brand already has its own ${kind}.`, `Use the brand's ${kind} (class plx-brand-${kind}, from the brand sheet) instead of inventing one, and say "I'll use your brand's ${kind}".`);
+      }
     }
     const fonts = (brief.fonts?.value ?? "").split(" + ").filter(Boolean);
     const fontHtml = (html + doc.styles.join(" ")).toLowerCase();

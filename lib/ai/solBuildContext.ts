@@ -18,7 +18,7 @@ export type SolBuildProfile = {
     logoUrl?: string;
   };
   /** The owner's sites and which one (if any) was chosen (lib/ai/solSiteContext.ts): the intake never guesses a site. */
-  sites?: Array<{ id: string; name?: string; updatedAt?: string; brand?: { colors?: string[]; logoUrl?: string; noLogo?: boolean; fonts?: string[]; strataProject?: string }; resolvedBrand?: import("@/lib/brand/brandModel").ResolvedBrand }>;
+  sites?: Array<{ id: string; name?: string; updatedAt?: string; brand?: { colors?: string[]; logoUrl?: string; noLogo?: boolean; fonts?: string[]; strataProject?: string; brandComponents?: string[] }; resolvedBrand?: import("@/lib/brand/brandModel").ResolvedBrand }>;
   siteSignal?: { explicitSiteId?: string; boundSiteId?: string; hintSiteId?: string };
 };
 

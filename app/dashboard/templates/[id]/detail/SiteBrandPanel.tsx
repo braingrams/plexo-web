@@ -21,6 +21,8 @@ export type BrandState = {
   lastSource: "webhook" | "schedule" | "owner" | null;
   useOnSite: boolean;
   canUseOnSite: boolean;
+  /** The latest colours/logo are saved on Plexo but have not reached Strata yet (retried automatically). */
+  sendPending?: boolean;
   /** A deployed server app, and whether its pages get the brand link (owner's switch; off by default). */
   serverApp?: boolean;
   brandInApp?: boolean;
