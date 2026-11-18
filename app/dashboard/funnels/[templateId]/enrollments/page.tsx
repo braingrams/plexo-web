@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { redirectIfV3 } from "@/lib/dashboardV3/v3Redirect";
 import { LmsEnrollment, LmsPage } from "@/lib/db/contentEntities";
 import { EnrollmentsClient } from "./EnrollmentsClient";
@@ -21,7 +22,7 @@ export default async function FunnelEnrollmentsPage({ params }: { params: Promis
         email: e.email,
         name: e.name ?? null,
         status: e.status ?? "ACTIVE",
-        paymentStatus: e.paymentStatus ?? "FREE",
+        paymentStatus: e.paymentStatus ?? PLAN.FREE,
         completedPageCount: e.completedPageCount ?? 0,
         enrolledAt: e.enrolledAt ?? new Date().toISOString(),
       }))}

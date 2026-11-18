@@ -5,7 +5,7 @@ import { startTrial, useTrialAvailable } from "./trial";
 import { usePricing } from "./usePricing";
 import { StripeCheckoutModal } from "./StripeCheckoutModal";
 import { startCheckout } from "@/lib/billing/clientCheckout";
-import { PLAN_LABELS, type PaidPlanId } from "@/lib/plan/plans";
+import { PLAN_LABELS, type PaidPlanId, PLAN } from "@/lib/plan/plans";
 
 /** Generic plan-upgrade prompt, reusable across features: shows the plan's price in the
  * person's currency and pays right here (Stripe's card form or Paystack's popup — the server
@@ -34,14 +34,14 @@ export function UpgradeModal({
   if (!open) return null;
   const planName = PLAN_LABELS[targetPlan];
   // Enterprise is arranged, not trialled.
-  const canTrial = trial.available && targetPlan !== "ENTERPRISE";
+  const canTrial = trial.available && targetPlan !== PLAN.ENTERPRISE;
   const price = pricing ? pricing.plans[targetPlan] : null;
   const priceText = price ? `${price.isFromPrice ? "from " : ""}${price.monthlyLabel}/month` : null;
 
   function tryFree(): void {
     setRedirecting(true);
     setTrialError(null);
-    void startTrial(targetPlan === "STARTER" ? "STARTER" : "PRO", returnTo).catch((err) => {
+    void startTrial(targetPlan === PLAN.STARTER ? PLAN.STARTER : PLAN.PRO, returnTo).catch((err) => {
       setTrialError(err instanceof Error ? err.message : "Couldn't start your trial.");
       setRedirecting(false);
     });

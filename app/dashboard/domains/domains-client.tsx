@@ -1,7 +1,7 @@
 "use client";
 
 import { getTierFeatures } from "@/lib/subscription";
-import { PLAN_LABELS, planLabel, toPlanId, type PaidPlanId } from "@/lib/plan/plans";
+import { PLAN_LABELS, planLabel, toPlanId, type PaidPlanId, PLAN } from "@/lib/plan/plans";
 import { UpgradeModal } from "../_components/UpgradeModal";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -260,7 +260,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, onTrial = fa
 
   const canUseCustomDomain = getTierFeatures(plan, { trial: onTrial }).customDomainEnabled;
   // On a trial, the same plan unlocks them once it's paid for; on Free, Starter is the first plan with one.
-  const domainPlan: PaidPlanId = onTrial && plan !== "FREE" ? (toPlanId(plan) as PaidPlanId) : "STARTER";
+  const domainPlan: PaidPlanId = onTrial && plan !== PLAN.FREE ? (toPlanId(plan) as PaidPlanId) : PLAN.STARTER;
 
   // Custom domains need a paid plan — a Free user clicking this is offered a seamless path to
   // upgrade (the shared upgrade prompt pays right here, and offers the free trial when it's

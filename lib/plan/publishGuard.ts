@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { NextResponse } from "next/server";
 
 import { getTierFeatures, isHomePageOnlyPlan } from "@/lib/subscription";
@@ -61,10 +62,10 @@ export async function assertCanPutSiteLive(
     const names = others.map((s) => s.name);
     const max = features.maxPublishedSites;
     const planName = planLabel(actor.subscriptionPlan);
-    const next = planLabel(nextPlanUp(toPlanId(actor.subscriptionPlan)) ?? "ENTERPRISE");
+    const next = planLabel(nextPlanUp(toPlanId(actor.subscriptionPlan)) ?? PLAN.ENTERPRISE);
     throw new PlanLimitError(
       "PLAN_SITE_LIMIT_EXCEEDED",
-      toPlanId(actor.subscriptionPlan) === "FREE"
+      toPlanId(actor.subscriptionPlan) === PLAN.FREE
         ? `The ${planName} plan keeps one site live at a time, and "${names[0]}" is live now. Upgrade to ${next} to put more sites live, or make this your live site instead (the other one goes offline, nothing is deleted).`
         : `The ${planName} plan keeps ${max} site${max === 1 ? "" : "s"} live at a time, and ${max === 1 ? `"${names[0]}" is` : "they're all"} live now. Upgrade to ${next} for more, or take one offline first (nothing is deleted).`,
       { liveSiteIds: others.map((s) => s.id), liveSiteNames: names },

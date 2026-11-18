@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { redirect } from "next/navigation";
 import { ensureCreditPeriod } from "@/lib/db/ledgerOperations";
 import { CreditLedgerEntry } from "@/lib/db/ledgerEntities";
@@ -20,7 +21,7 @@ export default async function PlanPage() {
   const { user, plan } = ctx;
   const balance = await ensureCreditPeriod(ctx.userId);
   const [{ data: recent }, payments] = await Promise.all([CreditLedgerEntry.query.primary({ userId: ctx.userId }).go({ order: "desc", limit: 10 }), listPaymentsForUser(ctx.userId)]);
-  const access = plan === "FREE" ? null : paidAccess(user);
+  const access = plan === PLAN.FREE ? null : paidAccess(user);
   const paying = !!access?.entitled && (access.basis === "SUBSCRIPTION" || access.basis === "SUBSCRIPTION_UNVERIFIED");
   const basis = access?.entitled ? (access.basis === "SUBSCRIPTION_UNVERIFIED" ? "SUBSCRIPTION" : access.basis) : null;
   const safe = async <T,>(fn: () => Promise<T>, fallback: T): Promise<T> => fn().catch(() => fallback);

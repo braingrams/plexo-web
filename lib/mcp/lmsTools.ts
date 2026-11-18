@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { randomUUID } from "node:crypto";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { getAvailableFunnelSlots } from "@/lib/lms/funnelSlots";
@@ -261,13 +262,13 @@ export async function handleLmsTool(toolName: string, args: any, resolved: Resol
       if (args.signupMode === "PAID" && !args.signupProductId && !existing.signupProductId) {
         throw new Error("Provide signupProductId to charge for signup before switching to PAID.");
       }
-      if (args.signupMode !== undefined && args.signupMode !== "FREE" && args.signupMode !== "PAID") {
+      if (args.signupMode !== undefined && args.signupMode !== PLAN.FREE && args.signupMode !== "PAID") {
         throw new Error("signupMode must be FREE or PAID.");
       }
 
       const patch: Record<string, unknown> = {};
       if (typeof args.enabled === "boolean") patch.enabled = args.enabled;
-      if (args.signupMode === "FREE" || args.signupMode === "PAID") patch.signupMode = args.signupMode;
+      if (args.signupMode === PLAN.FREE || args.signupMode === "PAID") patch.signupMode = args.signupMode;
       if (args.signupProductId !== undefined) patch.signupProductId = args.signupProductId || undefined;
       if (typeof args.requireName === "boolean") patch.requireName = args.requireName;
       if (typeof args.collectPhone === "boolean") patch.collectPhone = args.collectPhone;

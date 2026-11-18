@@ -1,3 +1,4 @@
+import { PLAN, PAID_PLAN_IDS } from "@/lib/plan/plans";
 // THE price list model. Every price Plexo shows or charges — plan prices in every currency,
 // monthly and yearly, AI credit top-ups — comes from one PRICE BOOK: a list of country groups
 // ("Nigeria", "Rest of Africa", "Rest of world", …), each with its currency, payment provider
@@ -23,7 +24,7 @@ export type BillingInterval = "monthly" | "yearly";
 export type BillingProvider = "STRIPE" | "PAYSTACK";
 export const BILLING_CURRENCIES = ["USD", "NGN", "GHS", "KES", "ZAR"] as const;
 export type BillingCurrency = (typeof BILLING_CURRENCIES)[number];
-const PAID: PaidPlanId[] = ["STARTER", "PRO", "ENTERPRISE"];
+const PAID: PaidPlanId[] = [...PAID_PLAN_IDS];
 
 /** Which currencies each provider can charge in for Plexo. */
 export const PROVIDER_CURRENCIES: Record<BillingProvider, BillingCurrency[]> = {
@@ -218,7 +219,7 @@ export function minorUnits(_currency: BillingCurrency | string): number {
 
 /** Whether a plan can be bought yearly in this price list. */
 export function yearlyOffered(region: Pick<PriceGroup, "yearly">, plan: PlanId): boolean {
-  if (plan === "FREE") return false;
+  if (plan === PLAN.FREE) return false;
   const v = region.yearly?.[plan];
   return typeof v === "number" && Number.isFinite(v) && v > 0;
 }
@@ -230,7 +231,7 @@ export function anyYearlyOffered(region: Pick<PriceGroup, "yearly">): boolean {
 
 /** Price of a plan for one billing period, in whole units. Free is 0; null when that period isn't offered (yearly on a monthly-only plan). */
 export function planPrice(region: Pick<PriceGroup, "monthly" | "yearly">, plan: PlanId, interval: BillingInterval): number | null {
-  if (plan === "FREE") return 0;
+  if (plan === PLAN.FREE) return 0;
   if (interval === "yearly") return yearlyOffered(region, plan) ? (region.yearly[plan] as number) : null;
   return region.monthly[plan];
 }
@@ -295,7 +296,7 @@ export function planPriceView(region: PriceGroup, plan: PaidPlanId): PlanPriceVi
     yearlyPerMonthLabel: yearly === null ? null : formatMoney(perMonth, region.currency),
     yearlySavingPercent: yearly !== null && monthly > 0 ? Math.max(0, Math.round((1 - yearly / (monthly * 12)) * 100)) : 0,
     yearlyMonthsFree: yearly !== null && monthly > 0 ? Math.max(0, Math.round(12 - yearly / monthly)) : 0,
-    isFromPrice: plan === "ENTERPRISE",
+    isFromPrice: plan === PLAN.ENTERPRISE,
   };
 }
 
@@ -324,7 +325,7 @@ export function pricingView(region: PriceGroup, opts: { choices?: { local: Price
     regionName: region.name,
     currency: region.currency,
     provider: region.provider,
-    plans: { STARTER: planPriceView(region, "STARTER"), PRO: planPriceView(region, "PRO"), ENTERPRISE: planPriceView(region, "ENTERPRISE") },
+    plans: { STARTER: planPriceView(region, PLAN.STARTER), PRO: planPriceView(region, PLAN.PRO), ENTERPRISE: planPriceView(region, PLAN.ENTERPRISE) },
     yearlyAvailable: anyYearlyOffered(region),
     topup: { per1000: region.topupPer1000Credits, per1000Label: formatMoney(region.topupPer1000Credits, region.currency), packs: topupPacksFor(region) },
     currencyChoice: opts.choices && !opts.locked ? { localCurrency: opts.choices.local.currency, payingInUsd: region.id === opts.choices.usd.id } : null,

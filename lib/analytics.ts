@@ -1,3 +1,4 @@
+import { PLAN, RETIRED_PLAN, PaidPlanId } from "@/lib/plan/plans";
 /** Google Tag Manager container ID (GTM-…). GA4 and other tags are configured inside the container. */
 export const GTM_CONTAINER_ID = "GTM-N5VXD9KB";
 
@@ -33,7 +34,7 @@ const PLAN_ITEMS = {
 } as const;
 
 /** The ecommerce item for a subscription plan, with the spec's item IDs. Prices are the USD list prices. */
-export function subscriptionItem(plan: "STARTER" | "PRO" | "ENTERPRISE"): { item_id: string; item_name: string; item_category: string; item_variant: string; price: number; quantity: number } {
+export function subscriptionItem(plan: PaidPlanId): { item_id: string; item_name: string; item_category: string; item_variant: string; price: number; quantity: number } {
   const item = PLAN_ITEMS[plan];
   return {
     item_id: `${plan.toLowerCase()}_monthly`,
@@ -53,7 +54,7 @@ export function templateNameFor(name: string): string {
 /** purchase_type: an upgrade when the account already had a paid plan, otherwise a new subscription.
  * ULTRA is only accepted because it's a value stored before the plan rename (it reads as Pro). */
 export function purchaseTypeFor(previousPlan: string | null | undefined): "new_subscription" | "upgrade" {
-  return previousPlan === "STARTER" || previousPlan === "PRO" || previousPlan === "ENTERPRISE" || previousPlan === "ULTRA" ? "upgrade" : "new_subscription";
+  return previousPlan === PLAN.STARTER || previousPlan === PLAN.PRO || previousPlan === PLAN.ENTERPRISE || previousPlan === RETIRED_PLAN.ULTRA ? "upgrade" : "new_subscription";
 }
 
 /** create_project, with is_first_project from the backend count. Omitted if the count can't be read. */

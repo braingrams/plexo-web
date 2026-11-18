@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 "use client";
 
 import { useState } from "react";
@@ -83,7 +84,7 @@ export function EnrollmentsClient({
                   </div>
                 </div>
               </td>
-              <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.55)" }}>{e.paymentStatus === "FREE" ? "Free" : e.paymentStatus === "PAID" ? "Paid" : "Refunded"}</td>
+              <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.55)" }}>{e.paymentStatus === PLAN.FREE ? "Free" : e.paymentStatus === "PAID" ? "Paid" : "Refunded"}</td>
               <td style={{ padding: "10px 0", color: "rgba(240,242,255,0.4)" }}>{new Date(e.enrolledAt).toLocaleDateString()}</td>
               <td style={{ padding: "10px 0", textAlign: "right", whiteSpace: "nowrap" }}>
                 <a href={`mailto:${e.email}`} style={{ fontSize: "0.78rem", color: `var(--brand, ${BRAND[400]})`, textDecoration: "none", marginRight: "0.9rem" }}>

@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { redirect } from "next/navigation";
 import { ThemeProvider } from "next-themes";
 
@@ -125,7 +126,7 @@ function planStatusFor(user: Parameters<typeof paidAccess>[0]): "free" | "trial"
 
 function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngradedAt?: string | null; planBeforeDowngrade?: string | null; planDowngradeReason?: string | null; trialStartedAt?: string | null }): PlanBannerState | null {
   const plan = effectivePlan(user);
-  if (plan !== "FREE") {
+  if (plan !== PLAN.FREE) {
     const access = paidAccess(user);
     const daysLeft = accessDaysLeft(user);
     if (access.entitled && (access.basis === "TRIAL" || access.basis === "GRANT") && daysLeft !== null) {
@@ -136,7 +137,7 @@ function planBannerState(user: Parameters<typeof paidAccess>[0] & { planDowngrad
   }
   if (user.planDowngradedAt) {
     const before = storedPlan({ subscriptionPlan: user.planBeforeDowngrade, planVersion: user.planVersion });
-    return { kind: "downgraded", previousPlan: before === "FREE" ? "STARTER" : before, since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
+    return { kind: "downgraded", previousPlan: before === PLAN.FREE ? PLAN.STARTER : before, since: user.planDowngradedAt, reason: user.planDowngradeReason ?? null, trialAvailable: canStartTrial(user) };
   }
   return null;
 }

@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 
-import { CURRENT_PLAN_VERSION, normalizeStoredPlan, type PaidPlanId } from "@/lib/plan/plans";
+import { CURRENT_PLAN_VERSION, normalizeStoredPlan, type PaidPlanId, PLAN } from "@/lib/plan/plans";
 
 /**
  * The Plexo plan a Stripe subscription is for, in today's terms — or null when it isn't a
@@ -16,7 +16,7 @@ export function planFromStripeSubscription(sub: Pick<Stripe.Subscription, "metad
   const raw = sub.metadata?.plan;
   if (!raw) return null;
   const plan = normalizeStoredPlan(raw, sub.metadata?.planVersion);
-  return plan === "FREE" ? null : plan;
+  return plan === PLAN.FREE ? null : plan;
 }
 
 /** Metadata every new plan subscription carries. */

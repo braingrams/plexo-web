@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveLmsAdmin } from "@/lib/lms/adminAuthDynamo";
@@ -41,7 +42,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ t
 
   const patch: Record<string, unknown> = {};
   if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
-  if (body.signupMode === "FREE" || body.signupMode === "PAID") patch.signupMode = body.signupMode;
+  if (body.signupMode === PLAN.FREE || body.signupMode === "PAID") patch.signupMode = body.signupMode;
   if (body.signupProductId !== undefined) patch.signupProductId = body.signupProductId ?? undefined;
   if (typeof body.requireName === "boolean") patch.requireName = body.requireName;
   if (typeof body.collectPhone === "boolean") patch.collectPhone = body.collectPhone;

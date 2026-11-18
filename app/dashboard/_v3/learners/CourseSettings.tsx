@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 "use client";
 
 import "./learners.css";
@@ -86,7 +87,7 @@ export function CourseSettings({ courses, current, experience, initial, products
           <Card padding="lg" data-tour="course-price">
             <CardHeader title="Price" description="Free, or one price for the whole course." />
             <div className="plx-form">
-              <SegmentedControl label="Price" value={s.signupMode} onChange={(v) => (v === "FREE" ? save({ signupMode: "FREE" }) : products.length ? save({ signupMode: "PAID", signupProductId: s.signupProductId ?? products[0].id }) : setS({ ...s, signupMode: "PAID" }))} options={[{ value: "FREE", label: "Free" }, { value: "PAID", label: "Paid" }]} />
+              <SegmentedControl label="Price" value={s.signupMode} onChange={(v) => (v === PLAN.FREE ? save({ signupMode: PLAN.FREE }) : products.length ? save({ signupMode: "PAID", signupProductId: s.signupProductId ?? products[0].id }) : setS({ ...s, signupMode: "PAID" }))} options={[{ value: PLAN.FREE, label: "Free" }, { value: "PAID", label: "Paid" }]} />
               {s.signupMode === "PAID" ? (
                 products.length > 0 && s.signupProductId ? (
                   <>

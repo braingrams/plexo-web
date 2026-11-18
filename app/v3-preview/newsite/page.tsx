@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { notFound } from "next/navigation";
 import { NewSiteFlow } from "@/app/dashboard/_v3/newsite/NewSiteFlow";
 
@@ -9,7 +10,7 @@ export default async function NewSitePreview({ searchParams }: { searchParams: P
     <NewSiteFlow
       preview={q.screen === "goal" || q.screen === "look" || q.screen === "all" ? { screen: q.screen, goal: "store", mock: q.mock === "1" } : undefined}
       mode={q.mode === "dialog" ? "dialog" : "page"}
-      context={{ plan: q.plan ?? "FREE", brand: { name: "Ama's Kitchen", about: "Homemade meals", colors: ["#E4572E"] }, siteNames: ["Ama's Kitchen"], liveSiteNames: ["Ama's Kitchen"] }}
+      context={{ plan: q.plan ?? PLAN.FREE, brand: { name: "Ama's Kitchen", about: "Homemade meals", colors: ["#E4572E"] }, siteNames: ["Ama's Kitchen"], liveSiteNames: ["Ama's Kitchen"] }}
     />
   );
 }

@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { redirectIfV3 } from "@/lib/dashboardV3/v3Redirect";
 import { auth } from "@/server/authDynamo";
 import { LmsFunnel } from "@/lib/db/contentEntities";
@@ -25,7 +26,7 @@ export default async function FunnelSettingsPage({ params }: { params: Promise<{
       templateId={templateId}
       initialFunnel={{
         enabled: funnel.enabled ?? false,
-        signupMode: funnel.signupMode ?? "FREE",
+        signupMode: funnel.signupMode ?? PLAN.FREE,
         signupProductId: funnel.signupProductId ?? null,
         requireName: funnel.requireName ?? true,
         collectPhone: funnel.collectPhone ?? false,

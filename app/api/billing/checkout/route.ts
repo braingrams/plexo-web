@@ -7,7 +7,7 @@ import { topupOffer } from "@/lib/credits/topupOffer";
 import { billingRegionFor, regionLockFields } from "@/lib/billing/region";
 import { stripePlanMetadata } from "@/lib/billing/stripePlans";
 import { startPaystackPlanCheckout, startPaystackTopupCheckout } from "@/lib/billing/paystackBilling";
-import { PLAN_LABELS, type PaidPlanId } from "@/lib/plan/plans";
+import { PLAN_LABELS, type PaidPlanId, PLAN, RETIRED_PLAN } from "@/lib/plan/plans";
 import { storedPlan } from "@/lib/plan/entitlement";
 import { yearlyOffered, type BillingInterval } from "@/lib/billing/pricing";
 import { getStripe } from "@/lib/stripe";
@@ -18,7 +18,7 @@ import { LmsFunnelAddonSlot } from "@/lib/db/contentEntities";
 import { PlanChangeError, changePlanInPlace } from "@/lib/billing/planChange";
 
 type CheckoutRequest =
-  | { kind: "subscription"; plan: PaidPlanId | "ULTRA"; interval?: BillingInterval }
+  | { kind: "subscription"; plan: PaidPlanId | typeof RETIRED_PLAN.ULTRA; interval?: BillingInterval }
   | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE" }
   | { kind: "funnel_addon_slot" };
 
@@ -28,7 +28,7 @@ function isValidBody(value: unknown): value is CheckoutRequest {
   if (body.kind === "subscription") {
     if (body.interval !== undefined && body.interval !== "monthly" && body.interval !== "yearly") return false;
     // ULTRA: a page loaded before the plan rename (it means today's Pro).
-    return body.plan === "STARTER" || body.plan === "PRO" || body.plan === "ENTERPRISE" || body.plan === "ULTRA";
+    return body.plan === PLAN.STARTER || body.plan === PLAN.PRO || body.plan === PLAN.ENTERPRISE || body.plan === RETIRED_PLAN.ULTRA;
   }
   if (body.kind === "topup") return body.pack === "SMALL" || body.pack === "MEDIUM" || body.pack === "LARGE";
   if (body.kind === "funnel_addon_slot") return true;
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   try {
     if (body.kind === "subscription") {
-      const plan: PaidPlanId = body.plan === "ULTRA" ? "PRO" : body.plan;
+      const plan: PaidPlanId = body.plan === RETIRED_PLAN.ULTRA ? PLAN.PRO : body.plan;
       const interval: BillingInterval = body.interval ?? "monthly";
       if (interval === "yearly" && !yearlyOffered(region, plan)) {
         return NextResponse.json({ error: `The ${PLAN_LABELS[plan]} plan is only available monthly. Please choose monthly billing.` }, { status: 400 });
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       }
 
       const priceId = await ensureStripePlanPrice(stripe!, region, plan, interval);
-      const metadata = { ...stripePlanMetadata({ plexoUserId: session.user.id, plan, interval, region: region.id }), previous_plan: user.subscriptionPlan ?? "FREE" };
+      const metadata = { ...stripePlanMetadata({ plexoUserId: session.user.id, plan, interval, region: region.id }), previous_plan: user.subscriptionPlan ?? PLAN.FREE };
       // Already paying for a plan? Change that subscription in place (prorated) — a new
       // Checkout here would open a SECOND subscription and bill them for both every month.
       const changed = await changePlanInPlace(stripe!, customerId!, plan, priceId, metadata);

@@ -1,3 +1,4 @@
+import { PaidPlanId } from "@/lib/plan/plans";
 import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { docClient } from "./client";
 import { User, UserEmailLock } from "./coreEntities";
@@ -35,7 +36,7 @@ export async function createUserWithEmailLock(params: {
   image?: string;
   passwordHash?: string;
   isConfirmed: boolean;
-  pendingPlan?: "STARTER" | "PRO" | "ENTERPRISE";
+  pendingPlan?: PaidPlanId;
   country?: string;
   countrySetAt?: string;
 }): Promise<void> {

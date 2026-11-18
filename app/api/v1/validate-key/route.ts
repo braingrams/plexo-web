@@ -1,3 +1,4 @@
+import { PLAN, RETIRED_PLAN, PlanId } from "@/lib/plan/plans";
 import { planEntitlement } from "@/lib/plan/entitlement";
 import { planFromOwner, workspacePlan } from "@/lib/plan/workspacePlan";
 import { createHash } from "node:crypto";
@@ -49,7 +50,7 @@ async function resolveSdkBranding(
  *   x-api-key: <raw api key> | "workspace-internal"
  *
  * Responses:
- *   200 { valid: true, plan: "FREE" | "PRO" | "ULTRA" (SDK-compatible), planId: "FREE" | "STARTER" | "PRO" | "ENTERPRISE", useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, branding?: { name: string, logoUrl?: string, brandColor?: string } }
+ *   200 { valid: true, plan: typeof PLAN.FREE | typeof PLAN.PRO | typeof RETIRED_PLAN.ULTRA (SDK-compatible), planId: PlanId, useAi: boolean, aiProvider: string, aiTier: string, manageLandingPagePublishing: boolean, branding?: { name: string, logoUrl?: string, brandColor?: string } }
  *   Deliberately does NOT return a canvasFidelity field -- that used to gate the compiled
  *   canvas behind an app-specific allowlist, a leftover from canary-rollout scaffolding built
  *   before the SDK's own default ('auto') resolved to 'compiled' unconditionally. plexo-sdk's
@@ -64,10 +65,10 @@ async function resolveSdkBranding(
  *   500 { valid: false, error: "Internal server error." }
  */
 /** The plan name published @charisol/plexo-sdk versions understand (FREE / PRO / ULTRA). */
-function sdkPlanName(plan: string): "FREE" | "PRO" | "ULTRA" {
-  if (plan === "STARTER") return "PRO";
-  if (plan === "PRO" || plan === "ENTERPRISE") return "ULTRA";
-  return "FREE";
+function sdkPlanName(plan: string): typeof PLAN.FREE | typeof PLAN.PRO | typeof RETIRED_PLAN.ULTRA {
+  if (plan === PLAN.STARTER) return PLAN.PRO;
+  if (plan === PLAN.PRO || plan === PLAN.ENTERPRISE) return RETIRED_PLAN.ULTRA;
+  return PLAN.FREE;
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
@@ -81,7 +82,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   try {
-    let subscriptionPlan = "FREE";
+    let subscriptionPlan: PlanId = PLAN.FREE;
     let useAi = false;
     let aiProvider = "openai";
     let aiTier = "AUTO";

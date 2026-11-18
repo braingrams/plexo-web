@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 "use client";
 
 import { getTierFeatures } from "@/lib/subscription";
@@ -179,7 +180,7 @@ function primaryButtonStyle(enabled: boolean) {
  * (NewSiteProvider), where `onClose` is set and the page header is hidden.
  * `plan` decides whether the Server app tab is usable.
  */
-export function NewSiteWizard({ onClose, plan = "FREE" }: { onClose?: () => void; plan?: PlanId } = {}) {
+export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => void; plan?: PlanId } = {}) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [startTab, setStartTab] = useState<"marketplace" | "blank" | "ai" | "upload" | "server" | "wordpress">("marketplace");
   const [creatingBlank, setCreatingBlank] = useState(false);

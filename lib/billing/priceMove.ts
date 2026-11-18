@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 // Moves people who already subscribe to a new price, at their next renewal — never mid-cycle,
 // never prorated, never early (rules and data model: lib/billing/priceChanges.ts, docs/PRICE_CHANGES.md).
 //
@@ -92,7 +93,7 @@ export const emptyReport = (apply: boolean): MoveReport => ({ apply, scanned: 0,
 
 export function toSubscriberInput(u: MoveUser): SubscriberPriceInput | null {
   const plan = storedPlan(u);
-  if (plan === "FREE") return null;
+  if (plan === PLAN.FREE) return null;
   return {
     plan,
     interval: u.subscriptionInterval === "yearly" ? "yearly" : "monthly",

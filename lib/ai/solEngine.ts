@@ -1,3 +1,4 @@
+import { PLAN } from "@/lib/plan/plans";
 import { effectivePlan } from "@/lib/plan/entitlement";
 import { decryptSecret } from "@/lib/crypto";
 import { resolveSystemProvider } from "@/lib/ai/systemProvider";
@@ -60,7 +61,7 @@ export async function solRouteForUser(userId: string): Promise<{ route: SolRoute
 
 /** Rule 2 — the tier a request actually runs on. */
 export function tierFor(route: SolRoute, plan: string, requested: ConcreteTier): ConcreteTier {
-  return route.paidBy === "plexo" && plan === "FREE" ? "BASIC" : requested;
+  return route.paidBy === "plexo" && plan === PLAN.FREE ? "BASIC" : requested;
 }
 
 /** Rule 3, before — null if the account can cover the worst case of one call, else why not. */
@@ -84,7 +85,7 @@ export const FREE_SOL_MAX_ANSWER_TOKENS = 12_000;
 
 /** Rule 2b — the longest answer per SOL round (undefined: the normal ceiling). */
 export function maxAnswerTokensFor(route: SolRoute, plan: string): number | undefined {
-  return route.paidBy === "plexo" && plan === "FREE" ? FREE_SOL_MAX_ANSWER_TOKENS : undefined;
+  return route.paidBy === "plexo" && plan === PLAN.FREE ? FREE_SOL_MAX_ANSWER_TOKENS : undefined;
 }
 
 export const BASIC_LOCK_NOTE = "On the Free plan, SOL uses the Basic model so your monthly AI goes further. Upgrade to choose Medium or High.";

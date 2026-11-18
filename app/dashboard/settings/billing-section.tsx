@@ -8,7 +8,7 @@ import { useTopupPacks, packLabel } from "../_components/useTopupPacks";
 import { StripeCheckoutModal } from "../_components/StripeCheckoutModal";
 import { PlanPicker } from "../_components/PlanPicker";
 import { startCheckout as beginCheckout, verifyPaystackPayment, type CheckoutBody, type CheckoutResult } from "@/lib/billing/clientCheckout";
-import { PLAN_LABELS, type PlanId } from "@/lib/plan/plans";
+import { PLAN_LABELS, type PlanId, PLAN, RETIRED_PLAN } from "@/lib/plan/plans";
 import type { BillingInterval } from "@/lib/billing/pricing";
 
 type LedgerEntryType = "MONTHLY_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
@@ -96,7 +96,7 @@ function daysUntil(iso: string): number {
   return Math.max(0, Math.ceil(diff / (24 * 60 * 60 * 1000)));
 }
 
-export function BillingSection({ plan, paying = plan !== "FREE", planNote = null, trialAvailable = false, provider = null, interval = null, cancelAtPeriodEnd = false, scheduled = null, priceNotice = null, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
+export function BillingSection({ plan, paying = plan !== PLAN.FREE, planNote = null, trialAvailable = false, provider = null, interval = null, cancelAtPeriodEnd = false, scheduled = null, priceNotice = null, allowanceBalance, topupBalance, allowanceResetAt, recentActivity }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -149,11 +149,11 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           return;
         }
         if (data.status === "complete") {
-          if (data.paymentStatus === "paid" && data.transactionId && (data.plan === "STARTER" || data.plan === "PRO" || data.plan === "ENTERPRISE")) {
+          if (data.paymentStatus === "paid" && data.transactionId && (data.plan === PLAN.STARTER || data.plan === PLAN.PRO || data.plan === PLAN.ENTERPRISE)) {
             trackPurchaseOnce(String(data.transactionId), {
               event: "purchase",
               purchase_type: purchaseTypeFor(data.previousPlan),
-              previous_plan: analyticsPlan(data.previousPlan ?? "FREE"),
+              previous_plan: analyticsPlan(data.previousPlan ?? PLAN.FREE),
               ecommerce: {
                 transaction_id: String(data.transactionId),
                 currency: String(data.currency ?? "").toUpperCase(),
@@ -213,8 +213,8 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
   useEffect(() => {
     const raw = searchParams.get("upgrade");
     // ULTRA: a link from before the plan rename (today's Pro).
-    const upgrade = raw === "ULTRA" ? "PRO" : raw;
-    if (upgrade !== "STARTER" && upgrade !== "PRO" && upgrade !== "ENTERPRISE") return;
+    const upgrade = raw === RETIRED_PLAN.ULTRA ? PLAN.PRO : raw;
+    if (upgrade !== PLAN.STARTER && upgrade !== PLAN.PRO && upgrade !== PLAN.ENTERPRISE) return;
     const interval = searchParams.get("interval") === "yearly" ? "yearly" : "monthly";
     // Read and captured as a local before router.replace strips the query string below.
     const returnTo = searchParams.get("returnTo");
@@ -439,7 +439,7 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
             currentPlan={plan}
             paying={paying}
             currentInterval={interval}
-            trialAvailable={plan === "FREE" && trialAvailable}
+            trialAvailable={plan === PLAN.FREE && trialAvailable}
             onResult={(result) => handleResult(result)}
           />
           {paying && (
