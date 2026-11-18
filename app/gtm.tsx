@@ -1,10 +1,11 @@
 import { headers } from "next/headers";
-import { GTM_CONTAINER_ID } from "@/lib/analytics";
+import { GTM_CONTAINER_ID, PRODUCTION_APP_URL } from "@/lib/analytics";
 import { TENANT_HEADER } from "@/lib/tenantHeader";
 
 // Google Tag Manager. GA4 and every other tag are configured inside the GTM container, not in code.
-// Production builds only, so `next dev` traffic isn't counted.
-const enabled = Boolean(GTM_CONTAINER_ID) && process.env.NODE_ENV === "production";
+// Production only: a production build of the production app. Staging, PR previews and `next dev` send nothing.
+export const tagsEnabled = Boolean(GTM_CONTAINER_ID) && process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_APP_URL === PRODUCTION_APP_URL;
+const enabled = tagsEnabled;
 
 /** True for a customer's published site (rewritten to /pub by the middleware). Plexo's tags stay off those pages. */
 async function isCustomerSite(): Promise<boolean> {
@@ -45,7 +46,7 @@ export async function GtmNoScript() {
 
 /** Microsoft Clarity, for the app. Off customer sites, like GTM. */
 export async function ClarityScript() {
-  if (await isCustomerSite()) return null;
+  if (!tagsEnabled || (await isCustomerSite())) return null;
   return (
     <script
       type="text/javascript"
