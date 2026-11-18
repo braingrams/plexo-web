@@ -1,5 +1,5 @@
-import { TrialPlanId } from "@/lib/plan/plans";
 "use client";
+import { TrialPlanId } from "@/lib/plan/plans";
 
 import { useEffect, useState } from "react";
 

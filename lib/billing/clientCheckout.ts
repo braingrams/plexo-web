@@ -1,5 +1,5 @@
-import { PaidPlanId } from "@/lib/plan/plans";
 "use client";
+import { PaidPlanId } from "@/lib/plan/plans";
 
 // One "Upgrade" (or "Buy credits") button for everyone: the server picks Stripe (US dollars) or
 // Paystack (naira, cedis, shillings, rand) from the person's region (POST /api/billing/checkout),

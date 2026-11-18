@@ -1,5 +1,5 @@
-import { PLAN } from "@/lib/plan/plans";
 "use client";
+import { PLAN } from "@/lib/plan/plans";
 
 import { useState } from "react";
 import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";

@@ -1,5 +1,5 @@
-import { PLAN } from "@/lib/plan/plans";
 "use client";
+import { PLAN } from "@/lib/plan/plans";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { aiErrorMessage } from "@/lib/ai/requestErrors";
