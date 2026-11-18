@@ -44,8 +44,8 @@ export function TrialOffer({ firstName, highlighted, trialDays }: { firstName: s
       });
       const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Something went wrong. Please try again.");
-      // Only after the server confirms the trial. Ultra isn't in the analytics plan list yet, so it isn't sent.
-      if (choice === "PRO") trackEvent({ event: "trial_start", plan_name: "pro", trial_days: trialDays, source_page: "welcome" });
+      // Only after the server confirms the trial.
+      if (choice !== "free") trackEvent({ event: "trial_start", plan_name: choice.toLowerCase(), trial_days: trialDays, source_page: "welcome" });
       router.push(choice === "free" ? "/dashboard" : "/dashboard?trial=started");
       router.refresh();
     } catch (err) {

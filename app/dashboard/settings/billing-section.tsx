@@ -149,7 +149,7 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
           return;
         }
         if (data.status === "complete") {
-          if (data.paymentStatus === "paid" && data.transactionId && (data.plan === "PRO" || data.plan === "ULTRA")) {
+          if (data.paymentStatus === "paid" && data.transactionId && (data.plan === "STARTER" || data.plan === "PRO" || data.plan === "ENTERPRISE")) {
             trackPurchaseOnce(String(data.transactionId), {
               event: "purchase",
               purchase_type: purchaseTypeFor(data.previousPlan),
@@ -260,14 +260,13 @@ export function BillingSection({ plan, paying = plan !== "FREE", planNote = null
     setError(null);
     const result = await beginCheckout(returnTo ? { ...body, returnTo } : body);
     setBusyAction(null);
-    // Only PRO has a list price in the analytics helpers; other plans are not tracked yet.
-    if (result.kind === "stripe" && body.kind === "subscription" && body.plan === "PRO") {
+    if (result.kind === "stripe" && body.kind === "subscription") {
       // The payment form is open now. Clear the previous ecommerce object first, as the spec requires.
       trackEvent({ ecommerce: null });
       trackEvent({
         event: "begin_checkout",
         checkout_type: "subscription",
-        ecommerce: { currency: "USD", value: 19, items: [subscriptionItem(body.plan)] },
+        ecommerce: { currency: "USD", value: subscriptionItem(body.plan).price, items: [subscriptionItem(body.plan)] },
       });
     }
     handleResult(result, returnTo);
