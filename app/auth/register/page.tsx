@@ -78,7 +78,11 @@ function RegisterForm() {
       });
 
       if (result?.error) {
-        setError(result.error.message ?? "Registration failed.");
+        const message = result.error.message ?? "Registration failed.";
+        const status = (result.error as { status?: number }).status;
+        const errorType = status === 409 ? "email_exists" : /password/i.test(message) ? "weak_password" : "server_error";
+        trackEvent({ event: "sign_up_error", method: "email", error_type: errorType });
+        setError(message);
         return;
       }
 
@@ -90,6 +94,7 @@ function RegisterForm() {
       router.push(`/auth/confirm?email=${encodeURIComponent(email)}`);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Registration failed.";
+      trackEvent({ event: "sign_up_error", method: "email", error_type: submitError instanceof TypeError ? "network_error" : "server_error" });
       setError(message);
     } finally {
       setLoading(false);

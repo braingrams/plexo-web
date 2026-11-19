@@ -1,5 +1,6 @@
 "use client";
 
+import { trackEvent } from "@/lib/analytics";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -434,6 +435,7 @@ function AccountMenu({ user, experience, persist, onExperienceChange, workspaces
     try {
       const { authClient } = await import("@/lib/auth-client");
       await authClient.signOut();
+      trackEvent({ event: "user_logout", user_id: null, plan_name: null, plan_status: null });
     } catch (e) {
       console.error("Sign out error:", e);
     }

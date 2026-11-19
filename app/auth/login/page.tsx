@@ -30,6 +30,17 @@ function LoginForm() {
   // as it loads, so the message is read from what it captured (initialAuthError) as well as the URL. It's
   // set after the page has loaded so the server and browser renders agree. A raw error code (one word,
   // straight from Google) becomes a plain sentence.
+  // The verification link lands here with ?verified=1 (see app/api/auth/verify-email). Track it once, then
+  // drop the flag from the URL so a refresh doesn't count it again.
+  useEffect(() => {
+    const verifiedParams = new URLSearchParams(window.location.search);
+    if (verifiedParams.get("verified") !== "1") return;
+    trackEvent({ event: "email_verified", method: "email" });
+    verifiedParams.delete("verified");
+    const qs = verifiedParams.toString();
+    window.history.replaceState({}, "", window.location.pathname + (qs ? "?" + qs : ""));
+  }, []);
+
   useEffect(() => {
     const raw = params.get("error") ?? initialAuthError;
     if (!raw) return;
@@ -66,6 +77,7 @@ function LoginForm() {
       // A Google-only account has no password. Say so and point at the Google button —
       // never redirect on the owner's behalf from the email form.
       if (result?.error?.code === "google_account_only") {
+        trackEvent({ event: "login_error", method: "email", error_type: "invalid_credentials" });
         setError("That password didn’t work. This account was set up with Google — use “Continue with Google” above, or choose “Forgot password” to set a password.");
         return;
       }
@@ -80,11 +92,13 @@ function LoginForm() {
 
       const status = result?.error?.status;
       if (status === 403) {
+        trackEvent({ event: "login_error", method: "email", error_type: "email_not_verified" });
         setError("This account is not verified yet. Check your email for the verification link.");
         return;
       }
 
       if (result?.error) {
+        trackEvent({ event: "login_error", method: "email", error_type: "invalid_credentials" });
         setError(result.error.message ?? "Invalid credentials.");
         return;
       }
@@ -96,6 +110,7 @@ function LoginForm() {
       window.location.assign(redirectTo);
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Invalid credentials.";
+      trackEvent({ event: "login_error", method: "email", error_type: submitError instanceof TypeError ? "network_error" : "server_error" });
       setError(message);
     } finally {
       setLoading(false);

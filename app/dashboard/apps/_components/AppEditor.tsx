@@ -1,5 +1,6 @@
 "use client";
 
+import { trackEvent } from "@/lib/analytics";
 import { SitePlanNotice } from "../../_components/SitePlanNotice";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
@@ -34,6 +35,19 @@ import { AppPreview, buildSteps, decodePlan, brandGradient, gradientFor } from "
 // right side shows the sketch from the questions and a plain-words checklist ticks off.
 
 type Tab = "preview" | "design" | "database" | "users" | "settings" | "history" | "github" | "functions" | "secrets";
+
+/** The spec's tab names for the app editor. */
+const EDITOR_TAB_NAME: Record<Tab, string> = {
+  preview: "preview",
+  design: "design",
+  database: "data",
+  users: "people",
+  settings: "settings",
+  history: "history",
+  github: "github",
+  functions: "server_code",
+  secrets: "secret_keys",
+};
 const MAIN_TABS: Array<{ id: Tab; label: string }> = [
   { id: "preview", label: "Preview" },
   { id: "design", label: "Design" },
@@ -165,6 +179,7 @@ export function AppEditor(props: {
   }, [tab]);
 
   const openTab = (t: Tab) => {
+    trackEvent({ event: "editor_tab_view", tab_name: EDITOR_TAB_NAME[t], project_type: "app", project_id: appId });
     setTab(t);
     setCodeMode(false);
     setMoreOpen(false);
@@ -418,7 +433,12 @@ export function AppEditor(props: {
       embedded={{
         emptyTitle: `What should ${summary.name} do?`,
         emptySuggestions: ["Add sign-up and a dashboard for users", "Make it look more premium", "Add a list of items people can add and edit", "Build a landing page with pricing"],
-        registerSend: (send) => (sendRef.current = send),
+        registerSend: (send) =>
+          (sendRef.current = (text, ...rest) => {
+            // Every prompt sent from the app editor's chat, typed or suggested. The prompt text is never sent.
+            trackEvent({ event: "sol_prompt_submit", sol_context: "app_editor", project_type: "app" });
+            return send(text, ...rest);
+          }),
         onToolFinished,
         onTurnEnd,
         transformOutgoing,
