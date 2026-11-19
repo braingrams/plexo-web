@@ -11,7 +11,7 @@ export const FORM_MCP_TOOLS = [
   {
     name: "get_form_settings",
     description:
-      "Lists every form on a site and where its submissions go besides the Form Submissions inbox and the owner's email: a MailDrip list and/or a webhook (Zapier, Make, a CRM), plus a thank-you page and anything a migrated WordPress form did that Plexo doesn't repeat (note). Also says whether MailDrip is connected and lists the account's MailDrip lists (ids to use with set_form_destinations).",
+      "Lists every form on a site and where its submissions go besides the Form Submissions inbox and the owner's email: a MailDrip list and/or a webhook (Zapier, Make, a CRM), plus a thank-you page, the verification box (captcha: Cloudflare Turnstile, Google reCAPTCHA or hCaptcha) a form has — with active:false meaning its secret key still needs saving — and anything a migrated WordPress form did that Plexo doesn't repeat (note). Also says whether MailDrip is connected and lists the account's MailDrip lists (ids to use with set_form_destinations).",
     inputSchema: {
       type: "object",
       properties: { templateId: { type: "string", description: "The site's home page id (see list_landing_pages)." } },
@@ -21,7 +21,7 @@ export const FORM_MCP_TOOLS = [
   {
     name: "set_form_destinations",
     description:
-      "Sets where one form sends each submission: maildripGroupId adds the person (email and name, taken from the submission) to that MailDrip list in the site's own MailDrip account — MailDrip must be connected first; webhookUrl POSTs every submission (https only). Pass null to stop one. Form names come from get_form_settings.",
+      "Sets where one form sends each submission: maildripGroupId adds the person (email and name, taken from the submission) to that MailDrip list in the site's own MailDrip account — MailDrip must be connected first; webhookUrl POSTs every submission (https only). Pass null to stop one. captcha adds or fixes the form's verification box: provider, the public siteKey and the secretKey from the owner's Cloudflare/Google/hCaptcha account (the secret is stored encrypted and never shown again; leave it out to keep the one already saved) — pass null to remove the box. A migrated WordPress form that had a box shows captcha.active false until its secret key is saved. Form names come from get_form_settings.",
     inputSchema: {
       type: "object",
       properties: {
@@ -29,6 +29,16 @@ export const FORM_MCP_TOOLS = [
         formName: { type: "string", description: "Exactly as get_form_settings lists it." },
         maildripGroupId: { type: ["string", "null"], description: "A list id from get_form_settings' maildrip.groups, or null to stop adding to a list." },
         webhookUrl: { type: ["string", "null"], description: "https address to send each submission to, or null to stop." },
+        captcha: {
+          type: ["object", "null"],
+          description: "The form's verification box, or null to remove it.",
+          properties: {
+            provider: { type: "string", enum: ["turnstile", "recaptcha", "hcaptcha"] },
+            siteKey: { type: "string", description: "The public site key." },
+            secretKey: { type: "string", description: "The secret key. Omit to keep the one already saved." },
+          },
+          required: ["provider", "siteKey"],
+        },
       },
       required: ["templateId", "formName"],
     },
@@ -59,7 +69,7 @@ export async function handleFormTool(toolName: string, args: any, resolved: Reso
     };
   }
   try {
-    const form = await saveFormSettings(templateId, { formName: String(args?.formName ?? ""), maildripGroupId: args?.maildripGroupId, webhookUrl: args?.webhookUrl });
+    const form = await saveFormSettings(templateId, { formName: String(args?.formName ?? ""), maildripGroupId: args?.maildripGroupId, webhookUrl: args?.webhookUrl, captcha: args?.captcha });
     return { form, next: "New submissions to this form go there from now on. Suggest the owner sends a test submission to check it arrives." };
   } catch (err) {
     if (err instanceof FormSettingsError) throw new Error(err.message);

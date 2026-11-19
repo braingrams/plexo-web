@@ -5,6 +5,8 @@ import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo"
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
 import { FormSettings } from "@/lib/db/opsEntities";
 import { Template } from "@/lib/db/contentEntities";
+import { ALL_CAPTCHA_RESPONSE_FIELDS, CAPTCHA_RESPONSE_FIELDS, verifyCaptcha } from "@/lib/forms/captcha";
+import { decryptSecret } from "@/lib/crypto";
 import { designFormatOf } from "@/lib/v2/design";
 import { V2_FORM_HONEYPOT_FIELD_NAME, findV2Form, relabelV2Fields } from "@/lib/v2/forms";
 
@@ -130,11 +132,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
   }
 
+  // Settings are read once: the captcha check below and the thank-you page after both need them.
+  const { data: formSettings } = await FormSettings.get({ templateId, formName }).go();
+
+  // The "I'm not a robot" check the site had on WordPress, kept (lib/forms/captcha.ts). Only
+  // enforced once the owner's secret key is saved. A failed check says so plainly — a real
+  // person needs to know to tick the box again; it's not the silent drop a bot gets.
+  if (formSettings?.captchaProvider && formSettings.captchaSecretEncrypted) {
+    let secret: string | null = null;
+    try {
+      secret = decryptSecret(formSettings.captchaSecretEncrypted);
+    } catch {
+      console.error(`[forms] captcha secret unreadable: templateId=${templateId} form=${formName}`);
+    }
+    if (secret) {
+      const answer = formData.get(CAPTCHA_RESPONSE_FIELDS[formSettings.captchaProvider]);
+      const result = await verifyCaptcha({ provider: formSettings.captchaProvider, secret, token: typeof answer === "string" ? answer : null, ip: clientIp(request) });
+      if (result === "failed") {
+        const message = "Please complete the verification box, then send again.";
+        if (wantsJson) return NextResponse.json({ error: message }, { status: 400 });
+        const back = new URL(redirectPath, request.url);
+        back.searchParams.set("plexo_form_error", "captcha");
+        return NextResponse.redirect(back, { status: 303 });
+      }
+    }
+  }
+  for (const name of Object.keys(fields)) if (ALL_CAPTCHA_RESPONSE_FIELDS.has(name)) delete fields[name];
+
   await recordFormSubmission({ templateId, organizationId: organization.id, formName: resolvedFormName, fields, submitterIp: clientIp(request), siteHost: hostname });
 
   // A thank-you page set for this form (e.g. carried over from WordPress) wins over the
   // default of showing the confirmation on the same page.
-  const { data: formSettings } = await FormSettings.get({ templateId, formName }).go();
   const thankYou = formSettings?.redirectUrl;
   const validThankYou = thankYou && (thankYou.startsWith("/") || /^https:\/\//i.test(thankYou)) ? thankYou : null;
   if (wantsJson) return NextResponse.json({ ok: true, redirect: validThankYou });

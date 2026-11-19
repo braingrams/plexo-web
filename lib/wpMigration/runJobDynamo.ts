@@ -1,3 +1,4 @@
+import { saveMigratedCaptcha } from "./captchaCarryOver";
 import { createHash, randomUUID } from "node:crypto";
 import pLimit from "p-limit";
 import type { EntityItem } from "electrodb";
@@ -852,6 +853,7 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
       const added = await Promise.all(result.assetPaths.map((segs) => limit(() => enqueueAsset(job.id, segs.join("/"), row.key))));
       counts.assets += added.filter(Boolean).length;
 
+      await saveMigratedCaptcha(job.templateId, result.forms);
       await WpMigrationPage.patch({ jobId: job.id, key: row.key })
         .set({
           status: "DONE",

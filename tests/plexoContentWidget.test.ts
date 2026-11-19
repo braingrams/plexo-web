@@ -88,6 +88,8 @@ describe("content widget", () => {
 
 describe("form connector", () => {
   const submit = (form: HTMLFormElement) => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  // The connector also asks (once per form) whether a verification box is set up; only sends count here.
+  const sends = (mock: { mock: { calls: unknown[][] } }) => mock.mock.calls.filter((c) => !String(c[0]).includes("/captcha?"));
 
   it("connects a form with no action, names unnamed fields, and shows a thank-you", async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, redirect: null }) }));
@@ -97,8 +99,8 @@ describe("form connector", () => {
     const form = document.getElementById("contact") as HTMLFormElement;
     submit(form);
     await flush(); await flush();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(sends(fetchMock)).toHaveLength(1);
+    const [url, init] = sends(fetchMock)[0] as unknown as [string, RequestInit];
     expect(url).toContain("/api/public/forms/tpl_1/submit?form=contact");
     const fd = init.body as FormData;
     expect(fd.get("Your email")).toBe("a@b.co");
@@ -144,6 +146,16 @@ describe("form connector", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("draws the owner's verification box on a migrated form that has one saved, and none on a form that doesn't", async () => {
+    const fetchMock = vi.fn(async (url: string) => ({ ok: true, json: async () => (url.includes("form=Secured") ? { provider: "turnstile", siteKey: "0x4AAAAAADcYRIowzCZgtAXn" } : { provider: null }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    document.body.innerHTML = `<form id="a" method="post" action="/api/public/forms/tpl_1/submit?form=Secured&redirect=%2F"><input name="m"><button>Send</button></form><form id="b" method="post" action="/api/public/forms/tpl_1/submit?form=Open&redirect=%2F"><input name="m"><button>Send</button></form>`;
+    load(formsJs, { "data-template-id": "tpl_1", "data-auto": "true" });
+    await flush(); await flush();
+    expect(document.querySelector("#a [data-plexo-captcha=turnstile]")).not.toBeNull();
+    expect(document.querySelector("#b [data-plexo-captcha]")).toBeNull();
+  });
+
   it("still connects an ordinary contact form on a commerce site, and an explicitly marked one anywhere", async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true }) }));
     vi.stubGlobal("fetch", fetchMock);
@@ -157,7 +169,7 @@ describe("form connector", () => {
     document.body.innerHTML = `<form id="b" data-plexo-form="Questions"><input name="m" value="hi"></form>`;
     submit(document.getElementById("b") as HTMLFormElement);
     await flush();
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(sends(fetchMock)).toHaveLength(2);
     delete (window as any).__PLEXO_COMMERCE__;
     history.replaceState({}, "", "/");
   });

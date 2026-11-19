@@ -15,6 +15,7 @@ type Form = {
   redirectUrl: string | null;
   source: string | null;
   note: string | null;
+  captcha: { provider: "turnstile" | "recaptcha" | "hcaptcha"; siteKey: string; active: boolean } | null;
   lastDeliveredAt: string | null;
   lastDeliveryError: string | null;
 };
@@ -71,7 +72,12 @@ function FormRow({ templateId, form, overview, onSaved }: { templateId: string; 
   const [webhook, setWebhook] = useState(form.webhookUrl ?? "");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
-  const dirty = groupId !== (form.maildripGroupId ?? "") || webhook !== (form.webhookUrl ?? "");
+  const [captchaOpen, setCaptchaOpen] = useState(Boolean(form.captcha));
+  const [provider, setProvider] = useState<string>(form.captcha?.provider ?? "turnstile");
+  const [siteKey, setSiteKey] = useState(form.captcha?.siteKey ?? "");
+  const [secretKey, setSecretKey] = useState("");
+  const captchaDirty = captchaOpen && (secretKey.trim() !== "" || provider !== (form.captcha?.provider ?? "turnstile") || siteKey.trim() !== (form.captcha?.siteKey ?? ""));
+  const dirty = groupId !== (form.maildripGroupId ?? "") || webhook !== (form.webhookUrl ?? "") || captchaDirty;
   // A list chosen on WordPress (or before MailDrip was disconnected) that this account doesn't list.
   const unknownGroup = form.maildripGroupId && !overview.maildrip.groups.some((g) => g.id === form.maildripGroupId);
 
@@ -82,10 +88,11 @@ function FormRow({ templateId, form, overview, onSaved }: { templateId: string; 
       const res = await fetch(`/api/v1/templates/${templateId}/form-settings`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formName: form.formName, maildripGroupId: groupId || null, webhookUrl: webhook.trim() || null }),
+        body: JSON.stringify({ formName: form.formName, maildripGroupId: groupId || null, webhookUrl: webhook.trim() || null, ...(captchaDirty ? { captcha: { provider, siteKey: siteKey.trim(), secretKey: secretKey.trim() || undefined } } : {}) }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error ?? "Couldn't save.");
+      setSecretKey("");
       setMessage({ tone: "ok", text: "Saved — new submissions go here from now on." });
       onSaved();
     } catch (err) {
@@ -119,6 +126,35 @@ function FormRow({ templateId, form, overview, onSaved }: { templateId: string; 
           <input value={webhook} onChange={(e) => setWebhook(e.target.value)} placeholder="https://hooks.zapier.com/…" style={input} />
         </label>
       </div>
+      {form.captcha && !form.captcha.active && (
+        <p style={{ ...muted, color: "var(--ed-amber)", marginTop: "0.6rem" }}>
+          This form had a verification box on WordPress. Paste your secret key below to switch it back on — until then it&rsquo;s protected by Plexo&rsquo;s built-in spam filter.
+        </p>
+      )}
+      {captchaOpen ? (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.6rem", marginTop: "0.6rem" }}>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.72rem", color: "var(--ed-t-550)" }}>
+            Verification box
+            <select value={provider} onChange={(e) => setProvider(e.target.value)} style={input}>
+              <option value="turnstile">Cloudflare Turnstile</option>
+              <option value="recaptcha">Google reCAPTCHA</option>
+              <option value="hcaptcha">hCaptcha</option>
+            </select>
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.72rem", color: "var(--ed-t-550)" }}>
+            Site key (public)
+            <input value={siteKey} onChange={(e) => setSiteKey(e.target.value)} style={input} />
+          </label>
+          <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.72rem", color: "var(--ed-t-550)" }}>
+            Secret key {form.captcha?.active ? "(saved — leave empty to keep it)" : ""}
+            <input type="password" autoComplete="off" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} placeholder={form.captcha?.active ? "••••••••" : "Paste your secret key"} style={input} />
+          </label>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setCaptchaOpen(true)} style={{ background: "none", border: "none", padding: 0, marginTop: "0.6rem", fontSize: "0.74rem", color: "var(--ed-accent-text)", cursor: "pointer" }}>
+          Add a verification box (Turnstile, reCAPTCHA or hCaptcha)
+        </button>
+      )}
       {form.redirectUrl && <p style={{ ...muted, marginTop: "0.6rem" }}>After submitting, visitors go to <code>{form.redirectUrl}</code>.</p>}
       {form.note && <p style={{ ...muted, marginTop: "0.6rem" }}>{form.note}</p>}
       {form.lastDeliveryError ? (

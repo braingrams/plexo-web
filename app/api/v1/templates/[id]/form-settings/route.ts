@@ -12,15 +12,15 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
 /**
  * PUT — where one form sends submissions besides the inbox and the owner's email.
- * Body: { formName, maildripGroupId?: string | null, webhookUrl?: string | null } (null clears it).
+ * Body: { formName, maildripGroupId?: string | null, webhookUrl?: string | null, captcha?: { provider, siteKey, secretKey? } | null } (null clears it).
  */
 export async function PUT(request: NextRequest, context: { params: Promise<{ id: string }> }): Promise<NextResponse> {
   const { id } = await context.params;
   const resolved = await resolveSiteLayoutAdmin(request, id);
   if ("error" in resolved) return resolved.error;
-  const body = (await request.json().catch(() => null)) as { formName?: string; maildripGroupId?: string | null; webhookUrl?: string | null } | null;
+  const body = (await request.json().catch(() => null)) as { formName?: string; maildripGroupId?: string | null; webhookUrl?: string | null; captcha?: { provider: string; siteKey: string; secretKey?: string } | null } | null;
   try {
-    const form = await saveFormSettings(resolved.context.templateId, { formName: body?.formName ?? "", maildripGroupId: body?.maildripGroupId, webhookUrl: body?.webhookUrl });
+    const form = await saveFormSettings(resolved.context.templateId, { formName: body?.formName ?? "", maildripGroupId: body?.maildripGroupId, webhookUrl: body?.webhookUrl, captcha: body?.captcha });
     return NextResponse.json({ form });
   } catch (err) {
     if (err instanceof FormSettingsError) return NextResponse.json({ error: err.message }, { status: 400 });

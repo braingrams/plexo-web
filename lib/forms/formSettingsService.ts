@@ -4,6 +4,8 @@ import { WpMigrationJob } from "@/lib/db/importEntities";
 import { decryptMaildripKey, tryDecrypt } from "@/lib/crypto";
 import { listMaildripGroups, type MaildripGroup } from "@/lib/maildripGroups";
 import { validWebhookUrl } from "@/lib/forms/formActions";
+import { encryptSecret } from "@/lib/crypto";
+import { isCaptchaProvider, validSiteKey, type CaptchaProvider } from "@/lib/forms/captcha";
 
 // Shared by the Form Submissions page's "where submissions go" settings and the MCP tool.
 
@@ -16,6 +18,8 @@ export interface FormDestinations {
   redirectUrl: string | null;
   source: string | null;
   note: string | null;
+  /** The "I'm not a robot" check from WordPress. `active` is false until the secret key is saved — the owner is asked for it. */
+  captcha: { provider: CaptchaProvider; siteKey: string; active: boolean } | null;
   lastDeliveredAt: string | null;
   lastDeliveryError: string | null;
 }
@@ -52,6 +56,7 @@ export async function listFormSettings(templateId: string): Promise<FormSettings
         redirectUrl: s?.redirectUrl ?? null,
         source: s?.source ?? null,
         note: s?.note ?? null,
+        captcha: s?.captchaProvider && s.captchaSiteKey ? { provider: s.captchaProvider, siteKey: s.captchaSiteKey, active: Boolean(s.captchaSecretEncrypted) } : null,
         lastDeliveredAt: s?.lastDeliveredAt ?? null,
         lastDeliveryError: s?.lastDeliveryError ?? null,
       };
@@ -75,13 +80,24 @@ export class FormSettingsError extends Error {}
 /** Sets where one form sends submissions. null clears a destination; undefined leaves it as it is. */
 export async function saveFormSettings(
   templateId: string,
-  input: { formName: string; maildripGroupId?: string | null; webhookUrl?: string | null },
+  input: { formName: string; maildripGroupId?: string | null; webhookUrl?: string | null; captcha?: { provider: string; siteKey: string; secretKey?: string } | null },
 ): Promise<FormDestinations> {
   const formName = input.formName?.trim();
   if (!formName) throw new FormSettingsError("Choose which form to set up.");
-  type Field = "maildripGroupId" | "maildripGroupTitle" | "webhookUrl";
-  const set: Partial<Record<Field, string>> = {};
+  type Field = "maildripGroupId" | "maildripGroupTitle" | "webhookUrl" | "captchaProvider" | "captchaSiteKey" | "captchaSecretEncrypted";
+  const set: Partial<Record<Exclude<Field, "captchaProvider">, string>> & { captchaProvider?: CaptchaProvider } = {};
   const remove: (Field | "lastDeliveryError")[] = [];
+
+  if (input.captcha === null) remove.push("captchaProvider", "captchaSiteKey", "captchaSecretEncrypted");
+  else if (input.captcha) {
+    const { provider, siteKey, secretKey } = input.captcha;
+    if (!isCaptchaProvider(provider)) throw new FormSettingsError("Choose Cloudflare Turnstile, Google reCAPTCHA or hCaptcha.");
+    if (!validSiteKey(siteKey?.trim())) throw new FormSettingsError("Enter the site key exactly as your captcha provider shows it (the public one).");
+    set.captchaProvider = provider;
+    set.captchaSiteKey = siteKey.trim();
+    // Left empty, the secret already saved stays — so the site key can be fixed without pasting both again.
+    if (secretKey?.trim()) set.captchaSecretEncrypted = encryptSecret(secretKey.trim());
+  }
 
   if (input.webhookUrl !== undefined) {
     if (input.webhookUrl === null || input.webhookUrl.trim() === "") remove.push("webhookUrl");

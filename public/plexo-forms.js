@@ -157,6 +157,95 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", showReturnThanks);
   else showReturnThanks();
 
+  // Back from a plain form post that the captcha turned away: say what to do, next to the form.
+  function showReturnError() {
+    if (!/[?&]plexo_form_error=captcha(&|$)/.test(location.search)) return;
+    var forms = document.querySelectorAll("form");
+    for (var i = 0; i < forms.length; i++) {
+      if (nativeFormName(forms[i]) !== null || isClaimed(forms[i])) {
+        showMessage(forms[i], "Please complete the verification box, then send again.", true);
+        try { forms[i].scrollIntoView({ block: "center" }); } catch (err) { /* old browsers */ }
+        return;
+      }
+    }
+  }
+
+  // The name of a form that already posts to this site's own Plexo form address (a migrated form), else null.
+  function nativeFormName(form) {
+    var action = form.getAttribute("action") || "";
+    if (action.indexOf("/api/public/forms/" + TEMPLATE_ID + "/submit") === -1) return null;
+    var m = action.match(/[?&]form=([^&#]*)/);
+    try { return m ? decodeURIComponent(m[1].replace(/\+/g, " ")) : "Website Form"; } catch (err) { return "Website Form"; }
+  }
+
+  // The "I'm not a robot" box the owner had on WordPress (Turnstile, reCAPTCHA or hCaptcha), drawn
+  // above the send button for any form that has one saved on Plexo. Asked once per form name.
+  var CAPTCHA_SCRIPTS = {
+    turnstile: ["https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit", function () { return window.turnstile; }],
+    recaptcha: ["https://www.google.com/recaptcha/api.js?render=explicit", function () { return window.grecaptcha && window.grecaptcha.render ? window.grecaptcha : null; }],
+    hcaptcha: ["https://js.hcaptcha.com/1/api.js?render=explicit", function () { return window.hcaptcha; }]
+  };
+  var captchaConfigs = {};
+  var scriptLoads = {};
+  function loadCaptchaScript(provider, done) {
+    var spec = CAPTCHA_SCRIPTS[provider];
+    if (!spec) return;
+    if (spec[1]()) return done(spec[1]());
+    if (!scriptLoads[provider]) {
+      scriptLoads[provider] = [];
+      var tag = document.createElement("script");
+      tag.src = spec[0]; tag.async = true;
+      tag.onload = function () {
+        var tries = 0;
+        (function wait() {
+          var api = spec[1]();
+          if (api) { var q = scriptLoads[provider]; scriptLoads[provider] = null; for (var i = 0; i < q.length; i++) q[i](api); }
+          else if (tries++ < 50) setTimeout(wait, 100);
+        })();
+      };
+      document.head.appendChild(tag);
+    }
+    if (scriptLoads[provider]) scriptLoads[provider].push(done);
+    else done(spec[1]());
+  }
+  function drawCaptcha(form, cfg) {
+    if (!cfg || !cfg.provider || form.__plexoCaptchaDrawn) return;
+    form.__plexoCaptchaDrawn = true;
+    var holder = document.createElement("div");
+    holder.setAttribute("data-plexo-captcha", cfg.provider);
+    holder.style.cssText = "margin:12px 0";
+    var btn = form.querySelector('button:not([type="button"]), input[type="submit"]');
+    if (btn && btn.parentNode && form.contains(btn)) btn.parentNode.insertBefore(holder, btn); else form.appendChild(holder);
+    loadCaptchaScript(cfg.provider, function (api) {
+      try { var id = api.render(holder, { sitekey: cfg.siteKey }); form.__plexoCaptchaReset = function () { try { api.reset(id); } catch (err) { /* already gone */ } }; } catch (err) { /* a bad key: the server still decides */ }
+    });
+  }
+  function setupCaptcha(form) {
+    if (form.__plexoCaptchaAsked) return;
+    var name = nativeFormName(form);
+    if (name === null) { if (!isClaimed(form)) return; name = formName(form); }
+    form.__plexoCaptchaAsked = true;
+    if (!captchaConfigs[name]) {
+      captchaConfigs[name] = fetch("/api/public/forms/" + encodeURIComponent(TEMPLATE_ID) + "/captcha?form=" + encodeURIComponent(name), { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : {}; })
+        .catch(function () { return {}; });
+    }
+    captchaConfigs[name].then(function (cfg) { drawCaptcha(form, cfg); });
+  }
+  function scanCaptchas() {
+    var forms = document.querySelectorAll("form");
+    for (var i = 0; i < forms.length; i++) setupCaptcha(forms[i]);
+  }
+  var scanTimer = null;
+  function scheduleScan() { clearTimeout(scanTimer); scanTimer = setTimeout(scanCaptchas, 150); }
+  function startCaptchaWatch() {
+    scanCaptchas();
+    showReturnError();
+    if (window.MutationObserver) new MutationObserver(scheduleScan).observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", startCaptchaWatch);
+  else startCaptchaWatch();
+
   document.addEventListener("submit", function (e) {
     var form = e.target;
     if (!form || form.tagName !== "FORM" || !isClaimed(form)) return;
@@ -192,6 +281,8 @@
       })
       .then(function () {
         form.__plexoSending = false;
+        // An answer works once — ask again for the next send.
+        if (form.__plexoCaptchaReset) form.__plexoCaptchaReset();
         for (var k = 0; k < buttons.length; k++) {
           buttons[k].disabled = false;
           if (buttons[k].tagName === "BUTTON") buttons[k].innerHTML = labels[k]; else buttons[k].value = labels[k];

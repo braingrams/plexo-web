@@ -13,6 +13,7 @@ import { convertWordPressHtmlToTiptapJson, tiptapJsonToHtml } from "@/lib/blogIm
 import { migrationFetch, restUrl } from "./http";
 import { hostVariants, makeOriginRewriter } from "./urlSpace";
 import type { MigratedForm } from "./htmlTransform";
+import { applyCaptchaSecrets, type ExportedCaptchaKeys } from "./captchaCarryOver";
 import { carryOverForm, type ExportedFormActions } from "./formCarryOver";
 import type { WpInstall } from "./types";
 
@@ -48,7 +49,7 @@ export interface ConnectorSummary {
 }
 
 export interface ExtrasState {
-  stage: "forminator" | "tables" | "payform" | "redirects" | "form_actions" | "team" | "drafts" | "comments" | "give_forms" | "give_donations" | "wc_products" | "wc_coupons" | "wc_shipping" | "wc_orders" | "done";
+  stage: "forminator" | "tables" | "payform" | "redirects" | "form_actions" | "captcha" | "team" | "drafts" | "comments" | "give_forms" | "give_donations" | "wc_products" | "wc_coupons" | "wc_shipping" | "wc_orders" | "done";
   /** Position inside the current stage: which item, how far into it. */
   index: number;
   offset: number;
@@ -67,6 +68,8 @@ export interface ExtrasState {
     orders?: number;
     /** Forms whose WordPress after-submit actions (webhook, thank-you page, mailing list) now run on Plexo. */
     formActions?: number;
+    /** Forms whose verification box (Turnstile / reCAPTCHA / hCaptcha) is switched back on with the owner's own keys. */
+    captchaForms?: number;
   };
   /** Wildcard/regex redirect rules — Plexo redirects exact addresses, so these are listed for the owner. */
   redirectPatterns?: { from: string; to: string; kind: string; plugin: string }[];
@@ -81,7 +84,7 @@ export interface ExtrasState {
   finishedAt?: string;
 }
 
-const STAGES: ExtrasState["stage"][] = ["forminator", "tables", "payform", "redirects", "form_actions", "team", "drafts", "comments", "give_forms", "give_donations", "wc_products", "wc_coupons", "wc_shipping", "wc_orders", "done"];
+const STAGES: ExtrasState["stage"][] = ["forminator", "tables", "payform", "redirects", "form_actions", "captcha", "team", "drafts", "comments", "give_forms", "give_donations", "wc_products", "wc_coupons", "wc_shipping", "wc_orders", "done"];
 const PAGE_SIZE = 200;
 const STEP_BUDGET_MS = 35_000;
 
@@ -389,6 +392,18 @@ export async function runExtrasStep(job: JobItem, revalidate: RevalidateFn = asy
           }
         }
         state.formNotes = notes.slice(0, 100);
+        advance();
+        continue;
+      }
+
+      if (state.stage === "captcha") {
+        try {
+          const { captcha } = await connectorGet<{ captcha: ExportedCaptchaKeys[] }>(install, code, "captcha");
+          if (captcha.length > 0) state.counts.captchaForms = (state.counts.captchaForms ?? 0) + (await applyCaptchaSecrets(job.templateId, await migratedForms(job.id), captcha));
+        } catch (err) {
+          // Older plugin (before 1.3): the owner is asked for the secret key on the Form Submissions page instead.
+          if (!(err instanceof ConnectorError)) throw err;
+        }
         advance();
         continue;
       }

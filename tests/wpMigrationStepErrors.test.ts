@@ -10,6 +10,7 @@ vi.mock("@/lib/blogImport/taxonomyDynamo", () => ({}));
 vi.mock("@/lib/commerce/donations", () => ({}));
 vi.mock("@/lib/wpMigration/storeImport", () => ({}));
 vi.mock("@/lib/wpMigration/notify", () => ({}));
+vi.mock("@/lib/wpMigration/captchaCarryOver", () => ({}));
 
 import { isTransientAwsError, rewritePostLinks, stepErrorMessage } from "@/lib/wpMigration/runJobDynamo";
 

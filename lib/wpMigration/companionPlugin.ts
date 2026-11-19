@@ -16,7 +16,7 @@
 //  - columns that look like secrets (passwords, tokens, keys, card data) are never sent;
 //  - user export is name + email + role only — never password hashes.
 
-export const COMPANION_PLUGIN_VERSION = "1.2.0";
+export const COMPANION_PLUGIN_VERSION = "1.3.0";
 
 export const COMPANION_PLUGIN_PHP = String.raw`<?php
 /**
@@ -160,6 +160,74 @@ function plexo_migrator_flatten($value) {
     return trim(wp_strip_all_tags((string) $value));
 }
 
+/**
+ * The verification box (captcha) keys the site owner saved in whichever plugin draws it — Cloudflare
+ * Turnstile, Google reCAPTCHA or hCaptcha. Found by what the settings are called, so it works for any
+ * captcha plugin without knowing each one. Sent to Plexo once, over the owner's own connection, so the
+ * same box keeps protecting their forms; Plexo stores the secret key encrypted.
+ */
+function plexo_migrator_captcha_walk($value, $path, &$found) {
+    if (is_object($value)) {
+        $value = (array) $value;
+    }
+    if (is_array($value)) {
+        foreach ($value as $k => $v) {
+            plexo_migrator_captcha_walk($v, $path . '/' . $k, $found);
+        }
+        return;
+    }
+    if (!is_string($value) || strlen($value) < 8 || strlen($value) > 200) {
+        return;
+    }
+    $found[] = array('path' => strtolower($path), 'value' => trim($value));
+}
+
+function plexo_migrator_captcha_keys() {
+    global $wpdb;
+    $rows = $wpdb->get_results("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name REGEXP 'turnstile|recaptcha|hcaptcha|captcha' LIMIT 300");
+    $by_provider = array();
+    foreach ((array) $rows as $row) {
+        $found = array();
+        plexo_migrator_captcha_walk(maybe_unserialize($row->option_value), strtolower($row->option_name), $found);
+        foreach ($found as $item) {
+            $path = $item['path'];
+            $provider = null;
+            if (strpos($path, 'turnstile') !== false) {
+                $provider = 'turnstile';
+            } elseif (strpos($path, 'hcaptcha') !== false) {
+                $provider = 'hcaptcha';
+            } elseif (strpos($path, 'recaptcha') !== false) {
+                $provider = 'recaptcha';
+            }
+            if ($provider === null) {
+                continue;
+            }
+            $kind = null;
+            if (preg_match('/secret/', $path)) {
+                $kind = 'secret_key';
+            } elseif (preg_match('/site[_-]?key|sitekey/', $path)) {
+                $kind = 'site_key';
+            }
+            if ($kind === null || !preg_match('/^[0-9A-Za-z_-]{8,120}$/', $item['value'])) {
+                continue;
+            }
+            if (!isset($by_provider[$provider])) {
+                $by_provider[$provider] = array('provider' => $provider, 'site_key' => '', 'secret_key' => '');
+            }
+            if ($by_provider[$provider][$kind] === '') {
+                $by_provider[$provider][$kind] = $item['value'];
+            }
+        }
+    }
+    $out = array();
+    foreach ($by_provider as $entry) {
+        if ($entry['site_key'] !== '' && $entry['secret_key'] !== '') {
+            $out[] = $entry;
+        }
+    }
+    return $out;
+}
+
 /* ------------------------------------------------------------------ endpoints */
 
 add_action('rest_api_init', function () {
@@ -286,6 +354,10 @@ add_action('rest_api_init', function () {
     // audience ids only; no API keys or passwords ever leave WordPress.
     register_rest_route($ns, '/form-actions', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function () {
         return array('forms' => plexo_migrator_elementor_forms());
+    }));
+
+    register_rest_route($ns, '/captcha', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function () {
+        return array('captcha' => plexo_migrator_captcha_keys());
     }));
 
     register_rest_route($ns, '/team', array('methods' => 'GET', 'permission_callback' => $auth, 'callback' => function () {

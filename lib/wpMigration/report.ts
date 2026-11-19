@@ -174,6 +174,16 @@ export function buildMigrationReport(input: {
       detail: `${forms.length} form(s) now send submissions to your Plexo dashboard and your email. Send yourself a test message to see it arrive.`,
     });
   }
+  const captchaForms = forms.filter((f) => (f as MigratedForm).captcha);
+  if (captchaForms.length > 0) {
+    const kinds = Array.from(new Set(captchaForms.map((f) => ({ turnstile: "Cloudflare Turnstile", recaptcha: "Google reCAPTCHA", hcaptcha: "hCaptcha" })[(f as MigratedForm).captcha!.provider]))).join(" and ");
+    checklist.push({
+      id: "captcha",
+      label: "Forms' verification box (captcha)",
+      status: "review",
+      detail: `${captchaForms.length} form(s) had ${kinds} on WordPress. Plexo's spam filter protects them already. To bring the box back, open Form Submissions, choose the form and paste your secret key (connecting the Plexo Migrator plugin does this for you automatically). The old WordPress captcha scripts only work on your old address, so they were removed.`,
+    });
+  }
   const donationCampaigns = pageRows.flatMap((p) => ((p.donationCampaigns as { campaignId: string; name: string }[] | undefined) ?? []));
   const uniqueCampaigns = Array.from(new Map(donationCampaigns.map((c) => [c.campaignId, c])).values());
   if (uniqueCampaigns.length > 0) checklist.push(donationPaymentsItem(uniqueCampaigns, input.paymentsReady ?? false));
@@ -302,15 +312,15 @@ export function donationPaymentsItem(campaigns: { name: string }[], paymentsRead
   return paymentsReady
     ? {
         id: "payments",
-        label: "Donations are live on Plexo",
+        label: "Payments and donations are live on Plexo",
         status: "done",
         detail: `${names} now takes one-time and monthly gifts through your connected payment account. If your WordPress donors give monthly, open Commerce → Donations and click “Bring over existing monthly donors” so their gifts keep being recorded.`,
       }
     : {
         id: "payments",
-        label: "Connect payments so your donation forms can take gifts",
+        label: "Connect payments so your payment and donation forms can take money",
         status: "blocked",
-        detail: `${names} moved to Plexo Donations with the same amounts and monthly option. Connect Stripe or Paystack in Commerce → Settings → Payments — use the same account WordPress used and your existing monthly donors carry straight over. Switching your domain before this would stop donations, so it blocks the switch.`,
+        detail: `${names} moved to Plexo payments with the same fields and amounts (an open amount stays open). Connect Stripe or Paystack in Commerce → Settings → Payments — use the same account WordPress used. Switching your domain before this would stop those payments, so it blocks the switch.`,
       };
 }
 

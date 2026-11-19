@@ -56,6 +56,8 @@ export interface MigratedForm {
   fields: string[];
   /** The WordPress form it came from ("elementor:b48f986", "forminator:12", "cf7:5", "wpforms:7"), matched to what the Plexo Migrator plugin reports it did after a submission. */
   sourceKey?: string;
+  /** The verification box (captcha) this form had, with the owner's public site key — kept so the owner can switch it back on with their secret key (lib/forms/captcha.ts). */
+  captcha?: { provider: "turnstile" | "recaptcha" | "hcaptcha"; siteKey: string };
 }
 
 /** Which WordPress form this is, read from the plumbing fields the form plugins print (before they're stripped). */
@@ -255,9 +257,57 @@ const PLUGIN_HIDDEN_FIELD_RE = /^(_wpnonce|.*_nonce|nonce|_wp_http_referer|_wp_o
 // site is on Plexo. Matched against the action's path after origin rewriting.
 const WORDPRESS_ENDPOINT_RE = /\/wp-admin\/admin-(post|ajax)\.php$|\/wp-json\/|\/wp-comments-post\.php$|\/wp-login\.php$|[?&]rest_route=/i;
 
+type CaptchaInfo = { provider: "turnstile" | "recaptcha" | "hcaptcha"; siteKey: string };
+
+/** Which captcha a widget element is, from its class. */
+function providerOfWidget(el: cheerio.Cheerio<AnyNode>): CaptchaInfo["provider"] {
+  if (el.is(".cf-turnstile")) return "turnstile";
+  if (el.is(".h-captcha")) return "hcaptcha";
+  return "recaptcha";
+}
+
+/**
+ * The captcha a page was set up with, when the widget isn't in the markup because a plugin draws it
+ * with JavaScript (Cloudflare Turnstile plugins print their public key into the page config).
+ * Public site keys only — a secret key is never in a page.
+ */
+export function detectPageCaptcha(html: string): CaptchaInfo | null {
+  const turnstile = html.match(/["']site_?key["']\s*:\s*["']([0-9A-Za-z_-]{8,120})["']/i);
+  if (turnstile && /turnstile/i.test(html)) return { provider: "turnstile", siteKey: turnstile[1] };
+  const widget = html.match(/class=["'][^"']*\b(cf-turnstile|h-captcha|g-recaptcha|elementor-g-recaptcha)\b[^"']*["'][^>]*data-sitekey=["']([0-9A-Za-z_-]{8,120})["']/i)
+    ?? html.match(/data-sitekey=["']([0-9A-Za-z_-]{8,120})["'][^>]*class=["'][^"']*\b(cf-turnstile|h-captcha|g-recaptcha|elementor-g-recaptcha)\b/i);
+  if (widget) {
+    const isFirstClass = /^(cf-turnstile|h-captcha|g-recaptcha|elementor-g-recaptcha)$/i.test(widget[1]);
+    const cls = (isFirstClass ? widget[1] : widget[2]).toLowerCase();
+    const key = isFirstClass ? widget[2] : widget[1];
+    return { provider: cls === "cf-turnstile" ? "turnstile" : cls === "h-captcha" ? "hcaptcha" : "recaptcha", siteKey: key };
+  }
+  return null;
+}
+
+/**
+ * Removes every captcha script and its plugin config. They verify on WordPress's side and are tied
+ * to the old address — kept, they draw a box that shows "Verification failed" (Turnstile) or
+ * "invalid domain for site key" (Google). Plexo draws its own box from the saved keys instead.
+ */
+const CAPTCHA_SCRIPT_RE = /challenges\.cloudflare\.com\/turnstile|google\.com\/recaptcha|gstatic\.com\/recaptcha|recaptcha\.net|hcaptcha\.com|\/plugins\/(kitgenix-captcha[^/]*|simple-cloudflare-turnstile|cloudflare-turnstile[^/]*|hcaptcha-for-forms-and-more|advanced-nocaptcha-recaptcha|google-captcha|recaptcha-for-woocommerce|wpcaptcha[^/]*|captcha-code-authentication|really-simple-captcha)\//i;
+const CAPTCHA_CODE_RE = /kitgenix[-_]?captcha|KitgenixCaptcha|TurnstileConfig|TurnstileElementorConfig|turnstile\.(render|reset|getResponse)|cf-turnstile-response|grecaptcha\.|hcaptcha\.(render|execute)|HCaptcha|sct_|cfturnstile/i;
+function stripCaptchaScripts($: cheerio.CheerioAPI): void {
+  $("script").each((_, el) => {
+    const node = $(el);
+    const src = node.attr("src") || node.attr("data-rocket-src") || "";
+    if (src ? CAPTCHA_SCRIPT_RE.test(src) : CAPTCHA_CODE_RE.test(node.text()) && !/application\/(ld\+)?json/i.test(node.attr("type") || "")) node.remove();
+  });
+  $("link[href]").each((_, el) => {
+    if (CAPTCHA_SCRIPT_RE.test($(el).attr("href") || "")) $(el).remove();
+  });
+}
+
 const CAPTCHA_SELECTOR = ".g-recaptcha, .elementor-g-recaptcha, .wpcf7-recaptcha, .wpforms-recaptcha-container, .forminator-g-recaptcha, .cf-turnstile, .h-captcha, .elementor-field-type-recaptcha, .elementor-field-type-recaptcha_v3";
 
-const PAYMENT_FORM_SELECTOR = "form.wpf_form, form[data-wpf_form_id], form.give-form, form.woocommerce-cart-form, form.checkout.woocommerce-checkout";
+// Forminator's Stripe and PayPal fields charge on WordPress's side — a form carrying one is a
+// payment form even though it looks like any other Forminator form.
+const PAYMENT_FORM_SELECTOR = "form.wpf_form, form[data-wpf_form_id], form.give-form, form.woocommerce-cart-form, form.checkout.woocommerce-checkout, form:has([data-is-payment=true]), form:has(.forminator-field-stripe), form:has(.forminator-field-stripe-ocs), form:has(.forminator-field-paypal)";
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "form";
@@ -300,7 +350,7 @@ function postsToWordPress(form: cheerio.Cheerio<AnyNode>): boolean {
  * and emails them. Field names become their visible labels ("Full Name", not "full_name");
  * a checkbox/radio group is named for its question and keeps every ticked value.
  */
-function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ctx: TransformContext, plugin: string, index: number): MigratedForm {
+function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ctx: TransformContext, plugin: string, index: number, pageCaptcha: CaptchaInfo | null = null): MigratedForm {
   const sourceKey = formSourceKey(form, plugin);
   const formId = form.attr("id") || `plexo-form-${index}`;
   form.attr("id", formId);
@@ -315,8 +365,11 @@ function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ct
   // A captcha checks submissions on WordPress's side, which Plexo doesn't do — kept, it'd be
   // a box that does nothing (or Google's "invalid domain for site key" on a new address).
   // Plexo Forms' honeypot (below) does the spam-blocking instead.
+  const seen: { captcha: CaptchaInfo | null } = { captcha: pageCaptcha };
   form.find(CAPTCHA_SELECTOR).each((_, el) => {
     const widget = $(el);
+    const key = widget.attr("data-sitekey");
+    if (key && /^[0-9A-Za-z_-]{8,120}$/.test(key)) seen.captcha = { provider: providerOfWidget(widget), siteKey: key };
     const group = widget.closest(".elementor-field-group, .wpforms-field, .forminator-row, p");
     (group.length > 0 && group.closest("form").is(form) && group.find("input:not([type=hidden]), select, textarea").length === 0 ? group : widget).remove();
   });
@@ -389,7 +442,7 @@ function rewireOneForm($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>, ct
       `<script>(function(){var f=document.getElementById(${JSON.stringify(formId)});if(!f)return;f.querySelectorAll(".forminator-field").forEach(function(w){var l=w.querySelector(".forminator-label"),i=w.querySelector("input.forminator-input,textarea.forminator-textarea");if(!l||!i||i.type==="checkbox"||i.type==="radio")return;var t=i.tagName==="TEXTAREA";l.classList.add(t?"forminator-floating--textarea":"forminator-floating--input");if(!t&&!i.parentNode.classList.contains("forminator-input--wrap")){var d=document.createElement("div");d.className="forminator-input--wrap";i.parentNode.insertBefore(d,i);d.appendChild(i);}function s(){w.classList.toggle("forminator-is_filled",!!i.value);}i.addEventListener("focus",function(){w.classList.add("forminator-is_active");});i.addEventListener("blur",function(){w.classList.remove("forminator-is_active");s();});i.addEventListener("input",s);s();});})();</script>`,
     );
   }
-  return { id: formId, name, plugin, fields: fieldNames, ...(sourceKey ? { sourceKey } : {}) };
+  return { id: formId, name, plugin, fields: fieldNames, ...(sourceKey ? { sourceKey } : {}), ...(seen.captcha ? { captcha: seen.captcha } : {}) };
 }
 
 export function donationToken(source: string): string {
@@ -483,6 +536,77 @@ function convertPaymatticForms($: cheerio.CheerioAPI, rawHtml: string): Detected
   return found;
 }
 
+const FORMINATOR_PLUMBING_FIELDS = /^(forminator_nonce|_wp_http_referer|form_id|page_id|form_type|current_url|render_id|action|referer_url|paymentid|paymentmethod|subscriptionid|stripe-.*)$/i;
+
+/**
+ * Forminator forms with a Stripe card field → a Plexo payment. The form keeps its look and its
+ * own email, name and amount fields (the amount stays open-ended, typed by the payer, exactly as
+ * on WordPress); the card is taken on Plexo's secure checkout step instead of by the Stripe
+ * field, and the money goes to the owner's own Stripe account through Plexo. Runs on Plexo's
+ * donation engine (one-off, custom amount) — the same one Paymattic forms use. PayPal-based
+ * Forminator forms are left alone and reported, since they can't be moved automatically.
+ */
+function convertForminatorPaymentForms($: cheerio.CheerioAPI, _rawHtml: string): DetectedDonationForm[] {
+  const found: DetectedDonationForm[] = [];
+  $("form.forminator-custom-form").each((_, el) => {
+    const form = $(el);
+    const stripe = form.find('[data-payment-type="stripe"], .forminator-field-stripe, .forminator-field-stripe-ocs').first();
+    if (stripe.length === 0 || form.find('[data-payment-type="paypal"], .forminator-field-paypal').length > 0) return;
+    const formId = form.attr("data-form-id") || form.find('input[name="form_id"]').first().attr("value") || String(found.length + 1);
+    const source = `forminator-payment:${formId}`;
+    const currencyAttr = (form.find("[data-currency]").first().attr("data-currency") || "").toUpperCase();
+    const currency = /^[A-Z]{3}$/.test(currencyAttr) ? currencyAttr : null;
+
+    // The card row goes: Plexo's checkout takes the card on the next, secure step.
+    const cardRow = stripe.closest(".forminator-row");
+    const note = '<div class="forminator-row"><div class="forminator-col"><p style="margin:0;font-size:0.85em;opacity:0.75">You\'ll enter your card details on the next, secure step.</p></div></div>';
+    if (cardRow.length > 0 && cardRow.closest("form").is(form)) cardRow.replaceWith(note);
+    else stripe.remove();
+
+    const amount = form.find(".forminator-field-currency input, input.forminator-currency").first();
+    if (amount.length > 0) {
+      amount.attr("data-plexo-custom-amount", "1");
+      amount.attr("min", "1");
+    }
+    form.find(".forminator-field-name input").first().attr("data-plexo-donor-name", "1");
+    form.find('input[type="email"]').first().attr("data-plexo-donor-email", "1");
+    form.find("input[type=hidden]").each((__, f) => {
+      if (FORMINATOR_PLUMBING_FIELDS.test($(f).attr("name") || "")) $(f).remove();
+    });
+    form.removeClass("forminator_ajax").removeAttr("data-forminator-render").removeAttr("action").removeAttr("novalidate");
+    const style = (form.attr("style") || "").replace(/display\s*:\s*none\s*;?/gi, "").trim();
+    if (style) form.attr("style", style);
+    else form.removeAttr("style");
+    form.find("button, input[type=submit]").removeAttr("disabled");
+    const button = form.find("button.forminator-button-submit, button[type=submit], input[type=submit]").first();
+    const token = donationToken(source);
+    form.attr("data-plexo-donation", token);
+    form.attr("data-plexo-donation-adapter", "forminator-payment");
+    found.push({
+      source,
+      token,
+      name: formDisplayNameForDonation($, form) || "Payment",
+      presets: [],
+      defaultPresetIndex: 0,
+      allowCustomAmount: true,
+      minAmountMinor: 100,
+      allowMonthly: false,
+      currency,
+      buttonLabel: cleanLabel(button.text() || button.attr("value") || "") || null,
+    });
+  });
+  if (found.length > 0) {
+    const otherForminatorForms = $("form.forminator-custom-form").not("[data-plexo-donation]").length;
+    $("script").each((_, el) => {
+      const src = $(el).attr("src") || $(el).attr("data-rocket-src") || "";
+      const code = src ? "" : $(el).text();
+      if (/js\.stripe\.com/.test(src)) $(el).remove();
+      else if (otherForminatorForms === 0 && (/forminator/i.test(src) || /forminator/i.test(code))) $(el).remove();
+    });
+  }
+  return found;
+}
+
 function formDisplayNameForDonation($: cheerio.CheerioAPI, form: cheerio.Cheerio<AnyNode>): string {
   let node: cheerio.Cheerio<AnyNode> = form;
   for (let depth = 0; depth < 8; depth++) {
@@ -503,7 +627,7 @@ function formDisplayNameForDonation($: cheerio.CheerioAPI, form: cheerio.Cheerio
  *  - search forms → a web search scoped to the site (WordPress's ?s= search index is gone).
  * Payment/donation forms are left to the donation adapter and reported if unhandled.
  */
-function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: MigratedForm[]; unmigrated: { plugin: string; reason: string }[]; loginForms: number; searchForms: number } {
+function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext, pageCaptcha: CaptchaInfo | null): { forms: MigratedForm[]; unmigrated: { plugin: string; reason: string }[]; loginForms: number; searchForms: number } {
   const forms: MigratedForm[] = [];
   const pluginsSeen = new Set<string>();
   const handled = new Set<AnyNode>();
@@ -511,7 +635,9 @@ function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: Mig
   let loginForms = 0;
   let searchForms = 0;
 
-  $(PAYMENT_FORM_SELECTOR).each((_, el) => {
+  // Payment forms are never plain contact forms — either converted to a Plexo payment already
+  // (data-plexo-donation) or reported below.
+  $(`${PAYMENT_FORM_SELECTOR}, form[data-plexo-donation]`).each((_, el) => {
     handled.add(el);
   });
 
@@ -524,7 +650,7 @@ function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: Mig
       handled.add(el);
       index += 1;
       pluginsSeen.add(plugin);
-      forms.push(rewireOneForm($, $(el), ctx, plugin, index));
+      forms.push(rewireOneForm($, $(el), ctx, plugin, index, pageCaptcha));
     });
   }
 
@@ -562,7 +688,7 @@ function rewireForms($: cheerio.CheerioAPI, ctx: TransformContext): { forms: Mig
     if (postsToWordPress(form)) {
       handled.add(el);
       index += 1;
-      forms.push(rewireOneForm($, form, ctx, "custom", index));
+      forms.push(rewireOneForm($, form, ctx, "custom", index, pageCaptcha));
     }
   });
 
@@ -743,8 +869,11 @@ export function transformPage(rawHtml: string, ctx: TransformContext): Transform
   removeWordPressCruft($);
   promoteLazyImages($);
   makeRefsRootRelative($, ctx);
-  const donationForms = convertPaymatticForms($, rawHtml);
-  const { forms, unmigrated, loginForms, searchForms } = rewireForms($, ctx);
+  const donationForms = [...convertPaymatticForms($, rawHtml)];
+  const pageCaptcha = detectPageCaptcha(rawHtml);
+  const stripeForms = convertForminatorPaymentForms($, rawHtml);
+  const { forms, unmigrated, loginForms, searchForms } = rewireForms($, ctx, pageCaptcha);
+  stripCaptchaScripts($);
   rewriteMovedLinks($, ctx);
 
   // 3. Inventory what the finished page references.
@@ -773,7 +902,7 @@ export function transformPage(rawHtml: string, ctx: TransformContext): Transform
     unmigratedForms: unmigrated,
     loginForms,
     searchForms,
-    donationForms,
+    donationForms: [...donationForms, ...stripeForms],
     facts: extractFacts($),
   };
 }

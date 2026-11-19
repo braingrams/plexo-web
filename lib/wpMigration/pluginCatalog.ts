@@ -86,11 +86,47 @@ const CATALOG: Record<string, CatalogEntry> = {
     outcome: "NATIVE",
     explanation: "Every page keeps its SEO title, description and structured data; Plexo now generates your sitemap.xml and robots.txt.",
   },
+  "kitgenix-captcha-for-cloudflare-turnstile": {
+    name: "Cloudflare Turnstile (Kitgenix)",
+    outcome: "NATIVE",
+    explanation:
+      "Your forms' verification box is kept on Plexo with your own keys (Form Submissions → the form → verification box). Until the secret key is saved there, forms are protected by Plexo's built-in spam filter. WordPress's captcha scripts were removed — they only work on your old address.",
+  },
+  "simple-cloudflare-turnstile": {
+    name: "Simple Cloudflare Turnstile",
+    outcome: "NATIVE",
+    explanation:
+      "Your forms' verification box is kept on Plexo with your own keys (Form Submissions → the form → verification box). Until the secret key is saved there, forms are protected by Plexo's built-in spam filter. WordPress's captcha scripts were removed — they only work on your old address.",
+  },
+  "cloudflare-turnstile": {
+    name: "Cloudflare Turnstile",
+    outcome: "NATIVE",
+    explanation:
+      "Your forms' verification box is kept on Plexo with your own keys (Form Submissions → the form → verification box). Until the secret key is saved there, forms are protected by Plexo's built-in spam filter. WordPress's captcha scripts were removed — they only work on your old address.",
+  },
+  "hcaptcha-for-forms-and-more": {
+    name: "hCaptcha",
+    outcome: "NATIVE",
+    explanation:
+      "Your forms' verification box is kept on Plexo with your own keys (Form Submissions → the form → verification box). Until the secret key is saved there, forms are protected by Plexo's built-in spam filter. WordPress's captcha scripts were removed — they only work on your old address.",
+  },
+  "advanced-nocaptcha-recaptcha": {
+    name: "Advanced noCaptcha & reCAPTCHA",
+    outcome: "NATIVE",
+    explanation:
+      "Your forms' verification box is kept on Plexo with your own keys (Form Submissions → the form → verification box). Until the secret key is saved there, forms are protected by Plexo's built-in spam filter. WordPress's captcha scripts were removed — they only work on your old address.",
+  },
+  "google-captcha": {
+    name: "Google Captcha (reCAPTCHA)",
+    outcome: "NATIVE",
+    explanation:
+      "Your forms' verification box is kept on Plexo with your own keys (Form Submissions → the form → verification box). Until the secret key is saved there, forms are protected by Plexo's built-in spam filter. WordPress's captcha scripts were removed — they only work on your old address.",
+  },
   forminator: {
     name: "Forminator",
     outcome: "NATIVE",
     explanation:
-      "Your forms were reconnected to Plexo Forms — submissions now arrive in your Plexo dashboard (Form Submissions) and by email, with spam protection built in.",
+      "Your forms were reconnected to Plexo Forms — submissions now arrive in your Plexo dashboard (Form Submissions) and by email, with spam protection built in. Forms that take card payments are moved to Plexo payments instead — see the payments item in your checklist.",
   },
   "contact-form-7": {
     name: "Contact Form 7",

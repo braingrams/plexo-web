@@ -268,6 +268,11 @@ export const FormSettings = new Entity(
       source: { type: "string" },
       /** What the form did on WordPress that Plexo couldn't repeat, in plain words — shown beside it. */
       note: { type: "string" },
+      /** The "I'm not a robot" check this form had (lib/forms/captcha.ts): provider and the owner's public site key. */
+      captchaProvider: { type: ["turnstile", "recaptcha", "hcaptcha"] as const },
+      captchaSiteKey: { type: "string" },
+      /** The owner's secret key, encrypted. The check only runs once this is saved — until then the form uses the honeypot alone. */
+      captchaSecretEncrypted: { type: "string" },
       lastDeliveredAt: { type: "string" },
       /** The last delivery problem, shown to the owner until a delivery succeeds again. */
       lastDeliveryError: { type: "string" },
