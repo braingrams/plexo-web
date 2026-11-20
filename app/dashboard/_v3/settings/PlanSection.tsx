@@ -293,34 +293,44 @@ export function PlanSection(props: PlanSectionProps) {
             </div>
             {credits.low || credits.negative ? <Notice tone="warn">Running low? Top up below and SOL carries on straight away.</Notice> : null}
             <div>
-              <h3 className="plx-h3" style={{ margin: "0 0 12px" }}>Add more credits</h3>
-              <div className="plx-packs">
-                {packs.map((p) => (
-                  <div key={p.pack} className="plx-sppack">
-                    <div className="plx-sppack__amt">
-                      <b>{p.credits.toLocaleString("en-US")}</b>
-                      <span>credits</span>
-                    </div>
-                    <div className="plx-sppack__price">{p.price}</div>
-                    <Button variant="secondary" fullWidth disabled={busy !== null && busy !== `topup-${p.pack}`} loading={busy === `topup-${p.pack}`} onClick={() => checkout({ kind: "topup", pack: p.pack }, `topup-${p.pack}`)}>
-                      Buy
-                    </Button>
-                  </div>
-                ))}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 16 }}>
+                <h3 className="plx-h3" style={{ margin: 0 }}>Add more credits</h3>
+                <p className="plx-small" style={{ color: "var(--plx-muted)", margin: 0 }}>
+                  Choose from ready-made credit packs or enter the exact amount you want to buy. Credits you buy never expire.
+                </p>
               </div>
 
-              {/* Custom top-up amount */}
-              <div style={{ marginTop: 16, padding: "18px 20px", borderRadius: 16, border: "1px solid var(--plx-border)", background: "var(--plx-elevated)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>Custom credit amount</div>
-                    <div className="plx-small" style={{ color: "var(--plx-muted)", marginTop: 2 }}>
-                      Put your amount and get credits worth that upfront ({currencySymbol}{ratePer1000.toLocaleString("en-US")} gives 1,000 credits).
+              {/* 1. Credit packs */}
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "var(--plx-text)", marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span>Credit packs</span>
+                </div>
+                <div className="plx-packs">
+                  {packs.map((p) => (
+                    <div key={p.pack} className="plx-sppack">
+                      <div className="plx-sppack__amt">
+                        <b>{p.credits.toLocaleString("en-US")}</b>
+                        <span>credits</span>
+                      </div>
+                      <div className="plx-sppack__price">{p.price}</div>
+                      <Button variant="secondary" fullWidth disabled={busy !== null && busy !== `topup-${p.pack}`} loading={busy === `topup-${p.pack}`} onClick={() => checkout({ kind: "topup", pack: p.pack }, `topup-${p.pack}`)}>
+                        Buy
+                      </Button>
                     </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 2. Buy what you need */}
+              <div style={{ padding: "18px 20px", borderRadius: 16, border: "1px solid var(--plx-border)", background: "var(--plx-elevated)" }}>
+                <div style={{ marginBottom: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15 }}>Buy what you need</div>
+                  <div className="plx-small" style={{ color: "var(--plx-muted)", marginTop: 2 }}>
+                    Enter any amount and get credits worth that upfront ({currencySymbol}{ratePer1000.toLocaleString("en-US")} gives 1,000 credits).
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                  <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                  <div style={{ position: "relative", display: "inline-flex", alignItems: "center", minWidth: 140, flex: "0 1 auto" }}>
                     <span style={{ position: "absolute", left: 12, fontWeight: 700, color: "var(--plx-muted)", pointerEvents: "none" }}>{currencySymbol}</span>
                     <input
                       type="number"
@@ -333,16 +343,17 @@ export function PlanSection(props: PlanSectionProps) {
                       style={{
                         paddingLeft: currencySymbol.length > 2 ? 46 : 28,
                         paddingRight: 12,
-                        height: 40,
+                        height: 42,
                         borderRadius: 10,
                         border: "1px solid var(--plx-border)",
                         background: "var(--plx-bg)",
                         color: "var(--plx-text)",
                         fontSize: 15,
                         fontWeight: 700,
-                        width: 140,
+                        width: "100%",
+                        maxWidth: 160,
                       }}
-                      aria-label="Custom top-up amount"
+                      aria-label="Enter price to buy credits"
                     />
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -455,14 +466,16 @@ export function PlanSection(props: PlanSectionProps) {
         </>
       }
       aside={
-        <>
-          <AsideCard title={`Your ${current.name} plan`} icon={CreditCard}>
-            <AsideStats items={[
-              { label: siteMeter.limit ? "Sites live" : "Sites", value: siteMeter.limit ? `${siteMeter.used} of ${siteMeter.limit}` : siteMeter.used, tone: siteMeter.tone === "ok" ? undefined : "warn" },
-              { label: "AI credits left", value: allowanceBalance.toLocaleString("en-US"), tone: creditsMeter.tone === "full" ? "bad" : creditsMeter.tone === "near" ? "warn" : "ok" },
-            ]} />
+        <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+          <AsideCard title={`Your ${current.name} plan`} icon={CreditCard} style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <AsideStats items={[
+                { label: siteMeter.limit ? "Sites live" : "Sites", value: siteMeter.limit ? `${siteMeter.used} of ${siteMeter.limit}` : siteMeter.used, tone: siteMeter.tone === "ok" ? undefined : "warn" },
+                { label: "AI credits left", value: allowanceBalance.toLocaleString("en-US"), tone: creditsMeter.tone === "full" ? "bad" : creditsMeter.tone === "near" ? "warn" : "ok" },
+              ]} />
+            </div>
           </AsideCard>
-        </>
+        </div>
       }
     >
       {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}

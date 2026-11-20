@@ -109,10 +109,15 @@ export async function pullPublished(token: string, projectId: string, opts: { al
   if (res.status === 404 || res.status === 400) {
     const body = (await res.clone().json().catch(() => ({}))) as { error?: { code?: string } };
     const notPublished = body.error?.code === "NOT_PUBLISHED";
-    // 400: a Strata from before ?source existed. NOT_PUBLISHED: nothing published yet (only a link may use the draft).
-    if (res.status === 400 || (notPublished && opts.allowDraft)) {
-      res = await strataFetch(`/projects/${pid(projectId)}/design-system`, token);
-      draft = notPublished;
+    // Check if the project itself exists in Strata by fetching its draft design system
+    const draftRes = await strataFetch(`/projects/${pid(projectId)}/design-system`, token);
+    if (draftRes.ok) {
+      if (opts.allowDraft || res.status === 400) {
+        res = draftRes;
+        draft = true;
+      } else {
+        throw new BrandError("This brand hasn't been published yet.", 409);
+      }
     } else if (notPublished) {
       throw new BrandError("This brand hasn't been published yet.", 409);
     }
@@ -155,10 +160,22 @@ export type PublishAttempt = "published" | "unchanged" | "unavailable" | "refuse
  */
 export async function publishStrataProject(userToken: string, projectId: string): Promise<PublishAttempt> {
   try {
-    const res = await strataFetch(`/projects/${pid(projectId)}/design-system/publish`, userToken, { method: "POST", body: {} });
+    let res = await strataFetch(`/projects/${pid(projectId)}/design-system/publish`, userToken, { method: "POST", body: {} });
+    if (res.status === 404) {
+      // Strata backend (charisol-design-system-be) publishes via /project/:queryId/publish
+      res = await strataFetch(`/project/${pid(projectId)}/publish`, userToken, { method: "POST", body: {} });
+    }
     if (res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { data?: { unchanged?: unknown } };
+      const body = (await res.json().catch(() => ({}))) as { data?: { unchanged?: unknown }; status?: boolean };
       return body.data?.unchanged === true ? "unchanged" : "published";
+    }
+    if (res.status === 400) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string; error?: { code?: string; message?: string } };
+      const msg = (body.error?.message ?? body.message ?? "").toLowerCase();
+      if (body.error?.code === "NO_DRAFT" || msg.includes("no draft changes")) {
+        return "unchanged";
+      }
+      return "refused";
     }
     if (res.status === 404 || res.status === 405 || res.status >= 500 || res.status === 429) return "unavailable";
     return "refused";

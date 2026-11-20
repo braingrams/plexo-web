@@ -2,10 +2,12 @@
 
 import "./hub.css";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Upload } from "lucide-react";
-import { Badge, ButtonLink, HelpMedia, ScrollRail, StatusPill, TabLinks } from "../ui";
+import { useEffect, useRef, useState } from "react";
+import { ArrowLeft, ChevronDown, ExternalLink, Eye, Upload } from "lucide-react";
+import { Badge, Button, ButtonLink, HelpMedia, ScrollRail, StatusPill, TabLinks } from "../ui";
 import { EditWebsiteButton } from "./EditWebsiteButton";
 import { OpenSiteButton, PreviewButton } from "../home/SiteButtons";
+import { liveHref, previewHref } from "@/lib/dashboardV3/siteLinks";
 import { hubTabHref, type HubTab, type HubTabId } from "@/lib/dashboardV3/hubTabs";
 import type { Experience } from "@/lib/dashboardV3/nav";
 import type { HubSite } from "@/lib/dashboardV3/hubData";
@@ -37,6 +39,45 @@ export function builderLabel(site: Pick<HubFrameSite, "sourceType" | "designForm
 }
 
 /** The top of a site's hub: who it is, whether it's live, the two main buttons, and only the tabs it uses. */
+function FoldedSiteActions({ site }: { site: HubFrameSite }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const live = liveHref(site);
+
+  useEffect(() => {
+    if (!open) return;
+    const click = (e: MouseEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", click);
+    return () => document.removeEventListener("mousedown", click);
+  }, [open]);
+
+  return (
+    <div ref={ref} style={{ position: "relative" }}>
+      <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)} rightIcon={<ChevronDown size={14} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s ease" }} />}>
+        View site
+      </Button>
+      {open ? (
+        <div style={{ position: "absolute", right: 0, top: "calc(100% + 6px)", zIndex: 50, minWidth: 190, padding: 6, borderRadius: 12, background: "var(--plx-surface)", border: "1px solid var(--plx-border)", boxShadow: "var(--plx-shadow-dropdown)", display: "flex", flexDirection: "column", gap: 2 }}>
+          <a href={previewHref(site.id)} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, color: "var(--plx-text)", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>
+            <Eye size={16} aria-hidden /> Preview draft
+          </a>
+          {live ? (
+            <a href={live} target="_blank" rel="noopener noreferrer" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, color: "var(--plx-text)", textDecoration: "none", fontSize: 14, fontWeight: 600 }}>
+              <ExternalLink size={16} aria-hidden /> Open live site
+            </a>
+          ) : (
+            <span style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, color: "var(--plx-muted)", fontSize: 13 }}>
+              <ExternalLink size={16} aria-hidden /> Not online yet
+            </span>
+          )}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function HubFrame({ site, tabs, current, experience, children }: { site: HubFrameSite; tabs: HubTab[]; current: HubTabId; experience: Experience; children: React.ReactNode }) {
   const currentHref = hubTabHref(site.id, current);
   return (
@@ -67,8 +108,14 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
           </div>
         </div>
         <div className="plx-hub__actions" data-tour="hub-actions">
-          <PreviewButton site={site} />
-          <OpenSiteButton site={site} />
+          {current === "settings" ? (
+            <FoldedSiteActions site={site} />
+          ) : (
+            <>
+              <PreviewButton site={site} />
+              <OpenSiteButton site={site} />
+            </>
+          )}
           {site.deployed ? (
             <ButtonLink href={hubTabHref(site.id, "app")} leftIcon={<Upload size={16} aria-hidden />}>
               Update app

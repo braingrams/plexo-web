@@ -103,14 +103,14 @@ export function Panel({ title, description, action, flush, tone, className, chil
  * The side card: a real surface (border, accent edge, header icon) for live status and the few
  * tips that matter. Use `AsideStats` inside for live numbers, then short tips below.
  */
-export function AsideCard({ title, icon: Icon = Info, children }: { title: string; icon?: LucideIcon; children: React.ReactNode }) {
+export function AsideCard({ title, icon: Icon = Info, children, style, className }: { title: string; icon?: LucideIcon; children: React.ReactNode; style?: React.CSSProperties; className?: string }) {
   return (
-    <Card as="section" padding="none" className="plx-aside">
+    <Card as="section" padding="none" className={cx("plx-aside", className)} style={style}>
       <header className="plx-aside__head">
         <span className="plx-aside__icon" aria-hidden><Icon size={18} /></span>
         <h3>{title}</h3>
       </header>
-      <div className="plx-aside__body">{children}</div>
+      <div className="plx-aside__body" style={style ? { flex: 1, display: "flex", flexDirection: "column" } : undefined}>{children}</div>
     </Card>
   );
 }

@@ -113,12 +113,20 @@ export function applyHealthSettingsWithNotes(html: string, s: HealthSettingsView
   }
 
   let tags = "";
-  const hasDescription = /<meta\b[^>]*name=["']description["']/i.test(head);
-  if (s.fallbackDescription && !hasDescription) {
+  const descTagMatch = head.match(/<meta\b[^>]*name=["']description["'][^>]*content=["']([^"']*)["'][^>]*>/i) || head.match(/<meta\b[^>]*content=["']([^"']*)["'][^>]*name=["']description["'][^>]*>/i);
+  const existingDescContent = descTagMatch ? (descTagMatch[1] ?? "").trim() : "";
+  const hasDescription = !!existingDescContent;
+  if (s.fallbackDescription) {
     const d = escapeHtmlAttr(s.fallbackDescription);
-    tags += `<meta name="description" content="${d}">`;
-    if (!/property=["']og:description["']/i.test(head)) tags += `<meta property="og:description" content="${d}">`;
-    note("meta_description", [`Google shows: "${s.fallbackDescription}"`]);
+    if (descTagMatch && !existingDescContent) {
+      out = out.replace(descTagMatch[0], `<meta name="description" content="${d}">`);
+      if (!/property=["']og:description["']/i.test(head)) tags += `<meta property="og:description" content="${d}">`;
+      note("meta_description", [`Google shows: "${s.fallbackDescription}"`]);
+    } else if (!hasDescription && !descTagMatch) {
+      tags += `<meta name="description" content="${d}">`;
+      if (!/property=["']og:description["']/i.test(head)) tags += `<meta property="og:description" content="${d}">`;
+      note("meta_description", [`Google shows: "${s.fallbackDescription}"`]);
+    }
   }
   if (s.organizationSchema && !/"@type"\s*:\s*"(Organization|LocalBusiness)"/i.test(out)) {
     // Built from the details the owner confirmed (name, logo, phone, address, hours, social profiles); a site with none still gets its name and address.

@@ -11,7 +11,7 @@ import { ListModeToggle, useListMode } from "./ListModeToggle";
 import { TabBar } from "./HubFrame";
 import { errMsg, hubApi } from "./hubApi";
 
-type Post = { id: string; title: string; status: string; publishedAt: string | null; updatedAt: string; viewCount: number };
+type Post = { id: string; title: string; status: string; publishedAt: string | null; updatedAt: string; viewCount: number; featuredImageUrl?: string | null };
 
 const STATUS: Record<string, { text: string; tone: "success" | "neutral" | "info" }> = { PUBLISHED: { text: "Published", tone: "success" }, DRAFT: { text: "Draft", tone: "neutral" }, SCHEDULED: { text: "Scheduled", tone: "info" } };
 
@@ -40,7 +40,7 @@ export function BlogTab({ siteId, experience }: { siteId: string; experience: st
         <EmptyState title="Write your first post" body="Tell people what's new. Open the editor and ask SOL to draft it for you, or write it yourself." action={actions} />
       ) : posts ? (
         <div data-tour="hub-blog">
-          <div className="plx-toolbar"><ListModeToggle mode={mode} onChange={setMode} /></div>
+          <div className="plx-toolbar plx-toolbar--end"><ListModeToggle mode={mode} onChange={setMode} /></div>
           {mode === "grid" ? (
             <ul className="plx-gcards">
               {shown.items.map((p) => {
@@ -48,7 +48,10 @@ export function BlogTab({ siteId, experience }: { siteId: string; experience: st
                 return (
                   <li key={p.id} style={{ display: "contents" }}>
                     <a className="plx-gcard" href={`/dashboard/templates/${siteId}/blog/${p.id}`}>
-                      <Badge tone={s.tone}>{s.text}</Badge>
+                      <div style={{ width: "100%", height: 130, borderRadius: 10, overflow: "hidden", marginBottom: 10, background: "var(--plx-tint)", display: "grid", placeItems: "center" }}>
+                        {p.featuredImageUrl ? <img src={p.featuredImageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <PenLine size={24} style={{ color: "var(--plx-muted)" }} aria-hidden />}
+                      </div>
+                      <Badge tone={s.tone} style={{ width: "fit-content", alignSelf: "flex-start" }}>{s.text}</Badge>
                       <span className="plx-gcard__title">{p.title}</span>
                       <span className="plx-gcard__foot"><span>{dateOf(p)}{p.status === "PUBLISHED" ? ` · ${p.viewCount} views` : ""}</span><ChevronRight size={18} aria-hidden /></span>
                     </a>
@@ -63,12 +66,15 @@ export function BlogTab({ siteId, experience }: { siteId: string; experience: st
                   const s = STATUS[p.status] ?? STATUS.DRAFT;
                   return (
                     <li key={p.id} style={{ display: "contents" }}>
-                      <a className="plx-hrow plx-hrow--link" href={`/dashboard/templates/${siteId}/blog/${p.id}`}>
+                      <a className="plx-hrow plx-hrow--link" href={`/dashboard/templates/${siteId}/blog/${p.id}`} style={{ alignItems: "center" }}>
+                        <span style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, display: "grid", placeItems: "center", background: "var(--plx-tint)", marginRight: 12 }}>
+                          {p.featuredImageUrl ? <img src={p.featuredImageUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <PenLine size={18} style={{ color: "var(--plx-muted)" }} aria-hidden />}
+                        </span>
                         <span className="plx-hrow__main">
                           <span className="plx-hrow__title">{p.title}</span>
                           <span className="plx-hrow__sub">{dateOf(p)}{p.status === "PUBLISHED" ? ` · ${p.viewCount} views` : ""}</span>
                         </span>
-                        <span className="plx-hrow__end"><Badge tone={s.tone}>{s.text}</Badge></span>
+                        <span className="plx-hrow__end"><Badge tone={s.tone} style={{ width: "fit-content" }}>{s.text}</Badge></span>
                         <ChevronRight size={18} aria-hidden className="plx-hrow__chev" />
                       </a>
                     </li>

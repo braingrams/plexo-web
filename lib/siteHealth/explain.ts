@@ -225,8 +225,8 @@ export function buildIssues(ctx: Ctx): Issue[] {
   const noDescription = aeoFailed(aeo, "meta_description") || failedAudit(speed, "meta-description");
   if (noDescription || settings.fallbackDescription) {
     push({
-      id: "meta_description", area: "seo", severity: noDescription ? "okay" : "good", impact: 120, gain: noDescription ? aeoGain("meta_description") : undefined,
-      title: noDescription ? "Your site has no short summary for Google" : "Your short summary is on",
+      id: "meta_description", area: "seo", severity: settings.fallbackDescription ? "good" : (noDescription ? "okay" : "good"), impact: 120, gain: !settings.fallbackDescription && noDescription ? aeoGain("meta_description") : undefined,
+      title: settings.fallbackDescription ? "Your short summary is on" : (noDescription ? "Your site has no short summary for Google" : "Your short summary is on"),
       why: "These are the one or two sentences people read under your site's name in search results. Without them, Google picks random words from your page.",
       autoFix: { id: "meta_description", label: "Write it for me", on: !!settings.fallbackDescription },
       steps: ["Open your home page in the editor.", "Open the page settings and find the box called description.", "Write one or two sentences about what you offer, about 120 to 155 characters.", "Publish the page."],
@@ -236,8 +236,8 @@ export function buildIssues(ctx: Ctx): Issue[] {
   const noTitle = aeoFailed(aeo, "title") || failedAudit(speed, "document-title");
   if (noTitle || ex.page_title) {
     push({
-      id: "page_title", area: "seo", severity: noTitle ? "okay" : "good", impact: 130, gain: noTitle ? aeoGain("title") : undefined,
-      title: noTitle ? "Your page has no name in the browser tab" : "Your page has a name in the browser tab",
+      id: "page_title", area: "seo", severity: ex.page_title ? "good" : (noTitle ? "okay" : "good"), impact: 130, gain: !ex.page_title && noTitle ? aeoGain("title") : undefined,
+      title: ex.page_title ? "Your page has a name in the browser tab" : (noTitle ? "Your page has no name in the browser tab" : "Your page has a name in the browser tab"),
       why: "The page title is the big blue link in Google results and the words on the browser tab. Without one, people see your web address.",
       autoFix: { id: "page_title", label: "Name my page", on: !!ex.page_title },
       steps: ["Open the page settings.", "Find the box called title.", "Write your page name and your business name, like 'Fresh bread | Mama Tee Bakery'.", "Publish the page."],
@@ -247,8 +247,8 @@ export function buildIssues(ctx: Ctx): Issue[] {
   const noSocial = aeoFailed(aeo, "open_graph");
   if (noSocial || ex.social_tags) {
     push({
-      id: "social_tags", area: "seo", severity: noSocial ? "okay" : "good", impact: 70, gain: noSocial ? aeoGain("open_graph") : undefined,
-      title: noSocial ? "Shared links of your site look plain" : "Shared links show a nice preview",
+      id: "social_tags", area: "seo", severity: ex.social_tags ? "good" : (noSocial ? "okay" : "good"), impact: 70, gain: !ex.social_tags && noSocial ? aeoGain("open_graph") : undefined,
+      title: ex.social_tags ? "Shared links show a nice preview" : (noSocial ? "Shared links of your site look plain" : "Shared links show a nice preview"),
       why: "When someone shares your link, hidden labels decide the picture and words they see. WhatsApp, Facebook and LinkedIn all use them.",
       autoFix: { id: "social_tags", label: "Add the preview", on: !!ex.social_tags },
       steps: ["Open the page settings.", "Add a share picture and a short summary.", "Publish the page."],
@@ -288,8 +288,8 @@ export function buildIssues(ctx: Ctx): Issue[] {
   const missingAlt = aeoFailed(aeo, "alt_text") || failedAudit(speed, "image-alt");
   if (missingAlt || settings.altFromFilename) {
     push({
-      id: "alt_text", area: "accessibility", severity: missingAlt ? "okay" : "good", impact: 90, gain: missingAlt ? aeoGain("alt_text") : undefined,
-      title: missingAlt ? "Some pictures have no description" : "Picture descriptions are on",
+      id: "alt_text", area: "accessibility", severity: settings.altFromFilename ? "good" : (missingAlt ? "okay" : "good"), impact: 90, gain: !settings.altFromFilename && missingAlt ? aeoGain("alt_text") : undefined,
+      title: settings.altFromFilename ? "Picture descriptions are on" : (missingAlt ? "Some pictures have no description" : "Picture descriptions are on"),
       why: "People who use a screen reader, and AI tools, cannot see your pictures. A short description tells them what is in each one.",
       autoFix: { id: "alt_text", label: "Describe my pictures", on: settings.altFromFilename },
       steps: ["Click a picture in the editor.", "Find the box called alt text or description.", "Type a few words about what the picture shows, like 'Our team at the market stall'.", "Publish the page."],
@@ -311,8 +311,8 @@ export function buildIssues(ctx: Ctx): Issue[] {
   const sdFail = aeoFailed(aeo, "structured_data");
   if (sdFail || settings.organizationSchema) {
     push({
-      id: "structured_data", area: "ai", severity: sdFail ? "okay" : "good", impact: 160, gain: sdFail ? aeoGain("structured_data") : undefined,
-      title: sdFail ? "Search and AI tools cannot tell who you are" : "Your business details are on",
+      id: "structured_data", area: "ai", severity: settings.organizationSchema ? "good" : (sdFail ? "okay" : "good"), impact: 160, gain: !settings.organizationSchema && sdFail ? aeoGain("structured_data") : undefined,
+      title: settings.organizationSchema ? "Your business details are on" : (sdFail ? "Search and AI tools cannot tell who you are" : "Your business details are on"),
       why: "A hidden label tells Google and AI assistants your business name, logo, phone, address and opening hours. Then they can name you correctly in answers and show you on maps.",
       autoFix: { id: "organization_schema", label: "Add my business details", on: settings.organizationSchema },
       steps: ["Open the page settings, then the custom code box in the head section.", "Paste a small JSON-LD block that says what kind of business you are, your name and your address.", "Publish the page."],
@@ -332,8 +332,8 @@ export function buildIssues(ctx: Ctx): Issue[] {
   const faqFail = aeoFailed(aeo, "faq_markup");
   if (faqFail || ex.faq_schema) {
     push({
-      id: "faq_markup", area: "ai", severity: faqFail ? "okay" : "good", impact: 60, gain: faqFail ? aeoGain("faq_markup") : undefined,
-      title: faqFail ? "Your questions and answers are not labelled" : "Your questions and answers are labelled",
+      id: "faq_markup", area: "ai", severity: ex.faq_schema ? "good" : (faqFail ? "okay" : "good"), impact: 60, gain: !ex.faq_schema && faqFail ? aeoGain("faq_markup") : undefined,
+      title: ex.faq_schema ? "Your questions and answers are labelled" : (faqFail ? "Your questions and answers are not labelled" : "Your questions and answers are labelled"),
       why: "You have questions on the page. Labelling them helps Google and AI assistants quote your answers.",
       autoFix: { id: "faq_schema", label: "Label my questions", on: !!ex.faq_schema },
       steps: ["Add a FAQ section with the FAQ block in the editor, which labels it for you.", "Each question should be a heading that ends with a question mark, followed by its answer."],
@@ -342,8 +342,8 @@ export function buildIssues(ctx: Ctx): Issue[] {
   }
   if (aeoFailed(aeo, "llms_txt") || settings.llmsTxt) {
     push({
-      id: "llms_txt", area: "ai", severity: aeoFailed(aeo, "llms_txt") ? "okay" : "good", impact: 80, gain: aeoFailed(aeo, "llms_txt") ? aeoGain("llms_txt") : undefined,
-      title: aeoFailed(aeo, "llms_txt") ? "AI assistants have no guide to your site" : "Your guide for AI assistants is on",
+      id: "llms_txt", area: "ai", severity: settings.llmsTxt ? "good" : (aeoFailed(aeo, "llms_txt") ? "okay" : "good"), impact: 80, gain: !settings.llmsTxt && aeoFailed(aeo, "llms_txt") ? aeoGain("llms_txt") : undefined,
+      title: settings.llmsTxt ? "Your guide for AI assistants is on" : (aeoFailed(aeo, "llms_txt") ? "AI assistants have no guide to your site" : "Your guide for AI assistants is on"),
       why: "A small file at your-address/llms.txt gives AI assistants like ChatGPT a quick summary of your site. It also lists your pages.",
       autoFix: { id: "llms_txt", label: "Add the guide", on: settings.llmsTxt },
       steps: ["Create a plain text file called llms.txt.", "Put your site name on the first line after a # sign, then one sentence about it, then a list of your pages as links.", "Upload it so it opens at your-address/llms.txt."],

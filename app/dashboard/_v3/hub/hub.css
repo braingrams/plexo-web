@@ -465,7 +465,7 @@ a.plx-gcard { display: flex; flex-direction: column; gap: 10px; padding: 18px; m
 a.plx-gcard:hover { transform: translateY(-2px); border-color: var(--plx-border-strong); box-shadow: var(--plx-shadow-overlay); }
 .plx-gcard__title { font-weight: 800; font-size: 16px; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .plx-gcard__foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--plx-muted); font-size: 13px; }
-.plx-toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-bottom: 12px; }
+.plx-toolbar--end { justify-content: flex-end; }
 /* Products: grid, list, select several */
 .plx-pbrowse { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .plx-ptools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -708,3 +708,38 @@ a.plx-gcard:hover { transform: translateY(-2px); border-color: var(--plx-border-
 .plx-pl__row .plx-badge { white-space: normal; text-align: left; line-height: 1.25; }
 
 .plx-pagecard__note { white-space: normal; text-align: left; line-height: 1.25; min-width: 0; }
+
+/* Floating Add more to your site action button */
+@keyframes plx-wobble-bounce {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateY(-6px) rotate(-1.5deg); }
+  50% { transform: translateY(0); }
+  75% { transform: translateY(-3px) rotate(1.5deg); }
+}
+.plx-floating-cta {
+  position: fixed;
+  right: 28px;
+  bottom: 28px;
+  z-index: 60;
+}
+.plx-floating-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  border-radius: 999px;
+  background: var(--plx-brand);
+  color: var(--plx-on-brand);
+  font-weight: 800;
+  font-size: 14px;
+  border: 1px solid var(--plx-border);
+  box-shadow: var(--plx-shadow-elevated);
+  cursor: pointer;
+  animation: plx-wobble-bounce 2.6s ease-in-out infinite;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.plx-floating-btn:hover {
+  animation-play-state: paused;
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: var(--plx-shadow-dropdown);
+}

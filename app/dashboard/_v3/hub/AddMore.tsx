@@ -146,8 +146,8 @@ export function AddMoreCards({ siteId, siteName, features, pages = [] }: { siteI
               <div className="plx-aomodal__same" role="note">
                 <p className="plx-aomodal__samehead">Added to &ldquo;{siteName}&rdquo;, the same website</p>
                 {example.today ? <p>Your pages today: <b>{example.today}</b></p> : null}
-                {example.adds.length ? <p>After setup you&apos;ll also have: <b>{example.adds.join(", ")}</b></p> : null}
-                <p>{example.summary}</p>
+                {example.adds.length ? <p>New pages added: <b>{example.adds.join(", ")}</b></p> : null}
+                {example.summary ? <p>{example.summary}</p> : null}
               </div>
             ) : null}
             <p className="plx-aomodal__h">What you get</p>

@@ -7,7 +7,7 @@ import { openSiteSwitcher, SWITCHER_PANEL_STEP } from "@/lib/dashboardV3/siteSwi
 import { useOptionalTour } from "../tour/TourProvider";
 import { useState } from "react";
 import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
-import { Check, ChevronRight, Copy, Mail, Package, Pencil, Plus, ShoppingBag } from "lucide-react";
+import { Check, ChevronRight, Copy, Mail, Package, Pencil, Plus, PlusCircle, ShoppingBag } from "lucide-react";
 import { shopQuickLinks } from "@/lib/dashboardV3/commerceNav";
 import { NEW_EMAIL_HREF } from "@/lib/dashboardV3/emails";
 import { liveHref, OPEN_SITE_HINT } from "@/lib/dashboardV3/siteLinks";
@@ -141,15 +141,16 @@ function AllSitesRow({ newSiteHref }: { newSiteHref: string }) {
   );
 }
 
-/** One tidy card for the things people do next that aren't about this one site: SOL, email, another website. */
-export function OtherActionsCard({ solPrompt, newSiteHref }: { solPrompt: string; newSiteHref: string }) {
+/** One tidy card for the things people do next: SOL, email, add more to your site. */
+export function OtherActionsCard({ solPrompt, siteId }: { solPrompt: string; newSiteHref?: string; siteId?: string }) {
+  const addMoreHref = siteId ? `/dashboard/sites/${siteId}?tab=settings#addmore` : "/dashboard";
   return (
     <Card padding="none" data-tour="home-actions">
       <h2 className="plx-card__title" style={{ padding: "18px 20px 6px" }}>Other actions</h2>
       <ul className="plx-actions">
         <ActionRow href="/dashboard/sol" icon={SolGlyph} title="Ask SOL" sub={`Try: “${solPrompt}”`} tour="home-ask-sol" />
         <ActionRow href={NEW_EMAIL_HREF} icon={Mail} title="Make an email" sub="A welcome note, receipt or newsletter" tour="home-make-email" />
-        <AllSitesRow newSiteHref={newSiteHref} />
+        <ActionRow href={addMoreHref} icon={PlusCircle} title="Add more to your site" sub="Turn on shop, bookings, blog, course, or sign-up" tour="home-add-more" />
       </ul>
     </Card>
   );

@@ -12,7 +12,7 @@ import type { Experience } from "@/lib/dashboardV3/nav";
 import { AsideCard, Notice, Panel, SaveBar, SettingRow, SettingsPageShell } from "./bits";
 import { isDirty } from "@/lib/dashboardV3/settingsSaveBar";
 import { switchLabel, useVersionSwitch } from "../../_versions/VersionUi";
-import { CountryField } from "@/app/_components/country/CountryField";
+import { CountrySelect } from "@/app/_components/country/CountrySelect";
 
 const FEELS: { id: Experience; title: string; body: string }[] = [
   { id: "beginner", title: "Guided", body: "Fewer buttons. Plexo walks you through each step in plain words." },
@@ -29,8 +29,27 @@ export function ProfileSection({ name: initialName, email, phone, image: initial
   const [saved, setSaved] = useState(initialName);
   const [image, setImage] = useState(initialImage ?? null);
   const [experience, setExperience] = useState(initialExperience);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(country ?? countryGuess ?? null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleCountryChange(code: string) {
+    setSelectedCountry(code);
+    try {
+      const res = await fetch("/api/profile/country", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ country: code }),
+      });
+      if (res.ok) {
+        show({ title: "Country saved", tone: "success" });
+        window.dispatchEvent(new Event("plexo:country-saved"));
+        router.refresh();
+      }
+    } catch {
+      // Keep optimistic value
+    }
+  }
 
   const patch = (json: Record<string, unknown>) => (mock ? Promise.resolve({}) : hubApi("/api/profile", { method: "PATCH", json }, "We couldn't save that. Please try again."));
 
@@ -143,15 +162,13 @@ export function ProfileSection({ name: initialName, email, phone, image: initial
           </div>
           <Input label="Your name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" help="What your team and customers see." error={!name.trim() && dirty ? "Please type the name you'd like us to use." : undefined} onKeyDown={(e) => e.key === "Enter" && dirty && name.trim() && void saveName()} />
           <Input label="Your email" value={email} readOnly help="This is what you sign in with." />
+          <div className="plx-field">
+            <label className="plx-field__label" htmlFor="profile-country">Country</label>
+            <CountrySelect id="profile-country" value={selectedCountry} onChange={handleCountryChange} />
+          </div>
           {phone ? <Input label="Your phone number" value={phone} readOnly help="Saved when you connected WhatsApp." /> : null}
         </div>
       </Panel>
-
-      {mock ? null : (
-        <Panel title="Your country" description="Plexo shows prices in your own currency, so this decides what you pay and in what money.">
-          <CountryField initialCountry={country} guess={countryGuess} />
-        </Panel>
-      )}
 
       <Panel title="Sign-in" description="Keep your account safe.">
         <SettingRow title="Password" description="We'll email you a link to choose a new one.">

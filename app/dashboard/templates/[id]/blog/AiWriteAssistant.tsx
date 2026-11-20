@@ -71,7 +71,7 @@ export function AiWriteAssistant({ onInsert, categories, tags }: { onInsert: (re
       <button
         type="button"
         onClick={() => setOpen(true)}
-        style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", padding: "0.5rem 0.9rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)", background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--ed-accent-text)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, fontFamily: "inherit", marginBottom: "1rem" }}
+        style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", padding: "0.5rem 0.9rem", borderRadius: 9, border: "1px solid var(--plx-border)", background: "var(--plx-tint)", color: "var(--plx-brand)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, fontFamily: "inherit", marginBottom: "1rem" }}
       >
         <SolGlyph size={16} />
         Write with SOL

@@ -23,5 +23,5 @@ export default async function AllSitesPage() {
   );
   const jar = await cookies();
   const current = pickCurrentSite(sites, jar.get(CURRENT_SITE_COOKIE)?.value);
-  return <AllSitesBoard rows={rows} homeName={current?.name ?? null} />;
+  return <AllSitesBoard rows={rows} currentSiteId={current?.id ?? null} />;
 }

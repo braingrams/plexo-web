@@ -5,7 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "./insights.css";
 import "./health.css";
 import { Check, Code2, Gauge, Monitor, PartyPopper, Pencil, RefreshCw, Smartphone, Undo2, Wrench } from "lucide-react";
-import { Button, ButtonLink, Card, CardHeader, Modal, Notice, SegmentedControl, Skeleton } from "../ui";
+import { BannerStack, Button, ButtonLink, Card, CardHeader, Modal, Notice, SegmentedControl, Skeleton } from "../ui";
 import { TabBar } from "./HubFrame";
 import { scoreLook } from "@/lib/siteHealth/explain";
 import type { MetricView } from "@/lib/siteHealth/explain";
@@ -340,6 +340,9 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
       if (!ok) setError(json.error ?? "That didn't work. Please try again.");
       else {
         const j = json as unknown as Payload & { summary?: Summary };
+        if (j.summary?.aeo?.to && j.last?.report?.aeo) {
+          j.last.report.aeo.score = j.summary.aeo.to;
+        }
         setData(j);
         setSummary(j.summary ?? null);
         setJustFixed(true);
@@ -393,12 +396,19 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
   return (
     <>
       <TabBar title="Site health" sub={sub} action={<Button leftIcon={<RefreshCw size={16} />} loading={running} loadingLabel="Checking your site…" onClick={run}>{report ? "Check again" : "Check my site"}</Button>} />
-      {error ? <GateOrError error={error}><Notice kind="error" title="Something went wrong">{error}</Notice></GateOrError> : null}
-      {running ? <Notice kind="info" title="Checking your site">This takes up to a minute. We open your site the way a visitor on a phone would, and then on a computer.</Notice> : null}
-      {data?.stale && !running && report ? <Notice kind="info" title="Your site changed since the last check">We&apos;ll look again in a moment so the numbers match what visitors see.</Notice> : null}
-      {justFixed && !running ? <Notice kind="success" title="Done">Your live site updates within a minute or two. Press Check again to see your new scores{next ? ` (you can after ${next.toLocaleTimeString("en", { timeStyle: "short" })})` : ""}.</Notice> : null}
-      {next && !running && report && !justFixed && !data?.stale ? <Notice kind="info" title="Just checked">You can run another check after {next.toLocaleTimeString("en", { timeStyle: "short" })}.</Notice> : null}
-      {report?.auto && !running ? <Notice kind="info" title="Checked for you">{report.auto === "weekly" ? "This is our weekly check." : "We checked again by ourselves after you changed your site."}</Notice> : null}
+      <BannerStack
+        banners={
+          <>
+            {error ? <GateOrError error={error}><Notice kind="error" title="Something went wrong">{error}</Notice></GateOrError> : null}
+            {running ? <Notice kind="info" title="Checking your site">This takes up to a minute. We open your site the way a visitor on a phone would, and then on a computer.</Notice> : null}
+            {data?.stale && !running && report ? <Notice kind="info" title="Your site changed since the last check">We&apos;ll look again in a moment so the numbers match what visitors see.</Notice> : null}
+            {justFixed && !running ? <Notice kind="success" title="Done">Your live site updates within a minute or two. Scores update automatically below.</Notice> : null}
+            {next && !running && report && !justFixed && !data?.stale ? <Notice kind="info" title="Just checked">You can run another check after {next.toLocaleTimeString("en", { timeStyle: "short" })}.</Notice> : null}
+            {report?.auto && !running ? <Notice kind="info" title="Checked for you">{report.auto === "weekly" ? "This is our weekly check." : "We checked again by ourselves after you changed your site."}</Notice> : null}
+            {data && !data.available ? <Notice kind="warning" title="Speed test not switched on yet">We can still check how easy your site is to find. The speed part comes once Plexo&apos;s speed test is connected.</Notice> : null}
+          </>
+        }
+      />
       {data?.auto?.nextAt && !running && report ? <p className="plx-health__when">{data.auto.reason === "changed" ? `We'll check again by ourselves around ${new Date(data.auto.nextAt).toLocaleTimeString("en", { timeStyle: "short" })}, a few minutes after your last change.` : `We also check by ourselves every week. The next one is around ${new Date(data.auto.nextAt).toLocaleDateString("en", { dateStyle: "medium" })}.`}</p> : null}
       {data && report && data.url ? (
         <div className="plx-toggle">
@@ -406,7 +416,6 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
           <input type="checkbox" className="plx-switch" role="switch" checked={data.settings.emailDigest} aria-label="Weekly Site health email" onChange={(e) => void setDigest(e.target.checked)} />
         </div>
       ) : null}
-      {data && !data.available ? <Notice kind="warning" title="Speed test not switched on yet">We can still check how easy your site is to find. The speed part comes once Plexo&apos;s speed test is connected.</Notice> : null}
 
       {!report ? (
         <Card>

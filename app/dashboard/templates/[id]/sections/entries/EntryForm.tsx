@@ -11,10 +11,10 @@ import type { SectionField } from "@/lib/customSections/model";
 
 type Value = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 
-const input: React.CSSProperties = { width: "100%", background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)", borderRadius: 9, color: "var(--ed-text)", padding: "0.5rem 0.7rem", fontSize: "0.85rem", outline: "none", fontFamily: "inherit" };
-const small: React.CSSProperties = { padding: "0.25rem 0.55rem", borderRadius: 7, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-text)", cursor: "pointer", fontSize: "0.72rem", fontWeight: 600, fontFamily: "inherit" };
-const labelStyle: React.CSSProperties = { display: "block", fontSize: "0.78rem", fontWeight: 700, color: "var(--ed-text)", marginBottom: 4 };
-const hintStyle: React.CSSProperties = { fontSize: "0.72rem", color: "var(--ed-t-450)", marginTop: 4 };
+const input: React.CSSProperties = { width: "100%", background: "var(--plx-surface)", border: "1px solid var(--plx-border)", borderRadius: 9, color: "var(--plx-text)", padding: "0.5rem 0.7rem", fontSize: "0.85rem", outline: "none", fontFamily: "inherit" };
+const small: React.CSSProperties = { padding: "0.35rem 0.65rem", borderRadius: 8, border: "1px solid var(--plx-border)", background: "var(--plx-surface)", color: "var(--plx-text)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, fontFamily: "inherit" };
+const labelStyle: React.CSSProperties = { display: "block", fontSize: "0.78rem", fontWeight: 700, color: "var(--plx-text)", marginBottom: 4 };
+const hintStyle: React.CSSProperties = { fontSize: "0.72rem", color: "var(--plx-muted)", marginTop: 4 };
 
 type Picture = { id: string; name: string; url: string };
 
@@ -50,20 +50,20 @@ function PictureField({ id, value, onChange }: { id: string; value: string; onCh
   return (
     <div style={{ display: "grid", gap: "0.5rem" }}>
       <div style={{ display: "flex", gap: "0.6rem", alignItems: "center", flexWrap: "wrap" }}>
-        {value ? <img src={value} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: "1px solid var(--ed-w-100)" }} /> : <span style={{ width: 56, height: 56, borderRadius: 8, border: "1px dashed var(--ed-w-100)" }} aria-hidden="true" />}
+        {value ? <img src={value} alt="" style={{ width: 56, height: 56, objectFit: "cover", borderRadius: 8, border: "1px solid var(--plx-border)" }} /> : <span style={{ width: 56, height: 56, borderRadius: 8, border: "1px dashed var(--plx-border)" }} aria-hidden="true" />}
         <label style={{ ...small, display: "inline-block" }}>
           {busy ? "Uploading…" : value ? "Upload a new one" : "Upload a picture"}
           <input id={id} type="file" accept="image/*" hidden onChange={(e) => { void upload(e.target.files?.[0]); e.target.value = ""; }} />
         </label>
         <button type="button" style={small} aria-expanded={open} onClick={() => void openLibrary()}>Choose from your pictures</button>
-        {value ? <button type="button" style={{ ...small, color: "var(--ed-danger)" }} onClick={() => onChange("")}>Remove</button> : null}
+        {value ? <button type="button" style={{ ...small, color: "var(--plx-danger)", borderColor: "color-mix(in srgb, var(--plx-danger) 30%, transparent)" }} onClick={() => onChange("")}>Remove</button> : null}
       </div>
       {open && (
-        <div style={{ border: "1px solid var(--ed-w-100)", borderRadius: 10, padding: "0.5rem" }}>
+        <div style={{ border: "1px solid var(--plx-border)", borderRadius: 10, padding: "0.5rem", background: "var(--plx-surface)" }}>
           {library === null ? <p style={hintStyle}>Loading your pictures…</p> : library.length === 0 ? <p style={hintStyle}>You haven&rsquo;t added any pictures yet. Use &ldquo;Upload a picture&rdquo;.</p> : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(72px, 1fr))", gap: 6, maxHeight: 180, overflowY: "auto" }}>
               {library.map((m) => (
-                <button key={m.id} type="button" title={m.name} aria-label={`Use ${m.name}`} aria-pressed={m.url === value} onClick={() => { onChange(m.url); setOpen(false); }} style={{ padding: 0, border: m.url === value ? "2px solid var(--ed-cta)" : "1px solid var(--ed-w-100)", borderRadius: 8, overflow: "hidden", background: "none", cursor: "pointer", aspectRatio: "1" }}>
+                <button key={m.id} type="button" title={m.name} aria-label={`Use ${m.name}`} aria-pressed={m.url === value} onClick={() => { onChange(m.url); setOpen(false); }} style={{ padding: 0, border: m.url === value ? "2px solid var(--plx-brand)" : "1px solid var(--plx-border)", borderRadius: 8, overflow: "hidden", background: "none", cursor: "pointer", aspectRatio: "1" }}>
                   <img src={m.url} alt="" loading="lazy" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                 </button>
               ))}
@@ -72,7 +72,7 @@ function PictureField({ id, value, onChange }: { id: string; value: string; onCh
         </div>
       )}
       <input aria-label="Or paste a picture link" value={shown} onChange={(e) => onChange(e.target.value)} placeholder="…or paste a picture link" style={input} />
-      {error && <p role="alert" style={{ fontSize: "0.75rem", color: "var(--ed-danger)" }}>{error}</p>}
+      {error && <p role="alert" style={{ fontSize: "0.75rem", color: "var(--plx-danger)" }}>{error}</p>}
     </div>
   );
 }
@@ -97,14 +97,14 @@ function Rows({ field, rows, onChange, idBase }: { field: SectionField; rows: Va
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
       {rows.map((row, i) => (
-        <div key={(row && row._key) || i} role="group" aria-label={`${name} ${i + 1} of ${rows.length}`} style={{ border: "1px solid var(--ed-w-080)", borderRadius: 12, padding: "0.75rem", background: "var(--ed-w-020)" }}>
+        <div key={(row && row._key) || i} role="group" aria-label={`${name} ${i + 1} of ${rows.length}`} style={{ border: "1px solid var(--plx-border)", borderRadius: 12, padding: "0.75rem", background: "var(--plx-tint)" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: "0.5rem", flexWrap: "wrap" }}>
-            <strong style={{ fontSize: "0.78rem", textTransform: "capitalize", color: "var(--ed-t-700)" }}>{name} {i + 1}</strong>
+            <strong style={{ fontSize: "0.78rem", textTransform: "capitalize", color: "var(--plx-text)" }}>{name} {i + 1}</strong>
             <span style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
               <button type="button" style={small} disabled={i === 0} aria-label={`Move ${name} ${i + 1} up`} onClick={() => move(i, -1)}>Move up</button>
               <button type="button" style={small} disabled={i === rows.length - 1} aria-label={`Move ${name} ${i + 1} down`} onClick={() => move(i, 1)}>Move down</button>
               <button type="button" style={small} disabled={full} aria-label={`Duplicate ${name} ${i + 1}`} onClick={() => copy(i)}>Duplicate</button>
-              <button type="button" style={{ ...small, color: "var(--ed-danger)" }} disabled={rows.length <= (field.min ?? 0)} aria-label={`Remove ${name} ${i + 1}`} onClick={() => onChange(rows.filter((_, k) => k !== i))}>Remove</button>
+              <button type="button" style={{ ...small, color: "var(--plx-danger)", borderColor: "color-mix(in srgb, var(--plx-danger) 30%, transparent)" }} disabled={rows.length <= (field.min ?? 0)} aria-label={`Remove ${name} ${i + 1}`} onClick={() => onChange(rows.filter((_, k) => k !== i))}>Remove</button>
             </span>
           </div>
           <Fields fields={field.item ?? []} values={row ?? {}} idBase={`${idBase}-${i}`} onChange={(k, v) => onChange(rows.map((r, j) => (j === i ? { ...r, [k]: v } : r)))} />
@@ -128,7 +128,7 @@ export function Fields({ fields, values, onChange, idBase = "f" }: { fields: Sec
         return (
           <div key={f.key} role={f.type === "list" || f.type === "button" ? "group" : undefined} aria-labelledby={f.type === "list" || f.type === "button" ? `${id}-l` : undefined}>
             {f.type === "toggle" ? (
-              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: "0.85rem", color: "var(--ed-text)", cursor: "pointer" }}>
+              <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: "0.85rem", color: "var(--plx-text)", cursor: "pointer" }}>
                 <input id={id} type="checkbox" checked={!!v} onChange={(e) => onChange(f.key, e.target.checked)} /> <span style={{ fontWeight: 700 }}>{f.label}</span>
               </label>
             ) : (
@@ -171,8 +171,8 @@ function ColorField({ id, value, onChange }: { id: string; value: string; onChan
   const valid = /^#[0-9a-f]{6}$/i.test(value);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <input id={id} type="color" value={valid ? value : "#266ddc"} onChange={(e) => onChange(e.target.value)} style={{ width: 44, height: 32, padding: 2, borderRadius: 8, border: "1px solid var(--ed-w-100)", background: "var(--ed-w-040)", cursor: "pointer" }} />
-      <span style={{ fontSize: "0.78rem", color: "var(--ed-t-450)" }}>{value || "Uses the design's own colour"}</span>
+      <input id={id} type="color" value={valid ? value : "#266ddc"} onChange={(e) => onChange(e.target.value)} style={{ width: 44, height: 32, padding: 2, borderRadius: 8, border: "1px solid var(--plx-border)", background: "var(--plx-surface)", cursor: "pointer" }} />
+      <span style={{ fontSize: "0.78rem", color: "var(--plx-muted)" }}>{value || "Uses the design's own colour"}</span>
       {value ? <button type="button" style={small} onClick={() => onChange("")}>Reset</button> : null}
     </div>
   );

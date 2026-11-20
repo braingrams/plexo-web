@@ -340,7 +340,10 @@ export async function fixEverything(site: FixSite, current: HealthSettingsView, 
       summary.skipped.push({ fix, reason: preview.texts.error });
       continue;
     }
-    if (!preview.notes.length && fix !== "llms_txt" && fix !== "ai_robots") {
+    if (fix === "meta_description" && !preview.notes.length && preview.text) {
+      preview.notes = [`Google shows: "${preview.text}"`];
+    }
+    if (!preview.notes.length && fix !== "llms_txt" && fix !== "ai_robots" && fix !== "meta_description") {
       summary.skipped.push({ fix, reason: "Nothing on your pages needed this one." });
       continue;
     }

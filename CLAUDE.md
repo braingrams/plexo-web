@@ -18,6 +18,22 @@ When implementing or fixing something, check:
 
 This applies to dashboard UI, public site behavior, and MCP tools alike — an MCP tool an AI assistant calls on the user's behalf should also require the fewest steps and least prior knowledge to get a working result.
 
+## Strict V2 / Strata Dashboard Standards (Mandatory)
+
+Every dashboard view and sub-page must strictly adhere to the V2 design language and Strata design tokens:
+- **Use `[data-plexo-v3]` and `.plx-page`**: All new and modified dashboard screens must be marked with `data-plexo-v3` and use the `.plx-page` root container.
+- **Strictly use Strata design tokens**: Use `--plx-border`, `--plx-surface`, `--plx-text`, `--plx-muted`, `--plx-brand`, `--plx-tint`, `--plx-elevated`, `--plx-sunken`, etc.
+- **NEVER use V1 tokens or `PageContainer`**:
+  - Do not use `--ed-*` tokens, legacy `--brand` variables, or v1 color tokens in dashboard views.
+  - Do NOT use `PageContainer` in dashboard views. `PageContainer` introduces conflicting legacy dark background tokens, double-back links ("double back everywhere"), and restrictive container widths.
+  - For sub-screens that need a back link, use `SiteToolBack` or clean v2 Strata breadcrumbs.
+- **Mobile responsiveness is first-class**:
+  - Screens must adapt to the full width of mobile screens (`padding: clamp(16px, 3vw, 24px)`), without nested artificial boxes or desktop-only max-width pinches.
+  - Grids must wrap cleanly using `minmax(min(100%, ...), 1fr)`.
+  - Badges and status pills must hug content (`width: fit-content`) rather than stretching full-width.
+- **Strong visual affordance for all action buttons**:
+  - Secondary buttons must ALWAYS look like interactive action buttons, not plain text. Ensure every secondary button has visible borders (`1px solid var(--plx-border)`), background (`var(--plx-surface)`), font weight, and hover states. Never render actions as unbordered text ghosts that look broken or unclickable on mobile.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## "Done" means no gaps — never report a gap as a finished result

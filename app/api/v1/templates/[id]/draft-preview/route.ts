@@ -48,13 +48,27 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   }
 
   const html = page.draftHtml || page.compiledHtml || "";
-  // thumb=1: the small inert picture on the site's page cards. No bar, no scripts, and an empty page stays blank so
+  // thumb=1: the small inert picture on the site's page cards. No bar, no user interaction, but styles and
+  // scripts run so WordPress migrated sites and custom HTML render accurately. An empty page stays blank so
   // the card's own sketch shows through.
   const thumb = !signed && request.nextUrl.searchParams.get("thumb") === "1";
   if (thumb) {
-    const csp = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "private, max-age=60", "Content-Security-Policy": "sandbox" };
+    const csp = {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "private, max-age=60",
+      "Content-Security-Policy": "sandbox allow-scripts allow-same-origin",
+    };
     if (!html.trim()) return new NextResponse("<!doctype html><meta charset=\"utf-8\"><body style=\"margin:0;background:transparent\">", { headers: csp });
-    return new NextResponse(`<!doctype html><style>html{background:#fff}</style>${html}`, { headers: csp });
+    const bgStyle = "<style>html{background:#fff}</style>";
+    let thumbHtml = html;
+    if (/<head[^>]*>/i.test(thumbHtml)) {
+      thumbHtml = thumbHtml.replace(/<head[^>]*>/i, (m) => `${m}${bgStyle}`);
+    } else if (/<html[^>]*>/i.test(thumbHtml)) {
+      thumbHtml = thumbHtml.replace(/<html[^>]*>/i, (m) => `${m}<head>${bgStyle}</head>`);
+    } else {
+      thumbHtml = `<!doctype html><meta charset="utf-8"><head>${bgStyle}</head><body>${thumbHtml}</body>`;
+    }
+    return new NextResponse(thumbHtml, { headers: csp });
   }
   if (!html.trim()) {
     return shell("Nothing to preview yet", `<h1 style="font-size:22px">There is nothing to preview yet</h1><p>This page is still empty. Open the editor, add something to it, and then preview it here.</p><p><a href="${back}" target="_top" style="color:#517a12;font-weight:700">Back to my site</a></p>`);

@@ -62,7 +62,7 @@ export function VisitsCard({ days, now }: { days: number[]; now?: number }) {
   const max = Math.max(1, ...days);
   const labels = dayLabels(now);
   return (
-    <Card padding="lg" data-tour="home-visits">
+    <Card padding="lg" data-tour="home-visits" className="plx-visits-card">
       <CardHeader title="Visits this week" description={total ? `${total.toLocaleString("en")} visit${total === 1 ? "" : "s"} in the last 7 days` : undefined} />
       {total ? (
         <div className="plx-trend" role="img" aria-label={`Visits per day: ${days.map((n, i) => `${labels[i]} ${n}`).join(", ")}`}>

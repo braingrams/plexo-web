@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { PageContainer } from "../../../../_components/PageContainer";
+import { ArrowLeft } from "lucide-react";
 import { Card } from "../../../../_components/Card";
 import { FIELD_TYPE_LABELS, SECTION_FIELD_TYPES, fieldKeyFrom, sampleDefaults, type SectionField, type SectionFieldType } from "@/lib/customSections/model";
 import { LAYOUT_PRESETS } from "@/lib/customSections/presets";
@@ -32,11 +32,11 @@ const fromRows = (rows: Row[]): unknown[] =>
       ...(r.type === "list" ? { itemName: r.itemName || "item", item: fromRows(r.item ?? []) } : {}),
     }));
 
-const input: React.CSSProperties = { width: "100%", background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)", borderRadius: 9, color: "var(--ed-text)", padding: "0.55rem 0.75rem", fontSize: "0.85rem", outline: "none", fontFamily: "inherit" };
-const primary: React.CSSProperties = { padding: "0.65rem 1.2rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "var(--ed-cta)", color: "var(--ed-on-brand)" };
-const small: React.CSSProperties = { padding: "0.3rem 0.65rem", borderRadius: 8, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-text)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, fontFamily: "inherit" };
-const h2: React.CSSProperties = { fontSize: "0.95rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "0.25rem" };
-const hint: React.CSSProperties = { fontSize: "0.78rem", color: "var(--ed-t-450)", marginBottom: "0.8rem" };
+const input: React.CSSProperties = { width: "100%", background: "var(--plx-surface)", border: "1px solid var(--plx-border)", borderRadius: 9, color: "var(--plx-text)", padding: "0.55rem 0.75rem", fontSize: "0.85rem", outline: "none", fontFamily: "inherit" };
+const primary: React.CSSProperties = { padding: "0.65rem 1.2rem", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", background: "var(--plx-brand)", color: "var(--plx-on-brand)" };
+const small: React.CSSProperties = { padding: "0.35rem 0.65rem", borderRadius: 8, border: "1px solid var(--plx-border)", background: "var(--plx-surface)", color: "var(--plx-text)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, fontFamily: "inherit" };
+const h2: React.CSSProperties = { fontSize: "0.95rem", fontWeight: 800, color: "var(--plx-text)", marginBottom: "0.25rem" };
+const hint: React.CSSProperties = { fontSize: "0.78rem", color: "var(--plx-muted)", marginBottom: "0.8rem" };
 
 function FieldRows({ rows, onChange, nested }: { rows: Row[]; onChange: (r: Row[]) => void; nested?: boolean }) {
   const set = (i: number, patch: Partial<Row>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -44,7 +44,7 @@ function FieldRows({ rows, onChange, nested }: { rows: Row[]; onChange: (r: Row[
   return (
     <div style={{ display: "grid", gap: "0.6rem" }}>
       {rows.map((r, i) => (
-        <div key={r.rowId} style={{ border: "1px solid var(--ed-w-080)", borderRadius: 10, padding: "0.65rem", background: nested ? "var(--ed-w-020)" : "transparent" }}>
+        <div key={r.rowId} style={{ border: "1px solid var(--plx-border)", borderRadius: 10, padding: "0.65rem", background: nested ? "var(--plx-tint)" : "transparent" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 11rem), 1fr))", gap: "0.5rem", alignItems: "center" }}>
             <input aria-label="Name" placeholder="What is it called? e.g. Name" value={r.label} onChange={(e) => set(i, { label: e.target.value })} style={input} />
             <select aria-label="Kind of field" value={r.type} onChange={(e) => set(i, { type: e.target.value as SectionFieldType, item: e.target.value === "list" ? (r.item?.length ? r.item : [{ rowId: rid(), label: "", type: "text" }]) : r.item })} style={input}>
@@ -53,13 +53,13 @@ function FieldRows({ rows, onChange, nested }: { rows: Row[]; onChange: (r: Row[
             <span style={{ display: "flex", gap: 4 }}>
               <button type="button" aria-label="Move up" disabled={i === 0} onClick={() => { const c = [...rows]; [c[i - 1], c[i]] = [c[i], c[i - 1]]; onChange(c); }} style={small}>↑</button>
               <button type="button" aria-label="Move down" disabled={i === rows.length - 1} onClick={() => { const c = [...rows]; [c[i + 1], c[i]] = [c[i], c[i + 1]]; onChange(c); }} style={small}>↓</button>
-              <button type="button" aria-label="Remove" onClick={() => onChange(rows.filter((_, j) => j !== i))} style={{ ...small, color: "var(--ed-danger)" }}>Remove</button>
+              <button type="button" aria-label="Remove" onClick={() => onChange(rows.filter((_, j) => j !== i))} style={{ ...small, color: "var(--plx-danger)", borderColor: "color-mix(in srgb, var(--plx-danger) 30%, transparent)" }}>Remove</button>
             </span>
           </div>
           {r.type === "select" && <input aria-label="Choices" placeholder="Choices, separated by commas" value={r.optionsText ?? ""} onChange={(e) => set(i, { optionsText: e.target.value })} style={{ ...input, marginTop: "0.5rem" }} />}
           {r.type !== "list" && (
             <details style={{ marginTop: "0.45rem" }}>
-              <summary style={{ cursor: "pointer", fontSize: "0.72rem", fontWeight: 600, color: "var(--ed-t-500)" }}>Add help for the person filling it in</summary>
+              <summary style={{ cursor: "pointer", fontSize: "0.72rem", fontWeight: 600, color: "var(--plx-muted)" }}>Add help for the person filling it in</summary>
               <div style={{ display: "grid", gap: "0.4rem", marginTop: "0.4rem" }}>
                 <input aria-label="Help text" placeholder="A short tip shown under the box, e.g. Use a square photo" value={r.hint ?? ""} onChange={(e) => set(i, { hint: e.target.value })} style={input} />
                 {["text", "longtext", "richtext", "button"].includes(r.type) && <input aria-label="Example text" placeholder="Example shown in the empty box, e.g. Ada Lovelace" value={r.placeholder ?? ""} onChange={(e) => set(i, { placeholder: e.target.value })} style={input} />}
@@ -67,8 +67,8 @@ function FieldRows({ rows, onChange, nested }: { rows: Row[]; onChange: (r: Row[
             </details>
           )}
           {r.type === "list" && (
-            <div style={{ marginTop: "0.6rem", paddingLeft: "0.75rem", borderLeft: "2px solid var(--ed-w-100)" }}>
-              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-800)", marginBottom: 4 }}>
+            <div style={{ marginTop: "0.6rem", paddingLeft: "0.75rem", borderLeft: "2px solid var(--plx-border)" }}>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 600, color: "var(--plx-text)", marginBottom: 4 }}>
                 What is one of these called?
                 <input value={r.itemName ?? ""} placeholder="e.g. testimonial" onChange={(e) => set(i, { itemName: e.target.value })} style={{ ...input, display: "block", marginTop: 4, maxWidth: 260 }} />
               </label>
@@ -176,9 +176,11 @@ export function SectionTypeEditor({ templateId, templateName, existing }: { temp
   }, [rows]);
 
   return (
-    <PageContainer>
-      <Link href={`/dashboard/templates/${templateId}/sections`} style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--ed-t-500)", textDecoration: "none" }}>← Your sections · {templateName}</Link>
-      <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.8rem", fontWeight: 800, color: "var(--ed-text)", letterSpacing: "-0.02em", margin: "0.75rem 0 1.5rem" }}>{existing ? `Change “${existing.name}”` : "Make a new section"}</h1>
+    <div data-plexo-v3 className="plx-page" style={{ padding: "clamp(16px, 3vw, 32px)", maxWidth: 1200, margin: "0 auto" }}>
+      <Link href={`/dashboard/templates/${templateId}/sections`} style={{ display: "inline-flex", alignItems: "center", gap: 6, marginBottom: 12, textDecoration: "none", color: "var(--plx-muted)", fontWeight: 700, fontSize: "0.85rem" }}>
+        <ArrowLeft size={16} aria-hidden /> Your sections
+      </Link>
+      <h1 style={{ fontFamily: "var(--font-heading), sans-serif", fontSize: "1.8rem", fontWeight: 800, color: "var(--plx-text)", letterSpacing: "-0.02em", margin: "1rem 0 1.5rem" }}>{existing ? `Change “${existing.name}”` : "Make a new section"}</h1>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 420px), 1fr))", gap: "1.25rem", alignItems: "start" }}>
         <div style={{ display: "grid", gap: "1.25rem" }}>
@@ -195,18 +197,18 @@ export function SectionTypeEditor({ templateId, templateName, existing }: { temp
               <p style={hint}>Pick a ready-made look, or describe it in your own words and SOL will draft it. You can change anything afterwards.</p>
               <div style={{ display: "grid", gap: "0.6rem" }}>
                 {LAYOUT_PRESETS.map((p) => (
-                  <button key={p.id} type="button" aria-pressed={presetId === p.id} onClick={() => pick(p.id)} style={{ textAlign: "left", padding: "0.8rem 1rem", borderRadius: 12, border: presetId === p.id ? "2px solid var(--ed-cta)" : "1px solid var(--ed-w-100)", background: "var(--ed-w-030)", color: "var(--ed-text)", cursor: "pointer", fontFamily: "inherit" }}>
+                  <button key={p.id} type="button" aria-pressed={presetId === p.id} onClick={() => pick(p.id)} style={{ textAlign: "left", padding: "0.8rem 1rem", borderRadius: 12, border: presetId === p.id ? "2px solid var(--plx-brand)" : "1px solid var(--plx-border)", background: "var(--plx-tint)", color: "var(--plx-text)", cursor: "pointer", fontFamily: "inherit" }}>
                     <span style={{ display: "block", fontWeight: 700, fontSize: "0.85rem" }}>{p.label}</span>
-                    <span style={{ display: "block", fontSize: "0.75rem", color: "var(--ed-t-500)", marginTop: 2 }}>{p.blurb}</span>
+                    <span style={{ display: "block", fontSize: "0.75rem", color: "var(--plx-muted)", marginTop: 2 }}>{p.blurb}</span>
                   </button>
                 ))}
               </div>
-              <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--ed-w-080)" }}>
-                <label htmlFor="section-idea" style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "var(--ed-text)", marginBottom: 4 }}>Or describe it</label>
+              <div style={{ marginTop: "1rem", paddingTop: "1rem", borderTop: "1px solid var(--plx-border)" }}>
+                <label htmlFor="section-idea" style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "var(--plx-text)", marginBottom: 4 }}>Or describe it</label>
                 <textarea id="section-idea" value={idea} onChange={(e) => setIdea(e.target.value)} rows={3} placeholder="e.g. A menu with dish names, a short description, a price and a photo for each dish" style={{ ...input, resize: "vertical" }} />
                 <div style={{ marginTop: "0.5rem", display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
                   <button type="button" onClick={draftFromIdea} disabled={drafting || idea.trim().length < 8} style={{ ...small, opacity: drafting || idea.trim().length < 8 ? 0.5 : 1 }}>{drafting ? "SOL is drafting…" : "Draft it for me"}</button>
-                  {draftNote && <span role="status" style={{ fontSize: "0.78rem", color: "var(--ed-accent-text)" }}>{draftNote}</span>}
+                  {draftNote && <span role="status" style={{ fontSize: "0.78rem", color: "var(--plx-brand)" }}>{draftNote}</span>}
                 </div>
               </div>
             </Card>
@@ -218,17 +220,17 @@ export function SectionTypeEditor({ templateId, templateName, existing }: { temp
             <FieldRows rows={rows} onChange={setRows} />
           </Card>
 
-          <details style={{ border: "1px solid var(--ed-w-080)", borderRadius: 14, padding: "1rem 1.25rem" }}>
-            <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: "0.88rem", color: "var(--ed-text)" }}>Fine-tune the design</summary>
+          <details style={{ border: "1px solid var(--plx-border)", borderRadius: 14, padding: "1rem 1.25rem", background: "var(--plx-surface)" }}>
+            <summary style={{ cursor: "pointer", fontWeight: 700, fontSize: "0.88rem", color: "var(--plx-text)" }}>Fine-tune the design</summary>
             <p style={{ ...hint, marginTop: "0.6rem" }}>Written in plain HTML. Put <code>{"{{name}}"}</code> where a field should appear, and wrap the part that repeats in <code>{"{{#group}}"}</code> … <code>{"{{/group}}"}</code>. Colours and spacing use your site&rsquo;s own, so it matches automatically. Scripts and unsafe code are removed.</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-              {insertable.map((t) => <code key={t} style={{ fontSize: "0.72rem", padding: "2px 6px", borderRadius: 6, background: "var(--ed-w-040)" }}>{t}</code>)}
+              {insertable.map((t) => <code key={t} style={{ fontSize: "0.72rem", padding: "2px 6px", borderRadius: 6, background: "var(--plx-tint)", color: "var(--plx-text)" }}>{t}</code>)}
             </div>
             <textarea aria-label="Design" value={html} onChange={(e) => setHtml(e.target.value)} rows={14} spellCheck={false} style={{ ...input, fontFamily: "ui-monospace, Menlo, monospace", fontSize: "0.78rem", lineHeight: 1.5 }} />
           </details>
 
-          {error && <p role="alert" style={{ fontSize: "0.82rem", color: "var(--ed-danger)" }}>{error}</p>}
-          {notice && <p role="status" style={{ fontSize: "0.82rem", color: "var(--ed-accent-text)" }}>{notice}</p>}
+          {error && <p role="alert" style={{ fontSize: "0.82rem", color: "var(--plx-danger)" }}>{error}</p>}
+          {notice && <p role="status" style={{ fontSize: "0.82rem", color: "var(--plx-brand)" }}>{notice}</p>}
           <div><button type="button" onClick={save} disabled={saving} style={{ ...primary, opacity: saving ? 0.6 : 1 }}>{saving ? "Saving…" : existing ? "Save changes" : "Create section"}</button></div>
         </div>
 
@@ -236,12 +238,12 @@ export function SectionTypeEditor({ templateId, templateName, existing }: { temp
           <p style={h2}>Preview</p>
           <p style={hint}>Colours here are only a sketch. On your page it takes on your site&rsquo;s own look.</p>
           {previewDoc ? (
-            <iframe title="Preview of your section" sandbox="" srcDoc={previewDoc} style={{ width: "100%", height: 520, border: "1px solid var(--ed-w-080)", borderRadius: 10, background: "#fff" }} />
+            <iframe title="Preview of your section" sandbox="" srcDoc={previewDoc} style={{ width: "100%", height: 520, border: "1px solid var(--plx-border)", borderRadius: 10, background: "#fff" }} />
           ) : (
-            <p style={{ fontSize: "0.8rem", color: "var(--ed-t-400)" }}>The preview will show up here.</p>
+            <p style={{ fontSize: "0.8rem", color: "var(--plx-muted)" }}>The preview will show up here.</p>
           )}
         </Card>
       </div>
-    </PageContainer>
+    </div>
   );
 }

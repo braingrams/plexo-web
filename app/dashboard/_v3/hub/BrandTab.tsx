@@ -170,8 +170,8 @@ export function BrandSaved({ siteId, siteName, isRaw, client, preview, previewSt
           </span>
         </div>
         {onEdit ? <Button variant="secondary" size="sm" onClick={onEdit}>Edit brand</Button> : null}
-        <Button variant="ghost" size="sm" onClick={() => setPicking(true)}>{BRAND_COPY.switchBrand}</Button>
-        <Button variant="ghost" size="sm" aria-expanded={more} onClick={() => setMore((m) => !m)}>{more ? "Fewer options" : "More options"}</Button>
+        <Button variant="secondary" size="sm" onClick={() => setPicking(true)}>{BRAND_COPY.switchBrand}</Button>
+        <Button variant="secondary" size="sm" aria-expanded={more} onClick={() => setMore((m) => !m)}>{more ? "Fewer options" : "More options"}</Button>
       </div>
       {summary}
       <p className="plx-bsaved__foot">{BRAND_COPY.footnote}{state.projectId ? <> · <a href={strataBrandBibleUrl(state.projectId)} target="_blank" rel="noreferrer">Open <ExternalLink size={12} aria-hidden style={{ verticalAlign: "-1px" }} /></a></> : null}</p>
@@ -258,12 +258,12 @@ export function BrandComponents({ components, projectId }: { components: Array<{
       <CardHeader
         title="Ready-made pieces"
         description={components.length ? "Buttons, cards and other pieces from your brand. SOL and your AI helpers use these first, so everything you build matches." : "Your brand has no ready-made pieces yet. When SOL or your AI helper builds something you want to reuse, like a button or a card, they can save it here for you."}
-        action={projectId ? <a className="plx-btn plx-btn--secondary plx-btn--sm" href={strataBrandBibleUrl(projectId)} target="_blank" rel="noreferrer">Saved to your design system <ExternalLink size={14} aria-hidden /></a> : undefined}
+        action={projectId ? <a className="plx-btn plx-btn--secondary plx-btn--sm" href={strataBrandBibleUrl(projectId)} target="_blank" rel="noreferrer" style={{ whiteSpace: "nowrap" }}>Saved to design system <ExternalLink size={14} aria-hidden /></a> : undefined}
       />
       {components.length ? (
         <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
           {components.map((c) => (
-            <li key={c.name} style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap", justifyContent: "space-between" }}>
+            <li key={c.name} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between", padding: "10px 14px", borderRadius: 12, background: "var(--plx-tint)", border: "1px solid var(--plx-border)" }}>
               <b>{cap(c.name)}</b>
               <span className="plx-small">
                 {c.variants.length ? `Looks: ${c.variants.join(", ")}` : "One look"}
@@ -357,7 +357,7 @@ export function BrandTab({ siteId, siteName, brand, defaults = null, sourceType 
               <div className="plx-brandedit" role="region" aria-label="Editing your brand">
                 <span><b>Editing your brand</b><span className="plx-small" style={{ display: "block" }}>Change anything, then press Save. When you are finished, press Done.</span></span>
                 <span style={{ display: "flex", gap: 8 }}>
-                  <Button variant="ghost" onClick={() => (anyDirty ? setLeaving(true) : setEditing(false))}>Cancel</Button>
+                  <Button variant="secondary" onClick={() => (anyDirty ? setLeaving(true) : setEditing(false))}>Cancel</Button>
                   <Button onClick={() => (anyDirty ? setLeaving(true) : setEditing(false))}>Done</Button>
                 </span>
               </div>

@@ -60,8 +60,22 @@ export function HomeView(props: HomeProps) {
   }
 
   const { progress } = site;
-  // A shop, blog, bookings, course or sign-up form joins THIS site; the dialog shows its pages today and what it adds.
-  const addMore = site.addMore ? <AddMoreCards siteId={site.site.id} siteName={site.site.name} features={site.addMore.features} pages={site.addMore.pages} /> : null;
+  const addMoreHref = `/dashboard/sites/${site.site.id}?tab=settings#addmore`;
+  const addMore = site.addMore ? (
+    <Card padding="none" style={{ overflow: "hidden", border: "1px solid var(--plx-border)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "18px 24px", flexWrap: "wrap" }}>
+        <div>
+          <b style={{ fontSize: 16, display: "block" }}>Do more with your site</b>
+          <span className="plx-small" style={{ color: "var(--plx-muted)" }}>
+            Turn on a shop, bookings, blog, course, or email sign-up whenever you&apos;re ready.
+          </span>
+        </div>
+        <ButtonLink href={addMoreHref} variant="secondary" rightIcon={<ArrowRight size={16} aria-hidden />}>
+          Add more to your site
+        </ButtonLink>
+      </div>
+    </Card>
+  ) : null;
   const showGuide = !progress.allDone || celebrate;
 
   if (showGuide) {
@@ -104,7 +118,7 @@ export function HomeView(props: HomeProps) {
           <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <SitePreviewCard site={site.site} brand={brand} />
             {progress.variant === "store" ? <ShopActionsCard siteId={site.site.id} /> : null}
-            <AskSolCard prompt={SOL_IDEAS[progress.variant]} />
+            <OtherActionsCard siteId={site.site.id} solPrompt={SOL_IDEAS[progress.variant]} newSiteHref={newSiteHref} />
           </aside>
         </div>
         {addMore}
@@ -125,7 +139,7 @@ export function HomeView(props: HomeProps) {
         <aside className="plx-home__rail">
           <SitePreviewCard site={site.site} brand={brand} />
           {progress.variant === "store" ? <ShopActionsCard siteId={site.site.id} /> : null}
-          <OtherActionsCard solPrompt={SOL_IDEAS[progress.variant]} newSiteHref={newSiteHref} />
+          <OtherActionsCard siteId={site.site.id} solPrompt={SOL_IDEAS[progress.variant]} newSiteHref={newSiteHref} />
         </aside>
       </div>
       {addMore}
@@ -143,7 +157,7 @@ function Page({ eyebrow, title, tuneHref, experience, demo, allSitesCta, childre
         </div>
         {allSitesCta ? (
           <ButtonLink href={ALL_SITES_PATH} variant="secondary" leftIcon={<LayoutGrid size={18} aria-hidden />} data-tour="home-all-sites">
-            Show all my sites at once
+            All websites
           </ButtonLink>
         ) : null}
       </div>

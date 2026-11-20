@@ -2,9 +2,9 @@ import { cx } from "./cx";
 
 export type BadgeTone = "neutral" | "brand" | "success" | "warning" | "danger" | "info" | "violet";
 
-export function Badge({ tone = "neutral", dot, className, children }: { tone?: BadgeTone; dot?: boolean; className?: string; children: React.ReactNode }) {
+export function Badge({ tone = "neutral", dot, className, style, children }: { tone?: BadgeTone; dot?: boolean; className?: string; style?: React.CSSProperties; children: React.ReactNode }) {
   return (
-    <span className={cx("plx-badge", tone !== "neutral" && `plx-badge--${tone}`, className)}>
+    <span className={cx("plx-badge", tone !== "neutral" && `plx-badge--${tone}`, className)} style={style}>
       {dot ? <span className="plx-badge__dot" aria-hidden /> : null}
       {children}
     </span>

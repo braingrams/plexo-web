@@ -6,8 +6,8 @@ import { sanitizeRichText } from "@charisol/plexo-sdk/v2/compile";
 // A small formatted-text box: Bold, Italic, Link, two kinds of list. What it hands back is always rebuilt through the same
 // allow-list the published page uses, and pasted text is cleaned the same way, so only those few kinds of formatting get in.
 
-const tool: React.CSSProperties = { padding: "0.25rem 0.55rem", borderRadius: 7, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-text)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, fontFamily: "inherit" };
-const field: React.CSSProperties = { width: "100%", background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)", borderRadius: 9, color: "var(--ed-text)", padding: "0.5rem 0.7rem", fontSize: "0.85rem", outline: "none", fontFamily: "inherit" };
+const tool: React.CSSProperties = { padding: "0.25rem 0.55rem", borderRadius: 7, border: "1px solid var(--plx-border)", background: "var(--plx-surface)", color: "var(--plx-text)", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, fontFamily: "inherit" };
+const field: React.CSSProperties = { width: "100%", background: "var(--plx-surface)", border: "1px solid var(--plx-border)", borderRadius: 9, color: "var(--plx-text)", padding: "0.5rem 0.7rem", fontSize: "0.85rem", outline: "none", fontFamily: "inherit" };
 
 export function RichTextBox({ value, onChange, label, placeholder, id }: { value: string; onChange: (html: string) => void; label: string; placeholder?: string; id: string }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -55,8 +55,8 @@ export function RichTextBox({ value, onChange, label, placeholder, id }: { value
   const keep = (e: React.MouseEvent) => e.preventDefault();
 
   return (
-    <div style={{ border: "1px solid var(--ed-w-100)", borderRadius: 9, background: "var(--ed-w-040)" }}>
-      <div role="toolbar" aria-label={`${label} formatting`} style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: 4, borderBottom: "1px solid var(--ed-w-080)" }}>
+    <div style={{ border: "1px solid var(--plx-border)", borderRadius: 9, background: "var(--plx-surface)" }}>
+      <div role="toolbar" aria-label={`${label} formatting`} style={{ display: "flex", flexWrap: "wrap", gap: 4, padding: 4, borderBottom: "1px solid var(--plx-border)" }}>
         <button type="button" style={{ ...tool, fontWeight: 800 }} aria-label="Bold" title="Bold (Ctrl+B)" onMouseDown={keep} onClick={() => run("bold")}>B</button>
         <button type="button" style={{ ...tool, fontStyle: "italic" }} aria-label="Italic" title="Italic (Ctrl+I)" onMouseDown={keep} onClick={() => run("italic")}>I</button>
         <button type="button" style={tool} aria-label="Add or change a link" aria-expanded={linkOpen} title="Link (Ctrl+K)" onMouseDown={keep} onClick={() => { remember(); setLinkOpen((o) => !o); }}>Link</button>
@@ -65,7 +65,7 @@ export function RichTextBox({ value, onChange, label, placeholder, id }: { value
         <button type="button" style={tool} aria-label="Remove formatting" onMouseDown={keep} onClick={() => run("removeFormat")}>Clear</button>
       </div>
       {linkOpen && (
-        <form onSubmit={applyLink} style={{ display: "flex", gap: 6, padding: 6, borderBottom: "1px solid var(--ed-w-080)", flexWrap: "wrap" }}>
+        <form onSubmit={applyLink} style={{ display: "flex", gap: 6, padding: 6, borderBottom: "1px solid var(--plx-border)", flexWrap: "wrap" }}>
           <input autoFocus aria-label="Where should the link go?" value={href} onChange={(e) => setHref(e.target.value)} placeholder="https://… (leave empty to remove the link)" style={{ ...field, flex: "1 1 12rem", width: "auto" }} />
           <button type="submit" style={tool}>Apply</button>
           <button type="button" style={tool} onClick={() => setLinkOpen(false)}>Cancel</button>
@@ -81,7 +81,7 @@ export function RichTextBox({ value, onChange, label, placeholder, id }: { value
         suppressContentEditableWarning
         data-placeholder={placeholder ?? "Type here…"}
         className="rich-box"
-        style={{ minHeight: "5rem", padding: "0.55rem 0.75rem", fontSize: "0.85rem", color: "var(--ed-text)", outline: "none", lineHeight: 1.5 }}
+        style={{ minHeight: "5rem", padding: "0.55rem 0.75rem", fontSize: "0.85rem", color: "var(--plx-text)", outline: "none", lineHeight: 1.5 }}
         onInput={emit}
         onBlur={emit}
         onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); remember(); setLinkOpen(true); } }}
@@ -93,7 +93,7 @@ export function RichTextBox({ value, onChange, label, placeholder, id }: { value
         }}
         onDrop={(e) => e.preventDefault()}
       />
-      <style>{`.rich-box:empty::before{content:attr(data-placeholder);color:var(--ed-t-400);pointer-events:none}.rich-box a{text-decoration:underline;color:var(--ed-accent-text)}.rich-box ul{list-style:disc;padding-left:1.25rem}.rich-box ol{list-style:decimal;padding-left:1.25rem}.rich-box p{margin:0 0 .4rem}`}</style>
+      <style>{`.rich-box:empty::before{content:attr(data-placeholder);color:var(--plx-muted);pointer-events:none}.rich-box a{text-decoration:underline;color:var(--plx-brand)}.rich-box ul{list-style:disc;padding-left:1.25rem}.rich-box ol{list-style:decimal;padding-left:1.25rem}.rich-box p{margin:0 0 .4rem}`}</style>
     </div>
   );
 }

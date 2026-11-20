@@ -121,8 +121,8 @@ export function GoogleVisits({ siteId, live, result }: { siteId: string; live: b
         <Card>
           <div className="plx-hga__connect">
             <BarChart3 size={28} aria-hidden />
-            <h3 className="plx-h3">Detailed numbers are coming</h3>
-            <p className="plx-body">Your simple visit counts above are always on. Detailed numbers (where people come from, which pages they like) aren&apos;t switched on in Plexo yet.</p>
+            <h3 className="plx-h3">Connect Google Analytics for detailed visitors</h3>
+            <p className="plx-body">Your simple visit counts above are always active. To see detailed visitor analytics (visitor locations, devices, and top pages), connect your Google Analytics account.</p>
           </div>
         </Card>
       ) : null}

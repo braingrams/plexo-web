@@ -64,6 +64,10 @@
 .plx-asidestats > div[data-tone="ok"] dd { color: var(--plx-success); }
 .plx-asidestats > div[data-tone="warn"] { background: var(--plx-warning-subtle); }
 .plx-asidestats > div[data-tone="bad"] { background: var(--plx-danger-subtle); }
+.plx-aside--stretch, .plx-sp__side > div:has(.plx-aside) { height: 100%; display: flex; flex-direction: column; }
+.plx-aside--stretch .plx-aside__body { flex: 1; display: flex; flex-direction: column; }
+.plx-aside--stretch .plx-asidestats { flex: 1; align-content: stretch; }
+.plx-aside--stretch .plx-asidestats > div { justify-content: center; }
 
 /* A row inside a panel: title + helper on the left, control on the right. */
 .plx-srow { display: flex; align-items: center; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; padding: 18px 0; border-top: 1px solid var(--plx-border); }
