@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import "./insights.css";
 import "./health.css";
 import { Check, Code2, Gauge, Monitor, PartyPopper, Pencil, RefreshCw, Smartphone, Undo2, Wrench } from "lucide-react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { BannerStack, Button, ButtonLink, Card, CardHeader, Modal, Notice, SegmentedControl, Skeleton } from "../ui";
 import { TabBar } from "./HubFrame";
 import { scoreLook } from "@/lib/siteHealth/explain";
@@ -108,7 +109,7 @@ function withQuery(href: string, query: string | undefined): string {
   return query ? `${href}${href.includes("?") ? "&" : "?"}${query}` : href;
 }
 
-function IssueRow({ issue, busy, editHref, onFix, onUndo }: { issue: Issue; busy: boolean; editHref?: string; onFix: (issue: Issue) => void; onUndo: (issue: Issue) => void }) {
+function IssueRow({ issue, busy, editHref, onFix, onUndo, onSolFix }: { issue: Issue; busy: boolean; editHref?: string; onFix: (issue: Issue) => void; onUndo: (issue: Issue) => void; onSolFix: (issue: Issue) => void }) {
   const done = issue.autoFix?.on;
   const manualHere = issue.steps.length > 0;
   return (
@@ -128,8 +129,14 @@ function IssueRow({ issue, busy, editHref, onFix, onUndo }: { issue: Issue; busy
             ) : (
               <Button size="sm" leftIcon={<Wrench size={16} />} loading={busy} loadingLabel="Working…" onClick={() => onFix(issue)}>{issue.autoFix.label}</Button>
             )
-          ) : null}
-          {!done && editHref && issue.editorHint === "editor" ? <ButtonLink size="sm" variant="secondary" href={withQuery(editHref, issue.where?.find((w) => w.editor)?.editor)} leftIcon={<Pencil size={16} aria-hidden />}>{issue.where?.some((w) => w.editor) ? "Take me to it" : "Open the editor"}</ButtonLink> : null}
+          ) : (
+            !done && (
+              <>
+                <Button size="sm" variant="secondary" leftIcon={<SolGlyph size={15} />} onClick={() => onSolFix(issue)}>Ask SOL to fix</Button>
+                {editHref && issue.editorHint === "editor" ? <ButtonLink size="sm" variant="ghost" href={withQuery(editHref, issue.where?.find((w) => w.editor)?.editor)} leftIcon={<Pencil size={15} aria-hidden />}>{issue.where?.some((w) => w.editor) ? "Take me to it" : "Open the editor"}</ButtonLink> : null}
+              </>
+            )
+          )}
         </div>
         {manualHere && !done ? (
           <details className="plx-hissue__how">
@@ -198,7 +205,7 @@ function BusinessForm({ loaded, value, onChange }: { loaded: NonNullable<Preview
   );
 }
 
-export function HealthTab({ siteId, live, editHref }: { siteId: string; live: boolean; editHref?: string }) {
+export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string; siteName?: string; live: boolean; editHref?: string }) {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -207,9 +214,26 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
   const [device, setDevice] = useState<"phone" | "computer">("phone");
   const [preview, setPreview] = useState<{ issue: Issue; loaded: Preview | null; text: string; business?: BusinessValues; items?: TextItem[]; regenerating?: boolean } | null>(null);
   const [everything, setEverything] = useState<EverythingPreview | "loading" | null>(null);
+  const [solTarget, setSolTarget] = useState<"all" | Issue | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [justFixed, setJustFixed] = useState(false);
+  const clearedKey = `plx_health_cleared_${siteId}`;
   const [clearedDone, setClearedDone] = useState(false);
+  useEffect(() => {
+    try {
+      if (typeof window !== "undefined" && window.localStorage.getItem(clearedKey) === "true") {
+        setClearedDone(true);
+      }
+    } catch {}
+  }, [clearedKey]);
+  const handleClearDone = useCallback(() => {
+    setClearedDone(true);
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(clearedKey, "true");
+      }
+    } catch {}
+  }, [clearedKey]);
   const autoRan = useRef(false);
 
   const load = useCallback(async () => {
@@ -390,9 +414,24 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
   const last2 = data && data.history.length >= 2 ? [data.history[data.history.length - 2], data.history[data.history.length - 1]] : null;
   const dSpeed = last2 && last2[0].speed != null && last2[1].speed != null ? last2[1].speed - last2[0].speed : null;
   const dAeo = last2 && last2[0].aeo != null && last2[1].aeo != null ? last2[1].aeo - last2[0].aeo : null;
-  const open = data?.issues.filter((i) => i.severity !== "good") ?? [];
-  const fixed = data?.issues.filter((i) => i.severity === "good") ?? [];
+  const open = data?.issues.filter((i) => i.severity !== "good" && !i.autoFix?.on) ?? [];
+  const fixed = data?.issues.filter((i) => i.severity === "good" || i.autoFix?.on) ?? [];
   const anyOn = !!data?.issues.some((i) => i.autoFix?.on);
+
+  const solAllPrompt = `Please fix all the site health and SEO issues on my site "${siteName || "my site"}". Specifically:
+1. Audit and fix the headings outline so there is exactly one clear <h1> and properly nested <h2> and <h3> tags.
+2. Fill in any missing search summaries or metadata.
+3. Optimize for search engines and AI assistants.
+Please perform the updates and let me know what you changed.`;
+  const solAllHref = `/dashboard/sol?new=1&draft=${encodeURIComponent(solAllPrompt)}`;
+
+  const solIssuePrompt = solTarget && solTarget !== "all"
+    ? `Please fix the "${solTarget.title}" issue on my site "${siteName || "my site"}".
+Context: ${solTarget.why}
+${solTarget.steps?.length ? `Steps needed: ${solTarget.steps.join(", ")}` : ""}
+Please analyze my page, make the necessary updates in one pass, and tell me what you fixed.`
+    : "";
+  const solIssueHref = `/dashboard/sol?new=1&draft=${encodeURIComponent(solIssuePrompt)}`;
 
   return (
     <>
@@ -405,18 +444,11 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
             {data?.stale && !running && report ? <Notice kind="info" title="Your site changed since the last check">We&apos;ll look again in a moment so the numbers match what visitors see.</Notice> : null}
             {justFixed && !running ? <Notice kind="success" title="Done">Your live site updates within a minute or two. Scores update automatically below.</Notice> : null}
             {next && !running && report && !justFixed && !data?.stale ? <Notice kind="info" title="Just checked">You can run another check after {next.toLocaleTimeString("en", { timeStyle: "short" })}.</Notice> : null}
-            {report?.auto && !running ? <Notice kind="info" title="Checked for you">{report.auto === "weekly" ? "This is our weekly check." : "We checked again by ourselves after you changed your site."}</Notice> : null}
+            {report?.auto && !running && !next ? <Notice kind="info" title="Checked for you">{report.auto === "weekly" ? "This is our weekly check." : "We checked again by ourselves after you changed your site."}</Notice> : null}
             {data && !data.available ? <Notice kind="warning" title="Speed test not switched on yet">We can still check how easy your site is to find. The speed part comes once Plexo&apos;s speed test is connected.</Notice> : null}
           </>
         }
       />
-      {data?.auto?.nextAt && !running && report ? <p className="plx-health__when">{data.auto.reason === "changed" ? `We'll check again by ourselves around ${new Date(data.auto.nextAt).toLocaleTimeString("en", { timeStyle: "short" })}, a few minutes after your last change.` : `We also check by ourselves every week. The next one is around ${new Date(data.auto.nextAt).toLocaleDateString("en", { dateStyle: "medium" })}.`}</p> : null}
-      {data && report && data.url ? (
-        <div className="plx-toggle">
-          <span style={{ minWidth: 0 }}><b style={{ display: "block", fontSize: 15 }}>Weekly email</b><span className="plx-small">A short note every week: how your site is doing, what changed and the 3 things to fix first.</span></span>
-          <input type="checkbox" className="plx-switch" role="switch" checked={data.settings.emailDigest} aria-label="Weekly Site health email" onChange={(e) => void setDigest(e.target.checked)} />
-        </div>
-      ) : null}
 
       {!report ? (
         <Card>
@@ -451,7 +483,18 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
             {report.speedError ? <p className="plx-body">{report.speedError}</p> : null}
             {report.aeoError ? <p className="plx-body">{report.aeoError}</p> : null}
             {data?.newSiteNote ? <p className="plx-hnote">{data.newSiteNote}</p> : null}
-            {when ? <p className="plx-health__when">Checked {when} on {report.url.replace(/^https?:\/\//, "")}</p> : null}
+            <div className="plx-health__card-footer">
+              <span className="plx-health__when" style={{ margin: 0 }}>
+                {when ? `Checked ${when} on ${report.url.replace(/^https?:\/\//, "")}` : ""}
+                {data?.auto?.nextAt ? ` · Next check around ${new Date(data.auto.nextAt).toLocaleDateString("en", { dateStyle: "medium" })}` : ""}
+              </span>
+              {data && report && data.url ? (
+                <label className="plx-health__email-toggle">
+                  <span><b>Weekly email</b> — 3 things to fix first</span>
+                  <input type="checkbox" className="plx-switch" role="switch" checked={data.settings.emailDigest} aria-label="Weekly Site health email" onChange={(e) => void setDigest(e.target.checked)} />
+                </label>
+              ) : null}
+            </div>
           </Card>
 
           {current && current.metrics.length ? (
@@ -464,7 +507,18 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
           <Card>
             <div className="plx-hbar">
               <CardHeader title={open.length ? "Easy wins, biggest first" : "Looking good"} description="Press the button and we do it. Prefer to do it yourself? Open Show me how." />
-              {data && data.fixableCount > 1 ? <Button leftIcon={<Wrench size={16} />} loading={fixing === "all"} onClick={openEverything}>Fix everything ({data.fixableCount})</Button> : null}
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+                {open.length > 0 ? (
+                  <Button leftIcon={<SolGlyph size={16} />} onClick={() => setSolTarget("all")}>
+                    Fix all with SOL
+                  </Button>
+                ) : null}
+                {data && data.fixableCount > 1 ? (
+                  <Button variant="secondary" leftIcon={<Wrench size={16} />} loading={fixing === "all"} onClick={openEverything}>
+                    Standard fixes ({data.fixableCount})
+                  </Button>
+                ) : null}
+              </div>
             </div>
             {summary ? (
               <div className="plx-hsummary">
@@ -479,7 +533,7 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
               </div>
             ) : null}
             {data && open.length ? (
-              <ul className="plx-hissues">{open.map((i) => <IssueRow key={i.id} issue={i} busy={fixing === i.id} editHref={editHref} onFix={openPreview} onUndo={(is) => apply(is, false)} />)}</ul>
+              <ul className="plx-hissues">{open.map((i) => <IssueRow key={i.id} issue={i} busy={fixing === i.id} editHref={editHref} onFix={openPreview} onUndo={(is) => apply(is, false)} onSolFix={(is) => setSolTarget(is)} />)}</ul>
             ) : (
               <p className="plx-body">We didn&apos;t find anything to fix. Nice work.</p>
             )}
@@ -490,12 +544,12 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
               <CardHeader
                 title="Already done"
                 description="Press Undo on any of these and your pages go back exactly as they were."
-                action={<Button size="sm" variant="secondary" onClick={() => setClearedDone(true)}>Clear all</Button>}
+                action={<Button size="sm" variant="secondary" onClick={handleClearDone}>Clear all</Button>}
               />
-              <ul className="plx-hissues">{fixed.map((i) => <IssueRow key={i.id} issue={i} busy={fixing === i.id} editHref={editHref} onFix={openPreview} onUndo={(is) => apply(is, false)} />)}</ul>
+              <ul className="plx-hissues">{fixed.map((i) => <IssueRow key={i.id} issue={i} busy={fixing === i.id} editHref={editHref} onFix={openPreview} onUndo={(is) => apply(is, false)} onSolFix={(is) => setSolTarget(is)} />)}</ul>
               <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {anyOn ? <Button size="sm" variant="secondary" leftIcon={<Undo2 size={16} />} loading={fixing === "all"} onClick={undoEverything}>Undo everything</Button> : null}
-                <Button size="sm" variant="secondary" onClick={() => setClearedDone(true)}>Clear all</Button>
+                <Button size="sm" variant="secondary" onClick={handleClearDone}>Clear all</Button>
               </div>
             </Card>
           ) : null}
@@ -503,6 +557,76 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
           {data ? <Trend history={data.history} text={data.trend} /> : null}
         </>
       )}
+
+      <Modal
+        open={!!solTarget}
+        onClose={() => setSolTarget(null)}
+        title={solTarget === "all" ? "Let SOL fix all issues for you" : `Fix "${solTarget?.title}" with SOL`}
+        description={
+          solTarget === "all"
+            ? "SOL will analyze your site and fix all detected issues in one pass — heading structure, summaries, and meta tags."
+            : solTarget?.why ?? "SOL will analyze your page and apply this fix in one pass."
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setSolTarget(null)}>Not now</Button>
+            <ButtonLink
+              href={solTarget === "all" ? solAllHref : solIssueHref}
+              leftIcon={<SolGlyph size={16} />}
+              onClick={() => setSolTarget(null)}
+            >
+              {solTarget === "all" ? "Open SOL to fix all" : "Open SOL to fix this"}
+            </ButtonLink>
+          </>
+        }
+      >
+        <div className="plx-hpreview">
+          {solTarget === "all" ? (
+            <>
+              <p className="plx-body">
+                SOL will inspect your site and make all necessary updates directly — including re-structuring headings into a clean single-h1 hierarchy, adding missing metadata, and polishing tags.
+              </p>
+              <ul>
+                {open.map((iss) => (
+                  <li key={iss.id}><b>{iss.title}:</b> {iss.why}</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <>
+              <p className="plx-body">
+                Instead of editing code or blocks manually, SOL will read your page and update it directly in one pass.
+              </p>
+              {solTarget && solTarget.steps?.length ? (
+                <ol style={{ paddingLeft: "1.2rem", margin: "0.5rem 0" }}>
+                  {solTarget.steps.map((s, idx) => (
+                    <li key={idx} style={{ fontSize: "0.85rem", color: "var(--plx-muted)", marginBottom: 4 }}>{s}</li>
+                  ))}
+                </ol>
+              ) : null}
+            </>
+          )}
+
+          <div
+            style={{
+              padding: "0.75rem 0.9rem",
+              borderRadius: "0.5rem",
+              background: "var(--plx-elevated)",
+              border: "1px solid var(--plx-border)",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.25rem",
+            }}
+          >
+            <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--plx-text)" }}>
+              ⚡ Uses AI credits {solTarget === "all" ? "(usually ~150–250 credits)" : "(usually ~100–150 credits)"}
+            </span>
+            <span style={{ fontSize: "0.78rem", color: "var(--plx-muted)" }}>
+              SOL does the full work in one pass. If you don&apos;t want to use AI credits, you can use standard fixes or open the editor to fix it manually.
+            </span>
+          </div>
+        </div>
+      </Modal>
 
       <Modal
         open={!!preview}

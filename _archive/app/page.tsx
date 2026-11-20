@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Mulish } from "next/font/google";
 import { ScrollFxProvider } from "@/app/scroll-fx";
 import { V2Nav } from "./components/v2/v2-nav";
 import { V2Hero } from "./components/v2/v2-hero";
@@ -17,12 +16,6 @@ import { V2PricingSection } from "./components/v2/v2-pricing-section";
 import { V2FaqSection } from "./components/v2/v2-faq-section";
 import { V2Footer } from "./components/v2/v2-footer";
 
-const mulish = Mulish({
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800", "900"],
-  display: "swap",
-});
-
 export default function RootHomePage() {
   const [isDark, setIsDark] = useState(true);
 
@@ -30,7 +23,7 @@ export default function RootHomePage() {
 
   return (
     <ScrollFxProvider>
-      <main className={`${mulish.className} min-h-screen w-full max-w-full overflow-x-hidden antialiased selection:bg-purple-600 selection:text-white transition-colors duration-500 ${
+      <main className={`min-h-screen w-full max-w-full overflow-x-hidden antialiased selection:bg-purple-600 selection:text-white transition-colors duration-500 font-sans ${
         isDark ? "bg-[#0b0f19] text-white" : "bg-white text-slate-950"
       }`}>
         <V2Nav isDark={isDark} onToggleTheme={toggleTheme} />

@@ -61,7 +61,7 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       content = <VisitsTab visits={await loadHubVisits(id)} siteId={id} live={site.status === "live"} gaResult={Array.isArray(query.ga) ? query.ga[0] : query.ga} />;
       break;
     case "health":
-      content = <HealthTab siteId={id} live={site.status === "live"} editHref={site.editHref} />;
+      content = <HealthTab siteId={id} siteName={site.name} live={site.status === "live"} editHref={site.editHref} />;
       break;
     case "settings": {
       const pages = await loadHubPages(ctx.organizationId, id).catch(() => []);

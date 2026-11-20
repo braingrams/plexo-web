@@ -362,10 +362,57 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 .plx-nav__link:hover { color: var(--plx-text); background: var(--plx-ghost-hover); }
 .plx-nav__link[aria-current="page"] { background: var(--plx-tint); color: var(--plx-text); }
 .plx-nav__link[aria-current="page"] svg { color: var(--plx-deep); }
-.plx-sidebar__help { margin-top: auto; padding: 16px; border-radius: 16px; background: var(--plx-tint); display: flex; flex-direction: column; gap: 6px; }
-.plx-sidebar__help strong { font-size: 14px; font-weight: 800; }
-.plx-sidebar__help p { margin: 0; font-size: 13px; color: var(--plx-muted); line-height: 1.45; }
-.plx-sidebar__help .plx-btn { margin-top: 6px; align-self: flex-start; }
+.plx-sidebar__foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.plx-sidebar__foot-collapsed { margin-top: auto; display: flex; flex-direction: column; align-items: center; padding-top: 8px; }
+.plx-sidebar__shout {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--plx-tint);
+  border: 1px solid var(--plx-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.plx-sidebar__shout:hover {
+  border-color: var(--plx-border-strong);
+  box-shadow: var(--plx-shadow-card);
+}
+.plx-sidebar__shout-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  color: var(--plx-deep);
+  text-transform: uppercase;
+}
+.plx-sidebar__shout strong {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--plx-text);
+  line-height: 1.25;
+}
+.plx-sidebar__shout p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--plx-muted);
+  line-height: 1.45;
+}
+.plx-sidebar__shout .plx-btn {
+  margin-top: 4px;
+  width: 100%;
+}
+.plx-sidebar__testimonial-collapsed {
+  color: var(--plx-brand);
+}
+.plx-sidebar__help { padding: 14px 16px; border-radius: 16px; background: var(--plx-elevated); display: flex; flex-direction: column; gap: 6px; }
+.plx-sidebar__help strong { font-size: 13.5px; font-weight: 800; }
+.plx-sidebar__help p { margin: 0; font-size: 12.5px; color: var(--plx-muted); line-height: 1.45; }
+.plx-sidebar__help .plx-btn { margin-top: 4px; align-self: flex-start; }
 .plx-main-col { min-width: 0; display: flex; flex-direction: column; }
 .plx-topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 32px; background: color-mix(in srgb, var(--plx-bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--plx-border); }
 .plx-topbar__right { display: flex; align-items: center; gap: 10px; }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Check, Copy, X } from "lucide-react";
 import { contentSnippet, type ContentLayout } from "@/lib/customContent/embed";
 import { productMarker } from "@/lib/commerce/embedSnippets";
 import { SiteProductPicker } from "../../_components/SiteProductPicker";
@@ -128,36 +129,40 @@ export function EmbedCodeModal({ onClose, siteId, pageId, canAddForMe = true, on
           padding: "1.75rem", display: "flex", flexDirection: "column", gap: "1.25rem",
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem" }}>
           <div>
-            <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--ed-text)", margin: 0 }}>Add to a page</h3>
-            <p style={{ fontSize: "0.78rem", color: "var(--ed-t-450)", margin: "0.3rem 0 0" }}>
+            <h3 style={{ fontSize: "1.15rem", fontWeight: 800, color: "var(--ed-text)", margin: 0 }}>Add to a page</h3>
+            <p style={{ fontSize: "0.82rem", color: "var(--ed-t-450)", margin: "0.35rem 0 0", lineHeight: 1.45 }}>
               Copy this snippet into your HTML anywhere you want it to appear. Works in the visual builder (an HTML block), raw HTML pages and React projects. Shop blocks need Commerce enabled.
             </p>
           </div>
-          <button type="button" onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ed-t-400)", fontSize: "1.2rem", lineHeight: 1, padding: "0.2rem" }}>
-            ×
+          <button type="button" onClick={onClose} aria-label="Close" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, minWidth: 32, borderRadius: 8, background: "var(--ed-w-030)", border: "1px solid var(--ed-w-080)", cursor: "pointer", color: "var(--ed-t-500)", transition: "all 0.15s ease" }}>
+            <X size={16} aria-hidden />
           </button>
         </div>
 
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-          {BLOCKS.map((b) => (
-            <button
-              key={b.key}
-              type="button"
-              onClick={() => setBlock(b.key)}
-              style={{
-                padding: "0.4rem 0.75rem", borderRadius: 8, fontSize: "0.78rem", fontWeight: 600,
-                background: block === b.key ? "color-mix(in srgb, var(--brand) 14%, transparent)" : "var(--ed-w-030)",
-                border: block === b.key ? "1px solid color-mix(in srgb, var(--brand) 35%, transparent)" : "1px solid var(--ed-w-080)",
-                color: block === b.key ? "var(--ed-accent-text)" : "var(--ed-t-650)", cursor: "pointer",
-              }}
-            >
-              {b.label}
-            </button>
-          ))}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.45rem" }}>
+          {BLOCKS.map((b) => {
+            const isSelected = block === b.key;
+            return (
+              <button
+                key={b.key}
+                type="button"
+                onClick={() => setBlock(b.key)}
+                style={{
+                  padding: "0.42rem 0.8rem", borderRadius: 999, fontSize: "0.78rem", fontWeight: 600,
+                  background: isSelected ? "color-mix(in srgb, var(--brand) 16%, transparent)" : "var(--ed-w-030)",
+                  border: isSelected ? "1px solid color-mix(in srgb, var(--brand) 40%, transparent)" : "1px solid var(--ed-w-080)",
+                  color: isSelected ? "var(--ed-accent-text)" : "var(--ed-t-650)", cursor: "pointer",
+                  transition: "all 0.15s ease",
+                }}
+              >
+                {b.label}
+              </button>
+            );
+          })}
         </div>
-        <p style={{ fontSize: "0.78rem", color: "var(--ed-t-400)", margin: 0 }}>{active.description}</p>
+        <p style={{ fontSize: "0.8rem", color: "var(--ed-t-450)", margin: 0, lineHeight: 1.45 }}>{active.description}</p>
 
         {block === "content_list" && (
           <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -236,22 +241,28 @@ export function EmbedCodeModal({ onClose, siteId, pageId, canAddForMe = true, on
         )}
 
         <div>
-          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--ed-t-550)", display: "block", marginBottom: "0.3rem" }}>Snippet to paste</label>
-          <div style={{ position: "relative" }}>
-            <pre style={{ margin: 0, padding: "0.9rem 1rem", borderRadius: 10, background: "rgba(0,0,0,0.35)", border: "1px solid var(--ed-w-080)", fontSize: "0.8rem", color: "var(--ed-lavender)", overflowX: "auto", fontFamily: "ui-monospace, monospace" }}>
-              {snippet}
-            </pre>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.45rem" }}>
+            <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--ed-t-650)", margin: 0 }}>Snippet to paste</label>
             <button
               type="button"
               onClick={copy}
               style={{
-                position: "absolute", top: "0.6rem", right: "0.6rem",
-                padding: "0.35rem 0.7rem", borderRadius: 7, fontSize: "0.72rem", fontWeight: 700,
-                border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)", background: "color-mix(in srgb, var(--brand) 12%, transparent)", color: "var(--ed-accent-text)", cursor: "pointer",
+                display: "inline-flex", alignItems: "center", gap: 6,
+                padding: "0.35rem 0.75rem", borderRadius: 8, fontSize: "0.75rem", fontWeight: 700,
+                border: "1px solid color-mix(in srgb, var(--brand) 35%, transparent)",
+                background: copied ? "color-mix(in srgb, var(--ed-success, #22c55e) 15%, transparent)" : "color-mix(in srgb, var(--brand) 14%, transparent)",
+                color: copied ? "var(--ed-success, #22c55e)" : "var(--ed-accent-text)", cursor: "pointer",
+                transition: "all 0.15s ease",
               }}
             >
-              {copied ? "Copied!" : "Copy"}
+              {copied ? <Check size={14} aria-hidden /> : <Copy size={14} aria-hidden />}
+              {copied ? "Copied" : "Copy code"}
             </button>
+          </div>
+          <div style={{ borderRadius: 10, background: "rgba(0,0,0,0.35)", border: "1px solid var(--ed-w-080)", overflow: "hidden" }}>
+            <pre style={{ margin: 0, padding: "0.9rem 1rem", fontSize: "0.82rem", lineHeight: 1.5, color: "var(--ed-lavender)", overflowX: "auto", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace", whiteSpace: "pre-wrap", wordBreak: "break-all" }}>
+              {snippet}
+            </pre>
           </div>
         </div>
       </div>

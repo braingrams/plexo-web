@@ -424,6 +424,9 @@ button.plx-linklike { font: inherit; color: inherit; background: none; border: 0
 .plx-bsaved__pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 700; color: var(--plx-deep); }
 .plx-bsaved__foot { margin: 10px 0 0; font-size: 13px; color: var(--plx-muted); }
 .plx-bdef { display: flex; flex-direction: column; gap: 22px; }
+.plx-bdef__card { display: flex; flex-direction: column; max-height: min(680px, calc(100vh - 140px)); }
+.plx-bdef__scroll { flex: 1; overflow-y: auto; min-height: 0; padding-right: 6px; display: flex; flex-direction: column; gap: 22px; }
+.plx-bdef__footer { padding-top: 16px; margin-top: 12px; border-top: 1px solid var(--plx-border); display: flex; flex-direction: column; gap: 12px; }
 .plx-bdef__presets { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 10px; }
 .plx-bdef__preset { display: flex; flex-direction: column; gap: 6px; padding: 12px; text-align: left; font: inherit; color: var(--plx-text); border: 2px solid var(--plx-border); border-radius: var(--plx-radius-card); background: var(--plx-surface); cursor: pointer; }
 .plx-bdef__preset:hover { border-color: var(--plx-border-strong); }

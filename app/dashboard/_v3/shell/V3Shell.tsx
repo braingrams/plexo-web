@@ -12,6 +12,7 @@ import {
   Ellipsis,
   Globe,
   GraduationCap,
+  Heart,
   House,
   LayoutGrid,
   LayoutList,
@@ -25,6 +26,7 @@ import {
   Settings,
   ShoppingBag,
   SlidersHorizontal,
+  Sparkles,
   UserRound,
 } from "lucide-react";
 import { activeNavId, type Experience, type NavIcon, type V3NavItem } from "@/lib/dashboardV3/nav";
@@ -231,7 +233,24 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
                 );
               })}
             </nav>
-            {collapsed ? null : <HelpCard />}
+            {collapsed ? (
+              <div className="plx-sidebar__foot-collapsed">
+                <Link
+                  href="/dashboard/testimonial/submit"
+                  className="plx-nav__link plx-sidebar__testimonial-collapsed"
+                  title="Loving Plexo? Drop a testimonial"
+                  aria-label="Loving Plexo? Drop a testimonial"
+                >
+                  <Sparkles size={20} aria-hidden />
+                  <span className="plx-sr-only">Drop a testimonial</span>
+                </Link>
+              </div>
+            ) : (
+              <div className="plx-sidebar__foot">
+                <TestimonialCard />
+                <HelpCard />
+              </div>
+            )}
           </>
         )}
       </aside>
@@ -320,6 +339,25 @@ function Brand({ orgBranding }: { orgBranding?: OrgBranding }) {
       {showLogo ? <OrgLogo branding={orgBranding} /> : null}
       {showName ? <span>{orgBranding.name}</span> : null}
     </>
+  );
+}
+
+function TestimonialCard() {
+  return (
+    <div className="plx-sidebar__shout">
+      <div className="plx-sidebar__shout-badge">
+        <Sparkles size={12} aria-hidden />
+        <span>Wall of fame</span>
+      </div>
+      <strong className="plx-sidebar__shout-title">Loving Plexo? ⭐</strong>
+      <p className="plx-sidebar__shout-desc">Drop a 30s review & get your site featured on our showcase!</p>
+      <Link href="/dashboard/testimonial/submit" className="plx-btn plx-btn--primary plx-btn--sm plx-sidebar__shout-btn">
+        <span className="plx-btn__label">
+          <Heart size={14} aria-hidden style={{ fill: "currentColor" }} />
+          Drop a testimonial
+        </span>
+      </Link>
+    </div>
   );
 }
 

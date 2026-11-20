@@ -68,12 +68,28 @@ export function GoogleVisits({ siteId, live, result, embedded }: { siteId: strin
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (retry = true) => {
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/sites/${siteId}/google-analytics?days=${days}`, { cache: "no-store" });
-      setData(res.ok ? ((await res.json()) as Payload) : { state: "error" });
+      if (res.ok) {
+        const json = (await res.json()) as Payload;
+        if (json.state === "error" && retry) {
+          setTimeout(() => { void load(false); }, 600);
+          return;
+        }
+        setData(json);
+      } else if (retry) {
+        setTimeout(() => { void load(false); }, 600);
+        return;
+      } else {
+        setData({ state: "error" });
+      }
     } catch {
+      if (retry) {
+        setTimeout(() => { void load(false); }, 600);
+        return;
+      }
       setData({ state: "error" });
     } finally {
       setLoading(false);

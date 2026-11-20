@@ -187,93 +187,97 @@ export function BrandDefinition({ siteId, siteName, own, defaults, sourceType, r
   const canApply = sourceType === "BUILDER";
   return (
     <div className="plx-hub__split plx-bdef__layout" data-tour="hub-brand-look">
-      <Card>
+      <Card className="plx-bdef__card">
         <CardHeader title={BRAND_COPY.definitionTitle} description={BRAND_COPY.definitionSub} />
-        <div className="plx-bdef">
-          <div className="plx-bdef__group">
-            <h3>{BRAND_COPY.presetsTitle}</h3>
-            <p className="plx-small" style={{ margin: 0 }}>{BRAND_COPY.presetsSub}</p>
-            <div className="plx-bdef__presets">
-              {BRAND_PRESETS.map((p) => (
-                <button key={p.id} type="button" className="plx-bdef__preset" onClick={() => { setDraft(p.draft); setOutcome(null); }}>
-                  <span className="plx-bdef__dots" aria-hidden>{[p.draft.primary, p.draft.secondary, p.draft.accent].map((c) => <i key={c} style={{ background: c }} />)}</span>
-                  <b>{p.name}</b>
-                  <span className="plx-small">{p.blurb}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="plx-bdef__group">
-            <h3>Logo</h3>
-            <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-              <span className="plx-hrow__thumb" style={{ width: 72, height: 72 }}>
-                {logoUrl ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={logoUrl} alt={`${siteName} logo`} style={{ objectFit: "contain" }} /> : <ImagePlus size={26} aria-hidden />}
-              </span>
-              <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void upload(f); }} />
-              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-                <Button variant="secondary" loading={uploading} onClick={() => fileRef.current?.click()}>{logoUrl ? "Change logo" : "Add my logo"}</Button>
-                {logoUrl ? <Button variant="ghost" onClick={() => { setLogoUrl(""); setNoLogo(false); setOutcome(null); }}>Remove</Button> : null}
+        <div className="plx-bdef" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <div className="plx-bdef__scroll">
+            <div className="plx-bdef__group">
+              <h3>{BRAND_COPY.presetsTitle}</h3>
+              <p className="plx-small" style={{ margin: 0 }}>{BRAND_COPY.presetsSub}</p>
+              <div className="plx-bdef__presets">
+                {BRAND_PRESETS.map((p) => (
+                  <button key={p.id} type="button" className="plx-bdef__preset" onClick={() => { setDraft(p.draft); setOutcome(null); }}>
+                    <span className="plx-bdef__dots" aria-hidden>{[p.draft.primary, p.draft.secondary, p.draft.accent].map((c) => <i key={c} style={{ background: c }} />)}</span>
+                    <b>{p.name}</b>
+                    <span className="plx-small">{p.blurb}</span>
+                  </button>
+                ))}
               </div>
-              {!logoUrl ? (
-                noLogo ? (
-                  <span className="plx-small" style={{ flexBasis: "100%" }}>No logo: we&apos;ll make a simple one from your site&apos;s name. <Button variant="link" onClick={() => setNoLogo(false)}>Undo</Button></span>
-                ) : (
-                  <span className="plx-small" style={{ flexBasis: "100%" }}><Button variant="link" onClick={() => { setNoLogo(true); setOutcome(null); }}>I don&apos;t have a logo</Button> and that&apos;s fine, we&apos;ll make one from your name.</span>
-                )
+            </div>
+
+            <div className="plx-bdef__group">
+              <h3>Logo</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+                <span className="plx-hrow__thumb" style={{ width: 72, height: 72 }}>
+                  {logoUrl ? /* eslint-disable-next-line @next/next/no-img-element */ <img src={logoUrl} alt={`${siteName} logo`} style={{ objectFit: "contain" }} /> : <ImagePlus size={26} aria-hidden />}
+                </span>
+                <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/svg+xml,image/webp" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void upload(f); }} />
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <Button variant="secondary" loading={uploading} onClick={() => fileRef.current?.click()}>{logoUrl ? "Change logo" : "Add my logo"}</Button>
+                  {logoUrl ? <Button variant="ghost" onClick={() => { setLogoUrl(""); setNoLogo(false); setOutcome(null); }}>Remove</Button> : null}
+                </div>
+                {!logoUrl ? (
+                  noLogo ? (
+                    <span className="plx-small" style={{ flexBasis: "100%" }}>No logo: we&apos;ll make a simple one from your site&apos;s name. <Button variant="link" onClick={() => setNoLogo(false)}>Undo</Button></span>
+                  ) : (
+                    <span className="plx-small" style={{ flexBasis: "100%" }}><Button variant="link" onClick={() => { setNoLogo(true); setOutcome(null); }}>I don&apos;t have a logo</Button> and that&apos;s fine, we&apos;ll make one from your name.</span>
+                  )
+                ) : null}
+              </div>
+              {suggested.length ? (
+                <div className="plx-small" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                  <Button variant="secondary" size="sm" onClick={() => set({ primary: suggested[0], secondary: suggested[1] ?? "" })}>Use colours from my logo</Button>
+                  <span style={{ display: "flex", gap: 6 }}>{suggested.slice(0, 2).map((c) => <i key={c} aria-hidden style={{ width: 18, height: 18, borderRadius: 999, background: c, display: "inline-block" }} />)}</span>
+                </div>
               ) : null}
             </div>
-            {suggested.length ? (
-              <div className="plx-small" style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                <Button variant="secondary" size="sm" onClick={() => set({ primary: suggested[0], secondary: suggested[1] ?? "" })}>Use colours from my logo</Button>
-                <span style={{ display: "flex", gap: 6 }}>{suggested.slice(0, 2).map((c) => <i key={c} aria-hidden style={{ width: 18, height: 18, borderRadius: 999, background: c, display: "inline-block" }} />)}</span>
+
+            <div className="plx-bdef__group">
+              <h3>Colours</h3>
+              <ColourPicker label="Main colour" value={draft.primary} onChange={(h) => set({ primary: h })} extra={suggested} />
+              <ColourPicker label="Second colour" optional value={draft.secondary} onChange={(h) => set({ secondary: h })} />
+              <ColourPicker label="Accent colour" optional value={draft.accent} onChange={(h) => set({ accent: h })} />
+            </div>
+
+            <div className="plx-bdef__group">
+              <h3>Fonts</h3>
+              <div className="plx-fp__fields">
+                <FontField label="Headings" hint="Titles and big words" value={draft.headingFont} weight={draft.headingWeight} customFonts={customFonts} siteId={siteId} onCustomFonts={setCustomFonts} onChange={(headingFont, headingWeight) => set({ headingFont, headingWeight })} />
+                <FontField label="Text" hint="Paragraphs and buttons" value={draft.bodyFont} weight={draft.bodyWeight} customFonts={customFonts} siteId={siteId} onCustomFonts={setCustomFonts} onChange={(bodyFont, bodyWeight) => set({ bodyFont, bodyWeight })} />
               </div>
+              <FontPairs heading={draft.headingFont} body={draft.bodyFont} onPair={(p) => set({ headingFont: p.heading, bodyFont: p.body, headingWeight: 700, bodyWeight: 400 })} />
+            </div>
+
+            <div className="plx-bdef__group">
+              <h3>Buttons and corners</h3>
+              <div role="radiogroup" aria-label="How round your buttons and cards are" className="plx-bdef__choices">
+                {ROUNDNESS.map((r) => <button key={r.id} type="button" role="radio" aria-checked={draft.roundness === r.id} className="plx-bdef__choice" onClick={() => set({ roundness: r.id })}>{r.label}</button>)}
+              </div>
+            </div>
+
+            <div className="plx-bdef__group">
+              <h3>Spacing</h3>
+              <div role="radiogroup" aria-label="How much space there is between things" className="plx-bdef__choices">
+                {DENSITY.map((d) => <button key={d.id} type="button" role="radio" aria-checked={draft.density === d.id} className="plx-bdef__choice" title={d.hint} onClick={() => set({ density: d.id })}>{d.label}</button>)}
+              </div>
+            </div>
+          </div>
+
+          <div className="plx-bdef__footer">
+            {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
+            <div className="plx-bdef__savebar">
+              <Button loading={saving} onClick={save} disabled={!draft.primary || (!dirty && !saving)}>{BRAND_COPY.save}</Button>
+              <span className="plx-small" role="status">{dirty ? BRAND_COPY.unsaved : BRAND_COPY.upToDate}</span>
+            </div>
+            {outcome ? (
+              <div className="plx-inlinemsg" role="status" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
+                <span>{outcome.text}</span>
+                {outcome.askSol ? <ButtonLink href={solHref} variant="secondary" size="sm" leftIcon={<SolGlyph size={16} />}>Ask SOL to restyle my pages</ButtonLink> : null}
+              </div>
+            ) : !canApply ? (
+              <p className="plx-small">This site was built another way, so Plexo saves your look and SOL can restyle its pages with it.</p>
             ) : null}
           </div>
-
-          <div className="plx-bdef__group">
-            <h3>Colours</h3>
-            <ColourPicker label="Main colour" value={draft.primary} onChange={(h) => set({ primary: h })} extra={suggested} />
-            <ColourPicker label="Second colour" optional value={draft.secondary} onChange={(h) => set({ secondary: h })} />
-            <ColourPicker label="Accent colour" optional value={draft.accent} onChange={(h) => set({ accent: h })} />
-          </div>
-
-          <div className="plx-bdef__group">
-            <h3>Fonts</h3>
-            <div className="plx-fp__fields">
-              <FontField label="Headings" hint="Titles and big words" value={draft.headingFont} weight={draft.headingWeight} customFonts={customFonts} siteId={siteId} onCustomFonts={setCustomFonts} onChange={(headingFont, headingWeight) => set({ headingFont, headingWeight })} />
-              <FontField label="Text" hint="Paragraphs and buttons" value={draft.bodyFont} weight={draft.bodyWeight} customFonts={customFonts} siteId={siteId} onCustomFonts={setCustomFonts} onChange={(bodyFont, bodyWeight) => set({ bodyFont, bodyWeight })} />
-            </div>
-            <FontPairs heading={draft.headingFont} body={draft.bodyFont} onPair={(p) => set({ headingFont: p.heading, bodyFont: p.body, headingWeight: 700, bodyWeight: 400 })} />
-          </div>
-
-          <div className="plx-bdef__group">
-            <h3>Buttons and corners</h3>
-            <div role="radiogroup" aria-label="How round your buttons and cards are" className="plx-bdef__choices">
-              {ROUNDNESS.map((r) => <button key={r.id} type="button" role="radio" aria-checked={draft.roundness === r.id} className="plx-bdef__choice" onClick={() => set({ roundness: r.id })}>{r.label}</button>)}
-            </div>
-          </div>
-
-          <div className="plx-bdef__group">
-            <h3>Spacing</h3>
-            <div role="radiogroup" aria-label="How much space there is between things" className="plx-bdef__choices">
-              {DENSITY.map((d) => <button key={d.id} type="button" role="radio" aria-checked={draft.density === d.id} className="plx-bdef__choice" title={d.hint} onClick={() => set({ density: d.id })}>{d.label}</button>)}
-            </div>
-          </div>
-
-          {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
-          <div className="plx-bdef__savebar">
-            <Button loading={saving} onClick={save} disabled={!draft.primary || (!dirty && !saving)}>{BRAND_COPY.save}</Button>
-            <span className="plx-small" role="status">{dirty ? BRAND_COPY.unsaved : BRAND_COPY.upToDate}</span>
-          </div>
-          {outcome ? (
-            <div className="plx-inlinemsg" role="status" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
-              <span>{outcome.text}</span>
-              {outcome.askSol ? <ButtonLink href={solHref} variant="secondary" size="sm" leftIcon={<SolGlyph size={16} />}>Ask SOL to restyle my pages</ButtonLink> : null}
-            </div>
-          ) : !canApply ? (
-            <p className="plx-small">This site was built another way, so Plexo saves your look and SOL can restyle its pages with it.</p>
-          ) : null}
         </div>
       </Card>
       <BrandLivePreview draft={draft} logoUrl={logoUrl} siteName={siteName} />

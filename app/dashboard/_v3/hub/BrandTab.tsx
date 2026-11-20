@@ -2,7 +2,7 @@
 
 import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ExternalLink, ImagePlus, RefreshCw } from "lucide-react";
+import { AlertCircle, Box, Check, ChevronDown, ExternalLink, ImagePlus, Info, Layers, LayoutGrid, Maximize2, Minus, MousePointerClick, RefreshCw, Square, Tag, TextCursorInput, Type } from "lucide-react";
 import { strataBrandBibleUrl } from "@/lib/strata/appUrl";
 import { Button, Card, CardHeader, Input, Modal, Skeleton, Textarea, useToast } from "../ui";
 import { StrataBrandPicker, type StrataPickerClient } from "../brand/StrataBrandPicker";
@@ -250,27 +250,57 @@ export function BrandSaved({ siteId, siteName, isRaw, client, preview, previewSt
   );
 }
 
+const PIECE_DEFINITIONS: Record<string, { icon: React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties; "aria-hidden"?: boolean | "true" | "false" }>; meaning: string }> = {
+  alert: { icon: AlertCircle, meaning: "Banner message for important updates, warnings, or confirmations." },
+  badge: { icon: Tag, meaning: "Small status tag or label for categories and counts." },
+  button: { icon: MousePointerClick, meaning: "Clickable action for links, submissions, and key calls to action." },
+  card: { icon: Square, meaning: "Structured container for grouping a title, text, and media." },
+  cardgrid: { icon: LayoutGrid, meaning: "Grid layout that lines up cards cleanly across columns." },
+  container: { icon: Maximize2, meaning: "Page wrapper that neatens, centers, and pads your content." },
+  divider: { icon: Minus, meaning: "Subtle separator line between sections and content blocks." },
+  dropdown: { icon: ChevronDown, meaning: "Expandable menu for selecting actions or options." },
+  input: { icon: TextCursorInput, meaning: "Text field for visitors to type in answers or searches." },
+  modal: { icon: Layers, meaning: "Pop-up dialog for focused tasks or important confirmations." },
+  stack: { icon: Box, meaning: "Flex layout that arranges items vertically or horizontally." },
+  tooltip: { icon: Info, meaning: "Small popover hint shown when someone hovers an element." },
+  typography: { icon: Type, meaning: "Heading and body text styled with your brand's fonts." },
+};
+
 /** The brand's ready-made components (buttons, cards...), kept with the brand. SOL and any AI helper use them before inventing their own. */
-export function BrandComponents({ components, projectId }: { components: Array<{ name: string; variants: string[]; slots: Array<{ role: string }> }>; projectId: string | null }) {
+export function BrandComponents({ components, projectId, height }: { components: Array<{ name: string; variants: string[]; slots: Array<{ role: string }> }>; projectId: string | null; height?: number }) {
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   return (
-    <Card data-tour="hub-brand-components">
+    <Card data-tour="hub-brand-components" style={{ display: "flex", flexDirection: "column", height: height ? `${height}px` : undefined, maxHeight: height ? `${height}px` : 520, boxSizing: "border-box" }}>
       <CardHeader
         title="Ready-made pieces"
         description={components.length ? "Buttons, cards and other pieces from your brand. SOL and your AI helpers use these first, so everything you build matches." : "Your brand has no ready-made pieces yet. When SOL or your AI helper builds something you want to reuse, like a button or a card, they can save it here for you."}
         action={projectId ? <a className="plx-btn plx-btn--secondary plx-btn--sm" href={strataBrandBibleUrl(projectId)} target="_blank" rel="noreferrer" style={{ whiteSpace: "nowrap" }}>Saved to design system <ExternalLink size={14} aria-hidden /></a> : undefined}
       />
       {components.length ? (
-        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10 }}>
-          {components.map((c) => (
-            <li key={c.name} style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between", padding: "10px 14px", borderRadius: 12, background: "var(--plx-tint)", border: "1px solid var(--plx-border)" }}>
-              <b>{cap(c.name)}</b>
-              <span className="plx-small">
-                {c.variants.length ? `Looks: ${c.variants.join(", ")}` : "One look"}
-                {c.slots.length ? ` · You fill in: ${c.slots.map((s) => s.role).join(", ")}` : ""}
-              </span>
-            </li>
-          ))}
+        <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10, flex: 1, minHeight: 0, overflowY: "auto", paddingRight: 6 }}>
+          {components.map((c) => {
+            const def = PIECE_DEFINITIONS[c.name.toLowerCase()];
+            const Icon = def?.icon ?? Box;
+            const meaning = def?.meaning ?? "Reusable design piece from your brand.";
+            const count = c.variants.length;
+            const countLabel = count > 1 ? `${count} styles` : "1 style";
+            return (
+              <li key={c.name} style={{ display: "flex", flexDirection: "column", gap: 6, padding: "12px 14px", borderRadius: 12, background: "var(--plx-tint)", border: "1px solid var(--plx-border)" }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 8, background: "var(--plx-surface)", border: "1px solid var(--plx-border)", color: "var(--plx-deep)" }}>
+                      <Icon size={16} aria-hidden />
+                    </span>
+                    <b>{cap(c.name)}</b>
+                  </div>
+                  <span className="plx-small" style={{ padding: "2px 8px", borderRadius: 999, background: "var(--plx-surface)", border: "1px solid var(--plx-border)", color: "var(--plx-muted)", fontSize: 12, fontWeight: 600 }}>
+                    {countLabel}
+                  </span>
+                </div>
+                <p className="plx-small" style={{ margin: 0, color: "var(--plx-muted)", lineHeight: 1.45 }}>{meaning}</p>
+              </li>
+            );
+          })}
         </ul>
       ) : null}
     </Card>
@@ -278,7 +308,7 @@ export function BrandComponents({ components, projectId }: { components: Array<{
 }
 
 /** Your brand: what it is (colours, fonts, logo, corners), whether it is saved, and the little things that make a site look like yours in a browser tab and when shared. */
-export function BrandTab({ siteId, siteName, brand, defaults = null, sourceType = "BUILDER", strataClient, strataPreviewState, strataPreviewVoice }: { siteId: string; siteName: string; brand: SiteBrand | null; defaults?: HubBrand; experience?: string; sourceType?: string; /** Dev preview only. */ strataClient?: StrataPickerClient; strataPreviewState?: BrandState; /** Dev preview only. */ strataPreviewVoice?: BrandVoice | null }) {
+export function BrandTab({ siteId, siteName, brand, defaults = null, experience, sourceType = "BUILDER", strataClient, strataPreviewState, strataPreviewVoice }: { siteId: string; siteName: string; brand: SiteBrand | null; defaults?: HubBrand; experience?: string; sourceType?: string; /** Dev preview only. */ strataClient?: StrataPickerClient; strataPreviewState?: BrandState; /** Dev preview only. */ strataPreviewVoice?: BrandVoice | null }) {
   const { show } = useToast();
   const [meta, setMeta] = useState<Meta | null>(null);
   const [busy, setBusy] = useState(false);

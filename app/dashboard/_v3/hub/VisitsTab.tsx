@@ -5,6 +5,7 @@ import { Card, CardHeader, EmptyState, SegmentedControl } from "../ui";
 import type { HubVisits, HubVisitRow } from "@/lib/dashboardV3/hubData";
 import { TabBar } from "./HubFrame";
 import { GoogleVisits, Rank } from "./GoogleVisits";
+import { Pagination } from "../../_components/Pagination";
 
 function formatVisitLocation(v: HubVisitRow): string {
   const parts = [v.city, v.region, v.country].filter(Boolean);
@@ -18,6 +19,7 @@ function formatVisitDevice(v: HubVisitRow): string {
 
 export function VisitsTab({ visits, siteId, live, gaResult }: { visits: HubVisits; siteId: string; live: boolean; gaResult?: string }) {
   const [source, setSource] = useState<"plexo" | "google">(gaResult ? "google" : "plexo");
+  const [paging, setPaging] = useState<{ page: number; pageSize: number }>({ page: 1, pageSize: 10 });
   const max = Math.max(1, ...visits.days.map((d) => d.views));
   const last7 = visits.days.slice(-7).reduce((s, d) => s + d.views, 0);
   const best = visits.days.reduce((b, d) => (d.views > b.views ? d : b), visits.days[0] ?? { label: "", views: 0 });
@@ -108,19 +110,24 @@ export function VisitsTab({ visits, siteId, live, gaResult }: { visits: HubVisit
                         </tr>
                       </thead>
                       <tbody>
-                        {recent.map((v) => (
-                          <tr key={v.id} style={{ borderTop: "1px solid var(--plx-border)" }}>
-                            <td style={{ padding: "12px 22px", whiteSpace: "nowrap", color: "var(--plx-muted)", fontSize: 13 }}>
-                              {new Date(v.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
-                            </td>
-                            <td style={{ padding: "12px 18px", fontWeight: 600 }}>{formatVisitLocation(v)}</td>
-                            <td style={{ padding: "12px 18px", whiteSpace: "nowrap" }}>{formatVisitDevice(v)}</td>
-                            <td style={{ padding: "12px 18px" }}>{v.browser || "Unknown"}</td>
-                            <td style={{ padding: "12px 22px", color: "var(--plx-muted)", fontSize: 13 }}>{v.domain || "—"}</td>
-                          </tr>
-                        ))}
+                        {recent
+                          .slice((paging.page - 1) * paging.pageSize, paging.page * paging.pageSize)
+                          .map((v) => (
+                            <tr key={v.id} style={{ borderTop: "1px solid var(--plx-border)" }}>
+                              <td style={{ padding: "12px 22px", whiteSpace: "nowrap", color: "var(--plx-muted)", fontSize: 13 }}>
+                                {new Date(v.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                              </td>
+                              <td style={{ padding: "12px 18px", fontWeight: 600 }}>{formatVisitLocation(v)}</td>
+                              <td style={{ padding: "12px 18px", whiteSpace: "nowrap" }}>{formatVisitDevice(v)}</td>
+                              <td style={{ padding: "12px 18px" }}>{v.browser || "Unknown"}</td>
+                              <td style={{ padding: "12px 22px", color: "var(--plx-muted)", fontSize: 13 }}>{v.domain || "—"}</td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
+                  </div>
+                  <div style={{ padding: "14px 22px", borderTop: "1px solid var(--plx-border)" }}>
+                    <Pagination page={paging.page} pageSize={paging.pageSize} total={recent.length} noun="visits" onChange={setPaging} />
                   </div>
                 </Card>
               ) : null}

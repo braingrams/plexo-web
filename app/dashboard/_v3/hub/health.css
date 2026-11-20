@@ -4,7 +4,8 @@
 .plx-hhead__tone { display: inline-flex; align-items: center; gap: 10px; }
 .plx-htrendtext { margin: 0 0 16px; font-weight: 700; font-size: 15px; color: var(--plx-text); }
 .plx-hcelebrate { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; background: var(--plx-elevated); color: var(--plx-success); font-weight: 800; margin-bottom: 18px; }
-.plx-hmetrics--rich { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.plx-hmetrics--rich { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 680px) { .plx-hmetrics--rich { grid-template-columns: 1fr; } }
 .plx-hmetrics--rich li { flex-direction: column; gap: 4px; padding: 14px 16px; border: 1px solid var(--plx-border); border-radius: 14px; }
 .plx-hmetric__top { display: flex; align-items: center; gap: 10px; }
 .plx-hmetric__name { font-size: 15px; font-weight: 800; }
@@ -38,3 +39,6 @@
 .plx-htexts__list li { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
 .plx-htexts__bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .plx-hissue__where a { color: var(--plx-link); font-weight: 700; display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }
+.plx-health__card-footer { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--plx-border); display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.plx-health__email-toggle { display: inline-flex; align-items: center; gap: 12px; cursor: pointer; font-size: 13px; color: var(--plx-muted); user-select: none; }
+.plx-health__email-toggle span b { color: var(--plx-text); }

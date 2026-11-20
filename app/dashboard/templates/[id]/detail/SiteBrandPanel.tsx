@@ -54,7 +54,10 @@ export function timeAgo(iso: string | null, now = Date.now()): string {
 export function brandHeadline(state: BrandState, now = Date.now()): { text: string; tone: "ok" | "warn" | "bad" } {
   if (state.status === "needs-reconnect" || state.lastResultKind === "reconnect") return { text: "Plexo lost access to this brand. Link it again to keep it up to date.", tone: "bad" };
   if (state.lastResultKind === "needs-review") return { text: state.lastResult ?? "Your brand has changes that need a look before they go live.", tone: "warn" };
-  if (state.lastResultKind === "error") return { text: state.lastResult ?? "Couldn't reach your brand just now. Plexo will try again shortly.", tone: "warn" };
+  if (state.lastResultKind === "error") {
+    if (state.resolved?.colours?.length) return { text: "Your brand is on your site.", tone: "ok" };
+    return { text: state.lastResult ?? "Couldn't reach your brand just now. Plexo will try again shortly.", tone: "warn" };
+  }
   const when = timeAgo(state.updatedAt, now);
   return { text: when ? `Your brand was updated ${when}.` : "Your brand is on your site.", tone: "ok" };
 }
