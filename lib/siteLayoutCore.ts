@@ -5,6 +5,7 @@ import { Template, BlogSite, SiteLayout, type TemplateKind } from "@/lib/db/cont
 import { CommerceSettings } from "@/lib/db/commerceEntities";
 import type { V2LayoutSections } from "@/lib/v2/compile";
 import { designFormatOf, isV2Design } from "@/lib/v2/design";
+import { afterSiteChanged } from "@/lib/pub/siteChanged";
 
 // Split out of lib/siteLayoutDynamo.ts so these pure, DynamoDB-only functions have NO
 // `next/server`/`next/navigation` import anywhere in their own module or its import graph —
@@ -131,6 +132,28 @@ export function spliceLayoutRows(designJson: any, layout: LayoutRows | null): an
 }
 
 /**
+ * A page can switch the site's header and/or footer off for itself (the "Show header" / "Show footer"
+ * toggles in the editor's Page settings: Template.hideHeader / hideFooter). Pure: returns the same
+ * reference when nothing is hidden.
+ */
+export function applyPageChrome(layout: LayoutRows | null, page: { hideHeader?: boolean | null; hideFooter?: boolean | null } | null | undefined): LayoutRows | null {
+  if (!layout || (!page?.hideHeader && !page?.hideFooter)) return layout;
+  return {
+    headerRows: page.hideHeader ? [] : layout.headerRows,
+    footerRows: page.hideFooter ? [] : layout.footerRows,
+    headerSource: page.hideHeader ? null : layout.headerSource,
+    footerSource: page.hideFooter ? null : layout.footerSource,
+  };
+}
+
+/** The page's own toggles — taken from the object when it carries them, else read (only ever for a site that has a layout on). */
+async function pageChromeOf(template: { id: string; hideHeader?: boolean | null; hideFooter?: boolean | null }) {
+  if (template.hideHeader !== undefined || template.hideFooter !== undefined) return template;
+  const { data } = await Template.get({ id: template.id }).go();
+  return data ?? null;
+}
+
+/**
  * The one call ordinary page saves need: resolves the site's root, looks up its
  * SiteLayout, and returns designJson with header/footer rows spliced in when enabled —
  * unchanged otherwise. Compile the RETURN VALUE, not the original designJson, but persist
@@ -140,7 +163,8 @@ export function spliceLayoutRows(designJson: any, layout: LayoutRows | null): an
  */
 export async function compileWithSiteLayout(template: { id: string; parentId: string | null }, designJson: any): Promise<any> {
   const rootId = await resolveRootId(template);
-  const layout = await getEnabledSiteLayoutRows(rootId);
+  const siteLayout = await getEnabledSiteLayoutRows(rootId);
+  const layout = siteLayout ? applyPageChrome(siteLayout, await pageChromeOf(template)) : null;
   return spliceLayoutRows(designJson, layout);
 }
 
@@ -157,11 +181,12 @@ async function resolveRootId(template: { id: string; parentId?: string | null })
  * as compiledHtml. `designJson` defaults to the row's own (pass the draft when publishing one).
  */
 export async function compileTemplateWithSiteLayout(
-  template: { id: string; parentId?: string | null; kind: TemplateKind; name?: string; designFormat?: string | null; designJson?: unknown },
+  template: { id: string; parentId?: string | null; kind: TemplateKind; name?: string; designFormat?: string | null; designJson?: unknown; hideHeader?: boolean | null; hideFooter?: boolean | null },
   designJson: unknown = template.designJson,
 ): Promise<string> {
   const rootId = await resolveRootId(template);
-  const layout = await getEnabledSiteLayoutRows(rootId);
+  const siteLayout = await getEnabledSiteLayoutRows(rootId);
+  const layout = siteLayout ? applyPageChrome(siteLayout, await pageChromeOf(template)) : null;
   if (designFormatOf(template) === "v2") {
     return compileTemplate({ ...template, designJson }, { rootTemplateId: rootId, layout: layoutSectionsOf(layout) });
   }
@@ -179,12 +204,14 @@ export async function compileTemplateWithSiteLayout(
 export async function recompileSiteLayoutDependents(rootTemplateId: string): Promise<void> {
   const layout = await getEnabledSiteLayoutRows(rootTemplateId);
 
-  type PageToCompile = { id: string; name: string; designFormat?: string | null; designJson: unknown };
-  const asPage = (t: { id: string; name: string; designFormat?: string | null; designJson: unknown }): PageToCompile => ({
+  type PageToCompile = { id: string; name: string; designFormat?: string | null; designJson: unknown; hideHeader?: boolean | null; hideFooter?: boolean | null };
+  const asPage = (t: PageToCompile): PageToCompile => ({
     id: t.id,
     name: t.name,
     designFormat: t.designFormat,
     designJson: t.designJson,
+    hideHeader: t.hideHeader,
+    hideFooter: t.hideFooter,
   });
   const pages: PageToCompile[] = [];
   const { data: root } = await Template.get({ id: rootTemplateId }).go();
@@ -219,14 +246,14 @@ export async function recompileSiteLayoutDependents(rootTemplateId: string): Pro
     pages.push(...fragments.map((f) => f.data).filter((f): f is NonNullable<typeof f> => f !== null).map(asPage));
   }
 
-  const layoutSections = layoutSectionsOf(layout);
   for (const page of pages) {
     let compiledHtml: string;
     try {
+      const pageLayout = applyPageChrome(layout, page);
       compiledHtml =
         designFormatOf(page) === "v2"
-          ? await compileTemplate({ ...page, kind: "LANDING_PAGE" }, { rootTemplateId, layout: layoutSections })
-          : await compileTemplate({ ...page, designJson: spliceLayoutRows(page.designJson, layout), kind: "LANDING_PAGE" }, { rootTemplateId });
+          ? await compileTemplate({ ...page, kind: "LANDING_PAGE" }, { rootTemplateId, layout: layoutSectionsOf(pageLayout) })
+          : await compileTemplate({ ...page, designJson: spliceLayoutRows(page.designJson, pageLayout), kind: "LANDING_PAGE" }, { rootTemplateId });
     } catch {
       continue; // a malformed stored designJson shouldn't take the whole recompile pass down
     }
@@ -244,6 +271,8 @@ export async function recompileSiteLayoutDependents(rootTemplateId: string): Pro
  * fires on a header/footer fragment save, not on every ordinary page save.
  */
 export async function onTemplateSaved(templateId: string): Promise<void> {
+  // The live site just changed: clear its saved page copies and queue a health re-check.
+  afterSiteChanged(templateId);
   const { data: dependents } = await SiteLayout.scan
     .where(
       ({ enabled, headerTemplateId, footerTemplateId }, { eq }) =>

@@ -1,3 +1,5 @@
+import { templateLimitGate } from "@/lib/plan/limitGates";
+import { limitGateResponse } from "@/lib/plan/planGateResponse";
 import { NextRequest, NextResponse } from "next/server";
 
 import { Template } from "@/lib/db/contentEntities";
@@ -9,7 +11,11 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { validateRawHtmlContent, RawUploadValidationError } from "@/server/rawUpload";
 import { rawUploadLimitMessage } from "@/server/rawUploadLimit";
 import { isTemplateNameTaken } from "@/server/templateNameDynamo";
-import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutDynamo";
+import { compileTemplateWithSiteLayout, findRootTemplateId } from "@/lib/siteLayoutDynamo";
+import { ensureSiteLayout } from "@/lib/siteLayoutProvision";
+import { ensureBlankSiteLayout } from "@/lib/siteLayoutBlank";
+import { addPageToSiteMenu } from "@/lib/sites/siteNav";
+import { chromeFor } from "@/lib/v2/siteFormat";
 import { compileTemplate } from "@/lib/compileTemplate";
 import { cleanEmailHtml } from "@/lib/email/mergeTags";
 import { blankV2Design, defaultDesignFormat, designFormatOf, starterV2EmailDesign, v2DesignFromTemplate, type DesignFormat } from "@/lib/v2/design";
@@ -122,7 +128,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const parentId = body.parentId?.trim() || null;
-  let parent: { id: string; kind: TemplateKind; designFormat: DesignFormat } | null = null;
+  let parent: { id: string; kind: TemplateKind; designFormat: DesignFormat; parentId: string | null } | null = null;
   if (parentId) {
     // Every plan can build and preview a multi-page site; what the plan limits is what goes
     // LIVE (Free serves the homepage only — lib/plan/publishGuard.ts and the serve route), so
@@ -135,7 +141,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (parentRecord.kind !== "LANDING_PAGE") {
       return NextResponse.json({ error: "Only landing pages can have sub-pages." }, { status: 400 });
     }
-    parent = { id: parentRecord.id, kind: parentRecord.kind as TemplateKind, designFormat: designFormatOf(parentRecord) };
+    parent = { id: parentRecord.id, kind: parentRecord.kind as TemplateKind, designFormat: designFormatOf(parentRecord), parentId: parentRecord.parentId ?? null };
   }
 
   // A sub-page always belongs to the same landing-page tree as its parent.
@@ -157,14 +163,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       (t) => !t.parentId && t.kind === kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
     ).length;
     if (count >= limit) {
-      const label = kind === "LANDING_PAGE" ? "landing pages" : "email templates";
-      return NextResponse.json(
-        {
-          error: `Your plan allows a maximum of ${limit} ${label}. Upgrade to create more.`,
-          plan: resolved.subscriptionPlan,
-        },
-        { status: 403 },
-      );
+      return limitGateResponse(templateLimitGate(kind, limit));
     }
   }
 
@@ -230,7 +229,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let v2Design: ReturnType<typeof blankV2Design> | null = null;
   let v2Html = "";
   if (designFormat === "v2") {
-    v2Design = kind === "EMAIL" ? starterV2EmailDesign() : body.pageTemplate ? v2DesignFromTemplate(body.pageTemplate, { name, slug: slug ?? undefined, seed: `${id}` }) : blankV2Design();
+    // The page starts without its own menu/footer when the site shares one (a new site gets one automatically, below),
+    // so the owner never ends up with two headers.
+    let ownChrome = false;
+    if (kind === "LANDING_PAGE" && parent) {
+      const rootId = await findRootTemplateId(parent.id, parent.parentId);
+      const shared = await chromeFor(rootId, "");
+      ownChrome = shared.header || shared.footer;
+    }
+    v2Design = kind === "EMAIL" ? starterV2EmailDesign() : body.pageTemplate ? v2DesignFromTemplate(body.pageTemplate, { name, slug: slug ?? undefined, seed: `${id}`, ...(kind === "LANDING_PAGE" && !ownChrome ? { chrome: false } : {}) }) : blankV2Design();
     try {
       v2Html = kind === "EMAIL" ? await compileTemplate({ id, kind, name, designFormat, designJson: v2Design }) : await compileTemplateWithSiteLayout({ id, parentId, kind, name, designFormat }, v2Design);
     } catch (err) {
@@ -252,6 +259,25 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         ? { designFormat: "v2" as const, designJson: v2Design, compiledHtml: v2Html }
         : { designJson: BLANK_TEMPLATE_SHELL, compiledHtml: "" }),
   }).go();
+
+  // A brand-new new-editor site gets its shared header and footer straight away (never fatal: the site works without).
+  if (!parentId && kind === "LANDING_PAGE" && designFormat === "v2" && rawHtmlContent === null) {
+    try {
+      await ensureSiteLayout(id, resolved.organizationId, resolved.userId);
+    } catch (err) {
+      console.error("Couldn't add the default header and footer to the new site", err);
+    }
+  }
+
+  // A new classic-editor site gets the shared header and footer too, blank (nothing shows until the owner designs one).
+  if (!parentId && kind === "LANDING_PAGE" && designFormat !== "v2" && rawHtmlContent === null) {
+    await ensureBlankSiteLayout(id, resolved.userId).catch((err) => console.error("Couldn't add the blank header and footer to the new site", err));
+  }
+
+  // A new top-level page joins the site's shared menu, so it is reachable without the owner editing the header.
+  if (parent && !parent.parentId && slug && kind === "LANDING_PAGE" && designFormat === "v2") {
+    await addPageToSiteMenu(parent.id, name, `/${slug}`).catch(() => undefined);
+  }
 
   const { data: template } = await Template.get({ id }).go();
   if (!template) throw new Error(`Template ${id} vanished immediately after being created`);

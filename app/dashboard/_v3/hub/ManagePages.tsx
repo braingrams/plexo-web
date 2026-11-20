@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Home, MessagesSquare, Pencil, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, Home, Pencil, Trash2 } from "lucide-react";
 import { Badge, Button, ButtonLink, Card, CardHeader, Input, Modal, useToast } from "../ui";
 import type { HubPage } from "@/lib/dashboardV3/hubData";
 import { cleanPathPart, deletePageMessage, movePage, orderedPages, pathProblem } from "@/lib/dashboardV3/hubView";
 import { errMsg, hubApi } from "./hubApi";
+import { pageLabel } from "@/lib/dashboardV3/pagesList";
 
 type Menu = { available: boolean; hrefs: string[] };
 
@@ -46,12 +48,12 @@ export function ManagePagesList({ siteId, siteName, pages }: { siteId: string; s
     if (!updates) return;
     void act(`move:${p.id}`, () => Promise.all(updates.map((u) => hubApi(`/api/templates/${u.id}`, { method: "PATCH", json: { order: u.order } }, "We couldn't move that page."))));
   };
-  const copy = (p: HubPage) => act(`copy:${p.id}`, () => hubApi(`/api/templates/${p.id}/duplicate`, { method: "POST" }, "We couldn't copy that page."), `Copied "${p.name}"`);
+  const copy = (p: HubPage) => act(`copy:${p.id}`, () => hubApi(`/api/templates/${p.id}/duplicate`, { method: "POST" }, "We couldn't copy that page."), `Copied "${pageLabel(p)}"`);
   const toggleMenu = (p: HubPage, showIt: boolean) =>
     act(`menu:${p.id}`, async () => {
       const next = await hubApi<Menu>(`/api/v1/sites/${siteId}/menu`, { method: "PATCH", json: { href: p.path, label: p.name, show: showIt } }, "We couldn't change the menu.");
       setMenu(next);
-    }, showIt ? `"${p.name}" is in your menu` : `"${p.name}" is out of your menu`);
+    }, showIt ? `"${pageLabel(p)}" is in your menu` : `"${pageLabel(p)}" is out of your menu`);
 
   async function saveEdit() {
     if (!edit) return;
@@ -80,7 +82,7 @@ export function ManagePagesList({ siteId, siteName, pages }: { siteId: string; s
     }
   }
 
-  const solHome = (p: HubPage) => `/dashboard/sol?new=1&draft=${encodeURIComponent(`Make "${p.name}" the home page of my site "${siteName}".`)}`;
+  const solHome = (p: HubPage) => `/dashboard/sol?new=1&draft=${encodeURIComponent(`Make "${pageLabel(p)}" the home page of my site "${siteName}".`)}`;
 
   return (
     <>
@@ -93,7 +95,7 @@ export function ManagePagesList({ siteId, siteName, pages }: { siteId: string; s
               <span className="plx-mp__main">
                 <span className="plx-mp__name">
                   {p.isRoot ? <Home size={15} aria-hidden /> : null}
-                  {p.name}
+                  {pageLabel(p)}
                 </span>
                 <span className="plx-mp__path">{p.isRoot ? "Home page" : p.path}</span>
               </span>
@@ -104,18 +106,18 @@ export function ManagePagesList({ siteId, siteName, pages }: { siteId: string; s
               <span className="plx-mp__acts">
                 {!p.isRoot ? (
                   <>
-                    <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${p.name} up`} disabled={working || p.siblingIndex === 0} onClick={() => move(p, -1)}><ArrowUp size={18} aria-hidden /></Button>
-                    <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${p.name} down`} disabled={working || p.siblingIndex === p.siblingCount - 1} onClick={() => move(p, 1)}><ArrowDown size={18} aria-hidden /></Button>
+                    <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${pageLabel(p)} up`} disabled={working || p.siblingIndex === 0} onClick={() => move(p, -1)}><ArrowUp size={18} aria-hidden /></Button>
+                    <Button variant="ghost" size="sm" iconOnly aria-label={`Move ${pageLabel(p)} down`} disabled={working || p.siblingIndex === p.siblingCount - 1} onClick={() => move(p, 1)}><ArrowDown size={18} aria-hidden /></Button>
                   </>
                 ) : null}
-                <Button variant="ghost" size="sm" iconOnly aria-label={`Change name or address of ${p.name}`} onClick={() => { setEditError(null); setEdit({ page: p, name: p.name, slug: p.slug ?? "" }); }}><Pencil size={18} aria-hidden /></Button>
+                <Button variant="ghost" size="sm" iconOnly aria-label={`Change name or address of ${pageLabel(p)}`} onClick={() => { setEditError(null); setEdit({ page: p, name: p.name, slug: p.slug ?? "" }); }}><Pencil size={18} aria-hidden /></Button>
                 {!p.isRoot ? (
                   <>
                     {inMenu !== null ? (
-                      <Button variant="ghost" size="sm" iconOnly aria-label={inMenu ? `Hide ${p.name} from the menu` : `Show ${p.name} in the menu`} aria-pressed={!inMenu} disabled={working} onClick={() => toggleMenu(p, !inMenu)}>{inMenu ? <Eye size={18} aria-hidden /> : <EyeOff size={18} aria-hidden />}</Button>
+                      <Button variant="ghost" size="sm" iconOnly aria-label={inMenu ? `Hide ${pageLabel(p)} from the menu` : `Show ${pageLabel(p)} in the menu`} aria-pressed={!inMenu} disabled={working} onClick={() => toggleMenu(p, !inMenu)}>{inMenu ? <Eye size={18} aria-hidden /> : <EyeOff size={18} aria-hidden />}</Button>
                     ) : null}
-                    <Button variant="ghost" size="sm" iconOnly aria-label={`Make a copy of ${p.name}`} disabled={working} onClick={() => copy(p)}><Copy size={18} aria-hidden /></Button>
-                    <Button variant="ghost" size="sm" iconOnly aria-label={`Delete ${p.name}`} style={{ color: "var(--plx-danger)" }} disabled={working} onClick={() => setDel(p)}><Trash2 size={18} aria-hidden /></Button>
+                    <Button variant="ghost" size="sm" iconOnly aria-label={`Make a copy of ${pageLabel(p)}`} disabled={working} onClick={() => copy(p)}><Copy size={18} aria-hidden /></Button>
+                    <Button variant="ghost" size="sm" iconOnly aria-label={`Delete ${pageLabel(p)}`} style={{ color: "var(--plx-danger)" }} disabled={working} onClick={() => setDel(p)}><Trash2 size={18} aria-hidden /></Button>
                   </>
                 ) : null}
               </span>
@@ -140,7 +142,7 @@ export function ManagePagesList({ siteId, siteName, pages }: { siteId: string; s
               <Input label="Page address" help={`Will be: ${edit.page.path.replace(/[^/]*$/, "")}${cleanPathPart(edit.slug) || "…"}`} value={edit.slug} onChange={(e) => setEdit({ ...edit, slug: e.target.value })} autoComplete="off" />
             )}
             {!edit.page.isRoot ? (
-              <ButtonLink href={solHome(edit.page)} variant="link" size="sm" leftIcon={<MessagesSquare size={16} aria-hidden />}>Want this as your home page? Ask SOL</ButtonLink>
+              <ButtonLink href={solHome(edit.page)} variant="link" size="sm" leftIcon={<SolGlyph size={16} />}>Want this as your home page? Ask SOL</ButtonLink>
             ) : null}
             {editError ? <p className="plx-field__error" role="alert">{editError}</p> : null}
           </div>

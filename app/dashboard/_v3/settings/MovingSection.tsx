@@ -1,5 +1,7 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Download, Globe, Send, ShieldCheck } from "lucide-react";
@@ -102,7 +104,7 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
 
       {incoming.length ? (
         <Panel tone="tint" title="Someone wants to give you a site" description="Have a look, then say yes or no." data-tour="move-incoming">
@@ -147,7 +149,7 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
               )}
             </div>
           </div>
-          {!canImport ? <Notice tone="warn">Bringing a site in is part of the Starter plan. <Link href="/dashboard/settings/plan" style={{ fontWeight: 700 }}>See plans</Link></Notice> : null}
+          {!canImport ? <UpgradePrompt tone="info" requiredPlan="STARTER" message="Bringing a site in from another builder is part of the Starter plan." /> : null}
         </div>
       </Panel>
 

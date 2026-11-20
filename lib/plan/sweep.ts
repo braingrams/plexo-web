@@ -3,6 +3,7 @@ import type { EntityItem } from "electrodb";
 import { User } from "@/lib/db/coreEntities";
 import { isPaidPlan, planSyncAction } from "./entitlement";
 import { sendAccessEndingReminder, syncPlanLifecycle, verifyStripeSubscription } from "./lifecycle";
+import { sweepManagedAnalytics } from "@/lib/googleAnalytics/lifecycle";
 import { verifyPaystackSubscription } from "@/lib/billing/paystackBilling";
 
 type UserItem = EntityItem<typeof User>;
@@ -44,6 +45,8 @@ export async function runPlanSweep(opts: { now?: Date; budgetMs?: number } = {})
     }
   } while (cursor);
   report.complete = true;
+  // Plexo-managed Google Analytics properties of accounts whose plan ended: keep 90 days, then clean up.
+  await sweepManagedAnalytics({ now }).catch((err) => console.error("managed analytics sweep failed:", err));
   return report;
 }
 

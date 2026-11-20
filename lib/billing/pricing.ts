@@ -363,6 +363,85 @@ export function creditsForTopupAmount(amountPaid: number, currency: string, regi
   return Math.max(0, Math.round((amountPaid / region.topupPer1000Credits) * 1000));
 }
 
+/** Minimum amount allowed for a top-up in whole currency units (e.g. ₦100, $1). */
+export function minTopupAmount(currency: string): number {
+  switch (currency.toUpperCase()) {
+    case "NGN":
+      return 100;
+    case "KES":
+      return 10;
+    case "ZAR":
+      return 5;
+    case "GHS":
+      return 1;
+    default:
+      return 1;
+  }
+}
+
+/** Largest single top-up, in whole currency units (about $500). Bigger needs a conversation, and payment providers cap card payments anyway. */
+export function maxTopupAmount(currency: string): number {
+  switch (currency.toUpperCase()) {
+    case "NGN":
+      return 500_000;
+    case "KES":
+      return 50_000;
+    case "ZAR":
+      return 10_000;
+    case "GHS":
+      return 5_000;
+    default:
+      return 500;
+  }
+}
+
+export function currencySymbolFor(currency: string): string {
+  switch (currency.toUpperCase()) {
+    case "NGN":
+      return "₦";
+    case "USD":
+      return "$";
+    case "GHS":
+      return "GH₵";
+    case "KES":
+      return "KSh ";
+    case "ZAR":
+      return "R ";
+    default:
+      return "$";
+  }
+}
+
+export type CustomTopupView = {
+  credits: number;
+  amount: number;
+  amountMinor: number;
+  currency: BillingCurrency;
+  formattedPrice: string;
+  minAmount: number;
+  maxAmount: number;
+  valid: boolean;
+};
+
+/** Calculates the credits and details for an arbitrary top-up amount upfront. */
+export function calculateCustomTopup(amount: number, region: PriceGroup): CustomTopupView {
+  const minAmount = minTopupAmount(region.currency);
+  const maxAmount = maxTopupAmount(region.currency);
+  const valid = typeof amount === "number" && Number.isFinite(amount) && amount >= minAmount && amount <= maxAmount;
+  const credits = valid ? (creditsForTopupAmount(amount, region.currency, region) ?? 0) : 0;
+  const amountMinor = Math.round(amount * minorUnits(region.currency));
+  return {
+    credits,
+    amount,
+    amountMinor,
+    currency: region.currency,
+    formattedPrice: formatMoney(amount, region.currency),
+    minAmount,
+    maxAmount,
+    valid: valid && credits > 0,
+  };
+}
+
 // ── Provider object names (made on demand at checkout) ─────────────────────────────────
 
 /** Stripe lookup key for one plan price — the amount is in it, so a price edit makes a new price and old subscribers keep theirs. */

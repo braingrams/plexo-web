@@ -3,8 +3,9 @@
 import { Card, CardHeader } from "../ui";
 import type { HubVisits } from "@/lib/dashboardV3/hubData";
 import { TabBar } from "./HubFrame";
+import { GoogleVisits } from "./GoogleVisits";
 
-export function VisitsTab({ visits }: { visits: HubVisits }) {
+export function VisitsTab({ visits, siteId, live, gaResult }: { visits: HubVisits; siteId: string; live: boolean; gaResult?: string }) {
   const max = Math.max(1, ...visits.days.map((d) => d.views));
   const last7 = visits.days.slice(-7).reduce((s, d) => s + d.views, 0);
   const best = visits.days.reduce((b, d) => (d.views > b.views ? d : b), visits.days[0] ?? { label: "", views: 0 });
@@ -28,6 +29,7 @@ export function VisitsTab({ visits }: { visits: HubVisits }) {
           ))}
         </div>
       </Card>
+      <GoogleVisits siteId={siteId} live={live} result={gaResult} />
     </>
   );
 }

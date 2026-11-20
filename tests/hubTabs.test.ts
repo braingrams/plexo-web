@@ -4,13 +4,13 @@ import { hubKindLabel, hubTabs, NO_FEATURES, resolveHubTab } from "@/lib/dashboa
 const ids = (f = NO_FEATURES, e: "beginner" | "intermediate" | "pro" = "beginner") => hubTabs(f, e).map((t) => t.id);
 
 describe("hub tabs per kind", () => {
-  it("a plain website gets Pages, Brand, Web address, Settings", () => {
-    expect(ids()).toEqual(["pages", "brand", "address", "settings"]);
+  it("a plain website gets Pages, Brand, Web address, Visits, Site health, Settings", () => {
+    expect(ids()).toEqual(["pages", "brand", "address", "visits", "health", "settings"]);
   });
   it("a server app swaps Pages for App and drops tabs that cannot work for it", () => {
     const f = { ...NO_FEATURES, deployed: "server" as const };
-    expect(ids(f, "pro")).toEqual(["app", "address", "visits", "settings", "advanced"]);
-    expect(ids(f, "beginner")).toEqual(["app", "address", "settings"]);
+    expect(ids(f, "pro")).toEqual(["app", "address", "visits", "health", "settings", "advanced"]);
+    expect(ids(f, "beginner")).toEqual(["app", "address", "visits", "health", "settings"]);
     for (const dropped of ["pages", "products", "orders", "blog", "course", "brand"]) expect(ids(f, "pro")).not.toContain(dropped);
   });
   it("a static uploaded app gets the same App tab", () => {

@@ -16,7 +16,8 @@ import "./_components/cmx.css";
  * into their most-recently-updated site's Commerce module, where CommerceSiteSwitcher
  * lets them switch to a different one. An org with no sites yet gets a real empty state
  * instead of a silent redirect somewhere unrelated. */
-export default async function CommerceRootPage() {
+export default async function CommerceRootPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const to = (await searchParams)?.to;
   const session = await auth();
   if (!session?.user) redirect("/auth/login");
 
@@ -33,7 +34,7 @@ export default async function CommerceRootPage() {
   if (await currentUserOnNewDashboard(session.user.id)) {
     const withShop = await Promise.all(eligibleSites.map(async (s) => ({ id: s.id, enabled: (await CommerceSettings.get({ templateId: s.id }).go()).data?.enabled ?? false })));
     const siteId = pickShopSiteId(withShop);
-    if (siteId) redirect(commerceEntryHref(siteId));
+    if (siteId) redirect(commerceEntryHref(siteId, Array.isArray(to) ? to[0] : to));
     return (
       <div className="plx-page">
         <EmptyState

@@ -144,7 +144,17 @@
 .plx-plan__price { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.1; }
 .plx-plan__price small { display: block; margin-top: 4px; font-size: 13px; font-weight: 600; letter-spacing: 0; color: var(--plx-muted); }
 .plx-plan .plx-ticks { flex: 1; }
-.plx-plan__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.plx-plan__actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.plx-plan__actions > * { flex: 0 1 auto; min-width: 0; white-space: nowrap; padding-inline: 14px; }
+/* Side by side from 1200px, with both buttons on one row (compact so the trial button always fits beside the plan button). */
+@media (min-width: 1200px) {
+  .plx-plans { grid-template-columns: repeat(var(--plx-plan-count, 3), minmax(0, 1fr)); }
+  .plx-plan__actions { flex-wrap: nowrap; }
+  .plx-plan__actions > * { padding-inline: 10px; font-size: 14px; }
+  .plx-plan__actions > * svg { display: none; }
+}
+/* Very narrow phones: only then may the trial button drop under the plan button. */
+@media (max-width: 380px) { .plx-plan__actions { flex-wrap: wrap; } }
 /* "Pay once" under a plan: a quiet section of its own, two tidy options side by side. */
 .plx-bigstat { font-size: 44px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05; font-variant-numeric: tabular-nums; }
 .plx-receipt { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto; align-items: center; gap: 8px 16px; padding: 16px 28px; border-top: 1px solid var(--plx-border); min-height: 72px; }

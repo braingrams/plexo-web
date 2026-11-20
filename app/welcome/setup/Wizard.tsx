@@ -321,24 +321,24 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
           {strataOn ? (
             <div className="ob-group">
               {brandPick.kind === "project" || brandPick.kind === "create" || strataOpen ? null : (
-                <p className="ob-sub" style={{ fontSize: 15 }}>Already keep your brand in Strata? <button type="button" className="ob-linkbtn" onClick={() => setStrataOpen(true)}>Use my Strata brand</button> and your site will follow every change you publish there.</p>
+                <p className="ob-sub" style={{ fontSize: 15 }}>Already have a saved brand? <button type="button" className="ob-linkbtn" onClick={() => setStrataOpen(true)}>Use my saved brand</button> and your site will follow it when you change it.</p>
               )}
               {strataOpen || brandPick.kind === "project" || brandPick.kind === "create" ? (
                 <>
-                  <span className="ob-label">Your Strata brand</span>
+                  <span className="ob-label">Your saved brand</span>
                   <StrataBrandPicker
                     mode="draft"
                     compact
                     value={brandPick}
                     canCreate={!!draft.color}
-                    createHint="Choose your main colour above first, then Plexo can create your brand in Strata."
+                    createHint="Choose your main colour above first, then Plexo can save your brand."
                     onAvailable={setStrataOn}
                     onChange={(v, picked) => {
                       setBrandPick(v);
                       if (picked?.colors.length) setDraft((d) => ({ ...d, suggested: picked.colors, color: picked.colors[0] }));
                     }}
                   />
-                  <button type="button" className="ob-linkbtn" onClick={() => { setBrandPick(NO_SELECTION); setStrataOpen(false); }}>Skip Strata for now</button>
+                  <button type="button" className="ob-linkbtn" onClick={() => { setBrandPick(NO_SELECTION); setStrataOpen(false); }}>Skip for now</button>
                 </>
               ) : null}
             </div>

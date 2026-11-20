@@ -1,3 +1,4 @@
+import { planGateResponse } from "@/lib/plan/planGateResponse";
 import { NextRequest, NextResponse } from "next/server";
 
 import { auth } from "@/server/authDynamo";
@@ -73,10 +74,7 @@ export async function PATCH(
   if (permissionError) return permissionError;
 
   if (!(await orgCanWhiteLabelDynamo(id))) {
-    return NextResponse.json(
-      { error: "White-label is part of the Enterprise plan (and starts once the plan is paid for, not during a trial)." },
-      { status: 403 },
-    );
+    return planGateResponse("PLAN_BRANDING", "Showing your own brand instead of Plexo's is part of the Enterprise plan (and starts once the plan is paid for, not during a trial).", "ENTERPRISE");
   }
 
   const body = (await request.json().catch(() => ({}))) as {

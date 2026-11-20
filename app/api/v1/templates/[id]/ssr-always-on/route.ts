@@ -1,3 +1,4 @@
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
@@ -23,7 +24,7 @@ async function ownedSsrApp(request: NextRequest, templateId: string) {
     return { error: NextResponse.json({ error: `No template found with id "${templateId}" for this account.` }, { status: 404 }) };
   }
   if (!getTierFeatures(resolved.subscriptionPlan).ssrEnabled) {
-    return { error: NextResponse.json({ error: "Server apps are part of the Pro plan. Upgrade in Settings → Billing to use them." }, { status: 403 }) };
+    return { error: NextResponse.json(planGateBody("PLAN_SERVER_APPS", "Server apps are part of the Pro plan. Upgrade to use them."), { status: 403 }) };
   }
   const { data: app } = await DeployedApp.get({ templateId }).go();
   if (!app || app.type !== "SSR") {

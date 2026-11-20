@@ -21,11 +21,19 @@ import {
   type CommentTarget,
 } from "@charisol/plexo-sdk";
 import "@charisol/plexo-sdk/dist/plexo-sdk.css";
+import { readAutosave, saveStatus, writeAutosave } from "@/lib/editor/saveModel";
+import { saveAutosaveToAccount } from "@/lib/editor/autosavePref";
+import { PublishBlockedPanel } from "./PublishBlockedPanel";
+import { MultiPageSolDialog } from "../../_components/MultiPageSolDialog";
 import { SitePlanNotice } from "../../_components/SitePlanNotice";
+import { UpgradePrompt } from "../../_components/UpgradePrompt";
+import { parsePlanGate, pendingPublishKey, publishReturnPath, readPendingPublish, serializePendingPublish, type PlanGate } from "@/lib/plan/planGate";
 import { PagesPanel } from "./PagesPanel";
 import { CommentLayer, type NodeRectSource, type PendingPin } from "./comments/CommentLayer";
 import { V2TemplateEditor, type V2TemplateEditorHandle } from "./v2/V2TemplateEditor";
 import { TryNewEditorBanner, TryNewEditorDialog } from "./v2/TryNewEditor";
+import { BlockModeSwitch, ConvertToCodeDialog } from "./ConvertToCode";
+import { EditModeHint } from "./EditModeHint";
 import type { V2Design } from "@/lib/v2/design";
 import { BuyDomainFlow } from "../../domains/domains-client";
 import { Toggle } from "../../_components/Toggle";
@@ -58,6 +66,8 @@ type Props = {
   pixabayKey?: string;
   currentUserId: string;
   currentUserRole: string;
+  /** The owner's saved Autosave choice (undefined = never chosen: on). */
+  initialAutosave?: boolean;
   organizationId: string;
   // True for a Template created via Blog Settings' "Design custom layout" — shows the
   // Blog block palette group in PlexoBuilder and an instructional banner here.
@@ -85,6 +95,12 @@ type Props = {
   // v2 only: this page was moved from the classic editor and can still go back.
   canGoBackToClassic?: boolean;
   templateSlug?: string | null;
+  // This page can be turned into editable code (Design | Code | Text) — an ordinary block page, not an email or shared layout.
+  canConvertToCode?: boolean;
+  // Opened from "Edit the code" / "Edit the words" on a page that is still blocks: start by offering to turn it into code.
+  initialConvertTo?: "code" | "text";
+  // Site health link: scroll to this element once the editor is open and highlight it.
+  focusNodeId?: string;
 };
 
 function IconArrowLeft() {
@@ -429,13 +445,20 @@ function EditorHeaderRight({
   autoSaveEnabled,
   onToggleAutoSave,
   autoSaveNotification,
+  savedAt,
   compact,
   beginner,
   v3,
   saveFirst,
+  modeSwitch,
+  manyPages,
 }: {
+  /** Design | Code | Text, for pages that can be turned into code. */
+  modeSwitch?: React.ReactNode;
+  /** "Ask SOL about several pages". */
+  manyPages?: React.ReactNode;
   compact?: boolean;
-  /** The simple screen has its own status and "Make it live"; only comments and problems are shown here, in the editor's own button style. */
+  /** The simple screen has its own Save menu and status; only comments and problems are shown here, in the editor's own button style. */
   beginner?: boolean;
   /** On the new dashboard: show the switch between the simple and full editor. */
   v3?: boolean;
@@ -455,12 +478,16 @@ function EditorHeaderRight({
   autoSaveEnabled: boolean;
   onToggleAutoSave: () => void;
   autoSaveNotification: string | null;
+  /** When the page was last kept safe (ms), for the quiet "Saved 2 min ago". */
+  savedAt: number | null;
 }) {
   if (beginner) {
     const problem = publishError ?? saveError;
     return (
       <>
         {problem && <span role="alert" style={{ fontSize: "0.75rem", color: "var(--ed-danger)", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={problem}>{problem}</span>}
+        {modeSwitch}
+        {manyPages}
         <ViewSwitch to="pro" saveFirst={saveFirst} />
         <button type="button" onClick={onToggleComments} aria-pressed={commentsOpen}>
           <IconComment />
@@ -478,6 +505,8 @@ function EditorHeaderRight({
         flexShrink: 0,
       }}
     >
+      {modeSwitch}
+      {manyPages}
       {v3 && <ViewSwitch to="beginner" saveFirst={saveFirst} />}
       <div
         style={{
@@ -489,16 +518,25 @@ function EditorHeaderRight({
           color: autoSaveEnabled ? "var(--ed-accent-text)" : "var(--ed-t-600)",
           whiteSpace: "nowrap",
         }}
-        title={autoSaveEnabled ? "Auto-save enabled" : "Auto-save disabled"}
+        title={autoSaveEnabled ? "Autosave is on: your changes are kept safe as you work" : "Autosave is off: press Save to keep your changes"}
       >
         <IconAutoSave />
-        Auto Save
+        Autosave
         <Toggle
           checked={autoSaveEnabled}
           onChange={onToggleAutoSave}
-          label="Toggle auto-save"
+          label="Autosave"
         />
       </div>
+
+      {!compact && (() => {
+        const st = saveStatus({ saving: isSaving || isPublishing, error: saveError ?? publishError, dirty: false, autosave: autoSaveEnabled, savedAt, now: Date.now() });
+        return (
+          <span role="status" aria-live="polite" title={saveError ?? publishError ?? undefined} style={{ fontSize: "0.78rem", whiteSpace: "nowrap", maxWidth: 200, overflow: "hidden", textOverflow: "ellipsis", color: st.tone === "error" ? "var(--ed-danger)" : st.tone === "saved" ? "var(--ed-success)" : "var(--ed-t-600)" }}>
+            {st.text}
+          </span>
+        );
+      })()}
 
       {autoSaveNotification && (
         <span
@@ -642,7 +680,8 @@ function EditorHeaderRight({
         id="editor-save-btn"
         type="button"
         onClick={onSave}
-        disabled={isSaving}
+        disabled={isSaving || isPublishing}
+        title="Save your work. You can keep it as a draft or put it live."
         style={{
           display: compact ? "none" : "inline-flex",
           alignItems: "center",
@@ -675,51 +714,40 @@ function EditorHeaderRight({
         ) : (
           <IconSave />
         )}
-        {isSaving ? "Saving…" : "Save Draft"}
+        {isSaving || isPublishing ? "Saving…" : "Save"}
       </button>
 
-      <button
-        id="editor-publish-btn"
-        type="button"
-        onClick={onPublish}
-        disabled={isPublishing}
-        style={{
-          // The new editor has one Save button with Draft / Publish in its menu, so this one is only for the classic editor.
-          display: compact ? "none" : "inline-flex",
-          alignItems: "center",
-          gap: "0.45rem",
-          padding: "0.5rem 1rem",
-          borderRadius: 9,
-          border: "none",
-          cursor: isPublishing ? "not-allowed" : "pointer",
-          fontSize: "0.85rem",
-          fontWeight: 700,
-          background:
-            "var(--ed-cta)",
-          color: "var(--ed-on-brand)",
-          opacity: isPublishing ? 0.7 : 1,
-          boxShadow: "0 3px 16px var(--brand-glow)",
-          fontFamily: "inherit",
-          transition: "opacity 0.15s, box-shadow 0.15s",
-        }}
-      >
-        {isPublishing ? (
-          <span
-            style={{
-              width: 13,
-              height: 13,
-              borderRadius: "50%",
-              border: "2px solid var(--ed-w-300)",
-              borderTopColor: "var(--ed-on-brand)",
-              animation: "spin 0.65s linear infinite",
-              flexShrink: 0,
-            }}
-          />
-        ) : (
-          <IconUpload />
+    </div>
+  );
+}
+
+/** What "Save" means: keep it as a draft and leave, or put it live now. Big, plain choices. */
+function SaveChoiceDialog({ busy, canPublish, error, onDraft, onPublish, onClose }: { busy: "draft" | "publish" | null; canPublish: boolean; error: string | null; onDraft: () => void; onPublish: () => void; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !busy && onClose();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
+  const choice: React.CSSProperties = { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 4, width: "100%", minHeight: 64, padding: "0.9rem 1.1rem", borderRadius: 14, textAlign: "left", cursor: busy ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: busy ? 0.7 : 1 };
+  return (
+    <div role="presentation" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()} style={{ position: "fixed", inset: 0, background: "var(--ed-scrim)", zIndex: 100, display: "grid", placeItems: "center", backdropFilter: "blur(8px)" }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="save-choice-title" style={{ background: "var(--ed-panel)", border: "1px solid var(--ed-w-080)", borderRadius: 18, width: "min(92vw, 460px)", padding: "1.5rem", boxShadow: "0 20px 50px rgba(0,0,0,0.5)", display: "grid", gap: "0.85rem" }}>
+        <h2 id="save-choice-title" style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "var(--ed-text)", fontFamily: "var(--font-heading)" }}>What would you like to do?</h2>
+        <button type="button" disabled={Boolean(busy)} onClick={onDraft} style={{ ...choice, border: "1px solid var(--ed-w-120)", background: "transparent", color: "var(--ed-t-850)" }}>
+          <strong style={{ fontSize: "0.95rem" }}>{busy === "draft" ? "Saving…" : "Save as draft and close"}</strong>
+          <span style={{ fontSize: "0.8rem", opacity: 0.75 }}>Keep your work private for now and go back to your site.</span>
+        </button>
+        {canPublish && (
+          <button type="button" disabled={Boolean(busy)} onClick={onPublish} style={{ ...choice, border: "none", background: "var(--ed-cta)", color: "var(--ed-on-brand)" }}>
+            <strong style={{ fontSize: "0.95rem" }}>{busy === "publish" ? "Publishing…" : "Publish now"}</strong>
+            <span style={{ fontSize: "0.8rem", opacity: 0.85 }}>Put this page on the internet so visitors see it.</span>
+          </button>
         )}
-        {isPublishing ? "Publishing…" : "Publish"}
-      </button>
+        {error && <p role="alert" style={{ margin: 0, fontSize: "0.82rem", color: "var(--ed-danger)" }}>{error}</p>}
+        <button type="button" disabled={Boolean(busy)} onClick={onClose} style={{ minHeight: 44, background: "transparent", border: "none", color: "var(--ed-t-600)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem" }}>
+          Keep editing
+        </button>
+      </div>
     </div>
   );
 }
@@ -741,6 +769,7 @@ export function TemplateEditorClient({
   pixabayKey,
   currentUserId,
   currentUserRole,
+  initialAutosave,
   organizationId,
   isBlogLayout,
   commerceEnabled,
@@ -751,6 +780,9 @@ export function TemplateEditorClient({
   canTryNewEditor = false,
   canGoBackToClassic = false,
   templateSlug = null,
+  canConvertToCode = false,
+  initialConvertTo,
+  focusNodeId,
 }: Props) {
   const router = useRouter();
   const v3 = useEditorV3();
@@ -765,6 +797,8 @@ export function TemplateEditorClient({
   }, [v3, isV2]);
   const v2Ref = useRef<V2TemplateEditorHandle>(null);
   const [tryOpen, setTryOpen] = useState(false);
+  // "code" / "text": the dialog that explains turning this page into code is open, for that view.
+  const [convertTo, setConvertTo] = useState<"code" | "text" | null>(canConvertToCode ? (initialConvertTo ?? null) : null);
   const searchParams = useSearchParams();
   const builderRef = useRef<PlexoBuilderRef>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -778,11 +812,41 @@ export function TemplateEditorClient({
   const [autoSaveNotification, setAutoSaveNotification] = useState<
     string | null
   >(null);
-  const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => {
-    if (typeof window === "undefined") return true;
-    const stored = localStorage.getItem(`autosave-${templateId}`);
-    return stored === null ? true : stored === "true";
-  });
+  // Autosave: on unless the owner turned it off; the choice is theirs, remembered for every page on this device.
+  const [autoSaveEnabled, setAutoSaveEnabled] = useState(() => (typeof initialAutosave === "boolean" ? initialAutosave : typeof window === "undefined" ? true : readAutosave(window.localStorage, templateId)));
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+  const [manyPagesOpen, setManyPagesOpen] = useState(false);
+  const manyPagesChanged = useRef(false);
+  const [reloading, setReloading] = useState(false);
+  const [saveBusy, setSaveBusy] = useState<"draft" | "publish" | null>(null);
+  // "Publish now" with no web address yet asks for one first; the page goes live as soon as it is set.
+  const publishAfterAddress = useRef(false);
+  // The new editor's "Publish now" waits for this until the page is really live (the owner may be choosing an address meanwhile).
+  const pendingPublish = useRef<{ resolve: () => void; reject: (e: Error) => void } | null>(null);
+  // Whether the site has its web address yet (only changes the wording of "Publish now"); null = not known.
+  const [hasAddress, setHasAddress] = useState<boolean | null>(templateKind === "LANDING_PAGE" && templateParentId ? true : null);
+  useEffect(() => {
+    if (templateKind !== "LANDING_PAGE" || templateParentId || isBlogLayout) return;
+    let cancelled = false;
+    fetch(`/api/v1/domains?templateId=${templateId}`)
+      .then((r) => r.json())
+      .then((d: { domains?: unknown[] }) => !cancelled && Array.isArray(d.domains) && setHasAddress(d.domains.length > 0))
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [templateId, templateKind, templateParentId, isBlogLayout]);
+  function closePublishModal(): void {
+    publishAfterAddress.current = false;
+    setShowPublishModal(false);
+    pendingPublish.current?.reject(new Error("Your page wasn't put live. Choose a web address when you're ready and press Publish now again."));
+    pendingPublish.current = null;
+  }
+  // Keeps "Saved 2 min ago" honest while nothing else changes.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
   // Baseline for the "is the draft actually different from what's live" check below —
   // a plain string compare is far cheaper than deep-diffing the design tree on every
   // autosave tick. Updated after every successful publish.
@@ -798,6 +862,10 @@ export function TemplateEditorClient({
   const [modalCustomDomain, setModalCustomDomain] = useState("");
   const [modalIsSubmitting, setModalIsSubmitting] = useState(false);
   const [modalError, setModalError] = useState<string | null>(null);
+  // Set when the plan stops the publish: the modal then explains it and offers Upgrade / Publish and replace / Skip.
+  const [modalGate, setModalGate] = useState<(PlanGate & { liveSiteNames?: string[]; canReplace?: boolean }) | null>(null);
+  // Same idea for the header Publish button (e.g. a second page on Free).
+  const [publishGate, setPublishGate] = useState<PlanGate | null>(null);
   const [modalSuccess, setModalSuccess] = useState<string | null>(null);
   const [baseDomain, setBaseDomain] = useState("plexo.charisol.io");
   // The actual CloudFront routing endpoint a CUSTOM domain's CNAME must target — distinct
@@ -831,6 +899,7 @@ export function TemplateEditorClient({
       // The new editor saves its own page (same autosave route); there is no client-side HTML.
       if (!v2Ref.current) return { json: initialDesignJson, html: "" };
       const saved = await v2Ref.current.flush();
+      setSavedAt(Date.now());
       setHasUnpublishedChanges(true);
       return { json: saved as unknown as TemplateJSON, html: "" };
     }
@@ -851,6 +920,7 @@ export function TemplateEditorClient({
       };
       throw new Error(payload.error ?? "Unable to save template.");
     }
+    setSavedAt(Date.now());
     setHasUnpublishedChanges(
       JSON.stringify(exported.json) !== liveDesignJsonRef.current,
     );
@@ -876,6 +946,7 @@ export function TemplateEditorClient({
           throw new Error(payload.error ?? "Unable to save template.");
         }
         setSaveError(null);
+        setSavedAt(Date.now());
         setHasUnpublishedChanges(
           JSON.stringify(data.json) !== liveDesignJsonRef.current,
         );
@@ -978,19 +1049,16 @@ export function TemplateEditorClient({
   function handleToggleAutoSave(): void {
     const newState = !autoSaveEnabled;
     setAutoSaveEnabled(newState);
-    try {
-      localStorage.setItem(`autosave-${templateId}`, String(newState));
-    } catch (err) {
-      console.warn("Failed to persist autosave preference:", err);
-    }
+    writeAutosave(window.localStorage, newState);
+    void saveAutosaveToAccount(newState).catch(() => undefined);
     setAutoSaveNotification(newState ? "Autosave on" : "Autosave off");
     setTimeout(() => setAutoSaveNotification(null), 3000);
   }
 
-  async function handleSave(): Promise<void> {
+  async function handleSave(): Promise<boolean> {
     if (!(isV2 ? v2Ref.current : builderRef.current)) {
       setSaveError("Builder is not ready yet.");
-      return;
+      return false;
     }
     setSaveError(null);
     setSaveMessage(null);
@@ -999,10 +1067,12 @@ export function TemplateEditorClient({
       await flushSave();
       setSaveMessage("Draft saved.");
       setTimeout(() => setSaveMessage(null), 3000);
+      return true;
     } catch (error) {
       setSaveError(
         error instanceof Error ? error.message : "Unable to save template.",
       );
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -1013,13 +1083,40 @@ export function TemplateEditorClient({
    * canvas's own latest edits into the draft first, same as switching pages does, so
    * Publish always goes live with whatever is on the canvas right now, not a stale
    * previously-autosaved draft. */
-  async function handlePublish(): Promise<void> {
+  async function handlePublish(opts?: { addressChecked?: boolean }): Promise<void> {
+    // Coming back from checkout the editor may still be opening: give it a moment before calling it a failure.
+    for (let waited = 0; !(isV2 ? v2Ref.current : builderRef.current) && waited < 10_000; waited += 100) await new Promise((r) => setTimeout(r, 100));
     if (!(isV2 ? v2Ref.current : builderRef.current)) {
-      setPublishError("Builder is not ready yet.");
-      throw new Error("Builder is not ready yet.");
+      setPublishError("The editor is still opening. Try again in a moment.");
+      throw new Error("The editor is still opening. Try again in a moment.");
     }
     setPublishError(null);
+    setPublishGate(null);
     setPublishMessage(null);
+    // No web address yet? Ask for it first (the same window as always), then go live straight after.
+    let addressAsked = false;
+    if (!opts?.addressChecked && templateKind === "LANDING_PAGE" && !templateParentId && !isBlogLayout) {
+      try {
+        const checkData = (await (await fetch(`/api/v1/domains?templateId=${templateId}`)).json()) as { domains?: unknown[]; baseDomain?: string; routingEndpoint?: string };
+        if (checkData.domains && checkData.domains.length === 0) {
+          if (checkData.baseDomain) setBaseDomain(checkData.baseDomain);
+          if (checkData.routingEndpoint) setRoutingEndpoint(checkData.routingEndpoint);
+          publishAfterAddress.current = true;
+          setShowPublishModal(true);
+          setHasAddress(false);
+          // Saved as a draft meanwhile, so nothing is lost while they choose.
+          await flushSave().catch(() => undefined);
+          addressAsked = true;
+        }
+      } catch {
+        // Couldn't check: publish as before.
+      }
+      // The window takes over; this call finishes when the page is live (resolved by the window) or the owner backs out (rejected).
+      if (addressAsked) {
+        pendingPublish.current?.reject(new Error("Publishing was restarted."));
+        return new Promise<void>((resolve, reject) => { pendingPublish.current = { resolve, reject }; });
+      }
+    }
     setIsPublishing(true);
     try {
       const exported = await flushSave();
@@ -1030,43 +1127,18 @@ export function TemplateEditorClient({
         const payload = (await response.json().catch(() => ({}))) as {
           error?: string;
         };
-        throw new Error(payload.error ?? "Unable to publish template.");
+        const gate = parsePlanGate(payload);
+        if (gate) setPublishGate(gate);
+        throw new Error(gate ? "This page can't go live on your plan yet." : (payload.error ?? "Unable to publish template."));
       }
       liveDesignJsonRef.current = JSON.stringify(exported.json);
       setHasUnpublishedChanges(false);
+      setHasAddress(true);
       setPublishMessage("Published — now live.");
       if (v3 && isV2) void fetch("/api/experience/event", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ type: "publish" }), keepalive: true }).catch(() => undefined);
       setTimeout(() => setPublishMessage(null), 3000);
       router.refresh();
 
-      // Check if it's a landing page and doesn't have a linked domain (sub-pages
-      // share their site's domain and never get their own, so skip them). Blog
-      // layout templates are never published to their own domain either — they're
-      // only ever rendered as a substituted layout for a blog site (see
-      // lib/pub/blogLayoutRender.ts) — so the nudge would be meaningless there.
-      if (
-        templateKind === "LANDING_PAGE" &&
-        !templateParentId &&
-        !isBlogLayout
-      ) {
-        try {
-          const checkRes = await fetch(
-            `/api/v1/domains?templateId=${templateId}`,
-          );
-          const checkData = await checkRes.json();
-          if (checkData.domains && checkData.domains.length === 0) {
-            if (checkData.baseDomain) {
-              setBaseDomain(checkData.baseDomain);
-            }
-            if (checkData.routingEndpoint) {
-              setRoutingEndpoint(checkData.routingEndpoint);
-            }
-            setShowPublishModal(true);
-          }
-        } catch (e) {
-          console.error("Failed to check domain status:", e);
-        }
-      }
     } catch (error) {
       setPublishError(
         error instanceof Error ? error.message : "Unable to publish template.",
@@ -1080,16 +1152,31 @@ export function TemplateEditorClient({
 
   // SUBDOMAIN/CUSTOM only — BUY has its own submission flow entirely (BuyDomainFlow calls
   // POST /api/v1/domains/purchase directly, not this handler).
-  async function handleModalPublish(e: React.FormEvent) {
+  function handleModalPublish(e: React.FormEvent) {
     e.preventDefault();
+    void submitModalPublish({});
+  }
+
+  /** Remember what the owner was publishing, so coming back from checkout finishes it. */
+  function rememberPendingPublish(): void {
+    const domain = modalDomainType === "SUBDOMAIN" ? modalSubdomainPrefix : modalCustomDomain;
+    if (modalDomainType === "BUY" || !domain.trim()) return;
+    try {
+      localStorage.setItem(pendingPublishKey(templateId), serializePendingPublish({ templateId, domainType: modalDomainType, domain }));
+    } catch {
+      // Private mode etc.: they just press Publish again on the way back.
+    }
+  }
+
+  async function submitModalPublish(opts: { replaceLive?: boolean; override?: { domainType: "SUBDOMAIN" | "CUSTOM"; domain: string } }) {
     setModalError(null);
     setModalSuccess(null);
     setModalCertValidation(null);
+    setModalGate(null);
 
-    const inputDomain =
-      modalDomainType === "SUBDOMAIN"
-        ? modalSubdomainPrefix
-        : modalCustomDomain;
+    const domainType = opts.override?.domainType ?? modalDomainType;
+    const inputDomain = opts.override?.domain ?? (modalDomainType === "SUBDOMAIN" ? modalSubdomainPrefix : modalCustomDomain);
+    if (domainType === "BUY") return;
     if (!inputDomain.trim()) {
       setModalError("Please enter a domain name.");
       return;
@@ -1102,13 +1189,24 @@ export function TemplateEditorClient({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           templateId,
-          type: modalDomainType,
+          type: domainType,
           domain: inputDomain,
+          ...(opts.replaceLive ? { replaceLive: true } : {}),
         }),
       });
       const data = await response.json();
       if (!response.ok) {
+        const gate = parsePlanGate(data);
+        if (gate) {
+          setModalGate({ ...gate, liveSiteNames: Array.isArray(data.liveSiteNames) ? data.liveSiteNames : undefined, canReplace: data.canReplaceLiveSite === true && domainType === "SUBDOMAIN" });
+          return;
+        }
         throw new Error(data.error ?? "Failed to publish domain.");
+      }
+      try {
+        localStorage.removeItem(pendingPublishKey(templateId));
+      } catch {
+        // ignore
       }
 
       // Update local storage key domain mapping config to sync immediately
@@ -1116,7 +1214,7 @@ export function TemplateEditorClient({
         const key = `plexo-published-domain-${templateId}`;
         localStorage.setItem(
           key,
-          JSON.stringify({ domain: data.domain.domain, type: modalDomainType }),
+          JSON.stringify({ domain: data.domain.domain, type: domainType }),
         );
       } catch (err) {
         console.warn(err);
@@ -1130,7 +1228,7 @@ export function TemplateEditorClient({
       // opposed to the fuller Domains dashboard drawer, which always has) had no way
       // to find out what to add.
       if (
-        modalDomainType === "CUSTOM" &&
+        domainType === "CUSTOM" &&
         data.domain?.certificateValidationName &&
         data.domain?.certificateValidationValue
       ) {
@@ -1142,7 +1240,23 @@ export function TemplateEditorClient({
           "Domain added — add the DNS records below, then this finishes automatically.",
         );
       } else {
-        setModalSuccess("Landing page published successfully!");
+        setModalSuccess("Your web address is set. Publishing your page…");
+        setHasAddress(true);
+        if (publishAfterAddress.current) {
+          publishAfterAddress.current = false;
+          const waiting = pendingPublish.current;
+          pendingPublish.current = null;
+          try {
+            await handlePublish({ addressChecked: true });
+            waiting?.resolve();
+            setModalSuccess("Your page is live!");
+          } catch (e) {
+            waiting?.reject(e instanceof Error ? e : new Error("Unable to publish."));
+            setModalSuccess(null);
+            setModalError(e instanceof Error ? e.message : "Unable to publish.");
+            return; // stay on the window so the reason is visible
+          }
+        }
         setTimeout(() => {
           setShowPublishModal(false);
           setModalSuccess(null);
@@ -1157,17 +1271,50 @@ export function TemplateEditorClient({
     }
   }
 
+  // Back from checkout with a publish that was waiting on the upgrade: open the publish window and
+  // finish it, so the owner never has to find their way back (?resume=publish, see lib/plan/planGate.ts).
+  useEffect(() => {
+    if (searchParams.get("resume") !== "publish") return;
+    let raw: string | null = null;
+    try {
+      raw = localStorage.getItem(pendingPublishKey(templateId));
+    } catch {
+      // ignore
+    }
+    const pending = readPendingPublish(raw, templateId);
+    router.replace(`/dashboard/templates/${templateId}`);
+    if (!pending) return;
+    setShowPublishModal(true);
+    setModalDomainType(pending.domainType);
+    if (pending.domainType === "SUBDOMAIN") setModalSubdomainPrefix(pending.domain);
+    else setModalCustomDomain(pending.domain);
+    void fetch(`/api/v1/domains?templateId=${templateId}`).then((r) => r.json()).then((d: { baseDomain?: string; routingEndpoint?: string }) => {
+      if (d.baseDomain) setBaseDomain(d.baseDomain);
+      if (d.routingEndpoint) setRoutingEndpoint(d.routingEndpoint);
+    }).catch(() => undefined);
+    publishAfterAddress.current = true; // back from checkout: set the address and go live, no further clicks
+    void submitModalPublish({ override: { domainType: pending.domainType, domain: pending.domain } });
+    // Runs once on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const headerRightNode = (
     <EditorHeaderRight
+      modeSwitch={canConvertToCode && !isReadOnlyRole ? <BlockModeSwitch onPick={setConvertTo} /> : undefined}
+      manyPages={templateKind === "LANDING_PAGE" && !isBlogLayout && !isReadOnlyRole && !(isV2 && !beginner) ? (
+        <button type="button" onClick={() => setManyPagesOpen(true)} title="Ask SOL to change several pages in one go" style={isV2 ? undefined : { display: "inline-flex", alignItems: "center", gap: "0.4rem", minHeight: 40, padding: "0 0.8rem", borderRadius: 9, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-t-600)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 600, whiteSpace: "nowrap" }}>
+          SOL on several pages
+        </button>
+      ) : undefined}
       compact={isV2}
       beginner={beginner && isV2}
       v3={v3 && isV2}
-      saveFirst={() => handleSave()}
+      saveFirst={() => handleSave().then(() => undefined)}
       saveMessage={saveMessage}
       saveError={saveError}
       subscriptionPlan={subscriptionPlan}
       isSaving={isSaving}
-      onSave={() => void handleSave()}
+      onSave={() => setSaveDialogOpen(true)}
       hasUnpublishedChanges={hasUnpublishedChanges}
       isPublishing={isPublishing}
       publishMessage={publishMessage}
@@ -1181,6 +1328,7 @@ export function TemplateEditorClient({
       autoSaveEnabled={autoSaveEnabled}
       onToggleAutoSave={handleToggleAutoSave}
       autoSaveNotification={autoSaveNotification}
+      savedAt={savedAt}
     />
   );
 
@@ -1202,6 +1350,16 @@ export function TemplateEditorClient({
       )}
       {!isV2 && canTryNewEditor && !isReadOnlyRole && (
         <TryNewEditorBanner templateId={templateId} onTry={() => setTryOpen(true)} />
+      )}
+      {canConvertToCode && !isReadOnlyRole && <EditModeHint pageKey={templateId} blocks />}
+      {convertTo && (
+        <ConvertToCodeDialog
+          templateId={templateId}
+          templateName={templateName}
+          target={convertTo}
+          saveFirst={flushSave}
+          onClose={() => setConvertTo(null)}
+        />
       )}
       {tryOpen && (
         <TryNewEditorDialog
@@ -1249,6 +1407,7 @@ export function TemplateEditorClient({
             templateName={templateName}
             rootTemplateId={rootTemplateId}
             initialDesign={initialV2Design}
+            focusNodeId={focusNodeId}
             readOnly={isReadOnlyRole}
             commentMode={commentsOpen}
             onRequestComment={(target) => {
@@ -1259,10 +1418,16 @@ export function TemplateEditorClient({
             kind={templateKind}
             headerRight={headerRightNode}
             beginner={beginner}
-            onPublish={handlePublish}
+            onPublish={() => handlePublish()}
+            hasAddress={hasAddress ?? undefined}
+            initialAutosave={initialAutosave}
+            onAskSolManyPages={templateKind === "LANDING_PAGE" && !isBlogLayout ? () => setManyPagesOpen(true) : undefined}
+            savePaused={isPublishing || manyPagesOpen || reloading}
             onBack={() => router.push(exitHref)}
+            onOutOfCredits={() => setSolOutOfCredits(true)}
             onSaved={() => {
               setSaveError(null);
+              setSavedAt(Date.now());
               setHasUnpublishedChanges(true);
             }}
             canGoBack={canGoBackToClassic}
@@ -1271,6 +1436,8 @@ export function TemplateEditorClient({
         <PlexoBuilder
           ref={builderRef}
           apiKey="workspace-internal"
+          // From a Site health link: the classic editor selects and scrolls to the element (SDK 2.0.34+; older versions ignore it).
+          {...(focusNodeId ? { focusNodeId } : {})}
           onAiCreditsExhausted={() => setSolOutOfCredits(true)}
           mode={isEmail ? "email" : "landing_page"}
           mergeTags={isEmail ? editorMergeTags() : undefined}
@@ -1342,6 +1509,54 @@ export function TemplateEditorClient({
         />
       </div>
 
+      {manyPagesOpen && (
+        <MultiPageSolDialog
+          siteId={rootTemplateId ?? templateId}
+          currentPageId={templateId}
+          beforeRun={() => flushSave()}
+          onChanged={() => { manyPagesChanged.current = true; }}
+          onClose={() => {
+            setManyPagesOpen(false);
+            // SOL changed pages behind the open canvas: reload so what's on screen is what was saved (and autosave can't overwrite it).
+            if (manyPagesChanged.current) {
+              setReloading(true); // keeps the editor's Autosave paused until the page has reloaded
+              window.location.reload();
+            }
+          }}
+        />
+      )}
+      {saveDialogOpen && (
+        <SaveChoiceDialog
+          busy={saveBusy}
+          canPublish={!isReadOnlyRole}
+          error={saveError ?? publishError}
+          onClose={() => setSaveDialogOpen(false)}
+          onDraft={() => {
+            setSaveBusy("draft");
+            void handleSave().then((ok) => { if (ok) { setSaveDialogOpen(false); router.push(exitHref); } }).finally(() => setSaveBusy(null));
+          }}
+          onPublish={() => {
+            setSaveBusy("publish");
+            handlePublish()
+              .then(() => setSaveDialogOpen(false))
+              .catch(() => {
+                // No web address yet: the address window is now open, so step aside for it.
+                if (publishAfterAddress.current) setSaveDialogOpen(false);
+              })
+              .finally(() => setSaveBusy(null));
+          }}
+        />
+      )}
+      {publishGate && (
+        <div style={{ position: "fixed", inset: 0, background: "var(--ed-scrim)", zIndex: 100, display: "grid", placeItems: "center", padding: "1rem" }}>
+          <div style={{ background: "var(--ed-panel)", border: "1px solid var(--ed-w-080)", borderRadius: 16, width: "100%", maxWidth: 460, padding: "1.5rem", boxShadow: "0 20px 50px rgba(0,0,0,0.5)", display: "flex", flexDirection: "column", gap: "0.9rem" }}>
+            <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800, color: "var(--ed-text)", fontFamily: "var(--font-heading)" }}>This page can&apos;t go live yet</h2>
+            <UpgradePrompt message={publishGate.message} requiredPlan={publishGate.requiredPlan} returnTo={`/dashboard/templates/${templateId}`} />
+            <button type="button" className="btn-secondary" style={{ padding: "0.55rem" }} onClick={() => setPublishGate(null)}>Skip for now</button>
+          </div>
+        </div>
+      )}
+
       {/* ── Publish Modal Popup ──────────────────── */}
       {showPublishModal && (
         <div
@@ -1394,7 +1609,7 @@ export function TemplateEditorClient({
                 <IconRocket /> Publish Landing Page
               </h2>
               <button
-                onClick={() => setShowPublishModal(false)}
+                onClick={closePublishModal}
                 style={{
                   background: "none",
                   border: "none",
@@ -1683,7 +1898,23 @@ export function TemplateEditorClient({
                     </p>
                   )}
 
-                  {/* Action buttons */}
+                  {modalGate ? (
+                    <PublishBlockedPanel
+                      gate={modalGate}
+                      returnTo={publishReturnPath(templateId)}
+                      busy={modalIsSubmitting}
+                      onBeforeUpgrade={rememberPendingPublish}
+                      onReplace={() => void submitModalPublish({ replaceLive: true })}
+                      onUseFreeAddress={() => {
+                        setModalGate(null);
+                        setModalDomainType("SUBDOMAIN");
+                      }}
+                      onSkip={() => {
+                        setModalGate(null);
+                        closePublishModal();
+                      }}
+                    />
+                  ) : (
                   <div
                     style={{
                       display: "flex",
@@ -1693,7 +1924,7 @@ export function TemplateEditorClient({
                   >
                     <button
                       type="button"
-                      onClick={() => setShowPublishModal(false)}
+                      onClick={closePublishModal}
                       className="btn-secondary"
                       style={{ flex: 1, padding: "0.6rem" }}
                     >
@@ -1721,6 +1952,7 @@ export function TemplateEditorClient({
                       {modalIsSubmitting ? "Publishing…" : "Publish Live"}
                     </button>
                   </div>
+                  )}
                 </form>
               )}
             </div>
@@ -1730,3 +1962,5 @@ export function TemplateEditorClient({
     </div>
   );
 }
+
+

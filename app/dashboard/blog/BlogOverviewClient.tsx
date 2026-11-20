@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -692,7 +693,7 @@ export function BlogOverviewClient({
                 </label>
 
                 {error && (
-                  <p
+<GateOrError error={error}><p
                     style={{
                       fontSize: "0.82rem",
                       color: "#f87171",
@@ -701,8 +702,8 @@ export function BlogOverviewClient({
                     role="alert"
                   >
                     {error}
-                  </p>
-                )}
+                  </p></GateOrError>
+)}
 
                 <div
                   style={{
@@ -807,7 +808,7 @@ export function BlogOverviewClient({
                 </label>
 
                 {error && (
-                  <p
+<GateOrError error={error}><p
                     style={{
                       fontSize: "0.82rem",
                       color: "#f87171",
@@ -816,8 +817,8 @@ export function BlogOverviewClient({
                     role="alert"
                   >
                     {error}
-                  </p>
-                )}
+                  </p></GateOrError>
+)}
 
                 <div
                   style={{

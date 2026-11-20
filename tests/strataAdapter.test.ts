@@ -104,7 +104,7 @@ describe("connect()", () => {
     const adapter = createStrataAdapter({ win: w.win, fetchFn: fetchFn as never });
     const pending = adapter.connect();
     await vi.advanceTimersByTimeAsync(0); // the silent attempt is refused first
-    const assertion = expect(pending).rejects.toMatchObject({ message: expect.stringMatching(/closed before Strata was connected/), kind: "invalid" });
+    const assertion = expect(pending).rejects.toMatchObject({ message: expect.stringMatching(/closed before your brand was connected/), kind: "invalid" });
     w.popup.closed = true;
     await vi.advanceTimersByTimeAsync(2500);
     await assertion;

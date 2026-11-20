@@ -106,6 +106,11 @@ const SPECIAL: Record<string, [string, string]> = {
   sol_review_look: ["Looking it over on desktop and phone", "Looked it over on desktop and phone"],
   get_user_profile: ["Checking your account", "Checked your account"],
   get_analytics: ["Checking your visits", "Checked your visits"],
+  get_site_visits: ["Checking your visitor numbers", "Checked your visitor numbers"],
+  turn_on_visitor_numbers: ["Switching on visitor numbers", "Switched on visitor numbers"],
+  turn_off_visitor_numbers: ["Switching off visitor numbers", "Switched off visitor numbers"],
+  share_visitor_numbers_with_google: ["Sharing your numbers with your Google account", "Shared your numbers with your Google account"],
+  set_cookie_notice: ["Updating your cookie notice", "Updated your cookie notice"],
 };
 const OWNED = new Set(["page", "pages", "site", "shop", "blog post", "blog", "product", "products", "order", "orders", "funnel", "app", "profile", "layout", "form", "settings", "domain", "discount", "customers"]);
 

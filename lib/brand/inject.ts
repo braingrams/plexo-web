@@ -1,5 +1,6 @@
 import { escapeHtmlAttr } from "@/lib/pub/htmlInject";
 import { applyBrandMappingToCss, applyBrandMappingToHtml, type BrandMapping } from "./mapping";
+import { FONT_PRECONNECT_TAGS } from "@/lib/fonts/catalogue";
 import { brandForServing } from "./siteBrand";
 import { brandSheetPath } from "./store";
 
@@ -15,7 +16,8 @@ export const BRAND_LINK_ATTR = "data-plexo-brand";
  */
 export function brandLinkTag(siteId: string, revision: string, opts: { stable?: boolean } = {}): string {
   const href = opts.stable ? brandSheetPath(siteId) : `${brandSheetPath(siteId)}?v=${encodeURIComponent(revision)}`;
-  return `<link rel="stylesheet" href="${escapeHtmlAttr(href)}" ${BRAND_LINK_ATTR}>`;
+  // The preconnect tags let the browser open the font servers while it fetches the sheet, so brand fonts show sooner.
+  return `${FONT_PRECONNECT_TAGS}<link rel="stylesheet" href="${escapeHtmlAttr(href)}" ${BRAND_LINK_ATTR}>`;
 }
 
 /** Puts the link at the end of <head> (after the page's own styles; the sheet wins on specificity either way). Never twice. */
@@ -60,5 +62,23 @@ export async function applySiteBrandToCss(css: string, siteId: string): Promise<
     return brand?.mapping ? applyBrandMappingToCss(css, brand.mapping as BrandMapping) : css;
   } catch {
     return css;
+  }
+}
+
+/**
+ * For a page that is being turned into code: puts the site's brand sheet link into the page itself (a new-editor page gets it
+ * when it is served; a code page only gets it when its own colours are pointed at the brand), so the page keeps the
+ * brand it has today. No revision in the address: the sheet's own short cache carries later brand changes.
+ * Returns the link it wrote (null when the site has no brand), so the caller can show and check exactly what was added.
+ */
+export async function bakeBrandLink(html: string, siteId: string): Promise<{ html: string; link: string | null }> {
+  try {
+    const brand = await brandForServing(siteId);
+    if (!brand || html.includes(BRAND_LINK_ATTR)) return { html, link: null };
+    const link = brandLinkTag(siteId, brand.revision, { stable: true });
+    return { html: insertBrandLink(html, link), link };
+  } catch (err) {
+    console.warn(`[site-brand] ${siteId}: leaving the brand out of the code page`, err);
+    return { html, link: null };
   }
 }

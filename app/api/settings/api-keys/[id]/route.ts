@@ -1,3 +1,4 @@
+import { planGateResponse } from "@/lib/plan/planGateResponse";
 import { NextRequest, NextResponse } from "next/server";
 
 import { encryptSecret } from "@/lib/crypto";
@@ -138,10 +139,7 @@ export async function PATCH(
     const { data: owner } = await User.get({ id: existingKey.userId }).go();
     if (!owner) throw new Error(`ApiKey ${existingKey.id}'s owner user ${existingKey.userId} no longer exists`);
     if (!canUseHostManagedAi(owner.subscriptionPlan)) {
-      return NextResponse.json(
-        { error: "Host-Managed AI access is part of the Pro plan." },
-        { status: 403 },
-      );
+      return planGateResponse("PLAN_HOST_MANAGED_AI", "Host-managed AI access is part of the Pro plan.", "PRO");
     }
   }
 

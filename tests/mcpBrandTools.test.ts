@@ -19,7 +19,7 @@ describe("the MCP catalogue knows about the brand", () => {
     for (const name of ["get_site_brand", "list_strata_projects", "link_site_brand", "create_strata_project_from_brand"]) {
       expect(PLEXO_MCP_TOOLS.filter((t: { name: string }) => t.name === name)).toHaveLength(1);
     }
-    expect(BRAND_MCP_TOOLS).toHaveLength(8);
+    expect(BRAND_MCP_TOOLS).toHaveLength(10); // + get_brand_voice, set_brand_voice
   });
   it("has the component and token tools, once each, and tells the AI to use the brand's components first", () => {
     for (const name of ["list_brand_components", "create_brand_component", "get_brand_tokens", "set_brand_tokens"]) {

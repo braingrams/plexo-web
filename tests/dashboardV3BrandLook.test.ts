@@ -114,7 +114,8 @@ describe("lookOutcomeMessage", () => {
 describe("taskLink", () => {
   it("sends each step to the place it's done, with a button that says what it does", () => {
     expect(taskLink("brand", "s1", "Ama")).toMatchObject({ href: "/dashboard/sites/s1?tab=brand", label: "Add logo and colours" });
-    for (const id of ["words", "contact", "links"] as const) expect(taskLink(id, "s1", "Ama")).toMatchObject({ href: "/dashboard/sites/s1", label: "Edit my pages" });
+    for (const id of ["words", "contact", "links"] as const) expect(taskLink(id, "s1", "Ama")?.href).toBe(`/dashboard/sites/s1/words?for=${id}`);
+    expect(taskLink("words", "s1", "Ama")?.label).toBe("Change the words");
     expect(taskLink("post", "s1", "Ama")).toMatchObject({ href: "/dashboard/sites/s1?tab=blog", label: "Write a post" });
     expect(taskLink("lesson", "s1", "Ama")?.href).toBe("/dashboard/sites/s1?tab=course");
     expect(taskLink("price", "s1", "Ama")?.href).toBe("/dashboard/sites/s1?tab=course");
@@ -124,7 +125,7 @@ describe("taskLink", () => {
     const d = taskLink("describe", "s1", "Ama");
     expect(d?.href).toBe(d?.solHref);
     expect(d?.href).toMatch(/^\/dashboard\/sol\?new=1&draft=/);
-    expect(taskLink("address", "s1", "Ama")).toBeNull();
+    expect(taskLink("finish", "s1", "Ama")).toBeNull();
     expect(taskLink("product", "s1", "Ama")).toBeNull();
   });
   it("gives every link step a task-specific SOL prompt", () => {

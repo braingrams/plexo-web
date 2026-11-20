@@ -16,6 +16,7 @@ export function FloatingPanel({
   width = 360,
   label,
   className,
+  tourId,
   children,
 }: {
   open: boolean;
@@ -24,6 +25,8 @@ export function FloatingPanel({
   width?: number;
   label: string;
   className?: string;
+  /** Lets the product tour point at this panel (data-tour). */
+  tourId?: string;
   children: React.ReactNode;
 }) {
   const panel = useRef<HTMLDivElement>(null);
@@ -79,6 +82,7 @@ export function FloatingPanel({
         ref={panel}
         role="dialog"
         aria-label={label}
+        data-tour={tourId}
         className={cx("plx-pop", className)}
         style={pos ? ({ left: pos.left, top: pos.top, width: pos.width, "--plx-pop-top": `${pos.top}px` } as React.CSSProperties) : { visibility: "hidden" }}
       >

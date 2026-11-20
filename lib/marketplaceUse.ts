@@ -1,3 +1,5 @@
+import { templateLimitGate } from "@/lib/plan/limitGates";
+import { planGateBody } from "@/lib/plan/planGate";
 import { randomUUID } from "node:crypto";
 
 import { recompileCopiedV2Page } from "@/lib/v2/copy";
@@ -44,8 +46,9 @@ export async function useMarketplaceTemplate(
   const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const count = orgRoots.filter((t) => !t.parentId && t.kind === listing.kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout).length;
   if (count >= limit) {
-    const label = listing.kind === "LANDING_PAGE" ? "landing pages" : "email templates";
-    throw new MarketplaceUseError(`Your plan allows a maximum of ${limit} ${label}. Upgrade to create more.`, 403, { plan: resolved.subscriptionPlan });
+    const gate = templateLimitGate(listing.kind === "LANDING_PAGE" ? "LANDING_PAGE" : "EMAIL", limit);
+    const { error: _message, ...gateDetails } = planGateBody(gate.code, gate.message, gate.requiredPlan, gate.details);
+    throw new MarketplaceUseError(gate.message, 403, { plan: resolved.subscriptionPlan, ...gateDetails });
   }
 
   const newId = randomUUID();

@@ -1,8 +1,9 @@
 "use client";
+import { SolOutOfCredits } from "../../../_components/sol/SolTopUp";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { PLAN } from "@/lib/plan/plans";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { aiErrorMessage } from "@/lib/ai/requestErrors";
 import { useRouter } from "next/navigation";
 import { BlogRichTextEditor } from "./BlogRichTextEditor";
 import { AiWriteAssistant, type AiBlogPostResult } from "./AiWriteAssistant";
@@ -294,6 +295,7 @@ export function BlogPostEditor({
     nonce: number;
   } | null>(null);
   const [aiImageError, setAiImageError] = useState<string | null>(null);
+  const [imageOutOfCredits, setImageOutOfCredits] = useState(false);
 
   const markDirty = useCallback(() => setDirty(true), []);
 
@@ -526,36 +528,6 @@ export function BlogPostEditor({
     }
   }
 
-  /** Pure generation — returns the drafted post for the caller to preview. Never touches
-   * editor state, so a result the user doesn't like can be regenerated or dismissed
-   * without ever having clobbered what was already in the editor (see AiWriteAssistant). */
-  async function handleAiGenerate(topic: string): Promise<AiBlogPostResult> {
-    const res = await fetch("/api/v1/ai/generate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": "workspace-internal",
-      },
-      body: JSON.stringify({
-        mode: "generate_blog_post",
-        templateKind: "LANDING_PAGE",
-        prompt: topic,
-        context: {
-          existingCategories: allCategories.map((c) => c.name),
-          existingTags: allTags.map((t) => t.name),
-        },
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}) as { error?: string });
-      // The assistant shows SOL's top-up card for this one.
-      if (res.status === 402) throw Object.assign(new Error("You're out of AI credits."), { outOfCredits: true });
-      throw new Error(aiErrorMessage(res.status, body, "SOL couldn't write that post. Please try again."));
-    }
-    const { result } = (await res.json()) as { result: AiBlogPostResult };
-    return result;
-  }
-
   /** Applies a previously-generated (and now user-approved) draft to the editor's fields,
    * then kicks off the featured image generation. */
   async function handleAiInsert(result: AiBlogPostResult): Promise<void> {
@@ -620,6 +592,7 @@ export function BlogPostEditor({
         const body = await imageRes
           .json()
           .catch(() => ({}) as { error?: string });
+        if (imageRes.status === 402) setImageOutOfCredits(true);
         setAiImageError(
           imageRes.status === 402
             ? "Not enough credits for the featured image — you can upload one manually."
@@ -666,10 +639,13 @@ export function BlogPostEditor({
   return (
     <PageContainer className="blog-editor-grid" style={{ paddingTop: 0 }}>
       <div>
-        <AiWriteAssistant
-          onGenerate={handleAiGenerate}
-          onInsert={handleAiInsert}
-        />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <AiWriteAssistant
+            onInsert={handleAiInsert}
+            categories={allCategories.map((c) => c.name)}
+            tags={allTags.map((t) => t.name)}
+          />
+        </div>
         <textarea
           value={title}
           onChange={(e) => {
@@ -925,7 +901,7 @@ export function BlogPostEditor({
             />
           )}
           {error && (
-            <p
+<GateOrError error={error}><p
               style={{
                 color: "var(--ed-danger)",
                 fontSize: "0.8rem",
@@ -933,8 +909,8 @@ export function BlogPostEditor({
               }}
             >
               {error}
-            </p>
-          )}
+            </p></GateOrError>
+)}
           <p
             style={{
               fontSize: "0.72rem",
@@ -1027,6 +1003,7 @@ export function BlogPostEditor({
 
         <div style={PANEL}>
           <label style={FIELD_LABEL}>Featured Image</label>
+          {imageOutOfCredits && <SolOutOfCredits onDismiss={() => setImageOutOfCredits(false)} />}
           {aiImageError && (
             <p
               style={{

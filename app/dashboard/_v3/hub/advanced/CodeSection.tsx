@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Check, Copy } from "lucide-react";
@@ -119,7 +120,7 @@ function OwnCode({ page }: { page: PickerPage }) {
           ))}
         </div>
         {files.length > editable.length ? <p className="plx-small">{files.length - editable.length} picture and other files are kept as they are and not shown here.</p> : null}
-        {error ? <Notice kind="error" title="That didn't work">{error}</Notice> : null}
+        {error ? <GateOrError error={error}><Notice kind="error" title="That didn't work">{error}</Notice></GateOrError> : null}
         {current ? (
           <div className="plx-adv__monaco">
             <Monaco

@@ -613,6 +613,10 @@ export const CommerceSettings = new Entity(
       pickupEnabled: { type: "boolean", default: true },
       pickupLocation: { type: "string" },
       pickupInstructions: { type: "string" },
+      // Terms of sale / refund policy: text the owner writes (shown on a hosted page) and/or a
+      // link to their own policy. Linked from checkout and order emails. See lib/commerce/terms.ts.
+      termsText: { type: "string" },
+      termsUrl: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },

@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { Badge, Button, Card, CardHeader, Input, Select, Skeleton, useToast } from "../ui";
@@ -100,7 +101,7 @@ export function AppVariables({ siteId, onRebuild }: { siteId: string; onRebuild:
           </div>
           <Input label={add === "variable" ? "Value" : "Password or key"} type={add === "secret" ? "password" : "text"} value={value} onChange={(e) => setValue(e.target.value)} autoComplete="off" />
           {add === "variable" && isPublicName(name) ? <p className="plx-small">Names starting like this are built into your app, so visitors can read them. Don&apos;t put anything private here.</p> : null}
-          {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+          {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
           <div className="plx-hub__actions"><Button loading={busy} onClick={save}>Save</Button><Button variant="ghost" onClick={() => setAdd(null)}>Cancel</Button></div>
         </div>
       ) : error ? <p className="plx-field__error" role="alert">{error}</p> : null}

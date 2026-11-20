@@ -1,5 +1,7 @@
 "use client";
 
+import { GateOrError } from "../../../_components/UpgradePrompt";
+import { rememberPlanGate } from "@/lib/plan/planGate";
 import { SolIcon, SolOutOfCredits } from "../../../_components/sol/SolTopUp";
 import { useMemo, useRef, useState } from "react";
 import {
@@ -108,7 +110,7 @@ export function AiImportDialog({
         },
       );
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Import failed.");
+      if (!res.ok) { rememberPlanGate(data); throw new Error(data.error ?? "Import failed."); }
       setResult({
         importedCount: data.importedCount,
         skippedCount: data.skippedCount,
@@ -186,18 +188,21 @@ export function AiImportDialog({
           </div>
         )}
         {error && (
-          <div
-            style={{
-              marginBottom: "1rem",
-              padding: "0.6rem 0.8rem",
-              borderRadius: 8,
-              background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 10%, transparent)",
-              border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)",
-              color: "var(--cmx-danger, #fca5a5)",
-              fontSize: "0.8rem",
-            }}
-          >
-            {error}
+          <div style={{ marginBottom: "1rem" }}>
+            <GateOrError error={error}>
+              <div
+                style={{
+                  padding: "0.6rem 0.8rem",
+                  borderRadius: 8,
+                  background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 10%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 30%, transparent)",
+                  color: "var(--cmx-danger, #fca5a5)",
+                  fontSize: "0.8rem",
+                }}
+              >
+                {error}
+              </div>
+            </GateOrError>
           </div>
         )}
 

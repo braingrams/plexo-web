@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
+import { useWallet } from "./useWallet";
 import { Pagination } from "../../../_components/Pagination";
 
 type LedgerEntry = {
@@ -25,7 +25,7 @@ type Withdrawal = {
   processedAt: string | null;
 };
 
-type InitialWallet = {
+export type InitialWallet = {
   showWallet: boolean;
   commerceEnabled: boolean;
   balanceCents: number;
@@ -64,94 +64,7 @@ const LEDGER_LABEL: Record<LedgerEntry["type"], string> = {
 };
 
 export function WalletClient({ templateId, initial }: { templateId: string; initial: InitialWallet }) {
-  const [balanceCents, setBalanceCents] = useState(initial.balanceCents);
-  const [pooled, setPooled] = useState(initial.pooled);
-  const [ledger, setLedger] = useState(initial.ledger);
-  const [ledgerTotal, setLedgerTotal] = useState(initial.ledgerTotal);
-  const [ledgerPaging, setLedgerPaging] = useState({ page: initial.ledgerPage, pageSize: initial.ledgerPageSize });
-  const [withdrawals, setWithdrawals] = useState(initial.withdrawals);
-  const [loadingLedger, setLoadingLedger] = useState(false);
-  const [togglingPooled, setTogglingPooled] = useState(false);
-
-  const [showWithdrawForm, setShowWithdrawForm] = useState(false);
-  const [amount, setAmount] = useState("");
-  const [accountNumber, setAccountNumber] = useState("");
-  const [accountHolderName, setAccountHolderName] = useState("");
-  const [bankName, setBankName] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
-
-  async function loadLedger(next: { page: number; pageSize: number }) {
-    setLoadingLedger(true);
-    try {
-      const res = await fetch(`/api/v1/commerce/${templateId}/wallet?page=${next.page}&pageSize=${next.pageSize}`);
-      const data = await res.json();
-      if (res.ok) {
-        setLedger(data.ledger);
-        setLedgerTotal(data.ledgerTotal ?? data.ledger.length);
-        setLedgerPaging({ page: data.page ?? next.page, pageSize: data.pageSize ?? next.pageSize });
-      }
-    } finally {
-      setLoadingLedger(false);
-    }
-  }
-
-  async function handleTogglePooled(next: boolean) {
-    setTogglingPooled(true);
-    try {
-      const res = await fetch(`/api/v1/commerce/${templateId}/wallet`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pooled: next }),
-      });
-      if (res.ok) {
-        setPooled(next);
-        const refreshed = await fetch(`/api/v1/commerce/${templateId}/wallet?page=1&pageSize=${ledgerPaging.pageSize}`).then((r) => r.json());
-        setBalanceCents(refreshed.wallet.balanceCents);
-        setLedger(refreshed.ledger);
-        setLedgerTotal(refreshed.ledgerTotal ?? refreshed.ledger.length);
-        setLedgerPaging({ page: refreshed.page ?? 1, pageSize: refreshed.pageSize ?? ledgerPaging.pageSize });
-      }
-    } finally {
-      setTogglingPooled(false);
-    }
-  }
-
-  async function handleWithdraw() {
-    setMessage(null);
-    const amountCents = Math.round(Number(amount) * 100);
-    if (!Number.isFinite(amountCents) || amountCents <= 0) {
-      setMessage({ kind: "error", text: "Enter a valid amount." });
-      return;
-    }
-    if (!accountNumber.trim() || !accountHolderName.trim() || !bankName.trim()) {
-      setMessage({ kind: "error", text: "Account number, account holder name, and bank name are required." });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const res = await fetch(`/api/v1/commerce/${templateId}/wallet/withdrawals`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ amountCents, accountNumber, accountHolderName, bankName }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Couldn't submit withdrawal request.");
-
-      setBalanceCents((prev) => prev - amountCents);
-      setWithdrawals((prev) => [{ id: data.withdrawal.id, amountCents, bankName, status: "PENDING", rejectionReason: null, requestedAt: new Date().toISOString(), processedAt: null }, ...prev]);
-      setAmount("");
-      setAccountNumber("");
-      setAccountHolderName("");
-      setBankName("");
-      setShowWithdrawForm(false);
-      setMessage({ kind: "success", text: "Withdrawal requested — it'll be processed by the Plexo team." });
-    } catch (err) {
-      setMessage({ kind: "error", text: err instanceof Error ? err.message : "Couldn't submit withdrawal request." });
-    } finally {
-      setSubmitting(false);
-    }
-  }
+  const { balanceCents, pooled, ledger, ledgerTotal, ledgerPaging, withdrawals, loadingLedger, togglingPooled, showWithdrawForm, setShowWithdrawForm, amount, setAmount, accountNumber, setAccountNumber, accountHolderName, setAccountHolderName, bankName, setBankName, submitting, message, loadLedger, handleTogglePooled, handleWithdraw } = useWallet(templateId, initial);
 
   if (!initial.showWallet) {
     return (

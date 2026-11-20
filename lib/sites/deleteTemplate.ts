@@ -1,8 +1,11 @@
+import { forgetPageEntries, forgetSiteEntries } from "@/lib/customSections/placements";
+import { siteIdForTemplate } from "@/lib/customSections/service";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { deleteObjects } from "@/lib/storage";
 import { removeCloudFrontDomain } from "@/lib/cloudfrontDomains";
 import { getDescendantIds } from "@/server/slugDynamo";
 import { purgeSiteData, siteDeletionBlocker, siteLayoutTemplateIds } from "./purgeSiteData";
+import { disconnect as stopSiteAnalytics } from "@/lib/googleAnalytics/connection";
 import { dropAppDatabases, purgeAppProject } from "@/lib/projects/purgeApp";
 
 // The one way a page or site is deleted — shared by the dashboard route
@@ -61,10 +64,15 @@ export async function deleteTemplateAndContents(existing: { id: string; parentId
   }
   await Promise.all(domains.map((d) => PublishedDomain.remove({ templateId: d.templateId, id: d.id }).go()));
 
+  // Visitor numbers: Plexo's own Google property goes to Google's trash with the site; an owner's own grant is revoked.
+  if (isSite) await stopSiteAnalytics(existing.id).catch((err) => console.error("analytics clean-up on delete (non-fatal):", err instanceof Error ? err.message : "unknown error"));
+
   // A React app also owns a database, server functions, builds and stored files.
   if (isSite && full?.sourceType === "REACT_PROJECT") await purgeAppProject(existing.id);
   const { removed } = isSite ? await purgeSiteData(existing.id, otherIds) : { removed: 0 };
 
+  if (isSite) await forgetSiteEntries(existing.id);
+  else await forgetPageEntries(await siteIdForTemplate(full ?? existing), allIds);
   await Promise.all(otherIds.map((id) => Template.remove({ id }).go()));
   await Template.remove({ id: existing.id }).go();
   return { descendantCount: descendantIds.length, removedData: removed };

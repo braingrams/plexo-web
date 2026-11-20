@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveSiteLayoutAdmin, recompileSiteLayoutDependents } from "@/lib/siteLayoutDynamo";
 import { SiteLayout, Template } from "@/lib/db/contentEntities";
+import { ensureSiteLayout } from "@/lib/siteLayoutProvision";
 
 export async function GET(request: NextRequest, context: { params: Promise<{ templateId: string }> }): Promise<NextResponse> {
   const { templateId } = await context.params;
@@ -41,6 +42,13 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ tem
   const { enabled } = body;
   if (typeof enabled !== "boolean") {
     return NextResponse.json({ error: "enabled must be a boolean." }, { status: 400 });
+  }
+
+  // Turning it on for a site on the new editor also gives it a ready-made header and footer (its name and a
+  // Home link), so the switch does something visible straight away instead of showing nothing.
+  if (enabled) {
+    const ensured = await ensureSiteLayout(templateId, organizationId, resolved.context.userId, { turnOn: true });
+    if (ensured) return NextResponse.json({ layout: { enabled: true, headerTemplateId: ensured.headerTemplateId, footerTemplateId: ensured.footerTemplateId } });
   }
 
   const { data: existing } = await SiteLayout.get({ templateId }).go();

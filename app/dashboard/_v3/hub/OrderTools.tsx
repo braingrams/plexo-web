@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { Mail, RotateCcw, Trash2 } from "lucide-react";
 import { Button, Input, Textarea } from "../ui";
@@ -204,7 +205,7 @@ export function OrderMore<T extends OrderExtras & { id: string }>({ siteId, orde
           </div>
         </div>
       )}
-      {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+      {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
     </div>
   );
 }

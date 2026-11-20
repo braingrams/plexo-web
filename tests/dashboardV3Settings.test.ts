@@ -11,10 +11,10 @@ const ids = (l: { id: string }[]) => l.map((s) => s.id);
 
 describe("settings tabs", () => {
   it("shows every section as a visible tab, most-used first", () => {
-    expect(ids(settingsTabs("beginner"))).toEqual(["profile", "plan", "team", "domains", "brand", "notifications", "connect", "moving", "developers"]);
+    expect(ids(settingsTabs("beginner"))).toEqual(["profile", "plan", "team", "domains", "brand", "notifications", "connect", "moving", "migration", "developers"]);
   });
   it("never hides a section, whatever the experience level", () => {
-    for (const e of ["beginner", "intermediate", "pro"] as const) expect(settingsTabs(e)).toHaveLength(9);
+    for (const e of ["beginner", "intermediate", "pro"] as const) expect(settingsTabs(e)).toHaveLength(10);
   });
   it("puts Developers before Move a site for pros, and labels it for everyone", () => {
     const pro = ids(settingsTabs("pro"));

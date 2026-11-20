@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
-import { Bot, CalendarClock, Code2, Eye, FileText, Flag, GitMerge, Hammer, History, Rocket, RotateCcw, Undo2 } from "lucide-react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
+import { CalendarClock, Code2, Eye, FileText, Flag, GitMerge, Hammer, History, Rocket, RotateCcw, Undo2 } from "lucide-react";
 import { appsApi, ApiError, type BuildReport } from "./api";
 import { C, Button, Notice, PaneHeader, StateStyles, Shimmer, ListSkeleton, ProblemState, EmptyHero, StatCard, Pill, timeAgo } from "./ui";
 
@@ -12,9 +13,11 @@ type Version = Awaited<ReturnType<typeof appsApi.versions>>["versions"][number];
 type BuildRow = Awaited<ReturnType<typeof appsApi.builds>>["builds"][number];
 type IconType = ComponentType<{ size?: number }>;
 
+const SolIcon = ((props: { size?: number }) => <SolGlyph size={props.size ?? 14} />) as unknown as IconType;
+
 // Who or what made each version, in the owner's words — each with its own colour on the timeline.
 const SOURCE: Record<string, { label: string; color: string; icon: IconType }> = {
-  ai: { label: "SOL", color: "var(--ed-accent-text)", icon: Bot },
+  ai: { label: "SOL", color: "var(--ed-accent-text)", icon: SolIcon },
   editor: { label: "Code edit", color: "var(--ed-violet)", icon: Code2 },
   deploy: { label: "Published", color: "var(--brand-deep)", icon: Rocket },
   restore: { label: "Went back", color: "var(--brand-light)", icon: Undo2 },
@@ -161,7 +164,7 @@ function VersionTimeline({ versions, busy, onRestore, onViewChanges }: { version
   const weekAgo = Date.now() - 7 * 86_400_000;
   const stats = [
     { label: versions.length === 1 ? "Version saved" : "Versions saved", value: versions.length, color: "var(--ed-accent-text)", icon: History },
-    { label: "Made by SOL", value: versions.filter((v) => v.source === "ai").length, color: "var(--brand-light)", icon: Bot },
+    { label: "Made by SOL", value: versions.filter((v) => v.source === "ai").length, color: "var(--brand-light)", icon: SolIcon },
     { label: "This week", value: versions.filter((v) => Date.parse(v.createdAt) > weekAgo).length, color: "var(--ed-violet)", icon: CalendarClock },
   ];
 

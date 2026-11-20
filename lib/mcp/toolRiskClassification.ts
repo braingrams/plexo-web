@@ -63,6 +63,9 @@ export const DESTRUCTIVE_TOOL_NAMES: ReadonlySet<string> = new Set([
   "delete_funnel_page", // deletes a funnel page outright (unlike delete_funnel, nothing here is soft/reversible)
   "set_funnel_enrollment_status", // can immediately revoke a paying learner's access to content they bought
 
+  // --- lib/mcp/convertTools.ts ---
+  "restore_page_blocks", // discards every change made to the page's code since it was turned into code
+
   // --- lib/mcp/appTools.ts (React apps) ---
   "app_publish", // changes what the app's real visitors get, and migrates the LIVE database
   "app_restore_version", // replaces the app's current files with an older version's

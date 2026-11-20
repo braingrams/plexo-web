@@ -172,11 +172,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         // lib/billing/pricing.ts. The checkout-time amount in metadata is only a fallback.
         const credits = creditsForCompletedTopup(checkoutSession, await loadPriceBook()) ?? Number(checkoutSession.metadata.credits ?? 0);
         if (credits > 0) {
+          const pack = checkoutSession.metadata?.pack;
+          const packDesc = pack === "custom" || !pack ? `${credits.toLocaleString("en-US")} credits` : pack;
           await grantTopup(
             plexoUserId,
             credits,
             event.id,
-            `Top-up purchase (${checkoutSession.metadata.pack ?? "credits"})`,
+            `Top-up purchase (${packDesc})`,
           );
         }
       }

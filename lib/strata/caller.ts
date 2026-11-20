@@ -27,7 +27,7 @@ export async function resolveStrataCaller(request: NextRequest): Promise<Resolve
     } catch {
       return null;
     }
-    const local = await resolveCharisolUser(claims).catch(() => null);
+    const local = await resolveCharisolUser(claims, { source: "strata" }).catch(() => null);
     if (!local) return null;
     const { data: user } = await User.get({ id: local.id }).go();
     if (!user || user.suspendedAt) return null;

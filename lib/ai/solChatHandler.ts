@@ -1,3 +1,4 @@
+import { OUT_OF_CREDITS_LINKS } from "@/lib/credits/upgradeOffer";
 import { buildSolAppContext } from "@/lib/projects/solAppContext";
 import { friendlyProviderError } from "@/lib/ai/providerErrors";
 import { describeAttachedImages } from "@/lib/ai/solImageDescriptions";
@@ -561,7 +562,7 @@ export async function prepareMessagesTurn(
     const requiredCredits = estimateWorstCaseAgentTurnCost(modelTier, text.length, maxAnswerTokensFor(routing.route, routing.plan));
     const preflightBalance = await ensureCreditPeriod(resolved.userId);
     if (preflightBalance.available < requiredCredits) {
-      return { ok: false, status: 402, body: { error: "insufficient_credits", requiredCredits, availableCredits: Math.max(0, preflightBalance.available) } };
+      return { ok: false, status: 402, body: { error: "insufficient_credits", code: "OUT_OF_CREDITS", ...OUT_OF_CREDITS_LINKS, requiredCredits, availableCredits: Math.max(0, preflightBalance.available) } };
     }
   }
 

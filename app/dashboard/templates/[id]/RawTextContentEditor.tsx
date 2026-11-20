@@ -8,7 +8,8 @@ import { ScriptAccessControl } from "./ScriptAccessControl";
 import { ColorSwatchPicker } from "./ColorSwatchPicker";
 
 export type RawTextContentEditorHandle = {
-  save: () => Promise<void>;
+  /** Resolves true when the changes were saved (or there was nothing to save). */
+  save: () => Promise<boolean>;
 };
 
 export type RawTextContentSaveStatus = {
@@ -31,6 +32,8 @@ type Props = {
    * PRE-edit page even after a save actually persisted, until an unrelated action (or a full
    * page reload) happened to refetch it. */
   onSaved?: () => void;
+  /** Site health link ("text-3", "img-0", "background-1"): open that field once the page has loaded, and highlight it on the page. */
+  initialField?: string;
 };
 
 type ActiveField =
@@ -313,7 +316,7 @@ function findPreviewElements(doc: Document, kind: "text" | "img" | "background",
 }
 
 export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props>(function RawTextContentEditor(
-  { templateId, onStatusChange, onSaved },
+  { templateId, onStatusChange, onSaved, initialField },
   ref,
 ) {
   const [nodes, setNodes] = useState<ExtractedTextNode[] | null>(null);
@@ -534,6 +537,22 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
     };
   }, [activeField, previewReady, scriptsActive]);
 
+  // Opened from a Site health problem: select the field it points to (the highlight effect above then marks it on the page),
+  // and bring it into view in the list. Once only.
+  const openedFieldRef = useRef(false);
+  useEffect(() => {
+    if (!initialField || openedFieldRef.current || loading || !nodes) return;
+    const m = initialField.match(/^(text|img|background)-(\d+)$/);
+    if (!m) return;
+    openedFieldRef.current = true;
+    const kind = m[1] as "text" | "img" | "background";
+    const id = Number(m[2]);
+    setCollapsedGroups(new Set());
+    setActiveField({ kind, id });
+    const t = setTimeout(() => fieldRefs.current.get(`${kind}-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 300);
+    return () => clearTimeout(t);
+  }, [initialField, loading, nodes]);
+
   // Reverse direction: clicking an element in the preview scrolls (and, for text fields,
   // focuses) the matching field in the list on the left — same data-ptid/data-pimg/data-pbg
   // attributes the highlight effect above already reads, just consumed the other way. Also
@@ -730,8 +749,8 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
   const colorDirty = colorNodes?.some((n) => colorDrafts[n.id] !== n.value) ?? false;
   const dirty = textDirty || imgDirty || bgDirty || colorDirty;
 
-  async function handleSave() {
-    if (!nodes) return;
+  async function handleSave(): Promise<boolean> {
+    if (!nodes) return true;
     setSaving(true);
     setSaveError(null);
     try {
@@ -785,8 +804,10 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
       setSavedFlash(true);
       setTimeout(() => setSavedFlash(false), 1500);
       onSaved?.();
+      return true;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Save failed.");
+      return false;
     } finally {
       setSaving(false);
     }

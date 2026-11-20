@@ -148,7 +148,7 @@ function cleanSections(raw: unknown): PageTemplateSection[] | undefined {
 }
 
 /** What to build, decided before anything is saved. Throws SiteBuildError (plain English) for a plan that can't work. */
-export function planSite(args: SiteCreateArgs): SitePlan {
+export function planSite(args: SiteCreateArgs, opts: { homeOnly?: boolean } = {}): SitePlan {
   const brief = cleanBrief(args.brief);
   const warnings: string[] = [];
   const requested: SitePagePlanInput[] = Array.isArray(args.pages) && args.pages.length
@@ -165,13 +165,25 @@ export function planSite(args: SiteCreateArgs): SitePlan {
     if (type === "blogPost") continue; // the blog's article layout comes with the blog
     typed.push({ type, input });
   }
-  if (args.store && !typed.some((p) => p.type === "store")) typed.push({ type: "store", input: {} });
-  if (args.blog && !typed.some((p) => p.type === "blog")) typed.push({ type: "blog", input: {} });
+  if (!opts.homeOnly && args.store && !typed.some((p) => p.type === "store")) typed.push({ type: "store", input: {} });
+  if (!opts.homeOnly && args.blog && !typed.some((p) => p.type === "blog")) typed.push({ type: "blog", input: {} });
 
   // The first page is the home page: "home" if asked for, else a one-page "landing", else a fitting home.
   let homeIndex = typed.findIndex((p) => p.type === "home");
   if (homeIndex < 0) homeIndex = typed.findIndex((p) => p.type === "landing");
-  const homeEntry = homeIndex >= 0 ? typed.splice(homeIndex, 1)[0] : { type: "home" as SitePageType, input: {} };
+  let homeEntry = homeIndex >= 0 ? typed.splice(homeIndex, 1)[0] : { type: "home" as SitePageType, input: {} };
+  // The Free plan publishes one page per site, so build ONE complete page (a one-page "landing" with
+  // everything on it) rather than a multi-page site whose other pages visitors could never open.
+  if (opts.homeOnly) {
+    const left = typed.filter((p) => p.type !== "blogPost");
+    if (left.length || args.store || args.blog) {
+      warnings.push(
+        `Your Free plan publishes one page, so I built one complete page${left.length ? ` instead of ${left.length + 1} separate ones` : ""}${args.store ? " (selling products comes with Starter)" : ""}. Upgrade any time and I can add pages like ${left.slice(0, 3).map((p) => PAGE_TYPE_DEFAULTS[p.type].name).join(", ") || "About and Contact"}.`,
+      );
+    }
+    typed.length = 0;
+    if (homeEntry.type === "home" && !str(homeEntry.input.layout, 60)) homeEntry = { ...homeEntry, type: "landing" as SitePageType };
+  }
 
   const toPlanned = (entry: { type: SitePageType; input: SitePagePlanInput }, isHome: boolean): PlannedPage => {
     const defaults = PAGE_TYPE_DEFAULTS[entry.type];
@@ -276,7 +288,7 @@ export type CreatedSitePage = { type: SitePageType; name: string; templateId: st
  * of losing the whole site.
  */
 export async function createSite(resolved: ResolvedUser, args: SiteCreateArgs, deps: SiteToolDeps) {
-  const plan = planSite(args);
+  const plan = planSite(args, { homeOnly: isHomePageOnlyPlan(resolved.subscriptionPlan) });
   const warnings = [...plan.warnings];
 
   // 1. The home page — the site itself.
@@ -395,10 +407,6 @@ export async function createSite(resolved: ResolvedUser, args: SiteCreateArgs, d
 
   // 7. Bake the shared menu and footer into every page.
   await recompileSiteLayoutDependents(siteId);
-
-  if (isHomePageOnlyPlan(resolved.subscriptionPlan) && pages.length > 1) {
-    warnings.push("Your plan puts only the home page live. The other pages are built and you can preview them — upgrade to publish them all.");
-  }
 
   return { siteId, name: plan.brief.name, brand: plan.choices, pages, store, blog, nav: plan.nav, warnings };
 }

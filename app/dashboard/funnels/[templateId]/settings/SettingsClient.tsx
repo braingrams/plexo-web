@@ -1,4 +1,5 @@
 "use client";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { PLAN } from "@/lib/plan/plans";
 
 import { useState } from "react";
@@ -167,7 +168,7 @@ export function SettingsClient({
         />
       </div>
 
-      {error && <div style={{ fontSize: "0.8rem", color: "#f87171" }}>{error}</div>}
+      {error && <GateOrError error={error}><div style={{ fontSize: "0.8rem", color: "#f87171" }}>{error}</div></GateOrError>}
       {saving && <div style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.4)" }}>Saving…</div>}
     </div>
   );
@@ -328,7 +329,7 @@ function PaidSignupPicker({
         <input style={{ ...inputStyle, flex: 2 }} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Full course access" />
         <input style={{ ...inputStyle, flex: 1 }} type="number" min="0" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder={`${symbol}0`} />
       </div>
-      {error && <div style={{ fontSize: "0.78rem", color: "#f87171", marginBottom: "0.6rem" }}>{error}</div>}
+      {error && <GateOrError error={error}><div style={{ fontSize: "0.78rem", color: "#f87171", marginBottom: "0.6rem" }}>{error}</div></GateOrError>}
       <div style={{ display: "flex", gap: "0.6rem" }}>
         <button
           type="button"

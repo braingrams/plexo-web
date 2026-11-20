@@ -1,3 +1,4 @@
+import { OUT_OF_CREDITS_LINKS } from "@/lib/credits/upgradeOffer";
 import { randomUUID } from "node:crypto";
 
 import { prepareMessagesTurn, prepareConfirmTurn, humanizeToolName, type StreamFrame, type TurnEmitter } from "@/lib/ai/solChatHandler";
@@ -189,7 +190,7 @@ async function reply(phone: string, markdown: string): Promise<void> {
 const TRY_AGAIN = "Something went wrong on my side. Please try again in a moment.";
 
 function outOfCreditsText(): string {
-  return `You've used up your AI credits, so I can't take that on right now.\n\nTop up or upgrade here and I'll be right back: ${appBaseUrl()}/dashboard/settings`;
+  return `You've used up your AI credits, so I can't take that on right now.\n\nTop up: ${appBaseUrl()}${OUT_OF_CREDITS_LINKS.topUpUrl}\nOr use your own AI key: ${appBaseUrl()}${OUT_OF_CREDITS_LINKS.ownKeyUrl}\nOr upgrade for more credits every month: ${appBaseUrl()}${OUT_OF_CREDITS_LINKS.upgradeUrl}\n\nI'll be right back once that's done.`;
 }
 
 type Attachments = Extract<PreparedMedia, { ok: true }>["attachments"];

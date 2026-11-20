@@ -218,10 +218,10 @@ describe("site_create", () => {
     expect(a.brand.headingFont).not.toBe(b.brand.headingFont);
   });
 
-  it("Free plan: builds the whole site but says only the home page goes live", async () => {
+  it("Free plan: builds one complete page (only the home page can go live) and says so", async () => {
     const r = await dispatchMcpTool("site_create", { brief: { name: "Tiny" }, pages: [{ type: "home" }, { type: "about" }] }, FREE);
-    expect(r.pages.length).toBe(2);
-    expect(r.warnings.join(" ")).toMatch(/only the home page live/);
+    expect(r.pages.length).toBe(1);
+    expect(r.warnings.join(" ")).toMatch(/publishes one page/);
   });
 
   it("refuses plainly without a name, and leaves nothing behind", async () => {

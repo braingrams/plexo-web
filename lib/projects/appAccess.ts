@@ -1,3 +1,4 @@
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextResponse, type NextRequest } from "next/server";
 import type { EntityItem } from "electrodb";
 import { resolveUser } from "@/lib/auth/resolveUser";
@@ -49,7 +50,7 @@ export function appError(err: unknown): NextResponse {
   if (err instanceof ProjectFileError || err instanceof ProjectPathError || err instanceof SecretError) {
     return NextResponse.json({ error: err.message }, { status: 400 });
   }
-  if (err instanceof ProjectLimitError) return NextResponse.json({ error: err.message }, { status: 403 });
+  if (err instanceof ProjectLimitError) return NextResponse.json(planGateBody("PLAN_PROJECT_LIMIT", err.message, err.requiredPlan), { status: 403 });
   if (err instanceof RestError) return NextResponse.json({ error: err.message, hint: err.hint }, { status: err.status });
   if (err instanceof AppDbError) {
     return NextResponse.json({ error: err.error.message, code: err.error.code, hint: err.error.hint, position: err.error.position }, { status: err.error.kind === "resuming" ? 503 : 400 });

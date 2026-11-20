@@ -1,5 +1,7 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
+import { PlanLock } from "@/app/dashboard/_components/PlanLock";
 import { useEffect, useState } from "react";
 import { SettingsActionBar } from "../_components/SettingsActionBar";
 import { Toggle } from "@/app/dashboard/_components/Toggle";
@@ -7,7 +9,7 @@ import { Toggle } from "@/app/dashboard/_components/Toggle";
 type CommercePaymentProvider = "BYO_PAYSTACK" | "PLATFORM_PAYSTACK" | "PLATFORM_STRIPE" | "BYO_STRIPE";
 type StripeAccessStatus = "NONE" | "PENDING" | "APPROVED" | "REJECTED";
 
-type InitialPaymentsSettings = {
+export type InitialPaymentsSettings = {
   paymentProvider: CommercePaymentProvider;
   paystackMode: "TEST" | "LIVE";
   paystackTestPublicKey: string;
@@ -270,7 +272,7 @@ function StripeAccessControl() {
           <FieldLabel label="Expected monthly volume (optional)">
             <input type="text" value={expectedVolume} onChange={(e) => setExpectedVolume(e.target.value)} placeholder="e.g. $500-2000/mo" style={inputStyle} />
           </FieldLabel>
-          {error && <p style={{ fontSize: "0.78rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p>}
+          {error && <GateOrError error={error}><p style={{ fontSize: "0.78rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p></GateOrError>}
           <button
             type="button"
             onClick={() => void handleRequest()}
@@ -413,12 +415,14 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
 
       <div style={{ display: "flex", flexDirection: isPlatform ? "row" : "column", gap: "1rem", flexWrap: "wrap" }}>
         <ProcessorGroup stacked={!isPlatform} iconLabel="P" iconBg="linear-gradient(135deg,var(--cmx-info, #12b3a8),var(--cmx-info, #0c8a82))" name="Paystack" currencyNote="Supports NGN, GHS, ZAR, KES and USD, depending on your account.">
-          <ProviderCard
-            label="Use your own keys"
-            hint="Money lands directly in your Paystack account."
-            selected={provider === "BYO_PAYSTACK"}
-            onClick={() => setProvider("BYO_PAYSTACK")}
-          />
+          <PlanLock requires="PRO" message="Using your own Paystack account is part of the Pro plan. Until then, choose “Hosted by Plexo” and withdraw from your wallet.">
+            <ProviderCard
+              label="Use your own keys"
+              hint="Money lands directly in your Paystack account."
+              selected={provider === "BYO_PAYSTACK"}
+              onClick={() => setProvider("BYO_PAYSTACK")}
+            />
+          </PlanLock>
           <ProviderCard
             label="Hosted by Plexo"
             hint="No keys needed — settles to your Commerce wallet."
@@ -428,12 +432,14 @@ export function PaymentsSettingsClient({ templateId, initial }: { templateId: st
         </ProcessorGroup>
 
         <ProcessorGroup stacked={!isPlatform} iconLabel="S" iconBg="#635bff" name="Stripe" currencyNote="Supports most major currencies worldwide.">
-          <ProviderCard
-            label="Use your own keys"
-            hint="Money lands directly in your Stripe account."
-            selected={provider === "BYO_STRIPE"}
-            onClick={() => setProvider("BYO_STRIPE")}
-          />
+          <PlanLock requires="PRO" message="Using your own Stripe account is part of the Pro plan. Until then, choose “Hosted by Plexo” and withdraw from your wallet.">
+            <ProviderCard
+              label="Use your own keys"
+              hint="Money lands directly in your Stripe account."
+              selected={provider === "BYO_STRIPE"}
+              onClick={() => setProvider("BYO_STRIPE")}
+            />
+          </PlanLock>
           <ProviderCard
             label="Hosted by Plexo"
             hint="Requires approval from Plexo first."

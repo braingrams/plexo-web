@@ -71,7 +71,7 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
     const data = (await res.json().catch(() => null)) as (T & { error?: string; kind?: string }) | null;
     if (res.ok) return data as T;
     const kind = data?.kind as StrataErrorKind | undefined;
-    throw new StrataError(data?.error ?? "Something went wrong talking to Strata. Please try again.", kind && KINDS.has(kind) ? kind : "server", res.status);
+    throw new StrataError(data?.error ?? "Something went wrong loading your brand. Please try again.", kind && KINDS.has(kind) ? kind : "server", res.status);
   }
 
   async function status(): Promise<StrataStatus> {
@@ -124,7 +124,7 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
         if (message.type === STRATA_CONNECTED_MESSAGE) {
           status().then((s) => done(() => resolve(s)), (err) => done(() => reject(err)));
         } else {
-          done(() => reject(new StrataError(message.message ?? "Strata couldn't be connected. Please try again.", "invalid")));
+          done(() => reject(new StrataError(message.message ?? "Your brand couldn't be connected. Please try again.", "invalid")));
         }
       };
       win.addEventListener("message", onMessage);
@@ -133,7 +133,7 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
         // Closed without a message — some browsers drop the link to the opener after a
         // cross-site sign-in — so check whether the connection went through anyway.
         clearInterval(watcher);
-        const closedEarly = () => new StrataError("The sign-in window was closed before Strata was connected. Try again when you're ready.", "invalid");
+        const closedEarly = () => new StrataError("The sign-in window was closed before your brand was connected. Try again when you're ready.", "invalid");
         // The window closes the moment the connection is saved, so look a couple of times before deciding nobody connected.
         const look = (triesLeft: number) =>
           status().then(
@@ -144,7 +144,7 @@ export function createStrataAdapter(options: StrataAdapterOptions = {}): PlexoSt
       }, 400);
       const timeout = setTimeout(() => {
         popup.close();
-        done(() => reject(new StrataError("Connecting to Strata took too long. Please try again.", "invalid")));
+        done(() => reject(new StrataError("Connecting to your brand took too long. Please try again.", "invalid")));
       }, POPUP_TIMEOUT_MS);
     });
     return pendingConnect;

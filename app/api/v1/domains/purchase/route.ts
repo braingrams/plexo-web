@@ -1,5 +1,6 @@
+import { planGateResponse } from "@/lib/plan/planGateResponse";
 import { randomUUID } from "node:crypto";
-import { countLiveCustomDomains, customDomainError } from "@/lib/plan/domainGate";
+import { countLiveCustomDomains, customDomainError, customDomainRequiredPlan } from "@/lib/plan/domainGate";
 import { NextRequest, NextResponse } from "next/server";
 import { getStripe } from "@/lib/stripe";
 import { resolveUser as resolveUserDynamo } from "@/lib/auth/resolveUser";
@@ -67,7 +68,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const batches = await Promise.all(orgTemplates.filter((t) => !t.parentId).map((t) => PublishedDomain.query.primary({ templateId: t.id }).go({ pages: "all" })));
     const orgDomains = batches.flatMap((b) => b.data);
     const customError = customDomainError(resolved, countLiveCustomDomains(orgDomains));
-    if (customError) return NextResponse.json({ error: customError, code: "PLAN_CUSTOM_DOMAIN_LIMIT", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
+    if (customError) return planGateResponse("PLAN_CUSTOM_DOMAIN_LIMIT", customError, customDomainRequiredPlan(resolved));
   }
 
   const body = await request.json().catch(() => ({}));

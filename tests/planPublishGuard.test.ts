@@ -84,6 +84,10 @@ describe("putting a site live at an address", () => {
     expect(err).toBeInstanceOf(PlanLimitError);
     expect(err.code).toBe("PLAN_SITE_LIMIT_EXCEEDED");
     expect(err.message).toMatch(/"My Blog" is live now/);
+    // Starter still keeps one site live, so the plan that lifts this is Pro, and Free may replace instead.
+    expect(err.details.requiredPlan).toBe("PRO");
+    expect(err.details.canReplaceLiveSite).toBe(true);
+    expect(err.message).toMatch(/Upgrade to Pro/);
   });
 
   it("Free: another address for the site that's already live is fine", async () => {

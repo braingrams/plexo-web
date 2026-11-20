@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { commerceEnableError, commercePlanForOrg, defaultPaymentProvider, paymentProviderError } from "@/lib/plan/commerceGate";
+import { commercePlanForOrg, commerceSettingsGate, defaultPaymentProvider } from "@/lib/plan/commerceGate";
+import { limitGateResponse } from "@/lib/plan/planGateResponse";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin, maskSecret } from "@/lib/commerce/adminAuthDynamo";
 import {
@@ -166,10 +167,8 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
   // The workspace's plan decides whether there's a store at all and whether it may use its
   // own payment keys (lib/plan/commerceGate.ts).
   const commercePlan = await commercePlanForOrg(organizationId);
-  const planError = (enabled === true ? commerceEnableError(commercePlan) : null) ?? paymentProviderError(commercePlan, paymentProvider);
-  if (planError) {
-    return NextResponse.json({ error: planError, code: "PLAN_COMMERCE_LIMIT", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
-  }
+  const planGate = commerceSettingsGate(commercePlan, { enabled, paymentProvider });
+  if (planGate) return limitGateResponse(planGate);
 
   // Platform Stripe is admin-gated — see CommerceStripeAccessRequest and the
   // request/approval flow in app/api/v1/commerce/stripe-access/route.ts + plexo-admin.

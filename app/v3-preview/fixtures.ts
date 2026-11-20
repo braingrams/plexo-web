@@ -20,7 +20,7 @@ export const MANY_SITES: SiteSummary[] = Array.from({ length: 30 }, (_, i): Site
 });
 
 export const PREVIEW_WORKSPACES = [
-  { id: "w1", name: "Oluwabukunmi's Workspace", role: "owner" },
+  { id: "w1", name: "Ama's Workspace", role: "owner" },
   { id: "w2", name: "Haven Realty Team", role: "editor" },
   { id: "w3", name: "Charisol Studio", role: "admin" },
 ];

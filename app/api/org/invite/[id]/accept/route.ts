@@ -26,7 +26,7 @@ export async function POST(_request: Request, context: { params: Promise<{ id: s
   } catch (err) {
     if (err instanceof SeatLimitError) {
       return NextResponse.json(
-        { error: "This team is full on its current plan, so the invite can't be accepted yet. Ask the person who invited you to free up a seat or upgrade.", code: err.code },
+        { error: "This team is full on its current plan, so the invite can't be accepted yet. Ask the person who invited you to free up a seat or upgrade.", code: "SEAT_LIMIT_FULL" },
         { status: 403 },
       );
     }

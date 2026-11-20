@@ -13,6 +13,7 @@ import { resolveSiteBrand } from "@/lib/brand/resolveSiteBrand";
 import { computeTasks, taskVariantFor } from "@/lib/dashboardV3/tasks";
 import { CURRENT_ONBOARDING_VERSION } from "@/lib/dashboardV3/flag";
 import { getPagesDomain } from "@/server/pagesDomain";
+import { loadHubPages, loadHubSite } from "@/lib/dashboardV3/hubData";
 import { HomeView } from "./HomeView";
 import type { HomeProps, HomeSiteRow } from "./homeTypes";
 
@@ -55,7 +56,7 @@ export async function V3Home({ user, organizationId, userId }: { user: HomeUser;
   }
   // Someone with sites who hasn't done the short "tune Plexo to you" setup gets a card for it (never "set up your first site").
   const tuneHref = sites.length > 0 && (user.onboardingVersion ?? 0) < CURRENT_ONBOARDING_VERSION ? "/welcome/setup" : undefined;
-  const base: Omit<HomeProps, "mode" | "site" | "all"> = { firstName, experience, brand, baseDomain: getPagesDomain(), newSiteHref: NEW_SITE_HREF, tuneHref };
+  const base: Omit<HomeProps, "mode" | "site" | "all"> = { firstName, experience, brand, siteCount: sites.length, baseDomain: getPagesDomain(), newSiteHref: NEW_SITE_HREF, tuneHref };
 
   if (!current) return <HomeView {...base} mode="none" site={null} all={[]} />;
   const remember = fixCookieTo ? <RememberSite siteId={fixCookieTo} /> : null;
@@ -77,5 +78,9 @@ export async function V3Home({ user, organizationId, userId }: { user: HomeUser;
   }
 
   const stats = progress.allDone ? await loadSiteStats(current, variant) : null;
-  return (<>{remember}<HomeView {...base} mode="site" site={{ site: current, progress, commerceEnabled, stats }} all={[]} /></>);
+  // "Add more to your site" needs what this site already has; a failed read just hides that area.
+  const addMore = await Promise.all([loadHubSite(organizationId, current.id), loadHubPages(organizationId, current.id)])
+    .then(([hub, pages]) => ({ features: hub.features, pages: pages.map((p) => ({ name: p.name, path: p.path })) }))
+    .catch(() => undefined);
+  return (<>{remember}<HomeView {...base} mode="site" site={{ site: current, progress, commerceEnabled, stats, addMore }} all={[]} /></>);
 }

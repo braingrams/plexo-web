@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { healSiteBrandInBackground } from "@/lib/strata/autoSetupBackground";
 import { checkCommerceRateLimit } from "@/lib/commerceRateLimitDynamo";
+import { readBrandTokens } from "@/lib/dashboardV3/brandDefinition";
+import { sendTokensToStrata } from "@/lib/brand/extrasWriteThrough";
 import { resolveSiteBrand } from "@/lib/brand/resolveSiteBrand";
 import { Template } from "@/lib/db/contentEntities";
 import { BrandError, createStrataProjectFromSiteBrand, getSiteBrandState, linkSiteBrand, refreshBrandMapping, runSiteBrandUpdate, setSiteBrandOptions, unlinkSiteBrand } from "@/lib/brand/siteBrand";
@@ -12,7 +14,7 @@ import { BrandError, createStrataProjectFromSiteBrand, getSiteBrandState, linkSi
  *           really uses now (lib/brand/resolveSiteBrand.ts: linked project > the site's saved brand > the account's)
  *   POST    { projectId, projectName?, autoSync? }   link this site to a Strata project (or move it to another)
  *           { createProject: true, name?, autoSync? }   make a NEW Strata project from this site's brand and link it
- *   PATCH   { autoSync?, useOnSite?, brandInApp? (server apps: add the brand link to the pages Plexo serves; off until the owner turns it on), applyBrand?, syncNow? }   the switches; "Apply my brand"; "Check Strata now"
+ *   PATCH   { autoSync?, useOnSite?, brandInApp? (server apps: add the brand link to the pages Plexo serves; off until the owner turns it on), applyBrand?, syncNow?, brandTokens? (accent colour, fonts, radius, spacing) }   the switches; "Apply my brand"; "Check Strata now"
  *   DELETE  unlink (pages go back to the colours and fonts they were built with)
  */
 type Ctx = { params: Promise<{ id: string }> };
@@ -87,7 +89,7 @@ export async function POST(request: NextRequest, ctx: Ctx): Promise<NextResponse
     }
   }
   const projectId = typeof body?.projectId === "string" ? body.projectId.trim() : "";
-  if (!projectId || projectId.length > 200) return NextResponse.json({ error: "Choose a Strata project to use." }, { status: 400 });
+  if (!projectId || projectId.length > 200) return NextResponse.json({ error: "Choose a brand to use." }, { status: 400 });
   try {
     await linkSiteBrand({
       siteId: auth.site.id,
@@ -106,8 +108,16 @@ export async function POST(request: NextRequest, ctx: Ctx): Promise<NextResponse
 export async function PATCH(request: NextRequest, ctx: Ctx): Promise<NextResponse> {
   const auth = await authorize(request, ctx, 30);
   if (auth.error) return auth.error;
-  const body = (await request.json().catch(() => null)) as { autoSync?: unknown; useOnSite?: unknown; brandInApp?: unknown; applyBrand?: unknown; syncNow?: unknown } | null;
+  const body = (await request.json().catch(() => null)) as { autoSync?: unknown; useOnSite?: unknown; brandInApp?: unknown; applyBrand?: unknown; syncNow?: unknown; brandTokens?: unknown } | null;
   try {
+    // The Your brand page: accent colour, fonts, corner roundness and spacing, saved with the brand.
+    if (body?.brandTokens !== undefined) {
+      const request = readBrandTokens(body.brandTokens);
+      if (!request) return NextResponse.json({ error: "We could not read those brand choices. Please try again." }, { status: 400 });
+      const sent = await sendTokensToStrata({ siteId: auth.site.id, userId: auth.resolved.userId, organizationId: auth.resolved.organizationId, request });
+      if (sent.state === "refused") return NextResponse.json({ error: sent.message }, { status: 409 });
+      return NextResponse.json({ ...(await stateWithBrand(auth.site.id, auth)), sent });
+    }
     if (body?.applyBrand === true) {
       const mapping = await refreshBrandMapping(auth.site.id);
       if (!mapping) return NextResponse.json({ error: "Plexo couldn't find colours or fonts on this site to match to your brand." }, { status: 409 });

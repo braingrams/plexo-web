@@ -1,5 +1,7 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Eye, ImagePlus } from "lucide-react";
@@ -94,9 +96,9 @@ export function BrandingSection({ organizationId, canManage, planAllowsWhiteLabe
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
       {!planAllowsWhiteLabel ? (
-        <Notice tone="warn"><span>Your own branding comes with the Enterprise plan. <a href="/dashboard/settings/plan" style={{ fontWeight: 700 }}>See plans</a></span></Notice>
+        <UpgradePrompt tone="info" requiredPlan="ENTERPRISE" message="Showing your own brand instead of Plexo's comes with the Enterprise plan." />
       ) : !canManage ? (
         <Notice>Only the owner of the account can change branding.</Notice>
       ) : null}

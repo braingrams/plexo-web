@@ -48,7 +48,7 @@ export function ToggleRow({ title, description, checked, disabled, onChange }: {
  * column (the most important card first) beside an optional side card of help. Wide screens use
  * the room; narrow ones stack.
  */
-export function SettingsPageShell({ title, purpose, action, aside, bar, children }: { title: string; purpose: React.ReactNode; action?: React.ReactNode; aside?: React.ReactNode; bar?: React.ReactNode; children: React.ReactNode }) {
+export function SettingsPageShell({ title, purpose, action, aside, below, bar, children }: { title: string; purpose: React.ReactNode; action?: React.ReactNode; aside?: React.ReactNode; /** Full-width content under both columns (e.g. the plan cards, which need the room). */ below?: React.ReactNode; bar?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="plx-sp">
       <header className="plx-sp__head">
@@ -65,6 +65,7 @@ export function SettingsPageShell({ title, purpose, action, aside, bar, children
         </div>
         {aside ? <aside className="plx-sp__side" aria-label="Help">{aside}</aside> : null}
       </div>
+      {below}
     </div>
   );
 }

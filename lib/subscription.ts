@@ -55,6 +55,8 @@ export type TierFeatures = {
    * page). Its own switch so the two can be gated separately again if ever needed.
    */
   siteMigrationEnabled: boolean;
+  /** Paste your own code (site verification, pixels, chat widgets) into every page's header/footer. Starter and above, and only live on a custom domain. */
+  customCodeEnabled: boolean;
   /** Whether the account may link a CUSTOM (non-plexopages.io) domain to a published page. */
   customDomainEnabled: boolean;
   /**
@@ -188,6 +190,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     // Moving an existing site in is on every plan (what Free can PUBLISH is still the homepage).
     siteMigrationEnabled: true,
     customDomainEnabled: false,
+    customCodeEnabled: false,
     maxCustomDomains: 0,
     includedFreeDomains: 0,
     brandingRemovalEnabled: false,
@@ -220,6 +223,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     sdkAiTier: "MEDIUM",
     manageLandingPagePublishingEnabled: false,
     hostManagedAiEnabled: false,
+    customCodeEnabled: true,
     maxCustomDomains: 1,
     includedFreeDomains: 0,
     whiteLabelEnabled: false,
@@ -243,6 +247,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     sdkAiTier: "HIGH",
     manageLandingPagePublishingEnabled: true,
     hostManagedAiEnabled: true,
+    customCodeEnabled: true,
     maxCustomDomains: 3,
     includedFreeDomains: 1,
     whiteLabelEnabled: false,
@@ -267,6 +272,7 @@ const TIER_DEFINITIONS: Record<SubscriptionPlan, TierFeatures> = {
     sdkAiTier: "HIGH",
     manageLandingPagePublishingEnabled: true,
     hostManagedAiEnabled: true,
+    customCodeEnabled: true,
     maxCustomDomains: 10,
     includedFreeDomains: 1,
     whiteLabelEnabled: true,

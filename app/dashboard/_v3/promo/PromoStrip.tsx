@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ArrowRightLeft, CalendarCheck, CodeXml, GraduationCap, Megaphone, MessageCircle, PenLine, ShoppingBag, X } from "lucide-react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
+import { ArrowRightLeft, CalendarCheck, CodeXml, GraduationCap, Megaphone, PenLine, ShoppingBag, X } from "lucide-react";
 import { isExternalHref, promoClasses, promoFeature, promoHiddenOn, type PromoFeature, type PromoRecord } from "@/lib/promos/promos";
 
 const ICONS: Record<PromoFeature["icon"], React.ComponentType<{ size?: number; strokeWidth?: number; "aria-hidden"?: boolean }>> = {
-  ArrowRightLeft, CalendarCheck, ShoppingBag, PenLine, GraduationCap, MessageCircle, Megaphone, CodeXml,
+  ArrowRightLeft, CalendarCheck, ShoppingBag, PenLine, GraduationCap, MessageCircle: SolGlyph, Megaphone, CodeXml,
 };
 
 export type PromoView = Pick<PromoRecord, "id" | "version" | "feature" | "audience" | "headline" | "body" | "buttonLabel" | "href" | "imageUrl" | "tone">;

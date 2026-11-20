@@ -1,0 +1,141 @@
+{
+ "_note": "Hand-built to Google's documented PageSpeed Insights v5 response shape (the free keyless quota was exhausted when this was written, so no live capture). Replace with a real capture when a key is available.",
+ "loadingExperience": {
+  "id": "https://example.com/",
+  "metrics": {
+   "LARGEST_CONTENTFUL_PAINT_MS": {
+    "percentile": 3100,
+    "category": "AVERAGE"
+   },
+   "CUMULATIVE_LAYOUT_SHIFT_SCORE": {
+    "percentile": 12,
+    "category": "AVERAGE"
+   },
+   "FIRST_CONTENTFUL_PAINT_MS": {
+    "percentile": 1500,
+    "category": "FAST"
+   }
+  },
+  "origin_fallback": true,
+  "overall_category": "AVERAGE"
+ },
+ "originLoadingExperience": {
+  "id": "https://example.com",
+  "metrics": {
+   "LARGEST_CONTENTFUL_PAINT_MS": {
+    "percentile": 3100,
+    "category": "AVERAGE"
+   },
+   "CUMULATIVE_LAYOUT_SHIFT_SCORE": {
+    "percentile": 12,
+    "category": "AVERAGE"
+   },
+   "FIRST_CONTENTFUL_PAINT_MS": {
+    "percentile": 1500,
+    "category": "FAST"
+   }
+  },
+  "overall_category": "AVERAGE"
+ },
+ "lighthouseResult": {
+  "categories": {
+   "performance": {
+    "score": 0.63
+   },
+   "seo": {
+    "score": 0.92
+   },
+   "accessibility": {
+    "score": 0.87
+   },
+   "best-practices": {
+    "score": 1
+   }
+  },
+  "audits": {
+   "largest-contentful-paint": {
+    "score": 0.4,
+    "numericValue": 4200,
+    "scoreDisplayMode": "numeric"
+   },
+   "first-contentful-paint": {
+    "score": 0.8,
+    "numericValue": 1700,
+    "scoreDisplayMode": "numeric"
+   },
+   "cumulative-layout-shift": {
+    "score": 0.9,
+    "numericValue": 0.08,
+    "scoreDisplayMode": "numeric"
+   },
+   "total-blocking-time": {
+    "score": 0.5,
+    "numericValue": 450,
+    "scoreDisplayMode": "numeric"
+   },
+   "uses-optimized-images": {
+    "score": 0.3,
+    "scoreDisplayMode": "metricSavings",
+    "details": {
+     "overallSavingsMs": 1200,
+     "overallSavingsBytes": 410000
+    }
+   },
+   "render-blocking-resources": {
+    "score": 0.5,
+    "scoreDisplayMode": "metricSavings",
+    "details": {
+     "overallSavingsMs": 450
+    }
+   },
+   "offscreen-images": {
+    "score": 0.6,
+    "scoreDisplayMode": "metricSavings",
+    "details": {
+     "overallSavingsMs": 0
+    }
+   },
+   "image-alt": {
+    "score": 0,
+    "scoreDisplayMode": "binary",
+    "details": {
+     "items": [
+      {
+       "node": {
+        "selector": "body > section.hero > img",
+        "snippet": "<img src=\"/hero.jpg\">",
+        "nodeLabel": "hero"
+       }
+      }
+     ]
+    }
+   },
+   "heading-order": {
+    "score": 0,
+    "scoreDisplayMode": "binary",
+    "details": {
+     "items": [
+      {
+       "node": {
+        "selector": "main > h4",
+        "snippet": "<h4>Menu</h4>",
+        "nodeLabel": "Menu"
+       }
+      }
+     ]
+    }
+   },
+   "viewport": {
+    "score": 1,
+    "scoreDisplayMode": "binary"
+   },
+   "diagnostics": {
+    "scoreDisplayMode": "informative"
+   },
+   "document-title": {
+    "score": 1,
+    "scoreDisplayMode": "binary"
+   }
+  }
+ }
+}

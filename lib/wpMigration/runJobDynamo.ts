@@ -31,6 +31,7 @@ import { buildStorePresentation, finishProductImport, importProductBatch, planWo
 import { convertGiveForms } from "./givewp";
 import { notifyMigrationDone, notifyMigrationPaused } from "./notify";
 import { slimForStorage } from "./slimHtml";
+import { closeLatestRun, outcomeOf, type RunCounts, type StoredRun } from "./history";
 
 // The WordPress migration as a resumable, step-at-a-time job — same execution model as
 // lib/siteImport/runJobDynamo.ts (the dashboard tab drives it step by step; a daily cron
@@ -1339,6 +1340,28 @@ export async function donationPaymentsReady(templateId: string): Promise<boolean
   return resolveDonationGateway(settings).gatewayReady;
 }
 
+/** When a run that was started again (rerun.ts) ends or stops, writes how it ended into the history. Best effort: history never blocks a move. */
+async function closeRunHistory(templateId: string, jobId: string, phase: string, error: string | null): Promise<void> {
+  try {
+    const { data: job } = await WpMigrationJob.get({ templateId, id: jobId }).go();
+    const runs = Array.isArray(job?.runs) ? (job!.runs as StoredRun[]) : [];
+    if (!job || !runs.some((r) => r.outcome === "running")) return;
+    const report = job.report as { summary?: { formsReconnected?: number } } | undefined;
+    const closed = closeLatestRun(runs, {
+      outcome: outcomeOf(phase),
+      finishedAt: new Date().toISOString(),
+      counts: (job.counts as RunCounts | undefined) ?? null,
+      redirects: job.movedLinks && typeof job.movedLinks === "object" ? Object.keys(job.movedLinks as object).length : 0,
+      forms: report?.summary?.formsReconnected ?? 0,
+      error: phase === "PAUSED_ERROR" || phase === "FAILED" ? error : null,
+    });
+    const { onlyStep: _done, ...planState } = (job.planState as { onlyStep?: string } | undefined) ?? {};
+    await WpMigrationJob.patch({ templateId, id: jobId }).set({ runs: closed, ...(phase === "PAUSED_ERROR" ? {} : { planState }) }).go();
+  } catch (err) {
+    console.warn(`[wp-migration] ${jobId}: couldn't write run history`, err);
+  }
+}
+
 /**
  * Processes exactly one bounded step of a migration and returns the resulting phase —
  * same atomic-claim contract as lib/siteImport/runJobDynamo.ts's processSiteImportStep.
@@ -1389,9 +1412,16 @@ export async function processWpMigrationStep(templateId: string, jobId: string, 
     } else {
       next = phase;
     }
+    // Running a single step again (rerun.ts) goes through the check-up and then stops, instead of running every later step too.
+    const onlyStep = (job.planState as { onlyStep?: string } | undefined)?.onlyStep;
+    if (onlyStep && phase === onlyStep && next !== phase && next !== "FINALIZING" && !TERMINAL.has(next)) {
+      next = "FINALIZING";
+      await WpMigrationJob.patch({ templateId, id: jobId }).set({ phase: "FINALIZING" }).go();
+    }
     await WpMigrationJob.patch({ templateId, id: jobId })
       .set({ processing: false, lastHeartbeatAt: new Date().toISOString(), errors: errors.slice(-200), ...(job.transientRetries ? { transientRetries: 0 } : {}) })
       .go();
+    if (TERMINAL.has(next)) await closeRunHistory(templateId, jobId, next, errors.slice(-1)[0] ?? null);
     return { done: TERMINAL.has(next), phase: next };
   } catch (err) {
     // A throttle or blip: every step is safe to re-run, so try again (after a short
@@ -1418,6 +1448,7 @@ export async function processWpMigrationStep(templateId: string, jobId: string, 
       })
       .go();
     if (emailPause) await notifyMigrationPaused(job, (job.planState as PlanState | undefined)?.siteName ?? "", reason);
+    await closeRunHistory(templateId, jobId, "PAUSED_ERROR", reason);
     return { done: false, phase: "PAUSED_ERROR" };
   }
 }

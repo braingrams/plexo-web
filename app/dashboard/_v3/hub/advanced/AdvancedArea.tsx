@@ -54,7 +54,7 @@ function Body({ kind, section, site, data }: { kind: ReturnType<typeof advancedK
     case "features":
       return data.features ? <FeaturesSection siteId={id} features={site.features} data={data.features} /> : <Card><Skeleton height={120} /></Card>;
     case "layout":
-      return data.layout ? <Embed><SiteLayoutClient templateId={id} siteName={site.name} initialEnabled={data.layout.enabled} header={data.layout.header} footer={data.layout.footer} /></Embed> : null;
+      return data.layout ? <Embed><SiteLayoutClient templateId={id} siteName={site.name} initialEnabled={data.layout.enabled} /></Embed> : null;
     case "lists":
       return data.contentTypes ? <Embed><ContentTypesClient templateId={id} templateName={site.name} initialContentTypes={data.contentTypes} /></Embed> : null;
     case "forms":

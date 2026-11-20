@@ -153,6 +153,19 @@ export function decryptStrataToken(encoded: string): string {
 }
 
 /**
+ * Encrypts/decrypts the Google refresh token a site owner grants so Plexo can read their
+ * Google Analytics reports. Its own DELIBERATELY separate secret
+ * (GOOGLE_ANALYTICS_TOKEN_ENCRYPTION_SECRET), same isolation rationale as the others above.
+ */
+export function encryptGoogleAnalyticsToken(plainText: string): string {
+  return encryptWithKey(plainText, deriveKey(requireEnv("GOOGLE_ANALYTICS_TOKEN_ENCRYPTION_SECRET")));
+}
+
+export function decryptGoogleAnalyticsToken(encoded: string): string {
+  return decryptWithKey(encoded, deriveKey(requireEnv("GOOGLE_ANALYTICS_TOKEN_ENCRYPTION_SECRET")));
+}
+
+/**
  * Wraps any of the decryptX functions above and turns a failure into `null` instead of
  * throwing — every decrypt* function here throws on a wrong/rotated key or corrupted
  * ciphertext (AES-GCM auth-tag mismatch), which is a REAL possibility for pre-existing

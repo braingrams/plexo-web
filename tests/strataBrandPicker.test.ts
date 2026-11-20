@@ -58,7 +58,7 @@ describe("words", () => {
     expect(all).not.toMatch(/token|MCP|API|SQL|JSON|webhook|GitHub/i);
   });
   it("confirms in one plain sentence", () => {
-    expect(confirmationText({ projectName: "Ama's brand", autoSync: true })).toBe('Your "Ama\'s brand" brand is on your website. It stays in step when you publish in Strata.');
-    expect(confirmationText({ projectName: "Ama", created: true, autoSync: false, notes: ["Your logo wasn't sent to Strata; add it there when you like."] })).toBe('Your brand is now in Strata as "Ama" and on your website. Your logo wasn\'t sent to Strata; add it there when you like.');
+    expect(confirmationText({ projectName: "Ama's brand", autoSync: true })).toBe('Your "Ama\'s brand" brand is on your website. It stays in step when you change it.');
+    expect(confirmationText({ projectName: "Ama", created: true, autoSync: false, notes: ["Your logo wasn't saved with your brand; add it on the Your brand page when you like."] })).toBe('Your brand is saved as "Ama" and on your website. Your logo wasn\'t saved with your brand; add it on the Your brand page when you like.');
   });
 });

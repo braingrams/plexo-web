@@ -6,6 +6,7 @@ import { resolveMaildripApiKey, sendCommerceEmail } from "@/lib/mail/maildrip";
 import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { getOrgBrandDynamo } from "@/server/orgDynamo";
+import { termsLink } from "@/lib/commerce/terms";
 import { buildOrderStatusEmail, type OrderStatusEvent } from "@/lib/mail/templates";
 import { refundStripePayment } from "@/lib/commerce/stripeClient";
 import { isDonationOrder, resolveDonationGateway } from "@/lib/commerce/donations";
@@ -89,6 +90,7 @@ export async function sendOrderStatusEmail(
     items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })),
     currency: order.currency ?? "NGN",
     orderUrl: `${storeUrl}/order-confirmation?order=${encodeURIComponent(order.orderNumber)}&email=${encodeURIComponent(order.customerEmail)}`,
+    termsUrl: termsLink(settings, storeUrl)?.url ?? null,
     brand,
   });
 

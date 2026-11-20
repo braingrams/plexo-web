@@ -1,3 +1,4 @@
+import { aiRefusalBody } from "@/lib/credits/upgradeOffer";
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveAiCaller } from "@/lib/ai/aiCaller";
@@ -14,7 +15,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const parsed = parseGenerateBody(resolved.key, await request.json().catch(() => null));
   if ("error" in parsed) return NextResponse.json({ error: parsed.error }, { status: parsed.status });
   const planned = await planGeneration(resolved.key, parsed.input);
-  if ("error" in planned) return NextResponse.json({ error: planned.error }, { status: planned.status });
+  if ("error" in planned) return NextResponse.json(aiRefusalBody(planned), { status: planned.status });
   try {
     return NextResponse.json(await runGeneration(resolved.key, parsed.input, planned.plan));
   } catch (err) {

@@ -1,6 +1,7 @@
 import * as cheerio from "cheerio";
 import type { Element } from "domhandler";
 import postcss, { type Rule } from "postcss";
+import { attributeRange, replaceRanges } from "@/lib/htmlTextExtraction";
 
 /**
  * Companion to htmlTextExtraction.ts for the "Text Content" editor's Images section — same
@@ -226,6 +227,43 @@ export type BackgroundEdit = { id: number; src?: string; backgroundSize?: string
  * template actually renders the background everywhere that selector applies.
  */
 export function applyImageEdits(html: string, imgEdits: ImgEdit[], backgroundEdits: BackgroundEdit[]): string {
+  if (imgEdits.length === 0 && backgroundEdits.length === 0) return html;
+  // Resizing and CSS backgrounds are rewritten from the page's tree; a new picture address is written straight into the
+  // page's own text, so a change of picture alone leaves every other character of the page exactly as it was.
+  const needsTree = backgroundEdits.length > 0 || imgEdits.some((e) => e.width !== undefined || e.height !== undefined);
+  const out = needsTree ? applyImageEditsViaTree(html, imgEdits.map((e) => ({ ...e, src: undefined })), backgroundEdits) : html;
+  const srcEdits = imgEdits.filter((e) => e.src !== undefined);
+  return srcEdits.length ? replaceImageSources(out, srcEdits) : out;
+}
+
+function replaceImageSources(html: string, edits: ImgEdit[]): string {
+  const $ = cheerio.load(html, { sourceCodeLocationInfo: true });
+  const byId = new Map(edits.map((e) => [e.id, e]));
+  const reps: { start: number; end: number; text: string }[] = [];
+  let lossless = true;
+  let imgId = 0;
+  $("img").each((_, el) => {
+    if ($(el).parents(SKIP_IMG_ANCESTORS).length) return;
+    if (!$(el).attr("src")) return;
+    const edit = byId.get(imgId++);
+    if (!edit || edit.src === undefined || edit.src === $(el).attr("src")) return;
+    const rep = attributeRange(html, el, "src", edit.src);
+    if (rep) reps.push(rep);
+    else lossless = false;
+  });
+  if (lossless) return replaceRanges(html, reps);
+  const $t = cheerio.load(html);
+  let i = 0;
+  $t("img").each((_, el) => {
+    if ($t(el).parents(SKIP_IMG_ANCESTORS).length) return;
+    if (!$t(el).attr("src")) return;
+    const edit = byId.get(i++);
+    if (edit?.src !== undefined) $t(el).attr("src", edit.src);
+  });
+  return $t.html();
+}
+
+function applyImageEditsViaTree(html: string, imgEdits: ImgEdit[], backgroundEdits: BackgroundEdit[]): string {
   const $ = cheerio.load(html);
 
   const imgEditById = new Map(imgEdits.map((e) => [e.id, e]));

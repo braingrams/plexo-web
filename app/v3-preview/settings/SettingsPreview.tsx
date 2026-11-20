@@ -12,6 +12,11 @@ import { ConnectSection } from "@/app/dashboard/_v3/settings/ConnectSection";
 import { DevelopersSection } from "@/app/dashboard/_v3/settings/DevelopersSection";
 import { BrandingSection } from "@/app/dashboard/_v3/settings/BrandingSection";
 import { MovingSection } from "@/app/dashboard/_v3/settings/MovingSection";
+import { MigrationHistory } from "@/app/dashboard/_v3/settings/MigrationHistory";
+import { SettingsPageShell } from "@/app/dashboard/_v3/settings/bits";
+import { installMock } from "../_mock/api";
+import { WP_HISTORY, WP_RERUN_PREVIEW } from "../_mock/wp";
+import { useState } from "react";
 import { parseExperience } from "@/lib/dashboardV3/nav";
 import type { SettingsSectionId } from "@/lib/dashboardV3/settingsNav";
 
@@ -22,6 +27,10 @@ const inDays = (n: number) => new Date(Date.now() + n * 86_400_000).toISOString(
 /** DEV ONLY: every Settings section with fake data (nothing is sent anywhere). */
 export function SettingsPreview({ section }: { section: SettingsSectionId }) {
   const params = useSearchParams();
+  useState(() => installMock([
+    { test: /wp-migration\/history/, res: () => (params.get("moves") === "none" ? { sites: [] } : WP_HISTORY) },
+    { test: /wp-migration\/[^/]+\/[^/]+\/rerun/, res: () => WP_RERUN_PREVIEW },
+  ]));
   const experience = parseExperience(params.get("exp")) ?? "beginner";
   const planParam = params.get("plan") ?? "paid";
   const free = planParam === "free";
@@ -88,6 +97,11 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
       {section === "connect" ? <ConnectSection baseUrl="https://plexobuilder.com" apiKeyHint="plexo_sk_••••a1b2" /> : null}
       {section === "developers" ? <DevelopersSection mock keys={Array.from({ length: manyKeys ? 9 : 1 }, (_, i) => ({ id: `k${i}`, name: "Key", maskedKey: `plexo_sk_••••a1b${i}`, createdAt: daysAgo(9 + i * 7) }))} maxKeys={manyKeys ? 10 : 3} canPublishViaApi={false} publishViaApi={false} canCompile /> : null}
       {section === "brand" ? <BrandingSection mock organizationId="o1" canManage planAllowsWhiteLabel={params.get("wl") !== "no"} initial={{ name: "Ama's Kitchen", logo: "", color: "", mode: "BOTH", on: false }} /> : null}
+      {section === "migration" ? (
+        <SettingsPageShell title="WordPress moves" purpose="Every site you've moved from WordPress: when each run happened, what came across and how it ended. Run any of them again if something changed on WordPress.">
+          <MigrationHistory />
+        </SettingsPageShell>
+      ) : null}
       {section === "moving" ? (
         <MovingSection
           mock

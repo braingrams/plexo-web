@@ -5,7 +5,7 @@
  */
 import type { SiteBrand } from "./brandLook";
 
-export type SiteKindLabel = "Website" | "Online store" | "Blog" | "Course" | "App with sign-in" | "Server app" | "Uploaded app" | "Uploaded page" | "Link page";
+export type SiteKindLabel = "Website" | "Online store" | "Blog" | "Course" | "App with sign-in" | "Server app" | "Uploaded app" | "Uploaded page" | "WordPress migrated site" | "Link page";
 
 export type SiteSummary = {
   id: string;
@@ -31,9 +31,11 @@ export function pickCurrentSite(sites: SiteSummary[], cookieValue?: string | nul
   return [...sites].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
 }
 
-export function siteKindOf(t: { sourceType?: string | null; isLmsFunnel?: boolean | null; hasStore?: boolean; hasBlog?: boolean }): SiteKindLabel {
+export function siteKindOf(t: { sourceType?: string | null; isLmsFunnel?: boolean | null; hasStore?: boolean; hasBlog?: boolean; migratedFrom?: string | null }): SiteKindLabel {
   if (t.sourceType === "REACT_PROJECT") return "App with sign-in";
   if (t.isLmsFunnel) return "Course";
+  // A site moved in from WordPress says so everywhere, whatever it is made of underneath.
+  if (t.migratedFrom) return "WordPress migrated site";
   if (t.sourceType === "RAW_UPLOAD") return "Uploaded page";
   if (t.hasStore) return "Online store";
   if (t.hasBlog) return "Blog";

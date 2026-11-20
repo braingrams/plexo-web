@@ -6,6 +6,8 @@ import type { SiteStats } from "@/lib/dashboardV3/homeData";
 import { dayLabels } from "@/lib/dashboardV3/visitsTrend";
 import { Badge, Card, CardHeader, EmptyState } from "../ui";
 import { timeAgo } from "./api";
+import { seeAllHref } from "@/lib/dashboardV3/seeAllLinks";
+import type { Experience } from "@/lib/dashboardV3/nav";
 
 export function StatTile({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
@@ -27,10 +29,11 @@ export function StatGrid({ stats }: { stats: SiteStats["stats"] }) {
   );
 }
 
-export function ActivityCard({ stats, site }: { stats: SiteStats; site: SiteSummary }) {
+export function ActivityCard({ stats, site, experience }: { stats: SiteStats; site: SiteSummary; experience?: Experience }) {
+  const seeAll = seeAllHref(stats.activityKind ?? "none", site.id, experience);
   return (
     <Card padding="lg">
-      <CardHeader title={stats.activityTitle} action={stats.activity.length ? <Link href={`/dashboard/sites/${site.id}`} className="plx-small" style={{ color: "var(--plx-link)", fontWeight: 700 }}>See all</Link> : undefined} />
+      <CardHeader title={stats.activityTitle} action={stats.activity.length && seeAll ? <Link href={seeAll} className="plx-small" style={{ color: "var(--plx-link)", fontWeight: 700 }}>See all</Link> : undefined} />
       {stats.activity.length ? (
         <ul style={{ listStyle: "none", margin: "12px 0 0", padding: 0, display: "flex", flexDirection: "column" }}>
           {stats.activity.map((a) => (

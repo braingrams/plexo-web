@@ -54,6 +54,10 @@ export const Template = new Entity(
       // back: the TemplateRevision (made by POST /api/templates/:id/convert-to-v2) holding its
       // classic design. Cleared when the owner goes back.
       classicBackupId: { type: "string" },
+      // Set while a page that was turned from blocks into editable code (POST /api/templates/:id/convert-to-code) can still
+      // go back: the TemplateRevision holding its block design, and when it was converted. Cleared when the owner goes back.
+      blocksBackupId: { type: "string" },
+      convertedFromBlocksAt: { type: "string" },
       // The site's OWN logo and colours (root page only): { logoUrl?, colors?, noLogo? }, written by the Brand tab and
       // copied from the owner's onboarding answers when a site is made. Read through readSiteBrand() (lib/dashboardV3/brandLook.ts).
       brand: { type: "any" },
@@ -87,6 +91,10 @@ export const Template = new Entity(
       marketplaceRejectionReason: { type: "string" },
       isBlogLayout: { type: "boolean", default: false },
       isSiteLayoutFragment: { type: "boolean", default: false },
+      // A page can switch the site's shared header / footer off for itself (the editor's "Show header" / "Show footer"
+      // toggles). Absent = shown, so every existing page keeps rendering as it did.
+      hideHeader: { type: "boolean" },
+      hideFooter: { type: "boolean" },
       isCommerceLayout: { type: "boolean", default: false },
       // True once this site has Funnel/LMS capability attached (an LmsFunnel row exists —
       // see app/api/v1/lms/funnels/route.ts's POST). Unlike isCommerceLayout/isBlogLayout,
@@ -633,6 +641,17 @@ export const SiteLayout = new Entity(
       enabled: { type: "boolean", default: false },
       headerTemplateId: { type: "string" },
       footerTemplateId: { type: "string" },
+      // Owner-pasted snippets for every page's <head> / end of <body> (lib/customCode). Stored already
+      // validated and re-written by sanitizeCustomCode; only injected on a custom domain on Starter and above.
+      customHeadCode: { type: "string" },
+      customFooterCode: { type: "string" },
+      customCodeUpdatedBy: { type: "string" },
+      customCodeUpdatedAt: { type: "string" },
+      // The owner chose to also run their code on cart, checkout and order pages (off by default: see lib/customCode/serve.ts).
+      customCodeOnCheckout: { type: "boolean" },
+      // Set the first time a site was given its header/footer (new sites at creation, older sites on first visit to Site layout):
+      // the lazy migration never runs twice, so an owner who removes them is never given them back (lib/siteLayoutBlank.ts).
+      layoutProvisionedAt: { type: "string" },
       createdAt: {
         type: "string",
         default: () => new Date().toISOString(),

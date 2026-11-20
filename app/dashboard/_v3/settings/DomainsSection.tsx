@@ -1,5 +1,7 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, ChevronDown, ExternalLink, Globe, Link2, MoreHorizontal, Search, Trash2 } from "lucide-react";
@@ -254,7 +256,7 @@ export function DomainsSection({ addresses: a0, sites, canUseOwn, mock = false }
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
 
       <div className="plx-getaddr" data-tour="domains-connect">
         <button type="button" className="plx-getaddr__card" onClick={() => { setDlgError(null); setDialog("connect"); }}>
@@ -320,7 +322,7 @@ export function DomainsSection({ addresses: a0, sites, canUseOwn, mock = false }
           <div className="plx-sform plx-sform--wide">
             <Select label="Which site is it for?" value={siteId} onChange={(e) => setSiteId(e.target.value)} options={sites.map((s) => ({ value: s.id, label: s.name }))} />
             <Input label="Your address" value={own} onChange={(e) => setOwn(e.target.value)} onKeyDown={(e) => e.key === "Enter" && own.trim() && canUseOwn && void connect()} placeholder="www.mybusiness.com" autoCapitalize="none" autoCorrect="off" help="Type it the way people would, like www.mybusiness.com." />
-            {!canUseOwn ? <Notice tone="warn">Your own address comes with the Starter plan. <a href="/dashboard/settings/plan" style={{ fontWeight: 700 }}>See plans</a></Notice> : null}
+            {!canUseOwn ? <UpgradePrompt tone="info" requiredPlan="STARTER" message="Your own address (like mybusiness.com) comes with the Starter plan." /> : null}
             {dlgError ? <Notice tone="bad">{dlgError}</Notice> : null}
           </div>
         )}

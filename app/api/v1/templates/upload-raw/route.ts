@@ -1,3 +1,5 @@
+import { templateLimitGate } from "@/lib/plan/limitGates";
+import { limitGateResponse } from "@/lib/plan/planGateResponse";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, StorageError } from "@/lib/storage";
@@ -128,10 +130,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       (t) => !t.parentId && t.kind === "LANDING_PAGE" && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
     ).length;
     if (templateCount >= features.maxLandingPages) {
-      return NextResponse.json(
-        { error: `Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.` },
-        { status: 403 }
-      );
+      return limitGateResponse(templateLimitGate("LANDING_PAGE", features.maxLandingPages));
     }
   }
 

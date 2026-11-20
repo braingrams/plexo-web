@@ -1,5 +1,7 @@
 "use client";
 
+import { planGateBody, rememberPlanGate } from "@/lib/plan/planGate";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -84,7 +86,11 @@ export function NewFunnelLauncher({ initialFunnelBuilderLevel }: { initialFunnel
       const slotsRes = await fetch("/api/v1/lms/funnels");
       const slotsBody = await slotsRes.json().catch(() => ({}));
       if (slotsRes.ok && slotsBody.slots && !slotsBody.slots.hasSlotAvailable) {
-        throw Object.assign(new Error("You've used every funnel slot your plan includes. Buy another slot to create more."), { needsSlot: true });
+        // The server's own words and the plan that lifts it, shown as the upgrade prompt (with "buy one extra slot").
+        const g = slotsBody.slotsGate as { message: string; requiredPlan: "STARTER" | "PRO" | "ENTERPRISE"; canBuySlot: boolean } | undefined;
+        const message = g?.message ?? "You're using every course slot your plan includes.";
+        rememberPlanGate(planGateBody("PLAN_FUNNEL_SLOTS", message, g?.requiredPlan ?? "PRO", { canBuySlot: g?.canBuySlot ?? true }));
+        throw Object.assign(new Error(message), { needsSlot: true });
       }
 
       const templateRes = await fetch("/api/templates", {
@@ -212,7 +218,7 @@ function QuickCreateModal({
           <input style={inputStyle} value={name} onChange={(e) => setName(e.target.value)} placeholder="My course" autoFocus />
         </div>
         {error && (
-          <div style={{ marginTop: "0.75rem", fontSize: "0.8rem", color: "#f87171" }}>
+<GateOrError error={error.message}><div style={{ marginTop: "0.75rem", fontSize: "0.8rem", color: "#f87171" }}>
             {error.message}
             {error.needsSlot && (
               <>
@@ -222,8 +228,8 @@ function QuickCreateModal({
                 </Link>
               </>
             )}
-          </div>
-        )}
+          </div></GateOrError>
+)}
         <div style={{ display: "flex", justifyContent: "flex-end", gap: "0.6rem", marginTop: "1.25rem" }}>
           <button type="button" style={buttonGhost} onClick={onClose} disabled={busy}>Cancel</button>
           <button
@@ -347,7 +353,7 @@ function BeginnerWizardModal({
         )}
 
         {error && (
-          <div style={{ marginTop: "0.9rem", fontSize: "0.8rem", color: "#f87171" }}>
+<GateOrError error={error.message}><div style={{ marginTop: "0.9rem", fontSize: "0.8rem", color: "#f87171" }}>
             {error.message}
             {error.needsSlot && (
               <>
@@ -357,8 +363,8 @@ function BeginnerWizardModal({
                 </Link>
               </>
             )}
-          </div>
-        )}
+          </div></GateOrError>
+)}
 
         <div style={{ display: "flex", justifyContent: "space-between", marginTop: "1.5rem" }}>
           <button type="button" style={buttonGhost} onClick={stepIndex === 0 ? onClose : () => setStepIndex((s) => s - 1)} disabled={busy}>

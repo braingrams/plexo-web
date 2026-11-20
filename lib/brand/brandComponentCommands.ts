@@ -20,6 +20,6 @@ export const BRAND_COMPONENT_OPS: ReadonlySet<string> = new Set(["insertBrandCom
 /** Plain words for an AI helping an owner when the command can't be used yet. */
 export function brandComponentCommandMessage(op: string): string {
   return op === "saveAsBrandComponent"
-    ? "Saving a section as a brand component from page_edit isn't available yet. Describe it with create_brand_component (name, styles, slots) to save it to the brand in Strata instead."
+    ? "Saving a section as a brand component from page_edit isn't available yet. Describe it with create_brand_component (name, styles, slots) to save it to the brand instead."
     : "Placing a brand component with page_edit isn't available yet. Build the section in the brand's look instead (get_brand_tokens gives its variables, list_brand_components its components), and tell the owner in plain words.";
 }

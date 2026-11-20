@@ -2,6 +2,7 @@ import * as cheerio from "cheerio";
 import type { AnyNode, Element } from "domhandler";
 
 import { BRAND } from "@/lib/theme";
+import { encodeAttr, encodeText } from "@/lib/editorModes/htmlSource";
 /**
  * Tags whose entire subtree is never end-user-visible text — skipped outright rather than
  * enumerated per-tag, since <script>/<style>/comments already get a distinct cheerio node
@@ -214,15 +215,85 @@ export function annotateTextNodesForPreview(html: string): string {
   return $.html();
 }
 
+type Span = { startOffset: number; endOffset: number };
+type Located = { sourceCodeLocation?: { startOffset: number; endOffset: number; attrs?: Record<string, Span>; startTag?: { startOffset: number; endOffset: number } } | null };
+
+/** Replaces the given ranges of `html`, back to front so earlier positions stay valid. */
+export function replaceRanges(html: string, reps: { start: number; end: number; text: string }[]): string {
+  let out = html;
+  for (const r of [...reps].sort((a, b) => b.start - a.start || b.end - a.end)) out = out.slice(0, r.start) + r.text + out.slice(r.end);
+  return out;
+}
+
+/** The change that sets (or adds) one attribute, keeping the quote style it was written with. */
+export function attributeRange(html: string, el: Element, name: string, value: string): { start: number; end: number; text: string } | null {
+  const loc = (el as unknown as Located).sourceCodeLocation;
+  if (!loc) return null;
+  const escaped = encodeAttr(value, '"');
+  const attr = loc.attrs?.[name];
+  if (attr) {
+    const raw = html.slice(attr.startOffset, attr.endOffset);
+    const quote = /^[^=]*=\s*(["'])/.exec(raw)?.[1];
+    const useQuote = (quote ?? '"') as '"' | "'";
+    const attrName = /^[^=\s]+/.exec(raw)?.[0] ?? name;
+    return { start: attr.startOffset, end: attr.endOffset, text: `${attrName}=${useQuote}${encodeAttr(value, useQuote)}${useQuote}` };
+  }
+  if (!loc.startTag) return null;
+  const at = loc.startTag.startOffset + 1 + el.name.length;
+  return { start: at, end: at, text: ` ${name}="${escaped}"` };
+}
+
 /**
- * Re-parses the SAME html the ids came from and reconstructs the identical id sequence,
- * then overwrites each requested text node's data (and, when provided, its nearest <a>
- * ancestor's href) in place before re-serializing. Ids not present in `edits` are left
- * untouched. Leading/trailing whitespace around the original text node is preserved (only
- * the trimmed core is replaced) so spacing between inline elements — e.g.
- * "Some <a>link</a> text." — doesn't visibly collapse.
+ * Applies each requested text edit (and, when provided, the nearest <a> ancestor's href) to the SAME html the ids came
+ * from, in the same deterministic order as extractTextNodes. Only the characters that change are rewritten: the rest of
+ * the page (quotes, spacing, comments, entities, tags left open) stays exactly as it was written. Leading/trailing
+ * whitespace around the original text is preserved so spacing between inline elements doesn't collapse. Ids not in
+ * `edits` are left untouched, and text that comes back unchanged is not rewritten at all.
  */
 export function applyTextEdits(html: string, edits: { id: number; text: string; href?: string }[]): string {
+  if (edits.length === 0) return html;
+  const $ = cheerio.load(html, { sourceCodeLocationInfo: true });
+  const editById = new Map(edits.map((e) => [e.id, e]));
+  const reps: { start: number; end: number; text: string }[] = [];
+  const hrefByLink = new Map<Element, { start: number; end: number; text: string }>();
+  let id = 0;
+  let lossless = true;
+
+  const root = $("body").length > 0 ? $("body").get(0)! : $.root().get(0)!;
+  walk($, root, [], (node, ancestors) => {
+    const textNode = node as { data?: string } & Located;
+    const raw = textNode.data ?? "";
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const currentId = id++;
+    const edit = editById.get(currentId);
+    if (!edit) return;
+    if (edit.text !== undefined && edit.text !== trimmed) {
+      const loc = textNode.sourceCodeLocation;
+      if (!loc) {
+        lossless = false;
+        return;
+      }
+      const source = html.slice(loc.startOffset, loc.endOffset);
+      const lead = /^\s*/.exec(source)![0];
+      const trail = /\s*$/.exec(source.slice(lead.length))![0];
+      reps.push({ start: loc.startOffset, end: loc.endOffset, text: lead + encodeText(edit.text) + trail });
+    }
+    if (edit.href !== undefined) {
+      const linkAncestor = nearestLinkAncestor(ancestors);
+      if (linkAncestor && (linkAncestor.attribs?.href ?? "") !== edit.href) {
+        const rep = attributeRange(html, linkAncestor, "href", edit.href);
+        if (rep) hrefByLink.set(linkAncestor, rep);
+        else lossless = false;
+      }
+    }
+  });
+  if (!lossless) return applyTextEditsViaTree(html, edits);
+  return replaceRanges(html, [...reps, ...hrefByLink.values()]);
+}
+
+/** Fallback for the rare node the parser gave no position for: rewrites the whole page from its tree (the old way). */
+function applyTextEditsViaTree(html: string, edits: { id: number; text: string; href?: string }[]): string {
   const $ = cheerio.load(html);
   const editById = new Map(edits.map((e) => [e.id, e]));
   let id = 0;

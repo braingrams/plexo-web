@@ -8,7 +8,8 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { readBody, appError } from "@/lib/projects/appAccess";
 import { deploy, filesFromUpload, DeployError } from "@/lib/projects/deploy";
 import { PlanLimitError, planLimitResponse } from "@/lib/plan/publishGuard";
-import { findAppForStrataProject, linkAppToStrataProject, checkSubdomain, StrataPublishError } from "@/lib/strata/publish";
+import { completeOnboardingForStrataPush } from "@/lib/onboarding/strataPush";
+import { findAppForStrataProject, linkPushedAppToBrand, linkAppToStrataProject, checkSubdomain, StrataPublishError } from "@/lib/strata/publish";
 import type { FileWrite } from "@/lib/projects/fileStore";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -23,7 +24,7 @@ type Ctx = { params: Promise<{ id: string }> };
  *         name?: string, subdomain?: string, publish?: boolean (default true), message?: string }
  *
  * The first call creates the Plexo app; later calls for the same Strata project update it and
- * keep its address. → 202 { appId, created, buildId, previewUrl, statusUrl, editorUrl } — poll
+ * keep its address. → 202 { appId, created, buildId, previewUrl, statusUrl, editorUrl, brandUrl (the app's Brand page: its brand bible) } — poll
  * statusUrl until pending is false; it then has the build errors (plain text) or the liveUrl.
  * publish:false only builds a preview link.
  */
@@ -71,8 +72,12 @@ export async function POST(request: NextRequest, { params }: Ctx): Promise<NextR
       },
     );
     if (!existing) await linkAppToStrataProject(result.appId, id);
+    // Pushing from Strata means they already have a brand and know what they are building: skip Plexo's onboarding, and put the
+    // pushed brand on the app's Brand page (best effort; the Brand page also connects it by itself the first time it is opened).
+    await completeOnboardingForStrataPush(resolved.userId);
+    await linkPushedAppToBrand({ appId: result.appId, strataProjectId: id, userId: resolved.userId, organizationId: resolved.organizationId });
     const origin = new URL(request.url).origin;
-    return NextResponse.json({ ...result, statusUrl: `${origin}/api/v1/strata/projects/${encodeURIComponent(id)}/publish/${result.buildId}`, created: !existing }, { status: 202 });
+    return NextResponse.json({ ...result, brandUrl: `${origin}/dashboard/sites/${result.appId}?tab=brand`, statusUrl: `${origin}/api/v1/strata/projects/${encodeURIComponent(id)}/publish/${result.buildId}`, created: !existing }, { status: 202 });
   } catch (err) {
     if (err instanceof StrataPublishError) return NextResponse.json({ error: err.message, code: err.code }, { status: err.status });
     if (err instanceof PlanLimitError) return planLimitResponse(err);

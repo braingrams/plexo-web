@@ -1,3 +1,7 @@
+import { planGateResponse } from "@/lib/plan/planGateResponse";
+import { planThatRaises } from "@/lib/plan/planNeeded";
+import { getTierFeatures } from "@/lib/subscription";
+import { getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
 import { createHash, randomInt, randomUUID } from "node:crypto";
 
 import { NextRequest, NextResponse } from "next/server";
@@ -62,6 +66,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const body = (await request.json().catch(() => ({}))) as { name?: string };
 
   const { data: existing } = await ApiKey.query.primary({ organizationId: ctx.organizationId }).go();
+  const plan = (await getOrganizationOwnerEntitlementDynamo(ctx.organizationId)).subscriptionPlan;
+  const maxKeys = getTierFeatures(plan).maxApiKeys;
+  if (existing.length >= maxKeys) {
+    return planGateResponse("PLAN_API_KEYS", `Your plan holds ${maxKeys} API key${maxKeys === 1 ? "" : "s"} and they're all in use. Upgrade for more, or delete one you no longer use.`, planThatRaises((f) => f.maxApiKeys, maxKeys));
+  }
   const keyName = body.name?.trim() || `API Key ${existing.length + 1}`;
 
   const rawKey = `pk_live_${randomToken(32)}`;

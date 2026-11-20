@@ -89,6 +89,7 @@ export async function loadHubSite(organizationId: string, id: string): Promise<H
     app: sourceType === "REACT_PROJECT",
     ownCode: sourceType === "RAW_UPLOAD",
     deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null,
+    migrated: !!t.migratedFrom,
   };
   const live = domains.filter((d) => d.active !== false);
   const best = live.find((d) => d.type === "CUSTOM") ?? live[0];
@@ -188,7 +189,7 @@ export async function loadHubSiteCards(organizationId: string, userId: string): 
         DeployedApp.get({ templateId: s.id }).go(),
         PageView.query.primary({ templateId: s.id }).between({ createdAt: week }, { createdAt: new Date().toISOString() }).go({ pages: "all" }).then((r) => r.data.length).catch(() => 0),
       ]);
-      const features: HubFeatures = { store: !!commerce?.enabled, blog: !!blog?.enabled, course: !!t?.isLmsFunnel, app: t?.sourceType === "REACT_PROJECT", ownCode: t?.sourceType === "RAW_UPLOAD", deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null };
+      const features: HubFeatures = { store: !!commerce?.enabled, blog: !!blog?.enabled, course: !!t?.isLmsFunnel, app: t?.sourceType === "REACT_PROJECT", ownCode: t?.sourceType === "RAW_UPLOAD", deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null, migrated: !!t?.migratedFrom };
       return { id: s.id, name: s.name, kind: hubKindLabel(features), status: s.status, address: s.address ?? null, visits7d: views, editHref: editHrefFor(s.id, t?.sourceType), app: isAppKind(hubKindLabel(features)) };
     }),
   );

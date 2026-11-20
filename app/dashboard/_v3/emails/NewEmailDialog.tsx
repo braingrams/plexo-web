@@ -1,9 +1,11 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import "./emails.css";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Code2, FilePlus2, LayoutDashboard, LayoutTemplate, Mail, MessageCircle, Search } from "lucide-react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
+import { ArrowLeft, Code2, FilePlus2, LayoutDashboard, LayoutTemplate, Mail, Search } from "lucide-react";
 import { Badge, Button, ButtonLink, Input, Modal, Skeleton } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { solEmailHref, type EmailUsage } from "@/lib/dashboardV3/emails";
@@ -67,7 +69,7 @@ export function EmailChoices({ onBlank, onDesign, onSol }: { onBlank: () => void
         <span>An empty email. You decide what goes in it.</span>
       </button>
       <a className="plx-echoice" href={solEmailHref()} onClick={onSol} data-testid="email-choice-sol">
-        <span className="plx-echoice__icon"><MessageCircle size={26} aria-hidden /></span>
+        <span className="plx-echoice__icon"><SolGlyph size={26} /></span>
         <b>Ask SOL to write it for me</b>
         <span>Tell SOL who it is for. SOL writes and designs it.</span>
       </a>
@@ -204,7 +206,7 @@ export function NewEmailDialog({ open, onClose, usage, designs, preview, start =
               )}
             </>
           ) : null}
-          {error ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div> : null}
+          {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}
         </div>
       )}
     </Modal>

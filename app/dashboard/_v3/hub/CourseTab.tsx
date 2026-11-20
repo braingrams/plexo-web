@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import { Settings2, Users } from "lucide-react";
 import { ButtonLink, Skeleton } from "../ui";
@@ -35,7 +36,7 @@ export function CourseTab({ siteId, experience = "beginner" }: { siteId: string;
           </span>
         }
       />
-      {error ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div> : null}
+      {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}
       {lessons === null && !error ? <Skeleton style={{ height: 200, borderRadius: 20 }} /> : null}
       {lessons ? <LessonsManager courseId={siteId} initial={lessons} experience={experience} /> : null}
     </>

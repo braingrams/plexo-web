@@ -38,6 +38,7 @@ import { ONE_TIME_CHANNELS } from "./oneTime";
 import {
   DEFAULT_PRICE_BOOK,
   creditsForTopupAmount,
+  minorUnits,
   paystackPlanName,
   planPriceMinor,
   regionById,
@@ -154,22 +155,49 @@ export async function startPaystackPlanCheckout(input: {
 export async function startPaystackTopupCheckout(input: {
   user: Pick<UserItem, "id" | "email">;
   region: PriceRegion;
-  pack: TopupPackId;
+  pack?: TopupPackId;
+  customAmount?: number;
+  credits?: number;
+  amountMinor?: number;
   callbackUrl: string;
 }): Promise<PaystackCheckout & { credits: number }> {
   const secretKey = requireKey();
-  const offer = topupPack(input.region, input.pack);
+  let credits: number;
+  let amountMinor: number;
+  let packLabel: string;
+
+  if (input.pack) {
+    const offer = topupPack(input.region, input.pack);
+    credits = input.credits ?? offer.credits;
+    amountMinor = input.amountMinor ?? offer.amountMinor;
+    packLabel = input.pack;
+  } else if (input.customAmount) {
+    credits = input.credits ?? creditsForTopupAmount(input.customAmount, input.region.currency, input.region) ?? 0;
+    amountMinor = input.amountMinor ?? Math.round(input.customAmount * minorUnits(input.region.currency));
+    packLabel = "custom";
+  } else {
+    throw new Error("Either pack or customAmount is required for top-up checkout.");
+  }
+
   const reference = newReference("plx_topup");
   const result = await initializePaystackTransaction({
     secretKey,
     email: input.user.email,
-    amountMinor: offer.amountMinor,
+    amountMinor,
     currency: input.region.currency,
     reference,
     callbackUrl: input.callbackUrl,
-    metadata: { kind: PAYSTACK_TOPUP_KIND, plexoUserId: input.user.id, pack: input.pack, credits: offer.credits, amountMinor: offer.amountMinor, region: input.region.id },
+    metadata: {
+      kind: PAYSTACK_TOPUP_KIND,
+      plexoUserId: input.user.id,
+      pack: packLabel,
+      credits,
+      amountMinor,
+      region: input.region.id,
+      ...(input.customAmount ? { customAmount: input.customAmount } : {}),
+    },
   });
-  return { provider: "PAYSTACK", accessCode: result.accessCode, authorizationUrl: result.authorizationUrl, reference: result.reference, publicKey: platformPaystackPublicKey(), credits: offer.credits };
+  return { provider: "PAYSTACK", accessCode: result.accessCode, authorizationUrl: result.authorizationUrl, reference: result.reference, publicKey: platformPaystackPublicKey(), credits };
 }
 
 // ── Applying payments ──────────────────────────────────────────────────────────────────
@@ -245,7 +273,8 @@ export async function applyPaystackTransaction(tx: PaystackTransaction, deps: Ap
     const credits =
       quoted > 0 && listMinor > 0 ? Math.round((quoted * Math.min(tx.amount, listMinor)) / listMinor) : region ? creditsForTopupAmount(tx.amount / 100, tx.currency, region) : null;
     if (!credits) return { applied: "none" };
-    await grantTopup(meta.plexoUserId, credits, `paystack-topup:${tx.reference}`, `Top-up purchase (${String(meta.pack ?? "credits")})`);
+    const packDesc = meta.pack === "custom" || !meta.pack ? `${credits.toLocaleString("en-US")} credits` : String(meta.pack);
+    await grantTopup(meta.plexoUserId, credits, `paystack-topup:${tx.reference}`, `Top-up purchase (${packDesc})`);
     const recorded = await recordPaystackPayment({ reference: tx.reference, userId: meta.plexoUserId, kind: "CREDIT_TOPUP", credits, amountMinor: tx.amount, currency: tx.currency, paidAt, email: tx.customer?.email, ...card });
     if (recorded?.becamePaid) await sendReceiptEmail(recorded.payment, { onceOnly: true }).catch((err) => console.error("paystack receipt failed", err));
     return { applied: "topup", userId: meta.plexoUserId };

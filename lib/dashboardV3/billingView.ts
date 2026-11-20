@@ -9,8 +9,10 @@ import { getTierFeatures } from "@/lib/subscription";
 import { PLAN_MONTHLY_AI_USD } from "@/lib/credits/value";
 import { PLAN_IDS, PLAN_LABELS, PLAN_RANK, toPlanId, type PlanId, PLAN, PAID_PLAN_IDS } from "@/lib/plan/plans";
 import type { PricingView } from "@/lib/billing/pricing";
+import { AI_ACTION_LABELS } from "@/lib/ai/types";
 
 export type { PlanId };
+export { AI_ACTION_LABELS };
 
 /** Price labels per plan in the person's own currency, e.g. { STARTER: "N13,500 a month" }. */
 export type PriceSource = Partial<Record<PlanId, string>>;
@@ -118,3 +120,41 @@ export const ACTIVITY_LABELS: Record<string, string> = {
   REFUND: "Refund",
   ADJUSTMENT: "Adjustment",
 };
+
+/**
+ * Formats raw AI action and credit activity descriptions into human-readable titles.
+ * Converts technical ledger entries like "agent_chat (bedrock_claude/MEDIUM)" to "Chat with SOL"
+ * and "generate_blog_post (bedrock_claude/MEDIUM)" to "Wrote blog post".
+ */
+export function formatAiActivityDescription(description?: string | null, type?: string | null): string {
+  if (!description || !description.trim()) {
+    return (type && ACTIVITY_LABELS[type]) || "Credits";
+  }
+  const raw = description.trim();
+
+  // Check if it starts with a known technical action mode (with optional "(provider/tier)" suffix)
+  const match = raw.match(/^([a-zA-Z0-9_]+)(?:\s*\([^)]*\))?$/);
+  if (match) {
+    const actionKey = match[1];
+    const known = (AI_ACTION_LABELS as Record<string, string>)[actionKey];
+    if (known) return known;
+    // If it's snake_case or technical identifier without spaces, convert to human title
+    if (actionKey.includes("_")) {
+      const words = actionKey.split("_").filter(Boolean);
+      return words.map((w, i) => (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : w.toLowerCase())).join(" ");
+    }
+  }
+
+  // Handle top-up descriptions like "Top-up purchase (SMALL)" or "Top-up purchase (custom)"
+  const topupMatch = raw.match(/^Top-up purchase\s*\(([^)]+)\)$/i);
+  if (topupMatch) {
+    const pack = topupMatch[1].trim();
+    if (pack.toLowerCase() === "custom" || pack.toLowerCase() === "credits") {
+      return "Credit top-up";
+    }
+    return `Credit top-up (${pack})`;
+  }
+
+  // If already a nice natural description (e.g. "Monthly Pro allowance", "Credits you bought"), keep it
+  return raw;
+}

@@ -138,6 +138,23 @@ describe("Paystack plan billing (mocked Paystack)", () => {
     await handlePaystackBillingEvent({ event: "charge.success", data: { status: "success", reference: "top1", amount: 3_000_000, currency: "NGN", customer: { email: "ada@example.com" }, metadata: { kind: "plexo_topup", plexoUserId: "u1", pack: "SMALL", region: "NG" } } });
     expect(db.topups[0][1]).toBe(20_000); // NGN 30,000 at 1,500 per 1,000
   });
+
+  it("a custom top-up grants credits for arbitrary amounts (e.g. ₦1,000 gives 667 credits)", async () => {
+    db.topups.length = 0;
+    await handlePaystackBillingEvent({
+      event: "charge.success",
+      data: {
+        status: "success",
+        reference: "top_custom",
+        amount: 100_000, // ₦1,000
+        currency: "NGN",
+        customer: { email: "ada@example.com" },
+        metadata: { kind: "plexo_topup", plexoUserId: "u1", pack: "custom", credits: 667, amountMinor: 100000, region: "NG" },
+      },
+    });
+    expect(db.topups[0][1]).toBe(667);
+    expect(db.topups[0][3]).toBe("Top-up purchase (667 credits)");
+  });
 });
 
 describe("pre-renewal webhook: invoice.create moves the subscriber to a changed price", () => {

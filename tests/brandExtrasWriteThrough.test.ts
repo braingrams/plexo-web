@@ -81,7 +81,7 @@ describe("sending token changes to Strata", () => {
     const d = deps();
     const r = await sendTokensToStrata({ ...who, request }, d);
     expect(r).toMatchObject({ state: "in-strata", changed: ["main colour"] });
-    expect(r.message).toMatch(/Saved in Strata \(main colour\)/);
+    expect(r.message).toMatch(/Your brand is saved \(main colour\)/);
     expect(d.calls).toEqual(["push-tokens", "publish", "clear:tokens", "refresh"]);
   });
   it("doesn't publish or refresh when nothing changed, and passes the plain reasons through", async () => {

@@ -1,3 +1,4 @@
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextRequest, NextResponse } from "next/server";
 import { getTierFeatures } from "@/lib/subscription";
 
@@ -15,9 +16,7 @@ export function resolveHostingTier(
   const allowedTiers = getTierFeatures(plan).deployedAppHostingTiers;
   if (!allowedTiers.includes(tierParam)) {
     return {
-      error: NextResponse.json({
-        error: `Your plan does not include the "${tierParam}" hosting tier. Available on this plan: ${allowedTiers.join(", ")}. Upgrade to access faster hosting options.`,
-      }, { status: 403 }),
+      error: NextResponse.json(planGateBody("PLAN_HOSTING_TIER", `Your plan does not include the "${tierParam}" hosting tier. Available on this plan: ${allowedTiers.join(", ")}. Upgrade to access faster hosting options.`, "PRO"), { status: 403 }),
     };
   }
   return { hostingTier: tierParam };

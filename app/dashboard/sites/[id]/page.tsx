@@ -3,11 +3,13 @@ import { AppTab } from "../../_v3/hub/AppTab";
 import { PagesTab } from "../../_v3/hub/PagesTab";
 import { ProductsTab } from "../../_v3/hub/ProductsTab";
 import { OrdersTab } from "../../_v3/hub/OrdersTab";
+import { ShopArea } from "../../_v3/hub/shop/ShopArea";
 import { AddressTab } from "../../_v3/hub/AddressTab";
 import { BlogTab } from "../../_v3/hub/BlogTab";
 import { CourseTab } from "../../_v3/hub/CourseTab";
 import { BrandTab, type HubBrand } from "../../_v3/hub/BrandTab";
 import { VisitsTab } from "../../_v3/hub/VisitsTab";
+import { HealthTab } from "../../_v3/hub/HealthTab";
 import { SettingsTab } from "../../_v3/hub/SettingsTab";
 import { AddMoreCards } from "../../_v3/hub/AddMore";
 import { AdvancedArea } from "../../_v3/hub/advanced/AdvancedArea";
@@ -17,6 +19,8 @@ import { loadAdvancedData, loadServerPlan } from "@/lib/dashboardV3/hubAdvancedD
 import { loadHubPages, loadHubProducts, loadHubSite, loadHubVisits, requireHubContext } from "@/lib/dashboardV3/hubData";
 
 export const dynamic = "force-dynamic";
+
+const examplePages = (pages: { name: string; path: string }[]) => pages.map((p) => ({ name: p.name, path: p.path }));
 
 /** One place per site: only the tabs it uses, and "Add more to your site" for the rest. */
 export default async function SiteHubPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
@@ -33,10 +37,13 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       content = site.app ? <AppTab siteId={id} siteName={site.name} info={site.app} experience={ctx.experience} /> : null;
       break;
     case "products":
-      content = <ProductsTab siteId={id} products={await loadHubProducts(id)} currency={site.currency} experience={ctx.experience} startWithService={query.new === "service"} />;
+      content = <ProductsTab siteId={id} products={await loadHubProducts(id)} currency={site.currency} experience={ctx.experience} startNew={query.new === "service" ? "service" : query.new === "product" ? "product" : undefined} />;
       break;
     case "orders":
       content = <OrdersTab siteId={id} currency={site.currency} />;
+      break;
+    case "shop":
+      content = <ShopArea siteId={id} section={Array.isArray(query.section) ? query.section[0] : query.section} part={Array.isArray(query.part) ? query.part[0] : query.part} searchParams={query} />;
       break;
     case "blog":
       content = <BlogTab siteId={id} experience={ctx.experience} />;
@@ -51,11 +58,21 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       content = <AddressTab siteId={id} siteName={site.name} experience={ctx.experience} />;
       break;
     case "visits":
-      content = <VisitsTab visits={await loadHubVisits(id)} />;
+      content = <VisitsTab visits={await loadHubVisits(id)} siteId={id} live={site.status === "live"} gaResult={Array.isArray(query.ga) ? query.ga[0] : query.ga} />;
       break;
-    case "settings":
-      content = <SettingsTab site={site} features={site.features} experience={ctx.experience} />;
+    case "health":
+      content = <HealthTab siteId={id} live={site.status === "live"} editHref={site.editHref} />;
       break;
+    case "settings": {
+      const pages = await loadHubPages(ctx.organizationId, id).catch(() => []);
+      content = (
+        <>
+          <SettingsTab site={site} features={site.features} experience={ctx.experience} />
+          <AddMoreCards siteId={id} siteName={site.name} features={site.features} pages={examplePages(pages)} />
+        </>
+      );
+      break;
+    }
     case "advanced": {
       // Pros only (hubTabs never offers it otherwise): the old per-site tools, shown here in place.
       const plan = await loadServerPlan(ctx.organizationId);
@@ -68,8 +85,8 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       const pages = await loadHubPages(ctx.organizationId, id);
       content = (
         <>
-          <PagesTab site={site} pages={pages} experience={ctx.experience} />
-          <AddMoreCards siteId={id} siteName={site.name} features={site.features} />
+          <PagesTab site={site} pages={pages} experience={ctx.experience} plan={ctx.plan} />
+          <AddMoreCards siteId={id} siteName={site.name} features={site.features} pages={examplePages(pages)} />
         </>
       );
     }

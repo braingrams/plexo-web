@@ -65,7 +65,7 @@ vi.mock("@/lib/db/contentEntities", async (orig) => ({
     query: { primary: () => ({ go: async () => ({ data: [...h.revisions].reverse() }) }) },
     remove: () => ({ go: async () => ({}) }),
   },
-  SiteLayout: { get: () => ({ go: async () => ({ data: null }) }), scan: { where: () => ({ go: async () => ({ data: [] }) }) } },
+  SiteLayout: { get: () => ({ go: async () => ({ data: null }) }), create: () => ({ go: async () => ({ data: {} }) }), patch: () => ({ set: () => ({ go: async () => ({ data: {} }) }) }), scan: { where: () => ({ go: async () => ({ data: [] }) }) } },
   BlogSite: {
     get: ({ templateId }: { templateId: string }) => ({ go: async () => ({ data: h.blogSites.get(templateId) ?? null }) }),
     create: (row: Record<string, any>) => ({ go: async () => { h.blogSites.set(row.templateId, row); return { data: row }; } }),
@@ -127,7 +127,9 @@ describe("page_create_from_template", () => {
   it("creates a complete, unpublished V2 site from a page template", async () => {
     const r = await call("page_create_from_template", { name: "Kalycare", templateId: "home" });
     expect(r).toMatchObject({ success: true, designFormat: "v2", publishedUrl: null, route: "/" });
-    expect(r.sections.map((s: any) => s.kind)).toEqual(expect.arrayContaining(["header", "hero", "footer"]));
+    // New sites use the shared site header and footer, so the page itself holds only its own sections.
+    expect(r.sections.map((s: any) => s.kind)).toContain("hero");
+    expect(r.sections.map((s: any) => s.kind)).not.toContain("header");
     const row = h.templates.get(r.templateId)!;
     expect(row.designFormat).toBe("v2");
     expect(row.designJson.format).toBe("plexo-v2@1");
@@ -169,7 +171,7 @@ describe("page_create_from_template", () => {
     expect(h.templates.get(about.templateId)).toMatchObject({ parentId: home.templateId, designFormat: "v2" });
     for (let i = 0; i < 4; i++) await call("page_create_from_template", { name: `S${i}` }, FREE);
     const before = h.templates.size;
-    await expect(call("page_create_from_template", { name: "One too many" }, FREE)).rejects.toThrow(/limit of 5 sites/);
+    await expect(call("page_create_from_template", { name: "One too many" }, FREE)).rejects.toThrow(/plan holds 5 sites/);
     expect(h.templates.size).toBe(before);
   });
 
@@ -446,7 +448,7 @@ describe("TEMPLATES_V2_NEW on: the old create/publish tools produce V2", () => {
 
   it("the plan's site limit still applies, in plain words", async () => {
     for (let i = 0; i < 5; i++) await call("create_landing_page", { name: `S${i}` }, FREE);
-    await expect(call("create_landing_page", { name: "Sixth" }, FREE)).rejects.toThrow(/limit of 5 sites/);
+    await expect(call("create_landing_page", { name: "Sixth" }, FREE)).rejects.toThrow(/plan holds 5 sites/);
   });
 
   it("a malformed classic design is still refused with the old schema message", async () => {

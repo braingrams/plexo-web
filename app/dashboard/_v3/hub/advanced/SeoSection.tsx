@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Globe, ImagePlus, FileText } from "lucide-react";
 import { Badge, Button, Card, CardHeader, Input, Skeleton, Textarea, useToast } from "../../ui";
@@ -127,7 +128,7 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
                         <Button variant="secondary" type="button" loading={uploading === "icon"} onClick={() => iconRef.current?.click()}>{shownFavicon ? "Change icon" : "Add an icon"}</Button>
                       </div>
                     ) : null}
-                    {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+                    {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
                     <div><Button type="submit" loading={busy} disabled={!dirty}>Save</Button></div>
                   </form>
                 )

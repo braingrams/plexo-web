@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavAction } from "../shell/useNavAction";
 import { SlidersHorizontal } from "lucide-react";
 import { Button, Card, useToast } from "../ui";
 import type { Experience } from "@/lib/dashboardV3/nav";
@@ -11,7 +11,7 @@ import { NUDGE_KEY, readNudgeState, shouldShowProNudge } from "@/lib/dashboardV3
 export function ProViewNudge({ experience, demo }: { experience: Experience; demo?: boolean }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
-  const router = useRouter();
+  const nav = useNavAction();
   const toast = useToast();
 
   useEffect(() => {
@@ -43,7 +43,7 @@ export function ProViewNudge({ experience, demo }: { experience: Experience; dem
     // They took the offer, so the card never returns, even after they come back to the simple view.
     try { localStorage.setItem(NUDGE_KEY, JSON.stringify({ ...readNudgeState(localStorage.getItem(NUDGE_KEY)), tried: true })); } catch { /* fine */ }
     toast.show({ tone: "success", title: "You're on the full view", description: "Switch back any time from your profile picture." });
-    router.refresh();
+    nav.refresh();
   };
 
   return (
@@ -57,7 +57,7 @@ export function ProViewNudge({ experience, demo }: { experience: Experience; dem
       </div>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
         <Button variant="ghost" onClick={later} disabled={busy}>Not now</Button>
-        <Button loading={busy} onClick={() => void tryIt()}>Try the full view</Button>
+        <Button loading={busy || nav.pending} onClick={() => void tryIt()}>Try the full view</Button>
       </div>
     </Card>
   );

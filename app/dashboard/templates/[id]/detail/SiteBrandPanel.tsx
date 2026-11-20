@@ -52,11 +52,11 @@ export function timeAgo(iso: string | null, now = Date.now()): string {
 
 /** The one line that says what happened, e.g. "Updated 2 min ago from Strata". */
 export function brandHeadline(state: BrandState, now = Date.now()): { text: string; tone: "ok" | "warn" | "bad" } {
-  if (state.status === "needs-reconnect" || state.lastResultKind === "reconnect") return { text: "Plexo lost access to this brand in Strata. Link it again to keep it up to date.", tone: "bad" };
-  if (state.lastResultKind === "needs-review") return { text: state.lastResult ?? "Strata has changes that need a look before they go live.", tone: "warn" };
-  if (state.lastResultKind === "error") return { text: state.lastResult ?? "Couldn't reach Strata just now. Plexo will try again shortly.", tone: "warn" };
+  if (state.status === "needs-reconnect" || state.lastResultKind === "reconnect") return { text: "Plexo lost access to this brand. Link it again to keep it up to date.", tone: "bad" };
+  if (state.lastResultKind === "needs-review") return { text: state.lastResult ?? "Your brand has changes that need a look before they go live.", tone: "warn" };
+  if (state.lastResultKind === "error") return { text: state.lastResult ?? "Couldn't reach your brand just now. Plexo will try again shortly.", tone: "warn" };
   const when = timeAgo(state.updatedAt, now);
-  return { text: when ? `Updated ${when} from Strata${state.lastSource === "webhook" ? " when it was published" : ""}.` : "Your brand from Strata is on your site.", tone: "ok" };
+  return { text: when ? `Your brand was updated ${when}.` : "Your brand is on your site.", tone: "ok" };
 }
 
 export function SiteBrandPanel({ templateId, sourceType }: { templateId: string; sourceType: string }) {
@@ -138,7 +138,7 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "0.9rem" }}>
         <div>
           <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)", margin: "0 0 0.3rem" }}>Brand</h2>
-          <p style={MUTED}>Use your brand from Strata on every page of this site. When you publish a change in Strata, your site changes too.</p>
+          <p style={MUTED}>Use your brand on every page of this site. When you change your brand, your site changes too.</p>
         </div>
         {state?.linked && !picking && (
           <button type="button" style={BTN} onClick={startPicking} disabled={busy !== null}>
@@ -152,16 +152,16 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
       {state && !state.linked && !picking && (
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
           <button type="button" style={PRIMARY} onClick={startPicking} disabled={busy !== null}>
-            {busy === "pick" ? "Opening…" : connected ? "Choose a brand" : "Connect Strata"}
+            {busy === "pick" ? "Opening…" : connected ? "Choose a brand" : "Connect your brand"}
           </button>
-          <span style={MUTED}>{connected ? "Pick the Strata project with your colours, fonts and buttons." : "Sign in with your Charisol account to pick your brand."}</span>
+          <span style={MUTED}>{connected ? "Pick the brand with your colours, fonts and buttons." : "Sign in with your Charisol account to pick your brand."}</span>
         </div>
       )}
 
       {picking && projects && (
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
           {projects.length === 0 ? (
-            <p style={MUTED}>You don&apos;t have any brands in Strata yet. Create one in Strata, then come back.</p>
+            <p style={MUTED}>You don&apos;t have any saved brands yet. Create one from your colours, then come back.</p>
           ) : (
             <>
               <select value={choice} onChange={(e) => setChoice(e.target.value)} style={{ ...BTN, minWidth: 220, fontWeight: 600 }} aria-label="Brand">
@@ -185,17 +185,17 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
           <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 6%, transparent)", marginBottom: "0.4rem" }}>
             <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: 999, background: toneColor, flexShrink: 0 }} />
             <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>{state.projectName ?? "Your Strata brand"}</div>
+              <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--plx-text, #f0f2ff)" }}>{state.projectName ?? "Your brand"}</div>
               <div style={{ ...MUTED, color: headline.tone === "ok" ? "color-mix(in srgb, var(--plx-text, rgb(240 242 255)) 55%, transparent)" : toneColor }}>{headline.text}</div>
             </div>
           </div>
 
           <div style={ROW}>
             <div>
-              <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>Keep in sync with Strata</div>
-              <p style={MUTED}>{state.autoSync ? "Changes you publish in Strata appear on your site within a couple of minutes." : "Your site keeps its current brand until you turn this back on."}</p>
+              <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>Keep my website up to date</div>
+              <p style={MUTED}>{state.autoSync ? "Changes to your brand appear on your site within a couple of minutes." : "Your site keeps its current brand until you turn this back on."}</p>
             </div>
-            <Toggle checked={state.autoSync} disabled={busy !== null || state.status !== "active"} label="Keep in sync with Strata" onChange={(on) => run("sync", () => call({ method: "PATCH", body: { autoSync: on } }))} />
+            <Toggle checked={state.autoSync} disabled={busy !== null || state.status !== "active"} label="Keep my website up to date" onChange={(on) => run("sync", () => call({ method: "PATCH", body: { autoSync: on } }))} />
           </div>
 
           {isRaw && (
@@ -220,7 +220,7 @@ export function SiteBrandPanel({ templateId, sourceType }: { templateId: string;
 
           <div style={{ ...ROW, paddingBottom: 0 }}>
             <button type="button" style={BTN} disabled={busy !== null} onClick={() => (state.status === "needs-reconnect" ? startPicking() : run("now", () => call({ method: "PATCH", body: { syncNow: true } })))}>
-              {busy === "now" ? "Checking…" : state.status === "needs-reconnect" ? "Link again" : "Check Strata now"}
+              {busy === "now" ? "Checking…" : state.status === "needs-reconnect" ? "Link again" : "Refresh my brand"}
             </button>
             <button
               type="button"

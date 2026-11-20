@@ -54,3 +54,15 @@ describe("which templates are sites on the new dashboard", () => {
     expect(summarizeSites([...many, ...notSites], [])).toHaveLength(40);
   });
 });
+
+import { siteKindOf } from "@/lib/dashboardV3/sites";
+import { hubKindLabel, NO_FEATURES } from "@/lib/dashboardV3/hubTabs";
+describe("migrated sites are labelled consistently", () => {
+  it("says WordPress migrated site, not Uploaded page or Blog", () => {
+    expect(siteKindOf({ sourceType: "RAW_UPLOAD", migratedFrom: "https://x.org" })).toBe("WordPress migrated site");
+    expect(siteKindOf({ hasBlog: true, migratedFrom: "https://x.org" })).toBe("WordPress migrated site");
+    expect(siteKindOf({ sourceType: "RAW_UPLOAD" })).toBe("Uploaded page");
+    expect(hubKindLabel({ ...NO_FEATURES, blog: true, ownCode: true, migrated: true })).toBe("WordPress migrated site");
+    expect(hubKindLabel({ ...NO_FEATURES, blog: true })).toBe("Blog");
+  });
+});

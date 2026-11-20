@@ -4,6 +4,7 @@ import "server-only";
  * tasks.ts) and the numbers on the live dashboard. Every read is wrapped so a hiccup in one
  * source shows a plain empty state instead of breaking the page.
  */
+import { senderOf, type ActivityKind } from "./seeAllLinks";
 import { Template } from "@/lib/db/contentEntities";
 import { BlogPost, LmsEnrollment, LmsPage } from "@/lib/db/contentEntities";
 import { CommerceOrder, CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
@@ -82,6 +83,8 @@ export type SiteStats = {
   activity: OrderRow[];
   activityTitle: string;
   activityEmpty: string;
+  /** What the card lists, so its "See all" opens the real list (lib/dashboardV3/seeAllLinks.ts). */
+  activityKind?: ActivityKind;
   /** Visits for each of the last 7 days, oldest first (for the little trend chart). */
   visitsByDay?: number[];
 };
@@ -98,6 +101,7 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
   let activity: OrderRow[] = [];
   let activityTitle = "Latest activity";
   let activityEmpty = "Nothing yet. Share your link and the first visitors will show up here.";
+  let activityKind: ActivityKind = "none";
 
   if (variant === "store") {
     const [orders, settings] = await Promise.all([
@@ -110,6 +114,7 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
     const month = paid.filter((o) => Date.parse(o.createdAt ?? "") >= monthAgo);
     stats.push({ id: "orders", label: "Orders", value: num(orders.length), hint: `${num(paid.length)} paid` });
     stats.push({ id: "sales", label: "Sales this month", value: formatMoney(month.reduce((s, o) => s + o.amountMinor, 0), currency) });
+    activityKind = "orders";
     activityTitle = "Latest orders";
     activityEmpty = "No orders yet. Share your store link with a few friends to get the first one.";
     activity = [...orders]
@@ -119,6 +124,7 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
   } else if (variant === "course") {
     const enrolled = await safe("students", async () => (await LmsEnrollment.query.primary({ templateId: id }).go({ pages: "all", attributes: ["email", "enrolledAt"] })).data, []);
     stats.push({ id: "students", label: "Students", value: num(enrolled.length) });
+    activityKind = "students";
     activityTitle = "New students";
     activityEmpty = "No students yet. Share your course link to get the first one.";
     activity = [...enrolled].sort((a, b) => (b.enrolledAt ?? "").localeCompare(a.enrolledAt ?? "")).slice(0, 5).map((e) => ({ id: e.email, who: e.email, amount: "", when: e.enrolledAt ?? "", paid: true }));
@@ -127,10 +133,12 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
     stats.push({ id: "posts", label: "Posts published", value: num(posts.filter((p) => p.status === "PUBLISHED").length) });
     activityEmpty = "Write a post and share it. Readers show up here.";
   } else if (variant !== "app") {
-    const subs = await safe("messages", async () => (await FormSubmission.query.primary({ templateId: id }).go({ pages: "all", attributes: ["id", "createdAt"] })).data, []);
+    const subs = await safe("messages", async () => (await FormSubmission.query.primary({ templateId: id }).go({ pages: "all", attributes: ["id", "createdAt", "fields", "formName"] })).data, []);
     stats.push({ id: "messages", label: variant === "link" ? "Link taps" : "Messages and sign-ups", value: num(subs.length) });
+    activityKind = "messages";
     activityTitle = "Messages and sign-ups";
     activityEmpty = "Nothing yet. When someone fills in a form on your site, it appears here.";
+    activity = [...subs].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 5).map((m) => ({ id: m.id, who: senderOf(m.fields, m.formName), amount: "", when: m.createdAt ?? "", paid: true }));
   }
-  return { stats, activity, activityTitle, activityEmpty, visitsByDay: bucketVisitsByDay(visitTimes) };
+  return { stats, activity, activityTitle, activityEmpty, activityKind, visitsByDay: bucketVisitsByDay(visitTimes) };
 }

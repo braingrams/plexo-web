@@ -157,7 +157,7 @@ describe("turning it on and off", () => {
     await expect(enableAutoUpdate({ appId: "app1", appName: "Café", userId: "u1" })).rejects.toThrow(/Link this site/);
     state.system = linked();
     state.userToken = null;
-    await expect(enableAutoUpdate({ appId: "app1", appName: "Café", userId: "u1" })).rejects.toThrow(/Connect Strata/);
+    await expect(enableAutoUpdate({ appId: "app1", appName: "Café", userId: "u1" })).rejects.toThrow(/Connect your brand/);
     expect(state.rows.size).toBe(0);
   });
 

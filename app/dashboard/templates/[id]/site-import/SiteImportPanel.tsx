@@ -1,5 +1,7 @@
 "use client";
 
+import { GateOrError } from "../../../_components/UpgradePrompt";
+import { rememberPlanGate } from "@/lib/plan/planGate";
 import { useEffect, useRef, useState } from "react";
 
 type Phase = "PENDING" | "DETECTING" | "DISCOVERING" | "FETCHING" | "REWRITING" | "COMPLETED" | "PAUSED_ERROR" | "FAILED" | "CANCELLED";
@@ -234,6 +236,7 @@ export function SiteImportPanel({
       });
       const data = await res.json();
       if (!res.ok) {
+        rememberPlanGate(data);
         setError(data.error ?? "Couldn't reach that site.");
         return;
       }
@@ -352,7 +355,7 @@ export function SiteImportPanel({
             </button>
             <button type="button" onClick={onClose} style={smallBtn}>Cancel</button>
           </div>
-          {error && <p style={{ color: "var(--ed-danger)", fontSize: "0.75rem" }}>{error}</p>}
+          {error && <GateOrError error={error}><p style={{ color: "var(--ed-danger)", fontSize: "0.75rem" }}>{error}</p></GateOrError>}
         </>
       )}
 
@@ -391,7 +394,7 @@ export function SiteImportPanel({
             </label>
           </div>
 
-          {error && <p style={{ color: "var(--ed-danger)", fontSize: "0.75rem" }}>{error}</p>}
+          {error && <GateOrError error={error}><p style={{ color: "var(--ed-danger)", fontSize: "0.75rem" }}>{error}</p></GateOrError>}
           <div style={{ display: "flex", gap: "0.5rem" }}>
             <button type="button" onClick={() => void handleStart()} disabled={starting || !ownershipAttested} style={{ ...smallBtnPrimary, opacity: !ownershipAttested ? 0.5 : 1 }}>
               {starting ? "Starting…" : "Start import"}

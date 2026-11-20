@@ -1,5 +1,7 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
+import { safeReturnTo } from "@/lib/plan/planGate";
 import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "../../_components/PageHeader";
 import { CustomSelect } from "../../../_components/CustomSelect";
@@ -45,6 +47,9 @@ export function AiSettingsClient({ initialApiKeys, canUseHostManagedAi }: { init
   const [activeKeyId, setActiveKeyId] = useState<string | null>(
     initialApiKeys.find((item) => item.isActive)?.id ?? initialApiKeys[0]?.id ?? null,
   );
+  const [showHostUpgrade, setShowHostUpgrade] = useState(false);
+  const [backTo, setBackTo] = useState<string | null>(null);
+  useEffect(() => setBackTo(new URLSearchParams(window.location.search).get("returnTo")), []);
   const activeKey = useMemo(() => apiKeys.find((item) => item.id === activeKeyId) ?? null, [apiKeys, activeKeyId]);
 
   const [draftUseAi, setDraftUseAi] = useState<boolean>(activeKey?.useAi ?? false);
@@ -135,6 +140,9 @@ export function AiSettingsClient({ initialApiKeys, canUseHostManagedAi }: { init
 
   return (
     <>
+      {backTo && safeReturnTo(backTo, "") ? (
+        <a href={safeReturnTo(backTo)} style={{ display: "inline-block", marginBottom: "0.75rem", fontSize: "0.82rem", color: "var(--plx-link, var(--brand))", textDecoration: "none" }}>← Back to what you were doing</a>
+      ) : null}
       <PageHeader eyebrow="Developer" title="SOL (AI)" subtitle="SOL is Plexo's AI. Choose whether it runs on Plexo's AI (paid from your AI credits) or your own AI key." />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
@@ -203,13 +211,15 @@ export function AiSettingsClient({ initialApiKeys, canUseHostManagedAi }: { init
                           {ACCESS_MODE_OPTIONS.map((option) => {
                             const active = draftAccessMode === option.value;
                             const requiresUpgrade = option.value === "HOST_MANAGED" && !canUseHostManagedAi;
-                            const isBtnDisabled = !activeKey.isActive || requiresUpgrade;
+                            const isBtnDisabled = !activeKey.isActive;
                             return (
                               <button
                                 key={option.value}
                                 type="button"
                                 disabled={isBtnDisabled}
                                 onClick={() => {
+                                  // A mode the plan doesn't include explains itself (and offers the upgrade) instead of doing nothing.
+                                  if (requiresUpgrade) return setShowHostUpgrade((v) => !v);
                                   setDraftAccessMode(option.value);
                                   setDraftDirty(true);
                                   setApiKeys((current) => current.map((item) => (item.id === activeKey.id ? { ...item, aiAccessMode: option.value } : item)));
@@ -237,10 +247,10 @@ export function AiSettingsClient({ initialApiKeys, canUseHostManagedAi }: { init
                             );
                           })}
                         </div>
-                        {draftAccessMode === "HOST_MANAGED" && !canUseHostManagedAi && (
-                          <p style={{ fontSize: "0.75rem", color: "var(--plx-muted, rgba(240,242,255,0.4))", marginTop: "0.5rem" }}>
-                            This key is set to let your own app approve and pay for AI, which is part of the Pro plan. AI requests through it are paused until you upgrade to Pro on the Subscription page.
-                          </p>
+                        {(showHostUpgrade || (draftAccessMode === "HOST_MANAGED" && !canUseHostManagedAi)) && !canUseHostManagedAi && (
+                          <div style={{ marginTop: "0.5rem" }}>
+                            <UpgradePrompt tone="info" requiredPlan="PRO" message={draftAccessMode === "HOST_MANAGED" ? "This key lets your own app approve and pay for AI, which is part of the Pro plan. AI requests through it are paused until you upgrade." : "Letting your own app approve and pay for AI is part of the Pro plan."} />
+                          </div>
                         )}
                       </div>
 

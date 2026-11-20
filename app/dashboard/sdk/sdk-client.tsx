@@ -1,5 +1,6 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
 import Link from "next/link";
 import { useState } from "react";
 import { PageHeader } from "../_components/PageHeader";
@@ -258,9 +259,9 @@ const text = compileToPlainText(template.designJson);
         </div>
 
         {!canSelfManagePublishing && (
-          <p style={{ fontSize: "0.75rem", color: "rgba(240,242,255,0.4)", marginTop: "1rem" }}>
-            Upgrade to Pro on the Subscription page to let your app publish pages without a limit.
-          </p>
+          <div style={{ marginTop: "1rem" }}>
+            <UpgradePrompt tone="info" requiredPlan="PRO" message="Letting your app publish pages without a limit is part of the Pro plan." />
+          </div>
         )}
         {publishSettingError && (
           <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{publishSettingError}</p>

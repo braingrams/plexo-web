@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { GitBranch } from "lucide-react";
 import { Button, ButtonLink, Card, CardHeader, Input, Select, Skeleton, useToast } from "../ui";
 import { errMsg, hubApi } from "./hubApi";
+import { GateOrError } from "../../_components/UpgradePrompt";
 
 type Repo = { fullName: string; defaultBranch: string; empty: boolean };
 type Status = { configured: boolean; lockedRepo?: string | null; link: { installationId: number; repo: string; branch: string; status: string } | null; installations: { id: number; account: string }[]; installUrl: string | null; repos?: Repo[] };
@@ -110,12 +111,12 @@ export function AppGitHub({ siteId, git, onChanged, onBuildStarted }: { siteId: 
               <Input label="Branch" value={branch} onChange={(e) => setBranch(e.target.value)} placeholder="main" />
             </div>
           ) : <p className="plx-small">No projects are shared with Plexo on this GitHub account yet. Share one on GitHub, then come back here.</p>}
-          {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+          <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError>
           <p className="plx-small">Connecting replaces your app&apos;s files with that project&apos;s files, then builds it.</p>
           <div><Button loading={busy} disabled={!repo || !branch.trim() || installation === null} onClick={() => installation !== null && connect(installation, repo, branch.trim())}>Connect and build</Button></div>
         </div>
       )}
-      {linked && error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+      {linked ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
     </Card>
   );
 }

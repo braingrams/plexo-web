@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeftRight,
   CircleHelp,
@@ -18,7 +18,7 @@ import {
   LifeBuoy,
   LogOut,
   Mail,
-  MessageCircle,
+  Package,
   PanelLeftClose,
   PanelLeftOpen,
   Search,
@@ -28,21 +28,25 @@ import {
   UserRound,
 } from "lucide-react";
 import { activeNavId, type Experience, type NavIcon, type V3NavItem } from "@/lib/dashboardV3/nav";
-import { parseSidebarChoice, sidebarModeForPath, sidebarViewFor, type SidebarView } from "@/lib/dashboardV3/sidebarMode";
+import { EDITOR_SIDEBAR_KEY, PAGES_SIDEBAR_KEY, foldedFromStorage, parseSidebarChoice, shellFrameFor, sidebarModeForPath, sidebarViewFor, type SidebarView } from "@/lib/dashboardV3/sidebarMode";
 import type { SiteSummary } from "@/lib/dashboardV3/sites";
 import type { TourContext, TourState, TourStep } from "@/lib/dashboardV3/tour";
 import type { OrgBranding } from "../../dashboard-shell";
 import { switchLabel, useVersionSwitch } from "../../_versions/VersionUi";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { SolSidebarProvider } from "../../sol/_components/SolSidebarContext";
 import { SolChatsColumn } from "../sol/SolChatsColumn";
 import { PlexoLogo } from "../brand/PlexoLogo";
 import { ThemeSwitch } from "../theme/ThemeContext";
 import { TourProvider, persistTourState, useTour } from "../tour/TourProvider";
 import { Avatar } from "../ui/Avatar";
+import { useToast } from "../ui/Toast";
 import { Modal } from "../ui/Modal";
 import { SegmentedControl } from "../ui/SegmentedControl";
 import { MenuPanel, useMenu } from "./Menu";
 import { NavProgress } from "./NavProgress";
+import { useNavAction } from "./useNavAction";
+import { startNavProgress } from "./NavProgress";
 import { LinkPending } from "../ui/LinkPending";
 import { SiteSwitcher } from "./SiteSwitcher";
 import { FloatingPanel } from "../ui/FloatingPanel";
@@ -54,8 +58,9 @@ const ICONS: Record<NavIcon, React.ComponentType<{ size?: number; "aria-hidden"?
   home: House,
   sites: LayoutGrid,
   orders: ShoppingBag,
+  products: Package,
   learners: GraduationCap,
-  sol: MessageCircle,
+  sol: SolGlyph,
   emails: Mail,
   domains: Globe,
   developers: CodeXml,
@@ -90,20 +95,14 @@ export type V3ShellProps = {
   children: React.ReactNode;
 };
 
-/** Full-screen surfaces (the page editor, an app's editor) bring their own chrome. SOL does not: it lives inside the shell like any other place. */
-function isChromeless(pathname: string): boolean {
-  const editor = pathname.match(/^\/dashboard\/templates\/([^/]+)$/);
-  if (editor && editor[1] !== "upload") return true;
-  return /^\/dashboard\/apps\/[^/]+$/.test(pathname);
-}
-
 /**
  * The v3 dashboard frame: sidebar on desktop, a top bar with Ask SOL / appearance / help /
  * account, and a bottom tab bar on phones. Beginners get the one-site switcher; the menu is
  * whatever lib/dashboardV3/nav.ts decided for this person.
  */
 export function V3Shell(props: V3ShellProps) {
-  const tourContext: TourContext = { siteId: props.currentSiteId ?? props.sites[0]?.id ?? null, experience: props.experience };
+  const tourSite = props.sites.find((x) => x.id === props.currentSiteId) ?? props.sites[0] ?? null;
+  const tourContext: TourContext = useMemo(() => ({ siteId: tourSite?.id ?? null, siteKind: tourSite?.kind ?? null, experience: props.experience }), [tourSite?.id, tourSite?.kind, props.experience]);
   return (
     <TourProvider
       initialState={props.tourState}
@@ -127,21 +126,24 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
   const [moreOpen, setMoreOpen] = useState(false);
 
   // The sidebar can fold to icons. It remembers the choice, and on a full-width editor it starts folded to leave room.
-  const editorRoute = /^\/dashboard\/emails\/[^/]+$/.test(pathname);
-  const [folded, setFolded] = useState<boolean | null>(null);
+  const frame = shellFrameFor(pathname);
+  const editorRoute = /^\/dashboard\/emails\/[^/]+$/.test(pathname) || frame === "editor";
+  const foldKey = frame === "editor" ? EDITOR_SIDEBAR_KEY : PAGES_SIDEBAR_KEY;
+  const [folded, setFolded] = useState<boolean | null>(frame === "editor" ? true : null);
   useEffect(() => {
+    let stored: string | null = null;
     try {
-      const v = localStorage.getItem("plx-sidebar-folded");
-      if (v === "1" || v === "0") setFolded(v === "1");
+      stored = localStorage.getItem(foldKey);
     } catch {
       /* private mode: just the default */
     }
-  }, []);
+    setFolded(foldedFromStorage(frame, stored));
+  }, [foldKey, frame]);
   const toggleFold = () => {
     const next = !collapsed;
     setFolded(next);
     try {
-      localStorage.setItem("plx-sidebar-folded", next ? "1" : "0");
+      localStorage.setItem(foldKey, next ? "1" : "0");
     } catch {
       /* fine */
     }
@@ -174,7 +176,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
     }
   };
 
-  if (isChromeless(pathname)) return <div className="plx-shell" data-chrome="none"><NavProgress />{children}</div>;
+  if (frame === "none") return <div className="plx-shell" data-chrome="none"><NavProgress />{children}</div>;
 
   const brand = <Brand orgBranding={orgBranding} />;
   const switcher = beginner ? <SiteSwitcher sites={sites} currentSiteId={currentSiteId} onSelect={onSiteSelect} /> : null;
@@ -186,7 +188,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
   const moreItems = nav.filter((n) => !tabs.includes(n));
 
   return (
-    <div className="plx-shell" data-collapsed={collapsed ? "" : undefined}>
+    <div className="plx-shell" data-collapsed={collapsed ? "" : undefined} data-frame={frame === "editor" ? "editor" : undefined}>
       <NavProgress />
       <aside className="plx-sidebar" aria-label={view === "chats" ? "Your conversations" : "Main"} data-mode={mode} data-view={view}>
         <div className="plx-sidebar__top">
@@ -206,7 +208,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
             value={view}
             onChange={pickView}
             options={[
-              { value: "chats", label: "Chats", icon: <MessageCircle size={17} aria-hidden /> },
+              { value: "chats", label: "Chats", icon: <SolGlyph size={17} /> },
               { value: "menu", label: "Menu", icon: <LayoutList size={17} aria-hidden /> },
             ]}
           />
@@ -235,7 +237,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
       </aside>
 
       <div className="plx-main-col">
-        <header className="plx-topbar">
+        {frame === "editor" ? null : <header className="plx-topbar">
           <div className="plx-mobilebar">
             <Link href="/dashboard" className="plx-topbar__logo-sm" aria-label="Home">
               {orgBranding?.logoUrl ? <OrgLogo branding={orgBranding} small /> : <PlexoLogo markOnly height={28} />}
@@ -245,7 +247,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
           <AskSolBox />
           <div className="plx-topbar__right">
             <Link href="/dashboard/sol?new=1" className="plx-iconbtn plx-mobile-only" aria-label="Ask SOL" data-tour="ask-sol">
-              <MessageCircle size={20} aria-hidden />
+              <SolGlyph size={20} />
             </Link>
             <div className="plx-topbar__theme" data-tour="theme-switch">
               <ThemeSwitch compact />
@@ -253,7 +255,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
             <HelpMenu />
             <AccountMenu user={user} experience={experience} persist={persist} onExperienceChange={onExperienceChange} workspaces={workspaces} currentWorkspaceId={currentWorkspaceId} onWorkspaceSwitch={onWorkspaceSwitch} />
           </div>
-        </header>
+        </header>}
         <main id="main" className={pathname.startsWith("/dashboard/sol") || pathname.startsWith("/v3-preview/sol") ? "plx-content plx-content--bleed" : editorRoute ? "plx-content plx-content--editor" : "plx-content"}>
           {children}
         </main>
@@ -393,14 +395,14 @@ function HelpMenu() {
             }}
           >
             <Compass size={18} aria-hidden />
-            Take the tour again
+            Tour: replay any part
           </button>
           <Link role="menuitem" className="plx-menu__item" href="/learn" onClick={() => menu.close(false)}>
             <CirclePlay size={18} aria-hidden />
             Watch how-to videos
           </Link>
           <Link role="menuitem" className="plx-menu__item" href="/dashboard/sol?new=1&draft=I%20need%20help%20with%20" onClick={() => menu.close(false)}>
-            <MessageCircle size={18} aria-hidden />
+            <SolGlyph size={18} />
             Ask SOL for help
           </Link>
           <a role="menuitem" className="plx-menu__item" href="mailto:support@plexopages.com">
@@ -418,7 +420,8 @@ function AccountMenu({ user, experience, persist, onExperienceChange, workspaces
   const [wsOpen, setWsOpen] = useState(false);
   const accountBtn = useRef<HTMLElement | null>(null);
   const currentWs = workspaces.find((w) => w.id === currentWorkspaceId) ?? workspaces[0];
-  const router = useRouter();
+  const nav = useNavAction();
+  const toast = useToast();
   const target: Experience = experience === "pro" ? "beginner" : "pro";
   const versions = useVersionSwitch();
 
@@ -426,18 +429,26 @@ function AccountMenu({ user, experience, persist, onExperienceChange, workspaces
     menu.close(false);
     if (onExperienceChange) return onExperienceChange(target);
     if (!persist) return;
-    await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ experience: target }) }).catch(() => {});
-    router.refresh();
+    toast.show({ title: target === "pro" ? "Switching to the pro view…" : "Switching to the guided view…", tone: "info" });
+    await nav.refreshAfter(async () => {
+      const res = await fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ experience: target }) }).catch(() => null);
+      if (!res?.ok) {
+        toast.show({ title: "We couldn't switch just now", description: "Check your internet connection and try again.", tone: "danger" });
+        return false;
+      }
+    });
   };
   const signOut = async () => {
     menu.close(false);
+    toast.show({ title: "Signing you out…", tone: "info" });
+    startNavProgress();
     try {
       const { authClient } = await import("@/lib/auth-client");
       await authClient.signOut();
     } catch (e) {
       console.error("Sign out error:", e);
     }
-    router.push("/auth/login");
+    nav.push("/auth/login");
   };
 
   return (
@@ -490,6 +501,10 @@ function AccountMenu({ user, experience, persist, onExperienceChange, workspaces
             </button>
           ))}
           <div className="plx-menu__sep" />
+          <a role="menuitem" className="plx-menu__item" href="https://plexopages.com" target="_blank" rel="noopener" onClick={() => menu.close(false)}>
+            <Globe size={18} aria-hidden />
+            Plexo website
+          </a>
           <button type="button" role="menuitem" className="plx-menu__item" onClick={signOut}>
             <LogOut size={18} aria-hidden />
             Sign out

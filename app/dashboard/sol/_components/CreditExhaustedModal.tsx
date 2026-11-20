@@ -7,6 +7,7 @@ import { CircleAlert, X } from "lucide-react";
 import { getStripePromise } from "@/lib/stripeClientPromise";
 import type { CreditInfo } from "./types";
 import { useTopupPacks, packLabel } from "../../_components/useTopupPacks";
+import { OutOfCreditsOptions } from "../../_components/sol/OutOfCreditsOptions";
 
 // Credits per pack, and their price in the person's currency, come from the price list (lib/billing/pricing.ts).
 const TOPUP_PACKS: Array<{ pack: "SMALL" | "MEDIUM" | "LARGE"; sub: string }> = [
@@ -161,6 +162,9 @@ export function CreditExhaustedModal({
               ))}
             </div>
 
+            <div style={{ marginTop: "0.9rem" }}>
+              <OutOfCreditsOptions returnTo={returnTo} />
+            </div>
             {error && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{error}</p>}
             {done && <p style={{ fontSize: "0.78rem", color: "#4ade80", marginTop: "0.75rem" }}>{done}</p>}
 

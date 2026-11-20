@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, Code2, CreditCard, Globe, Palette, Plug, Repeat2, User, Users, type LucideIcon } from "lucide-react";
+import { Bell, Code2, CreditCard, Globe, History, Palette, Plug, Repeat2, User, Users, type LucideIcon } from "lucide-react";
 import { SETTINGS_SECTIONS, settingsTabs, type SettingsSection, type SettingsSectionId } from "@/lib/dashboardV3/settingsNav";
 import type { Experience } from "@/lib/dashboardV3/nav";
 import { LinkPending } from "../ui/LinkPending";
 import { ScrollRail } from "../ui/ScrollRail";
 import "./settings.css";
 
-const ICONS: Record<SettingsSectionId, LucideIcon> = { profile: User, plan: CreditCard, team: Users, domains: Globe, brand: Palette, notifications: Bell, connect: Plug, developers: Code2, moving: Repeat2 };
+const ICONS: Record<SettingsSectionId, LucideIcon> = { profile: User, plan: CreditCard, team: Users, domains: Globe, brand: Palette, notifications: Bell, connect: Plug, developers: Code2, moving: Repeat2, migration: History };
 
 /**
  * The Settings frame: "Settings" and ONE row of tabs (every section visible, scrolls sideways on

@@ -150,6 +150,11 @@ const VISUAL_PAGE_TOOL_LABELS: Record<string, { infinitive: string; past: string
   page_publish: { infinitive: "publish", past: "published", noun: "page" },
   blog_layout_describe: { infinitive: "look at", past: "looked at", noun: "blog layout" },
   blog_layout_edit: { infinitive: "edit", past: "edited", noun: "blog layout" },
+  site_layout_describe: { infinitive: "look at", past: "looked at", noun: "site header and footer" },
+  site_layout_edit: { infinitive: "edit", past: "edited", noun: "site header and footer" },
+  page_chrome_set: { infinitive: "change", past: "changed", noun: "page header and footer" },
+  site_code_get: { infinitive: "look at", past: "looked at", noun: "header and footer code" },
+  site_code_set: { infinitive: "save", past: "saved", noun: "header and footer code" },
 };
 
 function humanizeToolName(name: string): { infinitive: string; past: string; noun: string } {

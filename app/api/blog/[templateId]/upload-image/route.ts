@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, StorageError } from "@/lib/storage";
+import { recordUploadedSize } from "@/lib/siteHealth/imageSize";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveBlogAdminSite } from "@/lib/blog/adminAuthDynamo";
 
@@ -44,6 +45,7 @@ export async function POST(
       access: "public",
       contentType: uploaded.type,
     });
+    await recordUploadedSize(blob.url, buffer);
     return NextResponse.json({ url: blob.url }, { status: 201 });
   } catch (err) {
     if (err instanceof StorageError) {

@@ -145,7 +145,7 @@ async function enforceFree(user: UserItem, now: Date): Promise<void> {
  */
 export async function applyFreePlanLimits(
   userId: string,
-  opts: { now?: Date; keepSiteId?: string } = {},
+  opts: { now?: Date; keepSiteId?: string; skipFallback?: boolean } = {},
 ): Promise<FreeLimitsSummary> {
   const now = opts.now ?? new Date();
   const stamp = now.toISOString();
@@ -158,7 +158,7 @@ export async function applyFreePlanLimits(
   await inBatches(changes.archivePageIds, 10, (id) => setPagePublishFlags(id, false, stamp));
 
   let fallback: string | null = null;
-  if (kept && changes.needsFallbackSubdomain) fallback = await createFallbackSubdomain(kept, userId);
+  if (kept && changes.needsFallbackSubdomain && !opts.skipFallback) fallback = await createFallbackSubdomain(kept, userId);
 
   await User.patch({ id: userId }).set({ freeLimitsAppliedAt: stamp }).go();
 
@@ -235,6 +235,17 @@ export async function makeSiteLive(userId: string, templateId: string): Promise<
   const sites = await listGovernedSites(userId);
   if (!sites.some((s) => s.id === templateId)) throw new PlanLifecycleError("That site isn't one you can put live.", 404);
   return applyFreePlanLimits(userId, { keepSiteId: templateId });
+}
+
+/**
+ * "Publish and replace the live site": every other site goes offline (nothing deleted) so
+ * `templateId` can take the one live slot. No address is made for it here — the caller is
+ * about to create the one the owner chose.
+ */
+export async function takeOtherSitesOffline(userId: string, templateId: string): Promise<void> {
+  const sites = await listGovernedSites(userId);
+  if (!sites.some((s) => s.id === templateId)) throw new PlanLifecycleError("That site isn't one you can put live.", 404);
+  await applyFreePlanLimits(userId, { keepSiteId: templateId, skipFallback: true });
 }
 
 /** The sites this account's plan governs — for the dashboard's plan screens. */

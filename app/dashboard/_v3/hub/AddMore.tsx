@@ -1,10 +1,13 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Clock, MessagesSquare } from "lucide-react";
+import { ArrowRight, Check, Clock, } from "lucide-react";
 import { Button, ButtonLink, Modal, useToast } from "../ui";
 import { addOnsFor, hubTabHref, type AddOnId, type HubFeatures } from "@/lib/dashboardV3/hubTabs";
+import { addMoreExample, type ExamplePage } from "@/lib/dashboardV3/addMoreExamples";
 import { errMsg, hubApi } from "./hubApi";
 
 /** A little picture of what each add-on gives you, drawn with tokens so it follows the theme. */
@@ -58,7 +61,7 @@ const WHAT: Record<AddOnId, { title: string; lead: string; items: string[]; go: 
 };
 
 /** The "Add more to your site" cards. Each turns a feature on as a short guided task and lands where the next step is. */
-export function AddMoreCards({ siteId, siteName, features }: { siteId: string; siteName: string; features: HubFeatures }) {
+export function AddMoreCards({ siteId, siteName, features, pages = [] }: { siteId: string; siteName: string; features: HubFeatures; /** The site's pages today, so the dialog can show what changes on THIS site. */ pages?: ExamplePage[] }) {
   const router = useRouter();
   const { show } = useToast();
   const [which, setWhich] = useState<AddOnId | null>(null);
@@ -67,6 +70,7 @@ export function AddMoreCards({ siteId, siteName, features }: { siteId: string; s
   const cards = addOnsFor(features);
   if (!cards.length) return null;
   const what = which ? WHAT[which] : null;
+  const example = which ? addMoreExample(which, siteName, pages) : null;
 
   async function run() {
     if (!which) return;
@@ -101,7 +105,7 @@ export function AddMoreCards({ siteId, siteName, features }: { siteId: string; s
     <section aria-labelledby="addmore" data-tour="hub-add-more" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
         <h2 id="addmore" className="plx-h2">Add more to your site</h2>
-        <p className="plx-hub__sub">Turn these on whenever you need them. Each one takes about a minute.</p>
+        <p className="plx-hub__sub">Turn these on whenever you need them. They are added to &ldquo;{siteName}&rdquo;, the site you are in, not to a new one. Each takes about a minute.</p>
       </div>
       <div className="plx-aogrid">
         {cards.map((c) => (
@@ -126,7 +130,7 @@ export function AddMoreCards({ siteId, siteName, features }: { siteId: string; s
         closeOnBackdrop={!busy}
         footer={
           which === "newsletter" ? (
-            <ButtonLink href={solHref} leftIcon={<MessagesSquare size={18} aria-hidden />}>{what?.go}</ButtonLink>
+            <ButtonLink href={solHref} leftIcon={<SolGlyph size={18} />}>{what?.go}</ButtonLink>
           ) : (
             <>
               <Button variant="secondary" onClick={() => setWhich(null)}>Not now</Button>
@@ -138,6 +142,14 @@ export function AddMoreCards({ siteId, siteName, features }: { siteId: string; s
         {which && what ? (
           <div className={`plx-aomodal plx-ao--${which}`}>
             <div className="plx-aomodal__art"><Art id={which} /></div>
+            {example ? (
+              <div className="plx-aomodal__same" role="note">
+                <p className="plx-aomodal__samehead">Added to &ldquo;{siteName}&rdquo;, the same website</p>
+                {example.today ? <p>Your pages today: <b>{example.today}</b></p> : null}
+                {example.adds.length ? <p>After setup you&apos;ll also have: <b>{example.adds.join(", ")}</b></p> : null}
+                <p>{example.summary}</p>
+              </div>
+            ) : null}
             <p className="plx-aomodal__h">What you get</p>
             <ul className="plx-aomodal__list">
               {what.items.map((i) => (
@@ -147,7 +159,7 @@ export function AddMoreCards({ siteId, siteName, features }: { siteId: string; s
             <p className="plx-aomodal__note"><Clock size={14} aria-hidden /> Takes about a minute. You stay in control of everything it adds.</p>
           </div>
         ) : null}
-        {error ? <p className="plx-field__error" role="alert" style={{ marginTop: 16 }}>{error}</p> : null}
+        {error ? <GateOrError error={error}><p className="plx-field__error" role="alert" style={{ marginTop: 16 }}>{error}</p></GateOrError> : null}
       </Modal>
     </section>
   );

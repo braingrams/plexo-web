@@ -9,7 +9,8 @@ import { StripeCheckoutModal } from "../_components/StripeCheckoutModal";
 import { PlanPicker } from "../_components/PlanPicker";
 import { startCheckout as beginCheckout, verifyPaystackPayment, type CheckoutBody, type CheckoutResult } from "@/lib/billing/clientCheckout";
 import { PLAN_LABELS, type PlanId, PLAN, RETIRED_PLAN } from "@/lib/plan/plans";
-import type { BillingInterval } from "@/lib/billing/pricing";
+import { currencySymbolFor, minTopupAmount, type BillingInterval } from "@/lib/billing/pricing";
+import { formatAiActivityDescription } from "@/lib/dashboardV3/billingView";
 
 type LedgerEntryType = "MONTHLY_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
 
@@ -106,6 +107,14 @@ export function BillingSection({ plan, paying = plan !== PLAN.FREE, planNote = n
   const [checkoutSecret, setCheckoutSecret] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<{ kind: "success" | "processing" | "error"; text: string } | null>(null);
   const [funnelSlots, setFunnelSlots] = useState<FunnelSlotsSummary | null>(null);
+  const [customAmountStr, setCustomAmountStr] = useState<string>("");
+  const activeCurrency = packInfo["SMALL"]?.price?.includes("₦") ? "NGN" : "USD";
+  const ratePer1000 = activeCurrency === "NGN" ? 1500 : 1;
+  const minCustomAmount = minTopupAmount(activeCurrency);
+  const currencySymbol = currencySymbolFor(activeCurrency);
+  const numCustomAmount = parseFloat(customAmountStr.replace(/,/g, "").trim());
+  const hasValidCustomNum = !isNaN(numCustomAmount) && numCustomAmount >= minCustomAmount;
+  const customCalculatedCredits = hasValidCustomNum && ratePer1000 > 0 ? Math.max(0, Math.round((numCustomAmount / ratePer1000) * 1000)) : 0;
 
   useEffect(() => {
     fetch("/api/v1/lms/addon-slots")
@@ -514,6 +523,67 @@ export function BillingSection({ plan, paying = plan !== PLAN.FREE, planNote = n
               );
             })}
           </div>
+
+          {/* Custom amount */}
+          <div style={{ marginTop: "0.75rem", padding: "0.85rem 1rem", borderRadius: "10px", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", background: "rgba(255, 255, 255, 0.02)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "0.5rem", marginBottom: "0.5rem" }}>
+              <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--plx-text, #f0f2ff)" }}>Or choose your own amount</span>
+              <span style={{ fontSize: "0.72rem", color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>
+                {currencySymbol}{ratePer1000.toLocaleString("en-US")} = 1,000 credits
+              </span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+              <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+                <span style={{ position: "absolute", left: "0.6rem", fontSize: "0.85rem", fontWeight: 600, color: "var(--plx-muted, rgba(240,242,255,0.4))" }}>{currencySymbol}</span>
+                <input
+                  type="number"
+                  min={minCustomAmount}
+                  step="any"
+                  placeholder={activeCurrency === "NGN" ? "1000" : "2"}
+                  value={customAmountStr}
+                  onChange={(e) => setCustomAmountStr(e.target.value)}
+                  style={{
+                    paddingLeft: currencySymbol.length > 2 ? "2rem" : "1.4rem",
+                    paddingRight: "0.6rem",
+                    height: "36px",
+                    borderRadius: "8px",
+                    border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 12%, transparent)",
+                    background: "rgba(0,0,0,0.2)",
+                    color: "var(--plx-text, #fff)",
+                    fontSize: "0.85rem",
+                    fontWeight: 600,
+                    width: "120px",
+                  }}
+                  aria-label="Custom amount"
+                />
+              </div>
+              <span style={{ color: "var(--plx-muted, rgba(240,242,255,0.4))", fontSize: "0.85rem" }}>→</span>
+              <span style={{ fontWeight: 700, fontSize: "0.85rem", color: customCalculatedCredits > 0 ? "var(--plx-text, #fff)" : "var(--plx-muted, rgba(240,242,255,0.4))" }}>
+                {customCalculatedCredits > 0 ? `${customCalculatedCredits.toLocaleString("en-US")} credits` : "0 credits"}
+              </span>
+              <button
+                type="button"
+                disabled={!hasValidCustomNum || busyAction === "topup-custom"}
+                onClick={() => void startCheckout({ kind: "topup", customAmount: numCustomAmount }, "topup-custom")}
+                style={{
+                  ...actionButtonStyle,
+                  padding: "0.4rem 0.9rem",
+                  marginLeft: "auto",
+                  opacity: !hasValidCustomNum || busyAction === "topup-custom" ? 0.6 : 1,
+                  cursor: !hasValidCustomNum ? "not-allowed" : "pointer",
+                }}
+              >
+                <span style={{ fontSize: "0.82rem", fontWeight: 700 }}>
+                  {busyAction === "topup-custom" ? "Opening…" : `Buy ${customCalculatedCredits > 0 ? `${customCalculatedCredits.toLocaleString("en-US")} credits` : "credits"}`}
+                </span>
+              </button>
+            </div>
+            {customAmountStr.trim() !== "" && !hasValidCustomNum ? (
+              <p style={{ fontSize: "0.72rem", color: "var(--plx-danger, #f87171)", marginTop: "0.4rem" }}>
+                Minimum amount is {currencySymbol}{minCustomAmount.toLocaleString("en-US")}.
+              </p>
+            ) : null}
+          </div>
         </div>
 
         {error && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)" }}>{error}</p>}
@@ -545,7 +615,7 @@ export function BillingSection({ plan, paying = plan !== PLAN.FREE, planNote = n
                   <div>
                     <p style={{ color: "var(--plx-text, #f0f2ff)", fontWeight: 600 }}>{TYPE_LABELS[entry.type]}</p>
                     <p style={{ color: "var(--plx-faint, rgba(240,242,255,0.35))", fontSize: "0.7rem" }}>
-                      {entry.description ?? "—"} · {formatDate(entry.createdAt)}
+                      {formatAiActivityDescription(entry.description, entry.type)} · {formatDate(entry.createdAt)}
                     </p>
                   </div>
                   <span style={{ fontWeight: 700, color: entry.amount >= 0 ? "var(--plx-success, #34d399)" : "var(--plx-danger, #f87171)", whiteSpace: "nowrap" }}>

@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Check, KeyRound, LayoutDashboard, LifeBuoy, PlayCircle, RotateCcw } from "lucide-react";
@@ -11,6 +12,7 @@ import type { Experience } from "@/lib/dashboardV3/nav";
 import { AsideCard, Notice, Panel, SaveBar, SettingRow, SettingsPageShell } from "./bits";
 import { isDirty } from "@/lib/dashboardV3/settingsSaveBar";
 import { switchLabel, useVersionSwitch } from "../../_versions/VersionUi";
+import { CountryField } from "@/app/_components/country/CountryField";
 
 const FEELS: { id: Experience; title: string; body: string }[] = [
   { id: "beginner", title: "Guided", body: "Fewer buttons. Plexo walks you through each step in plain words." },
@@ -18,7 +20,7 @@ const FEELS: { id: Experience; title: string; body: string }[] = [
   { id: "pro", title: "Everything", body: "All the tools in one place, and a tighter layout. For people who build a lot." },
 ];
 
-export function ProfileSection({ name: initialName, email, phone, image: initialImage, experience: initialExperience, mock = false }: { name: string; email: string; phone?: string | null; image?: string | null; experience: Experience; mock?: boolean }) {
+export function ProfileSection({ name: initialName, email, phone, image: initialImage, experience: initialExperience, country = null, countryGuess = null, mock = false }: { name: string; email: string; phone?: string | null; image?: string | null; experience: Experience; country?: string | null; countryGuess?: string | null; mock?: boolean }) {
   const router = useRouter();
   const { show } = useToast();
   const tour = useOptionalTour();
@@ -125,7 +127,7 @@ export function ProfileSection({ name: initialName, email, phone, image: initial
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
 
       <Panel title="Your profile" description="This is how you appear to the people you work with.">
         <div className="plx-sform">
@@ -144,6 +146,12 @@ export function ProfileSection({ name: initialName, email, phone, image: initial
           {phone ? <Input label="Your phone number" value={phone} readOnly help="Saved when you connected WhatsApp." /> : null}
         </div>
       </Panel>
+
+      {mock ? null : (
+        <Panel title="Your country" description="Plexo shows prices in your own currency, so this decides what you pay and in what money.">
+          <CountryField initialCountry={country} guess={countryGuess} />
+        </Panel>
+      )}
 
       <Panel title="Sign-in" description="Keep your account safe.">
         <SettingRow title="Password" description="We'll email you a link to choose a new one.">

@@ -501,6 +501,201 @@ export const ExperienceDailyStat = new Entity(
   { table, client: docClient },
 );
 
+// A site's Google Analytics connection (lib/googleAnalytics). One row per site. The refresh
+// token is encrypted (lib/crypto.ts encryptGoogleAnalyticsToken) and never leaves the server.
+export const SiteGoogleAnalytics = new Entity(
+  {
+    model: { entity: "siteGoogleAnalytics", version: "1", service: "plexoOps" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      connectedByUserId: { type: "string", required: true },
+      googleEmail: { type: "string" },
+      // Empty for a Plexo-managed property: Plexo's own service account reads it, so there is no owner token to keep.
+      refreshTokenEncrypted: { type: "string" },
+      // "managed": Plexo made and owns the property inside its own Google account (the owner never touches Google).
+      // "own": the owner signed in with their own Google account.
+      mode: { type: ["managed", "own"] as const, default: "own" },
+      // Managed only: which of Plexo's Google accounts holds the property (lib/googleAnalytics/managed.ts), so reads and
+      // clean-up go to the right place.
+      poolAccountName: { type: "string" },
+      // Managed only: the Google email the owner asked us to hand the property to (access binding), if any.
+      handedOverTo: { type: "string" },
+      handedOverAt: { type: "string" },
+      // Managed only: when the owner's paid plan was first seen to have ended. After the retention period the property is
+      // deleted from Plexo's Google account; paying again before then restores everything.
+      lapsedAt: { type: "string" },
+      // "connected": reports work. "needs_reconnect": Google said the permission was taken back.
+      status: { type: ["connected", "needs_reconnect"] as const, default: "connected" },
+      // Set after sign-in, when the owner picks (or we create) a property. Until measurementId
+      // is set the owner is still on the "pick your property" step and no tag is added.
+      accountName: { type: "string" },
+      propertyName: { type: "string" },
+      propertyDisplayName: { type: "string" },
+      streamName: { type: "string" },
+      measurementId: { type: "string" },
+      connectedAt: { type: "string", default: () => new Date().toISOString() },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "SITE#${templateId}" },
+        sk: { field: "sk", composite: [], template: "GOOGLEANALYTICS" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// What visitors in regions that need consent see before Google's tag loads (lib/consent). One row per site; no row means the defaults.
+export const SiteConsentSettings = new Entity(
+  {
+    model: { entity: "siteConsentSettings", version: "1", service: "plexoOps" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      // On by default: visitors in Europe, the UK, Switzerland and Brazil see the notice. Off is the owner's own call.
+      enabled: { type: "boolean", default: true },
+      message: { type: "string" },
+      acceptLabel: { type: "string" },
+      declineLabel: { type: "string" },
+      // "bar" across the bottom, or a "card" in the corner.
+      position: { type: ["bar", "card"] as const, default: "bar" },
+      // A #rrggbb colour. Missing means the site's brand colour (Strata) or a calm dark default.
+      accentColor: { type: "string" },
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "SITE#${templateId}" },
+        sk: { field: "sk", composite: [], template: "CONSENTSETTINGS" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Per-site "Site health" options the owner turned on with "Fix it for me" (lib/siteHealth/fixes.ts).
+// Every one is applied when a page is served and undone by turning it off: nothing in the owner's pages is rewritten.
+export const SiteHealthSettings = new Entity(
+  {
+    model: { entity: "siteHealthSettings", version: "1", service: "plexoOps" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      organizationId: { type: "string", required: true },
+      // Shown to search engines and AI tools when a page has no description of its own.
+      fallbackDescription: { type: "string" },
+      // A short plain-text file that tells AI tools what the site is about (/llms.txt).
+      llmsTxt: { type: "boolean", default: false },
+      // Business details for search engines (Organization markup).
+      organizationSchema: { type: "boolean", default: false },
+      // Videos and maps further down the page wait to load until scrolled to.
+      lazyEmbeds: { type: "boolean", default: false },
+      // Pictures with no description get one made from their file name.
+      altFromFilename: { type: "boolean", default: false },
+      // The page's language (<html lang>) when it does not say.
+      language: { type: "string" },
+      // The extra fixes, as { fixId: true } (lib/siteHealth/types.ts EXTRA_FIX_IDS). Absent or false = off.
+      extras: { type: "any" },
+      // Business details the owner confirmed for search engines (lib/siteHealth/business.ts): name, phone, address, hours...
+      business: { type: "any" },
+      // Page titles and picture descriptions written once when the fix was switched on (editable by the owner), served as stored.
+      // aiTitles: { "/about": "About us | Mama Tee Bakery" }, aiAlts: { "https://.../cake.jpg": "A chocolate cake on a stand" }
+      aiTitles: { type: "any" },
+      aiAlts: { type: "any" },
+      // The weekly "Your site health" email: on unless the owner switched it off (digestOff), and the numbers in the last one sent,
+      // so the next can say what changed (lib/siteHealth/digest.ts).
+      digestOff: { type: "boolean", default: false },
+      digestSentAt: { type: "string" },
+      digestScores: { type: "any" },
+      // Moves when a FIX changes (it means "run a fresh check"). The email's own bookkeeping must not move it, so the fix fields are listed.
+      updatedAt: { type: "string", default: () => new Date().toISOString(), watch: ["fallbackDescription", "llmsTxt", "organizationSchema", "lazyEmbeds", "altFromFilename", "language", "extras", "business", "aiTitles", "aiAlts"], set: () => new Date().toISOString() },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "SITE#${templateId}" },
+        sk: { field: "sk", composite: [], template: "HEALTHSETTINGS" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// How big a picture is (pixels), so pages can reserve its space before it loads (lib/siteHealth/imageSize.ts).
+// Written when a picture is uploaded to Plexo, or looked up once for pictures linked from elsewhere. One row per
+// picture address, shared by every site that uses it. `failed` rows remember "could not be read" so we do not retry
+// the same dead link on every check.
+export const ImageDimension = new Entity(
+  {
+    model: { entity: "imageDimension", version: "1", service: "plexoOps" },
+    attributes: {
+      key: { type: "string", required: true },
+      url: { type: "string", required: true },
+      width: { type: "number" },
+      height: { type: "number" },
+      source: { type: ["upload", "probe"] as const },
+      failed: { type: "boolean", default: false },
+      checkedAt: { type: "string", default: () => new Date().toISOString(), set: () => new Date().toISOString() },
+      ttl: { type: "number", default: () => days(180) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["key"], template: "IMGDIM#${key}" },
+        sk: { field: "sk", composite: [], template: "DIM" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// Sites waiting for an automatic health re-check (lib/siteHealth/recheck.ts). One row per site, so a burst of edits is one
+// row whose due time keeps moving later (that is the debounce). The row is removed once the check ran.
+export const SiteHealthRecheck = new Entity(
+  {
+    model: { entity: "siteHealthRecheck", version: "1", service: "plexoOps" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      reason: { type: ["changed", "weekly"] as const, required: true },
+      dueAt: { type: "string", required: true },
+      queuedAt: { type: "string", default: () => new Date().toISOString() },
+      attempts: { type: "number", default: 0 },
+      ttl: { type: "number", default: () => days(30) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: [], template: "HEALTHRECHECK" },
+        sk: { field: "sk", composite: ["templateId"], template: "SITE#${templateId}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+// One row per speed check. The newest is the "last result" shown on the page; the rest draw the trend.
+export const SiteHealthCheck = new Entity(
+  {
+    model: { entity: "siteHealthCheck", version: "1", service: "plexoOps" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      createdAt: { type: "string", required: true },
+      url: { type: "string", required: true },
+      // The whole normalized report (lib/siteHealth/types.ts), small enough for one item.
+      report: { type: "any", required: true },
+      speedScore: { type: "number" },
+      aeoScore: { type: "number" },
+      // A year of trend is plenty.
+      ttl: { type: "number", default: () => days(400) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "SITE#${templateId}" },
+        sk: { field: "sk", composite: ["createdAt"], template: "HEALTHCHECK#${createdAt}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoOpsService = new Service(
   {
     PageView,
@@ -515,6 +710,12 @@ export const plexoOpsService = new Service(
     SolUsageEventContent,
     SolDailyStat,
     ExperienceDailyStat,
+    SiteGoogleAnalytics,
+    SiteConsentSettings,
+    SiteHealthSettings,
+    SiteHealthCheck,
+    ImageDimension,
+    SiteHealthRecheck,
   },
   { table, client: docClient },
 );

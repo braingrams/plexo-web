@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Card, CardHeader } from "@/app/dashboard/_v3/ui";
 import { StrataBrandPicker, type StrataPickerClient } from "@/app/dashboard/_v3/brand/StrataBrandPicker";
-import { StrataBrand } from "@/app/dashboard/_v3/hub/BrandTab";
+import { BrandSaved } from "@/app/dashboard/_v3/hub/BrandTab";
 import { NewSiteFlow } from "@/app/dashboard/_v3/newsite/NewSiteFlow";
 import { NO_SELECTION, type PickerProject, type PickerSelection } from "@/lib/dashboardV3/strataPicker";
 import type { BrandState } from "@/app/dashboard/templates/[id]/detail/SiteBrandPanel";
@@ -53,10 +53,10 @@ export function BrandPreview() {
     return <NewSiteFlow mode="page" preview={{ screen: "brand", goal: "store", mock: true, strata: client }} context={{ plan: PLAN.PRO, brand: { name: "Ama's Kitchen", colors: ["#E4572E"] }, siteNames: [], liveSiteNames: [] }} />;
   }
   if (state === "linked") {
-    return <div className="plx-page" style={{ maxWidth: 760 }}><StrataBrand siteId="s1" siteName="Ama's Kitchen" isRaw={false} client={client} preview previewState={LINKED} /></div>;
+    return <div className="plx-page" style={{ maxWidth: 760 }}><BrandSaved siteId="s1" siteName="Ama's Kitchen" isRaw={false} client={client} preview previewState={LINKED} /></div>;
   }
   if (state === "unlinked") {
-    return <div className="plx-page" style={{ maxWidth: 760 }}><StrataBrand siteId="s1" siteName="Ama's Kitchen" isRaw={false} client={client} preview previewState={{ ...LINKED, linked: false, projectId: null, projectName: null, resolved: { ...RESOLVED, source: "site", linked: false, project: null, fonts: {} } }} /></div>;
+    return <div className="plx-page" style={{ maxWidth: 760 }}><BrandSaved siteId="s1" siteName="Ama's Kitchen" isRaw={false} client={client} preview previewState={{ ...LINKED, linked: false, projectId: null, projectName: null, resolved: { ...RESOLVED, source: "site", linked: false, project: null, fonts: {} } }} /></div>;
   }
   return (
     <div className="plx-page" style={{ maxWidth: 640 }}>

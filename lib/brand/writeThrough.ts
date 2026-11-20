@@ -18,8 +18,8 @@ import { flushWaitingExtras } from "./extrasWriteThrough";
 export type SendState = "in-strata" | "created" | "waiting" | "not-set-up";
 export type SendResult = { state: SendState; message: string; projectName?: string };
 
-export const SENT_NOTE = "Saved in Strata. Your website follows it.";
-export const WAITING_NOTE = "Saved here. It will go to Strata automatically; you can also press “Send to Strata”.";
+export const SENT_NOTE = "Your brand is saved. Your website follows it.";
+export const WAITING_NOTE = "Saved here. Your brand will finish saving by itself; you can also press “Save now”.";
 
 export type LocalBrand = { colors: string[]; logoUrl?: string };
 type LinkRow = { projectId: string; userId: string; projectLogo?: string | null };
@@ -44,7 +44,7 @@ export async function sendBrandToStrata(input: { siteId: string; userId: string;
     if (!link) {
       // Not in Strata yet (a new site, or an earlier attempt didn't get through): make its project from the saved brand now.
       const made = await deps.create(input);
-      if (made.status === "created") return { state: "created", message: `Saved in Strata${made.projectName ? ` as "${made.projectName}"` : ""}. Your website follows it.`, projectName: made.projectName };
+      if (made.status === "created") return { state: "created", message: `Your brand is saved${made.projectName ? ` as "${made.projectName}"` : ""}. Your website follows it.`, projectName: made.projectName };
       if (made.status === "already-linked") return sendBrandToStrata(input, deps);
       return { state: "waiting", message: WAITING_NOTE };
     }
@@ -84,7 +84,7 @@ const realDeps: WriteDeps = {
   session: async (userId) => (await loadStrataToken(userId).catch(() => null)) ?? ((await connectStrataInBackground(userId)) ? await loadStrataToken(userId).catch(() => null) : null),
   push: async (token, projectId, brand) => {
     const base = strataApiUrl();
-    if (!base) throw new Error("Strata isn't set up on this Plexo yet.");
+    if (!base) throw new Error("Saving your brand isn't available on this Plexo yet.");
     const client = createStrataClient({ baseUrl: base, getToken: () => token });
     const snapshot = await client.pull(projectId);
     const colours = brand.colors.map((value, i) => ({ role: i === 0 ? "primary" : i === 1 ? "secondary" : "accent", label: "", value })) as never;

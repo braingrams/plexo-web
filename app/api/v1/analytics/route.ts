@@ -1,3 +1,4 @@
+import { planGateResponse } from "@/lib/plan/planGateResponse";
 import { getTierFeatures } from "@/lib/subscription";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
   // Visitor analytics come with Starter and above (lib/subscription.ts analyticsEnabled).
   if (!getTierFeatures(resolved.subscriptionPlan).analyticsEnabled) {
-    return NextResponse.json({ error: "Visitor analytics come with the Starter plan and above. Upgrade in Settings → Billing to see who visits your sites.", code: "PLAN_ANALYTICS", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
+    return planGateResponse("PLAN_ANALYTICS", "Visitor analytics come with the Starter plan and above. Upgrade to see who visits your sites.");
   }
 
   const { searchParams } = new URL(request.url);

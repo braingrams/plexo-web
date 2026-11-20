@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavAction } from "../shell/useNavAction";
 import { ArrowRight, Landmark, Rocket, CreditCard } from "lucide-react";
 import { parsePriceToMinor, suggestAddressLabel } from "@/lib/dashboardV3/tasks";
 import { Button, ButtonLink, Input, SegmentedControl, useToast } from "../ui";
@@ -10,18 +10,23 @@ import { callApi } from "./api";
 type Common = { siteId: string; demo?: boolean; onDone?: () => void };
 
 function useRun(demo?: boolean) {
-  const router = useRouter();
+  const nav = useNavAction();
   const toast = useToast();
-  const [busy, setBusy] = useState(false);
+  const [working, setBusy] = useState(false);
+  const busy = working || nav.pending;
   const [error, setError] = useState("");
-  async function run(job: () => Promise<{ ok: true } | { ok: false; error: string }>, success?: string) {
+  async function run(job: () => Promise<{ ok: true } | { ok: false; error: string; refresh?: boolean }>, success?: string) {
     setBusy(true);
     setError("");
     const r = demo ? { ok: true as const } : await job();
     setBusy(false);
-    if (!r.ok) return setError(r.error), false;
+    if (!r.ok) {
+      setError(r.error);
+      if (r.refresh) nav.refresh(); // something was saved before it failed: show the page as it now is
+      return false;
+    }
     if (success) toast.show({ title: success, tone: "success" });
-    router.refresh();
+    nav.refresh();
     return true;
   }
   return { busy, error, setError, run };
@@ -119,60 +124,52 @@ export function PayForm({ siteId, demo }: Common) {
   );
 }
 
-/** Pick the free web address (name + the platform ending). A taken name comes back as a plain sentence. */
-export function AddressForm({ siteId, siteName, baseDomain, demo }: Common & { siteName: string; baseDomain: string }) {
+/**
+ * "Finish up": the web address and going online in ONE step. Someone with no address yet picks one (a name, taken names come back as a plain
+ * sentence), then one tap saves it and puts the site online. Someone who already has an address just sees it and taps once.
+ */
+export function FinishForm({ siteId, siteName, baseDomain, hasAddress, address, onLive, demo }: Common & { siteName: string; baseDomain: string; hasAddress: boolean; address?: string | null; onLive: () => void }) {
   const [label, setLabel] = useState(suggestAddressLabel(siteName));
   const { busy, error, setError, run } = useRun(demo);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     const v = label.trim().toLowerCase();
-    if (!/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(v)) return setError("Use only letters, numbers and dashes, like amas-kitchen.");
-    await run(async () => {
-      const r = await callApi("/api/v1/domains", "POST", { templateId: siteId, type: "SUBDOMAIN", domain: v });
-      if (!r.ok && /already|taken|registered/i.test(r.error)) return { ok: false as const, error: "Someone already has that address. Try adding your town or a word, like amas-kitchen-lagos." };
-      return r;
-    }, "Your web address is ready.");
+    if (!hasAddress && !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/.test(v)) return setError("Use only letters, numbers and dashes, like amas-kitchen.");
+    const ok = await run(async () => {
+      if (!hasAddress) {
+        const d = await callApi("/api/v1/domains", "POST", { templateId: siteId, type: "SUBDOMAIN", domain: v });
+        if (!d.ok) return /already|taken|registered/i.test(d.error) ? { ok: false as const, error: "Someone already has that address. Try adding your town or a word, like amas-kitchen-lagos." } : d;
+      }
+      const p = await callApi(`/api/templates/${siteId}/publish`, "POST");
+      // The address is saved even if going online hiccups: the next try only needs the last tap.
+      return p.ok ? p : { ok: false as const, refresh: !hasAddress, error: hasAddress ? p.error : `Your address is saved, but we couldn't put the site online yet. ${p.error}` };
+    });
+    if (ok) onLive();
   }
   return (
     <form onSubmit={submit} style={row}>
-      <Input label="Your web address" value={label} onChange={(e) => setLabel(e.target.value.toLowerCase().replace(/\s+/g, "-"))} error={error} help={`People will visit ${label || "your-name"}.${baseDomain}`} autoComplete="off" autoCapitalize="none" />
+      {hasAddress ? (
+        <p className="plx-body" style={{ margin: 0, overflowWrap: "anywhere" }}>
+          Your web address is <strong>{address ?? "ready"}</strong>. One tap and anyone can visit.
+        </p>
+      ) : (
+        <Input label="Your web address" value={label} onChange={(e) => setLabel(e.target.value.toLowerCase().replace(/\s+/g, "-"))} error={error} help={`People will visit ${label || "your-name"}.${baseDomain}`} autoComplete="off" autoCapitalize="none" />
+      )}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-        <Button type="submit" size="lg" loading={busy}>
-          Use this address
-        </Button>
-        <ButtonLink href="/dashboard/settings/domains" variant="link">
-          Use my own .com instead
-        </ButtonLink>
-      </div>
-    </form>
-  );
-}
-
-/** The big one-tap "Put my site online". Calls the normal publish and tells the parent so it can celebrate. */
-export function LiveForm({ siteId, onLive, demo }: Common & { onLive: () => void }) {
-  const { busy, error, run } = useRun(demo);
-  return (
-    <div style={row}>
-      <div>
-        <Button
-          size="lg"
-          loading={busy}
-          leftIcon={<Rocket size={18} aria-hidden />}
-          onClick={async () => {
-            const ok = await run(() => callApi(`/api/templates/${siteId}/publish`, "POST"));
-            if (ok) onLive();
-          }}
-        >
+        <Button type="submit" size="lg" loading={busy} leftIcon={<Rocket size={18} aria-hidden />}>
           Put my site online
         </Button>
+        {!hasAddress ? (
+          <ButtonLink href="/dashboard/settings/domains" variant="link">
+            Use my own .com instead
+          </ButtonLink>
+        ) : null}
       </div>
-      {error ? (
-        <p className="plx-field__error" role="alert" style={{ margin: 0 }}>
-          {error}
-        </p>
+      {hasAddress && error ? (
+        <p className="plx-field__error" role="alert" style={{ margin: 0 }}>{error}</p>
       ) : (
         <span className="plx-small">You can keep editing after it&apos;s online.</span>
       )}
-    </div>
+    </form>
   );
 }

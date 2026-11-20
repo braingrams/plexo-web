@@ -21,6 +21,7 @@ const STORE_STATS: SiteStats = {
     { id: "orders", label: "Orders", value: "37", hint: "31 paid" },
     { id: "sales", label: "Sales this month", value: "₦412,500" },
   ],
+  activityKind: "orders",
   activityTitle: "Latest orders",
   activityEmpty: "No orders yet.",
   visitsByDay: [120, 164, 98, 210, 245, 188, 259],

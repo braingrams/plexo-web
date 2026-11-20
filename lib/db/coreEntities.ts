@@ -104,6 +104,10 @@ export const User = new Entity(
       // stated preference, same as Prisma did).
       hideBranding: { type: "boolean", default: false },
       manageLandingPagePublishing: { type: "boolean", default: false },
+      // Where this account was first created: "plexo" (deliberately signed up on Plexo's own sign-up form),
+      // "strata" (signed in from Strata), or "charisol" (any other Charisol account signing in). Unset = created before this was recorded
+      // (treated as "plexo" by the admin broadcast filters — see plexo-admin lib/broadcast/segments.ts).
+      signupSource: { type: "string" },
       // Plan picked at signup before email verification completes — see server/auth.ts's
       // databaseHooks and app/auth/complete-subscription. Null once resolved.
       pendingPlan: { type: [PLAN.STARTER, PLAN.PRO, RETIRED_PLAN.ULTRA, PLAN.ENTERPRISE] as const },
@@ -231,6 +235,8 @@ export const User = new Entity(
       phoneSavedAt: { type: "string" },
       // Light / Dark / System (default System when unset). Mirrored in the plexo-theme cookie.
       themePreference: { type: ["light", "dark", "system"] as const },
+      // The editor's Autosave switch (on when unset), kept per person so it follows them between devices. lib/editor/autosavePref.ts.
+      editorAutosave: { type: "boolean" },
       // The product walkthrough (app/dashboard/_v3/tour): whether they've been asked, which tour
       // and where they are in it, so it resumes across pages and devices. lib/dashboardV3/tour.ts.
       tourState: { type: "any" },

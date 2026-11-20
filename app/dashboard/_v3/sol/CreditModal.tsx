@@ -5,6 +5,7 @@ import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe
 import { Check } from "lucide-react";
 import { startCheckout as beginCheckout } from "@/lib/billing/clientCheckout";
 import { getStripePromise } from "@/lib/stripeClientPromise";
+import { OutOfCreditsOptions } from "../../_components/sol/OutOfCreditsOptions";
 import { packLabel, useTopupPacks } from "../../_components/useTopupPacks";
 import type { CreditInfo } from "../../sol/_components/types";
 import { Button } from "../ui/Button";
@@ -80,6 +81,7 @@ export function CreditModal({ creditInfo, returnTo, onClose }: { creditInfo: Cre
               </span>
             </button>
           ))}
+          <OutOfCreditsOptions returnTo={returnTo} />
           {error ? <p className="sol3-error" role="alert">{error}</p> : null}
           {done ? (
             <p className="sol3-notice" role="status" style={{ display: "flex", gap: 8, alignItems: "center" }}>

@@ -1,3 +1,4 @@
+import { planGateMessage } from "@/lib/plan/limitGates";
 import { randomUUID } from "node:crypto";
 import { compileToHTML } from "@/lib/compiler";
 import { designFormatOf, V2_PAGE_NEEDS_NEW_TOOLS } from "@/lib/v2/design";
@@ -1341,7 +1342,7 @@ export async function handleBlogTool(
           siteId,
           resolved.subscriptionPlan,
         );
-        if (!quota.ok) throw new Error(quota.error);
+        if (!quota.ok) throw new Error(planGateMessage({ message: quota.error, requiredPlan: quota.requiredPlan }));
       }
 
       const post = await createBlogPost(
@@ -1424,7 +1425,7 @@ export async function handleBlogTool(
               siteId,
               resolved.subscriptionPlan,
             );
-            if (!quota.ok) throw new Error(quota.error);
+            if (!quota.ok) throw new Error(planGateMessage({ message: quota.error, requiredPlan: quota.requiredPlan }));
           }
         }
         input.status = args.status;

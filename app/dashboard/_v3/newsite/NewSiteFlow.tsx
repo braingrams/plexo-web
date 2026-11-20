@@ -1,11 +1,12 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import "./newsite.css";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, FilePlus2, LoaderCircle, Truck } from "lucide-react";
-import { Button, ButtonLink, Input, Modal, Notice, useToast } from "../ui";
+import { Button, ButtonLink, Input, Modal, Notice, Textarea, useToast } from "../ui";
 import { StrataBrandPicker, type PickedBrand, type StrataPickerClient } from "../brand/StrataBrandPicker";
 import { NO_SELECTION, selectionToChoice, type PickerSelection } from "@/lib/dashboardV3/strataPicker";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
@@ -57,6 +58,9 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const [nameEdited, setNameEdited] = useState(false);
   const [designs, setDesigns] = useState<Design[]>([]);
   const [total, setTotal] = useState(0);
+  // "Briefly describe what you want your website to look like": steers which designs are shown and the words on the site.
+  const [about, setAbout] = useState("");
+  const [feel, setFeel] = useState<{ industry: string; style: string } | null>(null);
   const [designId, setDesignId] = useState("");
   const [error, setError] = useState("");
   const [loadingDesigns, setLoadingDesigns] = useState(false);
@@ -112,10 +116,11 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     setLoadingDesigns(true);
     const id = ++request.current;
     try {
-      const res = await fetch("/api/onboarding/designs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: { goal, brand: { ...(brand ?? {}), name: name.trim() } } }) });
+      const res = await fetch("/api/onboarding/designs", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ profile: { goal, brand: { ...(brand ?? {}), name: name.trim(), ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}) } } }) });
       const data = await res.json();
       if (id !== request.current) return;
       if (!res.ok) throw new Error(data?.error || "");
+      setFeel(data.understood ?? null);
       setDesigns(data.designs);
       setTotal(data.total);
       setDesignId(data.designs[0]?.id ?? "");
@@ -133,7 +138,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     try {
       if (preview?.mock) { await new Promise((r) => setTimeout(r, 600)); setScreen("look"); return; }
       for (let i = 0; i < tries; i++) {
-        const res = await fetch("/api/dashboard/new-site", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ goal: who.goal, name: who.name, ...extra, ...(selectionToChoice(brandPick) ? { brand: selectionToChoice(brandPick) } : {}) }) });
+        const res = await fetch("/api/dashboard/new-site", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ goal: who.goal, name: who.name, ...extra, ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}), ...(feel ? { industry: feel.industry, style: feel.style } : {}), ...(selectionToChoice(brandPick) ? { brand: selectionToChoice(brandPick) } : {}) }) });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.site) {
           if (data.brand?.ok && data.brand.project?.name) toast.show({ title: `Your "${data.brand.project.name}" brand is on your website`, tone: "success" });
@@ -232,6 +237,15 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
           error={error || undefined}
           onChange={(e) => { setName(e.target.value); setNameEdited(true); setError(""); }}
         />
+        <Textarea
+          fieldClassName="plx-ns__about"
+          label="Briefly describe what you want your website to look like"
+          help="So we pick the best look for you. For example: a warm, friendly bakery in Lagos that takes cake orders. You can skip this."
+          value={about}
+          rows={3}
+          maxLength={500}
+          onChange={(e) => setAbout(e.target.value)}
+        />
         <div className="plx-ns__actions">
           <span />
           <Button size="lg" disabled={!goal} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={toBrand}>{app ? "Build it with SOL" : "Continue"}</Button>
@@ -246,7 +260,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     return (
       <>
         <div className="plx-ns__top">{back("goal")}<p className="plx-ns__step">{stepText("brand", brandStep)}</p></div>
-        {heading("Use your brand?", "If you keep your colours, fonts and logo in Strata, pick them here. Your website will look like your brand from the start and follow it when you change it. You can skip this.")}
+        {heading("Use your brand?", "Already have a saved brand? Pick it and your website starts with its colours, fonts and logo. You can skip this and set it up later.")}
         <div style={{ maxWidth: 760 }}>
         <StrataBrandPicker
           mode="draft"
@@ -254,7 +268,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
           value={brandPick}
           allowSkip
           canCreate={hasColours}
-          createHint="Once your website is made, add your colours on its Brand page and Plexo can create your Strata brand from them."
+          createHint="Once your website is made, add your colours on its Your brand page and Plexo saves your brand for you."
           onChange={(v, p) => { setBrandPick(v); setPicked(p ?? null); }}
         />
         </div>
@@ -280,8 +294,8 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
       <>
         <div className="plx-ns__top">{back("look")}<p className="plx-ns__step">{stepText("all", brandStep)}</p></div>
         {heading(`All designs for ${name.trim() || "your website"}`, "Made by designers on Plexo, best fit first. Free ones cost nothing; paid ones are a one-time price. Your logo and colours are added to your Brand page.")}
-        {error ? <Notice kind="warning" title="Something went wrong">{error}</Notice> : null}
-        <SeeAllDesigns goal={goal} name={name.trim()} brand={brand} mock={preview?.mock} onUse={useMarketDesign} />
+        {error ? <GateOrError error={error}><Notice kind="warning" title="Something went wrong">{error}</Notice></GateOrError> : null}
+        <SeeAllDesigns goal={goal} name={name.trim()} brand={brand} extra={{ about: about.trim(), industry: feel?.industry, tone: feel?.style }} mock={preview?.mock} onUse={useMarketDesign} />
       </>
     );
   }
@@ -291,7 +305,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     <>
       <div className="plx-ns__top">{back(brandStep ? "brand" : "goal")}<p className="plx-ns__step">{stepText("look", brandStep)}</p></div>
       {heading(`Pick a look for ${name.trim() || "your website"}`, "These are already filled in with your name. You can change the words, pictures, colours and the design itself later.")}
-      {error ? <Notice kind="warning" title="Something went wrong">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice kind="warning" title="Something went wrong">{error}</Notice></GateOrError> : null}
       <div className="plx-ns__designs" role="radiogroup" aria-label="Designs">
         {list.map((d, i) => (
           <button key={d?.id ?? i} type="button" role="radio" aria-checked={!!d && designId === d.id} className="plx-ns__design" disabled={!d} onClick={() => d && setDesignId(d.id)}>

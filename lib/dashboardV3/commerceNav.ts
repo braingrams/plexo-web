@@ -26,12 +26,21 @@ export function currentCommerceHref(items: CommerceNavItem[], pathname: string):
   return items.find((i) => pathname === i.href || pathname.startsWith(`${i.href}/`))?.href ?? "";
 }
 
-/** Where the bare /dashboard/commerce entry sends a new-dashboard owner: the orders tab (the nav item is "Orders"). */
-export function commerceEntryHref(siteId: string): string {
-  return siteHubHref(siteId, "orders");
+/** Where the bare /dashboard/commerce entry sends a new-dashboard owner: the orders tab (the nav item is "Orders"), or products for "?to=products". */
+export function commerceEntryHref(siteId: string, to?: string | null): string {
+  return siteHubHref(siteId, to === "products" ? "products" : "orders");
 }
 
 /** The shop to open from the bare "Orders" link: the most recent site whose shop is on, else the most recent site. `sites` is newest first. */
 export function pickShopSiteId(sites: { id: string; enabled: boolean }[]): string | null {
   return (sites.find((s) => s.enabled) ?? sites[0])?.id ?? null;
+}
+
+/** The shop's everyday shortcuts on Home, for beginners and pros alike. "Add a product" opens the add form straight away. */
+export function shopQuickLinks(siteId: string): { id: "add" | "manage" | "orders"; label: string; sub: string; href: string }[] {
+  return [
+    { id: "add", label: "Add a product", sub: "A name, a price and a photo", href: `${siteHubHref(siteId, "products")}&new=product` },
+    { id: "manage", label: "Manage products", sub: "Change prices, photos and stock", href: siteHubHref(siteId, "products") },
+    { id: "orders", label: "See your orders", sub: "What people bought and what to do next", href: siteHubHref(siteId, "orders") },
+  ];
 }

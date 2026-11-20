@@ -1,5 +1,6 @@
 import { compileTemplate } from "@/lib/compileTemplate";
 import { SiteLayout, Template } from "@/lib/db/contentEntities";
+import { fragmentIsBlank } from "@/lib/siteLayoutBlank";
 import { getEnabledSiteLayoutRows, layoutSectionsOf, spliceLayoutRows } from "@/lib/siteLayoutCore";
 import { designFormatOf, type DesignFormat } from "@/lib/v2/design";
 import type { ChromeOptions } from "@/lib/v2/layoutDesigns";
@@ -26,7 +27,10 @@ export async function siteInfo(rootTemplateId: string): Promise<{ format: Design
 export async function chromeFor(rootTemplateId: string, siteName: string): Promise<ChromeOptions> {
   const { data: layout } = await SiteLayout.get({ templateId: rootTemplateId }).go();
   const on = !!layout?.enabled;
-  return { siteName, header: !(on && layout?.headerTemplateId), footer: !(on && layout?.footerTemplateId) };
+  // A BLANK shared header/footer (every older site starts with one) shows nothing, so a page must still bring its
+  // own — otherwise a new page on an older site would have no menu at all.
+  const [headerBlank, footerBlank] = on ? await Promise.all([fragmentIsBlank(layout?.headerTemplateId), fragmentIsBlank(layout?.footerTemplateId)]) : [true, true];
+  return { siteName, header: headerBlank, footer: footerBlank };
 }
 
 /** Compiles a generated design for either format against the site's current header/footer. */

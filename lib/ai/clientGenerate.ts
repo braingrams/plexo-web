@@ -15,6 +15,8 @@ export interface AiRequestBody {
   context: unknown;
   tier?: string;
   isBlogLayout?: boolean;
+  /** The site this is written for, so the AI uses its brand voice. */
+  siteId?: string;
 }
 
 export interface CreditCheck {

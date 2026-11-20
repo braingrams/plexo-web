@@ -47,7 +47,7 @@ export async function POST(
   const balance = await ensureCreditPeriod(resolved.context.userId);
   if (balance.available < cost) {
     return NextResponse.json(
-      { error: "Insufficient credits — top up in Settings to generate a featured image." },
+      { error: "You don't have enough AI credits for a featured image. Top up, use your own AI key, or upload an image yourself." },
       { status: 402 },
     );
   }

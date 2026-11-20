@@ -1,10 +1,8 @@
 import { PLAN } from "@/lib/plan/plans";
-import { createHash, randomUUID } from "node:crypto";
 import { workspaceOwner } from "@/lib/plan/workspacePlan";
 import { effectivePlan } from "@/lib/plan/entitlement";
 import { NextRequest, NextResponse } from "next/server";
 import type { EntityItem } from "electrodb";
-import { parseUserAgent, extractGeoFromHeaders } from "@/server/analytics";
 import { resolveHideBranding, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
 import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
@@ -18,16 +16,22 @@ import { CommerceSettings, CommerceProduct } from "@/lib/db/commerceEntities";
 import { getStorefrontPath, getCheckoutPath, DEFAULT_STOREFRONT_SLUG } from "@/lib/commerce/storefrontLayout";
 import { orderLinkOnHomepage } from "@/lib/commerce/returnPath";
 import { deriveCommerceTheme, type CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
-import { FormSettings, PageView } from "@/lib/db/opsEntities";
-import { recordPageViewRollup } from "@/lib/analyticsRollup";
+import { FormSettings } from "@/lib/db/opsEntities";
 import { renderContentBlocks } from "@/lib/customContent/render";
 import { applyActiveNav } from "@/lib/pub/activeNav";
+import { applyOwnerCode } from "@/lib/customCode/serve";
 import { applySiteBrandToCss, applySiteBrandToHtml } from "@/lib/brand/inject";
-import { CONTENT_MARKER_ATTR, escapeHtmlAttr, injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
+import { CONTENT_MARKER_ATTR, safeJsonLd, escapeHtmlAttr, injectBrandingBar, injectCustomJs, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
+import { needsPageBase } from "@/lib/pub/pageBase";
 import { serveProject } from "@/lib/projects/serve";
 import { resolvePreviewHost } from "@/lib/projects/previewHost";
 import { User, Organization } from "@/lib/db/coreEntities";
-import { buildSiteRobotsTxt, buildSiteSitemap } from "@/lib/pub/siteSitemap";
+import { buildSiteRobotsTxt, buildSiteSitemap, listSitePages } from "@/lib/pub/siteSitemap";
+import { PAGE_CACHE_CONTROL, injectVisitBeacon } from "@/lib/pub/visitBeacon";
+import { applyHealthSettings, buildLlmsTxt, healthSettingsFor, serveCtxFor } from "@/lib/siteHealth/serve";
+import { productJsonLd } from "@/lib/siteHealth/businessMarkup";
+import { applyAnalyticsTag } from "@/lib/googleAnalytics/serveTag";
+import { aiRobotsRules } from "@/lib/siteHealth/speedFixes";
 import { cleanPathFor, mountedSegments, normalizeMountPrefix, unmountLocation, unmountText } from "@/lib/pub/mountPrefix";
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
@@ -259,38 +263,6 @@ function injectProductSeo(html: string, product: { name: string; description: st
   return out;
 }
 
-// designJson (unlike compiledHtml) is never run through sanitizeCompiledHtml.ts —
-// server/sanitizer.ts's sanitizePlexoPayload only Zod-validates + prototype-pollution-
-// cleans it (see that file's own comment) — so the raw customJs string the author typed
-// into BodyGlobalSettingsTab.tsx is still sitting in cursor.designJson right where the
-// compiler's own <script> tag for it got stripped out of compiledHtml on publish (the
-// sanitizer's exclusiveFilter only lets a <script src="..."> through, for the MailDrip
-// embed — any inline <script> with no src, customJs's included, is always removed).
-// Re-injecting it here at serve time, straight from designJson, is the fix: this is the
-// site owner's own authored code for their own site (the same trust model as the
-// customCss sibling field, which already survives publish untouched), not third-party or
-// visitor-supplied content, so there's no new XSS surface — just restoring a feature the
-// UI already promises but silently drops.
-function injectCustomJs(html: string, customJs: string | null | undefined): string {
-  const script = (customJs ?? "").trim();
-  if (!script) return html;
-  const scriptTag = `<script>\n${script}\n</script>`;
-  const maskedHtml = html.replace(
-    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
-    (block) => " ".repeat(block.length),
-  );
-  let insertAt = -1;
-  const bodyCloseRe = /<\/body\s*>/gi;
-  let match: RegExpExecArray | null;
-  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
-    insertAt = match.index;
-  }
-  if (insertAt !== -1) {
-    return html.slice(0, insertAt) + scriptTag + html.slice(insertAt);
-  }
-  return html + scriptTag;
-}
-
 // Routes <img> tags served from our own uploads bucket (see lib/storage.ts's
 // publicUrlFor — allowlisted in next.config.ts's images.remotePatterns) through Next's
 // /_next/image optimizer (resize + modern-format re-encode), and adds loading="lazy" to
@@ -428,7 +400,7 @@ export async function GET(
   const segments = params.slug ?? [];
   const url = new URL(request.url);
   // Files Plexo writes for the whole site (not stored pages) are answered as they are; their web addresses are then cleaned like the rest.
-  const platformFile = segments.length === 1 && /^(sitemap\.xml|robots\.txt)$/i.test(segments[0]);
+  const platformFile = segments.length === 1 && /^(sitemap\.xml|robots\.txt|llms\.txt)$/i.test(segments[0]);
   const clean = platformFile ? null : cleanPathFor(prefix, segments.map(safeDecode));
   if (clean !== null) {
     const slash = url.pathname.endsWith("/") && clean !== "/" ? "/" : "";
@@ -684,7 +656,8 @@ async function serveSite(
     // page-owned asset files to namespace, and the domain root itself has no "directory" to
     // disambiguate from.
     const pageSegments = slugSegments.slice(0, matchedSegments);
-    const isNestedRawPage = cursor.id !== published.templateId && cursor.sourceType === "RAW_UPLOAD";
+    // A page that started as blocks keeps no files of its own and uses absolute links (#anchors, /paths), so it needs no base.
+    const isNestedRawPage = needsPageBase(cursor, published.templateId);
     let html = isNestedRawPage
       ? injectBaseHref(cursor.compiledHtml, `/${pageSegments.join("/")}/`)
       : cursor.compiledHtml;
@@ -699,6 +672,10 @@ async function serveSite(
       siteName: published.template.name || rawDomain,
     });
     html = optimizeImages(html);
+    // Site health's "Fix it for me" options (lib/siteHealth/serve.ts), applied as the page is served so turning one off
+    // puts the page back exactly as it was. (Google Analytics is added last, after the owner's own code: applyAnalyticsTag.)
+    const healthView = await healthSettingsFor(published.templateId);
+    html = applyHealthSettings(html, healthView, await serveCtxFor(html, healthView, { canonicalUrl, siteName: published.template.name || rawDomain }));
     // The site's brand (lib/brand): the hosted brand sheet, so a brand published in Strata shows on every page without a
     // rebuild; raw-HTML/WordPress pages also get their own colours and fonts pointed at it when the owner turned that on.
     html = await applySiteBrandToHtml(html, published.templateId, cursor.sourceType === "RAW_UPLOAD" ? "raw" : cursor.designFormat === "v2" ? "v2" : "classic");
@@ -768,34 +745,13 @@ async function serveSite(
       html = injectFormsScript(html, published.templateId, { auto: true });
     }
 
-    // Record analytics view asynchronously (does not block client response)
-    try {
-      const ip = request.headers.get("x-forwarded-for")?.split(",")[0].trim() || request.headers.get("x-real-ip") || "127.0.0.1";
-      const ipHash = createHash("sha256").update(ip).digest("hex");
-      const userAgent = request.headers.get("user-agent") || null;
-      const { deviceType, browser, os } = parseUserAgent(userAgent);
-      const { country, region, city } = extractGeoFromHeaders(request.headers);
+    // The owner's own header/footer code (verification, pixels) — custom domain + Starter and above only.
+    html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") });
+    html = await applyAnalyticsTag(html, published.templateId, request.headers);
 
-      const viewCreatedAt = new Date();
-      void PageView.create({
-        id: randomUUID(),
-        templateId: cursor.id,
-        domain: rawDomain,
-        ipHash,
-        userAgent: userAgent ?? undefined,
-        deviceType: deviceType ?? undefined,
-        browser: browser ?? undefined,
-        os: os ?? undefined,
-        country: country ?? undefined,
-        region: region ?? undefined,
-        city: city ?? undefined,
-      }).go().catch((err) => console.error("Failed to log PageView:", err));
-      void recordPageViewRollup({ createdAt: viewCreatedAt, templateId: cursor.id, deviceType, browser, os }).catch((err) =>
-        console.error("Failed to record PageView rollup:", err),
-      );
-    } catch (err) {
-      console.error("Error logging PageView:", err);
-    }
+    // Visits are counted by the page's own counting script, not here: this response is cached at the edge, so most
+    // visits never reach this code (lib/pub/visitBeacon.ts). The script is the only counter, so nothing is counted twice.
+    html = injectVisitBeacon(html, cursor.id);
 
     // Both BUILDER and RAW_UPLOAD pages store their own served HTML in compiledHtml —
     // for BUILDER it's the compiler's output, for RAW_UPLOAD it's the uploaded file
@@ -807,6 +763,9 @@ async function serveSite(
         // Lets the WordPress migration's live check prove a URL on the owner's real domain
         // is now served by Plexo (and by this site), not still by the old host.
         "X-Plexo-Site": published.templateId,
+        // Kept at the edge for a minute and refreshed in the background; publishing and edits clear it at once
+        // (lib/pub/edgeCache.ts). Safe because visits are counted by the page's own script, not by this render.
+        "Cache-Control": PAGE_CACHE_CONTROL,
       },
     });
   }
@@ -854,6 +813,14 @@ async function serveSite(
             siteName: published.template.name || rawDomain,
           });
           html = optimizeImages(html);
+          // Site health's "Show prices in Google" fix: Product markup built from this product's own record (price, stock, picture).
+          if ((await healthSettingsFor(published.templateId)).extras.product_schema && !/"@type"\s*:\s*"Product"/i.test(html)) {
+            const ld = productJsonLd(
+              { name: product.name, description: product.description, imageUrl: product.imageUrl, sku: product.sku, priceMinor: product.priceMinor, currency: product.currency, stockQuantity: product.stockQuantity, kind: product.kind },
+              { url: `https://${rawDomain}${requestedPagePath}`, seller: published.template.name || rawDomain },
+            );
+            html = html.replace(/<\/head\s*>/i, `<script type="application/ld+json">${safeJsonLd(ld)}</script></head>`);
+          }
           html = await applySiteBrandToHtml(html, published.templateId, productDetailTemplate.designFormat === "v2" ? "v2" : "classic");
           html = injectCommerceScript(
             html,
@@ -869,6 +836,8 @@ async function serveSite(
             const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
             html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
           }
+          html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") });
+    html = await applyAnalyticsTag(html, published.templateId, request.headers);
           return new NextResponse(html, {
             headers: { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff" },
           });
@@ -896,14 +865,22 @@ async function serveSite(
 
   // /sitemap.xml and /robots.txt for every site — generated from the page tree and blog,
   // unless the owner uploaded their own file at that path (checked first, so it wins).
-  if (matchedSegments === 0 && remainingSegments.length === 1 && (remainingSegments[0] === "sitemap.xml" || remainingSegments[0] === "robots.txt")) {
+  if (matchedSegments === 0 && remainingSegments.length === 1 && (remainingSegments[0] === "sitemap.xml" || remainingSegments[0] === "robots.txt" || remainingSegments[0] === "llms.txt")) {
     const own = published.template.sourceType === "RAW_UPLOAD"
       ? (await TemplateAsset.get({ templateId: published.templateId, path: remainingSegments[0] }).go()).data
       : null;
-    if (!own) {
+    // llms.txt only exists once the owner turned on "Add the guide" in Site health.
+    const healthSettings = remainingSegments[0] !== "sitemap.xml" ? await healthSettingsFor(published.templateId) : null;
+    if (!own && (remainingSegments[0] !== "llms.txt" || healthSettings?.llmsTxt)) {
       const body = remainingSegments[0] === "sitemap.xml"
         ? await buildSiteSitemap(published.template, rawDomain, { homeOnly })
-        : buildSiteRobotsTxt(rawDomain, published.noindex ?? false);
+        : remainingSegments[0] === "llms.txt"
+          ? buildLlmsTxt({
+              siteName: published.template.name || rawDomain,
+              description: healthSettings?.fallbackDescription ?? published.template.compiledHtml.match(/<meta\b[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? null,
+              pages: await listSitePages(published.template, rawDomain, homeOnly),
+            })
+          : buildSiteRobotsTxt(rawDomain, published.noindex ?? false, { aiRules: healthSettings?.extras.ai_robots ? aiRobotsRules() : undefined });
       return new NextResponse(body, {
         headers: {
           "Content-Type": remainingSegments[0] === "sitemap.xml" ? "application/xml; charset=utf-8" : "text/plain; charset=utf-8",
@@ -983,6 +960,8 @@ async function serveSite(
     if (/<form[\s>]/i.test(html) || html.includes("data-plexo-form")) {
       html = injectFormsScript(html, published.templateId, { auto: true });
     }
+    html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") });
+    html = await applyAnalyticsTag(html, published.templateId, request.headers);
     headers.set("Cache-Control", "public, max-age=0, s-maxage=30, must-revalidate");
     return new NextResponse(html, { headers });
   }

@@ -29,7 +29,7 @@ export function strataFail(err: unknown): NextResponse {
     return NextResponse.json({ error: err.message, kind: err.kind }, { status });
   }
   console.error("strata route error:", err);
-  return NextResponse.json({ error: "Something went wrong talking to Strata. Please try again in a moment.", kind: "server" }, { status: 500 });
+  return NextResponse.json({ error: "Something went wrong loading your brand. Please try again in a moment.", kind: "server" }, { status: 500 });
 }
 
 export type StrataCaller = { userId: string; organizationId: string; client: ReturnType<typeof createStrataClient> };
@@ -41,7 +41,7 @@ export type StrataCaller = { userId: string; organizationId: string; client: Ret
 export async function authorizeStrata(request: NextRequest, bucket: string, limit: number): Promise<StrataCaller | NextResponse> {
   const base = strataApiUrl();
   if (!base) {
-    return NextResponse.json({ error: "Strata isn't set up on this Plexo yet, so there's nothing to connect.", kind: "unavailable" }, { status: 503 });
+    return NextResponse.json({ error: "Saving your brand isn't available on this Plexo yet, so there's nothing to connect.", kind: "unavailable" }, { status: 503 });
   }
   const resolved = await resolveUser(request);
   if (!resolved) return NextResponse.json({ error: "Sign in to Plexo to continue.", kind: "unauthorized" }, { status: 401 });
@@ -63,16 +63,16 @@ export async function exchangeCharisolIdToken(base: string, idToken: string): Pr
   try {
     res = await fetch(`${base}/auth/charisol-id-token`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ idToken }) });
   } catch {
-    throw new StrataError("Couldn't reach Strata. Check your connection and try again.", "network");
+    throw new StrataError("Couldn't reach your brand. Check your connection and try again.", "network");
   }
   const body = (await res.json().catch(() => ({}))) as { data?: { token?: unknown; user?: { email?: string; firstName?: string; lastName?: string; name?: string } } };
   if (res.ok && typeof body.data?.token === "string") {
     const u = body.data.user ?? {};
     return { token: body.data.token, email: u.email, name: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.name };
   }
-  if (res.status === 403) throw new StrataError("Your Strata account is suspended. Contact Charisol support to get it back.", "forbidden", 403);
-  if (res.status === 401) throw new StrataError("Strata didn't accept your Charisol sign-in. Try connecting again.", "invalid", 401);
-  throw new StrataError("Strata isn't available right now. Please try again in a few minutes.", "server", res.status);
+  if (res.status === 403) throw new StrataError("Your brand account is suspended. Contact Charisol support to get it back.", "forbidden", 403);
+  if (res.status === 401) throw new StrataError("Your brand didn't accept your Charisol sign-in. Try connecting again.", "invalid", 401);
+  throw new StrataError("Your brand isn't available right now. Please try again in a few minutes.", "server", res.status);
 }
 
 /**
@@ -84,7 +84,7 @@ export async function loginToStrataWithPassword(base: string, email: string, pas
   try {
     res = await fetch(`${base}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json", Accept: "application/json" }, body: JSON.stringify({ email, password }) });
   } catch {
-    throw new StrataError("Couldn't reach Strata. Check your connection and try again.", "network");
+    throw new StrataError("Couldn't reach your brand. Check your connection and try again.", "network");
   }
   const body = (await res.json().catch(() => ({}))) as { message?: string; data?: { token?: unknown; user?: { email?: string; firstName?: string; lastName?: string; name?: string } } };
   if (res.ok && typeof body.data?.token === "string") {
@@ -92,7 +92,7 @@ export async function loginToStrataWithPassword(base: string, email: string, pas
     return { token: body.data.token, email: u.email ?? email, name: [u.firstName, u.lastName].filter(Boolean).join(" ") || u.name };
   }
   if (res.status === 429) throw new StrataError("Too many sign-in attempts. Wait a few minutes and try again.", "invalid", 429);
-  if (res.status === 403) throw new StrataError(body.message || "That Strata account can't sign in right now. Contact Charisol support if this keeps happening.", "forbidden", 403);
-  if (res.status === 401 || res.status === 400) throw new StrataError(body.message || "That email and password don't match a Strata account. Check them and try again.", "invalid", 401);
-  throw new StrataError("Strata isn't available right now. Please try again in a few minutes.", "server", res.status);
+  if (res.status === 403) throw new StrataError(body.message || "That brand account can't sign in right now. Contact Charisol support if this keeps happening.", "forbidden", 403);
+  if (res.status === 401 || res.status === 400) throw new StrataError(body.message || "That email and password don't match a brand account. Check them and try again.", "invalid", 401);
+  throw new StrataError("Your brand isn't available right now. Please try again in a few minutes.", "server", res.status);
 }

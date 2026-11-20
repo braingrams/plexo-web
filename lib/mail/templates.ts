@@ -356,6 +356,8 @@ export function buildOrderStatusEmail(input: {
   items: { nameSnapshot: string; quantity: number; unitPriceMinor: number }[];
   currency: string;
   orderUrl: string;
+  /** The shop's terms of sale / refund policy, linked at the bottom when the owner has set one. */
+  termsUrl?: string | null;
   brand?: EmailBrand;
 }): { subject: string; html: string } {
   const copy = ORDER_STATUS_COPY[input.event];
@@ -387,6 +389,7 @@ export function buildOrderStatusEmail(input: {
       ${itemsTable}
       ${CTA_BUTTON(input.orderUrl, "View Order", accent)}
       ${FALLBACK_LINK(input.orderUrl, accent)}
+      ${input.termsUrl ? `<p style="margin:20px 0 0;font-size:12.5px;color:#76766F;text-align:left;">Our <a href="${esc(input.termsUrl)}" style="color:${accent};">terms of sale and refund policy</a></p>` : ""}
     `,
     brand: input.brand,
   });
@@ -1052,6 +1055,66 @@ export function buildRedesignAnnouncementEmail(input: { name?: string | null; se
       <p style="margin:0 0 8px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">It takes about a minute, and you can skip any step.</p>
       ${CTA_BUTTON(input.setupUrl, "Take 1 minute to personalise")}
       ${FALLBACK_LINK(input.setupUrl)}
+    `,
+  });
+  return { subject, preheader, html };
+}
+
+// ── Site health ─────────────────────────────────────────────────────────────────────────
+
+export type DigestEmailInput = {
+  siteName: string;
+  headline: string;
+  scores: { label: string; score: number; change: number | null }[];
+  fixes: { title: string; why: string; gain?: string; canFixForYou: boolean }[];
+  moreCount: number;
+  openUrl: string;
+  unsubscribeUrl: string;
+};
+
+/** The weekly "Your site health" email: how the site is doing, what changed, the three things worth fixing first, one button. */
+export function buildSiteHealthDigestEmail(input: DigestEmailInput): { subject: string; preheader: string; html: string } {
+  const name = esc(input.siteName);
+  const moved = input.scores.filter((s) => s.change != null && s.change !== 0);
+  const subject = `Your site health this week: ${input.siteName}`;
+  const preheader = input.fixes.length
+    ? `${input.fixes.length === 1 ? "One thing" : `${input.fixes.length} things`} worth fixing first, in plain words.`
+    : "Nothing needs fixing. Your site is in great shape.";
+  const tone = (n: number) => (n >= 90 ? "#2F7D32" : n >= 50 ? "#B26A00" : "#C0392B");
+  const change = (c: number | null) => (c == null ? "" : c === 0 ? "no change" : c > 0 ? `&#9650; up ${c}` : `&#9660; down ${Math.abs(c)}`);
+  const row = (s: DigestEmailInput["scores"][number]) => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid ${EMAIL_COLORS.border};font-size:15px;color:#3F3F3C;text-align:left;">${esc(s.label)}</td>
+      <td align="right" style="padding:10px 0;border-bottom:1px solid ${EMAIL_COLORS.border};font-size:15px;font-weight:800;color:${tone(s.score)};white-space:nowrap;">${s.score}<span style="font-weight:500;color:#5B5B58;font-size:12px;"> / 100 ${s.change != null ? `&middot; ${change(s.change)}` : ""}</span></td>
+    </tr>`;
+  const fix = (f: DigestEmailInput["fixes"][number], i: number) => `
+    <tr>
+      <td width="28" valign="top" style="padding:0 0 16px;font-size:15px;font-weight:800;color:#517A12;">${i + 1}</td>
+      <td valign="top" style="padding:0 0 16px;font-size:15px;line-height:1.55;color:#3F3F3C;text-align:left;"><strong style="color:#121212;">${esc(f.title)}</strong>${f.gain ? ` <span style="color:#5B5B58;">(${esc(f.gain)})</span>` : ""}<br/>${esc(f.why)}${f.canFixForYou ? `<br/><span style="color:#517A12;font-weight:700;">Plexo can fix this for you in one click.</span>` : ""}</td>
+    </tr>`;
+  const changeLine = moved.length
+    ? `Since last week: ${moved.map((s) => `${esc(s.label.toLowerCase())} went ${s.change! > 0 ? "up" : "down"} ${Math.abs(s.change!)}`).join(", ")}.`
+    : input.scores.some((s) => s.change != null)
+      ? "Nothing has moved since last week."
+      : "This is your first weekly check-in, so there is nothing to compare with yet.";
+  const html = emailShell({
+    title: esc(subject),
+    preheader,
+    unsubscribeUrl: input.unsubscribeUrl,
+    bodyHtml: `
+      <p style="margin:0 0 12px;font-size:13px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#517A12;text-align:left;">Your site health</p>
+      <h1 style="margin:0 0 12px;font-size:26px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.25;text-align:left;">${name}</h1>
+      <p style="margin:0 0 20px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${esc(input.headline)}</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 12px;">${input.scores.map(row).join("")}</table>
+      <p style="margin:0 0 28px;font-size:14px;color:#5B5B58;line-height:1.6;text-align:left;">${changeLine}</p>
+      ${input.fixes.length
+        ? `<p style="margin:0 0 14px;font-size:16px;font-weight:800;color:#121212;text-align:left;">${input.fixes.length === 1 ? "The one thing to fix first" : `The ${input.fixes.length} things to fix first`}</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 12px;">${input.fixes.map(fix).join("")}</table>
+      ${input.moreCount > 0 ? `<p style="margin:0 0 20px;font-size:14px;color:#5B5B58;text-align:left;">Plus ${input.moreCount} smaller ${input.moreCount === 1 ? "thing" : "things"} you can see in Site health.</p>` : ""}`
+        : `<p style="margin:0 0 24px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">Nothing needs fixing right now. We keep checking every week.</p>`}
+      ${CTA_BUTTON(input.openUrl, input.fixes.length ? "See and fix it" : "Open Site health")}
+      ${FALLBACK_LINK(input.openUrl)}
+      <p style="margin:24px 0 0;font-size:12px;color:#5B5B58;line-height:1.6;text-align:left;">You get this email once a week because Site health checks ${name} for you. You can turn it off with the link below, or in the Site health tab.</p>
     `,
   });
   return { subject, preheader, html };

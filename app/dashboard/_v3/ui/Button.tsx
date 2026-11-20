@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { forwardRef } from "react";
 import { LoaderCircle } from "lucide-react";
 import { cx } from "./cx";
@@ -59,6 +59,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   );
 });
 
+/** Inside a ButtonLink: a small spinner at the end of the button while its page is on the way. */
+function ButtonLinkPending() {
+  const { pending } = useLinkStatus();
+  return <span aria-hidden className="plx-bpend" data-on={pending ? "true" : "false"} />;
+}
+
 export type ButtonLinkProps = Common & Omit<React.ComponentProps<typeof Link>, "className"> & { className?: string };
 
 /** A link that looks like a button (navigation should be a link, not a button). */
@@ -70,6 +76,7 @@ export function ButtonLink({ variant, size, fullWidth, iconOnly, leftIcon, right
         {children}
         {rightIcon}
       </span>
+      <ButtonLinkPending />
     </Link>
   );
 }

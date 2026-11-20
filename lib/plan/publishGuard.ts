@@ -4,14 +4,16 @@ import { NextResponse } from "next/server";
 import { getTierFeatures, isHomePageOnlyPlan } from "@/lib/subscription";
 import { otherLiveSites } from "./siteLimits";
 import { customDomainError } from "./domainGate";
-import { nextPlanUp, planLabel, toPlanId } from "./plans";
+import { PAID_PLAN_IDS, planLabel, toPlanId, type PaidPlanId } from "./plans";
+import { planGateBody } from "./planGate";
+import { planGateMessage } from "./limitGates";
 import { listGovernedSites } from "./sitesStore";
 
 // Server-side plan checks for every way something goes live. The serve route enforces the
 // same limits for visitors regardless (app/pub/[domain]); these give the owner — or the AI
 // assistant acting for them — a clear reason and a next step instead of a silent no-op.
 
-export type PlanLimitCode = "PLAN_PAGE_LIMIT_EXCEEDED" | "PLAN_SITE_LIMIT_EXCEEDED" | "PLAN_CUSTOM_DOMAIN_REQUIRES_UPGRADE";
+export type PlanLimitCode = "PLAN_PAGE_LIMIT_EXCEEDED" | "PLAN_SITE_LIMIT_EXCEEDED" | "PLAN_CUSTOM_DOMAIN_REQUIRES_UPGRADE" | "PLAN_CUSTOM_DOMAIN_LIMIT";
 
 export class PlanLimitError extends Error {
   readonly status = 403;
@@ -26,7 +28,8 @@ export class PlanLimitError extends Error {
 }
 
 export function planLimitResponse(err: PlanLimitError): NextResponse {
-  return NextResponse.json({ error: err.message, code: err.code, upgradeUrl: "/dashboard/settings/subscription", ...err.details }, { status: err.status });
+  const { requiredPlan, ...details } = err.details as { requiredPlan?: PaidPlanId } & Record<string, unknown>;
+  return NextResponse.json(planGateBody(err.code, err.message, requiredPlan ?? PLAN.STARTER, details), { status: err.status });
 }
 
 /**
@@ -38,6 +41,7 @@ export function assertCanPublishPage(plan: string, page: { parentId?: string | n
     throw new PlanLimitError(
       "PLAN_PAGE_LIMIT_EXCEEDED",
       "The Free plan publishes one page per site — your homepage. This page is saved; upgrade to Starter to publish it.",
+      { requiredPlan: PLAN.STARTER },
     );
   }
 }
@@ -62,13 +66,28 @@ export async function assertCanPutSiteLive(
     const names = others.map((s) => s.name);
     const max = features.maxPublishedSites;
     const planName = planLabel(actor.subscriptionPlan);
-    const next = planLabel(nextPlanUp(toPlanId(actor.subscriptionPlan)) ?? PLAN.ENTERPRISE);
+    // The plan that actually lifts this: the first one that keeps more sites live than are live now
+    // (Starter still keeps just one, so from Free the answer is Pro).
+    const needed: PaidPlanId = PAID_PLAN_IDS.find((p) => {
+      const cap = getTierFeatures(p).maxPublishedSites;
+      return cap === null || cap > others.length;
+    }) ?? PLAN.ENTERPRISE;
+    const next = planLabel(needed);
     throw new PlanLimitError(
       "PLAN_SITE_LIMIT_EXCEEDED",
       toPlanId(actor.subscriptionPlan) === PLAN.FREE
-        ? `The ${planName} plan keeps one site live at a time, and "${names[0]}" is live now. Upgrade to ${next} to put more sites live, or make this your live site instead (the other one goes offline, nothing is deleted).`
-        : `The ${planName} plan keeps ${max} site${max === 1 ? "" : "s"} live at a time, and ${max === 1 ? `"${names[0]}" is` : "they're all"} live now. Upgrade to ${next} for more, or take one offline first (nothing is deleted).`,
-      { liveSiteIds: others.map((s) => s.id), liveSiteNames: names },
+        ? `This site can't go live yet. The ${planName} plan keeps one site live at a time, and "${names[0]}" is live now. Upgrade to ${next} to put more sites live, or publish this one instead (the other one goes offline, nothing is deleted).`
+        : `This site can't go live yet. The ${planName} plan keeps ${max} site${max === 1 ? "" : "s"} live at a time, and ${max === 1 ? `"${names[0]}" is` : "they're all"} live now. Upgrade to ${next} for more, or take one offline first (nothing is deleted).`,
+      { liveSiteIds: others.map((s) => s.id), liveSiteNames: names, requiredPlan: needed, canReplaceLiveSite: toPlanId(actor.subscriptionPlan) === PLAN.FREE },
     );
   }
+}
+
+/** A plan limit as one sentence for text-only places (MCP tools, AI assistants): the reason, the plan that lifts it and where to get it. Any other error keeps its own message. */
+export function planLimitText(err: unknown, fallback: string): string {
+  if (err instanceof PlanLimitError) {
+    const requiredPlan = ((err.details as { requiredPlan?: PaidPlanId }).requiredPlan ?? PLAN.STARTER) as PaidPlanId;
+    return planGateMessage({ message: err.message, requiredPlan });
+  }
+  return err instanceof Error ? err.message : fallback;
 }

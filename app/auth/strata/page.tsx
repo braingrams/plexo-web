@@ -58,7 +58,7 @@ function ConnectStrata() {
       const res = await fetch("/api/v1/strata/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim(), password }) });
       const body = (await res.json().catch(() => null)) as { error?: string; user?: { email?: string } } | null;
       if (!res.ok) {
-        setError(body?.error ?? "Strata couldn't be connected. Please try again.");
+        setError(body?.error ?? "Your brand couldn't be connected. Please try again.");
         setBusy(false);
         return;
       }
@@ -95,31 +95,31 @@ function ConnectStrata() {
       {phase === "connecting" && (
         <div role="status" className="ax-center-text">
           <span className="ax-spinner" style={{ margin: "0 auto 16px", display: "block", width: 26, height: 26 }} aria-hidden="true" />
-          <PageHead title="Connecting to Strata…">Using your Charisol account. This only takes a moment.</PageHead>
+          <PageHead title="Connecting to your brand…">Using your Charisol account. This only takes a moment.</PageHead>
         </div>
       )}
 
       {phase === "done" && (
         <div role="status" className="ax-center-text">
           <div className="ax-badge-icon ax-lime"><CheckCircle2 size={30} aria-hidden="true" /></div>
-          <PageHead title="Strata is connected">{who ? `Signed in as ${who}. ` : ""}You can close this window.</PageHead>
+          <PageHead title="Your brand is connected">{who ? `Signed in as ${who}. ` : ""}You can close this window.</PageHead>
         </div>
       )}
 
       {phase === "form" && (
         <>
-          <PageHead title={switching ? "Use another Strata account" : "Sign in to Strata"}>
-            {switching ? "Sign in with the Strata account you want to use in Plexo." : "We couldn't connect you automatically. Sign in to bring your brand in."}
+          <PageHead title={switching ? "Use another brand account" : "Sign in to your brand"}>
+            {switching ? "Sign in with the brand account you want to use in Plexo." : "We couldn't connect you automatically. Sign in to bring your brand in."}
           </PageHead>
           <form onSubmit={submit} className="ax-stack">
             {error && <Alert tone="error">{error}</Alert>}
             <TextField label="Email" type="email" autoComplete="username" inputMode="email" required autoFocus={!email} value={email} onChange={(e) => setEmail(e.target.value)} placeholder={plexoEmail || "you@example.com"} />
             <PasswordField label="Password" autoComplete="current-password" required autoFocus={!!email} value={password} onChange={(e) => setPassword(e.target.value)} />
-            <Button type="submit" loading={busy} disabled={!email || !password}>{busy ? "Connecting…" : "Connect Strata"}</Button>
+            <Button type="submit" loading={busy} disabled={!email || !password}>{busy ? "Connecting…" : "Connect your brand"}</Button>
           </form>
           <Divider />
           <GoogleButton onClick={google} disabled={busy} />
-          <p className="ax-hint ax-center-text" style={{ marginTop: 20 }}><Lock size={12} style={{ display: "inline", verticalAlign: "-1px", marginRight: 6 }} aria-hidden="true" />Your password goes straight to Strata. Plexo never keeps it.</p>
+          <p className="ax-hint ax-center-text" style={{ marginTop: 20 }}><Lock size={12} style={{ display: "inline", verticalAlign: "-1px", marginRight: 6 }} aria-hidden="true" />Your password goes straight to your brand. Plexo never keeps it.</p>
         </>
       )}
     </AuthShell>

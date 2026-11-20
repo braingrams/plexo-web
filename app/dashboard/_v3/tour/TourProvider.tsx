@@ -1,13 +1,13 @@
 "use client";
 
-import { pageZoom } from "@/lib/dashboardV3/pageZoom";
 import { otherDialogOpen } from "@/lib/dashboardV3/dialogs";
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
-import { Compass, ListChecks, Route } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Check, ChevronRight, Compass, ListChecks, Route } from "lucide-react";
 import {
   currentTourPosition,
   resolveTourSteps,
+  routeMatches,
   sameRoute,
   shouldOfferTour,
   tourReducer,
@@ -18,16 +18,20 @@ import {
   type TourState,
   type TourStep,
 } from "@/lib/dashboardV3/tour";
-import { TOUR_STEPS } from "@/lib/dashboardV3/tourSteps";
+import { TOUR_AREAS, TOUR_STEPS, type TourArea } from "@/lib/dashboardV3/tourSteps";
+import { TOUR_STEP_EVENT } from "@/lib/dashboardV3/siteSwitcherEvents";
+import { CoachMark } from "./CoachMark";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
-import { Portal, trapTab } from "../ui/portal";
+import { Portal } from "../ui/portal";
 
 type TourApi = {
   state: TourState;
   /** Open the "Want a quick tour?" question (the help menu's "Take the tour again"). */
   openOffer: () => void;
   start: (mode: TourMode) => void;
+  /** Replay just one part of Plexo (an id from TOUR_AREAS). */
+  startArea: (areaId: string, stepId?: string) => void;
   /** True while a step is on screen. */
   running: boolean;
 };
@@ -50,6 +54,7 @@ export type TourProviderProps = {
   /** Saves the state on the account (the profile API). Omit in previews. */
   onPersist?: (state: TourState) => void;
   steps?: TourStep[];
+  areas?: TourArea[];
   context?: TourContext;
   /** Pages where a first-time visitor is asked "Want a quick tour?" (default: Home). */
   offerOn?: string[];
@@ -60,15 +65,6 @@ export type TourProviderProps = {
 
 const WAIT_FOR_ANCHOR_MS = 4000;
 
-function visibleAnchor(anchor: string): HTMLElement | null {
-  const all = document.querySelectorAll<HTMLElement>(`[data-tour="${CSS.escape(anchor)}"]`);
-  for (const el of all) {
-    const r = el.getBoundingClientRect();
-    if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden") return el;
-  }
-  return null;
-}
-
 export function persistTourState(state: TourState) {
   void fetch("/api/profile", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ tourState: state }) }).catch(() => {});
 }
@@ -78,9 +74,10 @@ export function persistTourState(state: TourState) {
  * the page at a time with a short plain description, moving across pages as it goes. State is
  * saved on every move, so it picks up where they left off (on any device).
  */
-export function TourProvider({ initialState, onPersist, steps: registry = TOUR_STEPS, context, offerOn = ["/dashboard"], initialDriving = false, children }: TourProviderProps) {
+export function TourProvider({ initialState, onPersist, steps: registry = TOUR_STEPS, areas = TOUR_AREAS, context, offerOn = ["/dashboard"], initialDriving = false, children }: TourProviderProps) {
   const router = useRouter();
   const pathname = usePathname() ?? "/";
+  const search = useSearchParams()?.toString() ?? "";
   const [state, setState] = useState<TourState>(initialState);
   const [offerOpen, setOfferOpen] = useState(false);
   // The offer opens by itself, so it steps aside while any other dialog is open and returns once that one closes.
@@ -95,7 +92,7 @@ export function TourProvider({ initialState, onPersist, steps: registry = TOUR_S
   // Only drive navigation once the person has pressed something in this visit; a tour left
   // "active" on another page offers to resume instead of whisking them away on load.
   const [driving, setDriving] = useState(initialDriving);
-  const steps = useMemo(() => (state.mode ? resolveTourSteps(registry, state.mode, context) : []), [registry, state.mode, context]);
+  const steps = useMemo(() => (state.mode ? resolveTourSteps(registry, state.mode, context, state.area) : []), [registry, state.mode, state.area, context]);
   const position = currentTourPosition(state, steps);
 
   const persistRef = useRef(onPersist);
@@ -145,20 +142,37 @@ export function TourProvider({ initialState, onPersist, steps: registry = TOUR_S
     [dispatch, registry, context],
   );
 
+  const startArea = useCallback(
+    (areaId: string, stepId?: string) => {
+      setOfferOpen(false);
+      setDriving(true);
+      dispatch({ type: "start", mode: "detailed", area: areaId, stepId, steps: resolveTourSteps(registry, "detailed", context, areaId) });
+    },
+    [dispatch, registry, context],
+  );
+
   const resume = useCallback(() => {
     setOfferOpen(false);
     setDriving(true);
     if (state.stepId) dispatch({ type: "goto", stepId: state.stepId });
   }, [dispatch, state.stepId]);
 
-  const api = useMemo<TourApi>(() => ({ state, openOffer: () => setOfferOpen(true), start, running: !!position && driving }), [state, start, position, driving]);
+  const api = useMemo<TourApi>(() => ({ state, openOffer: () => setOfferOpen(true), start, startArea, running: !!position && driving }), [state, start, startArea, position, driving]);
 
   // Move to the step's page when it lives elsewhere.
-  const onStepPage = position ? sameRoute(position.step.route, pathname) : false;
+  const onStepPage = position ? routeMatches(position.step.route, pathname, search) : false;
   useEffect(() => {
     if (!position || !driving || onStepPage) return;
     router.push(position.step.route);
   }, [position, driving, onStepPage, router]);
+
+  // Only the parts that exist for this person (no Store part for someone who can't have one).
+  const offerAreas = useMemo(() => areas.filter((a) => resolveTourSteps(registry, "detailed", context, a.id).length > 0), [areas, registry, context]);
+  // Tell parts of the page which step is showing (the site switcher opens itself for its step and closes after it).
+  const showingId = position && driving && onStepPage ? position.step.id : null;
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(TOUR_STEP_EVENT, { detail: { id: showingId } }));
+  }, [showingId]);
 
   const canResume = state.status === "later" && !!state.stepId && !!state.mode;
 
@@ -168,6 +182,9 @@ export function TourProvider({ initialState, onPersist, steps: registry = TOUR_S
       <TourOffer
         open={offerOpen && !otherOpen}
         canResume={canResume}
+        areas={offerAreas}
+        doneAreas={state.doneAreas ?? []}
+        onArea={startArea}
         onPick={start}
         onResume={resume}
         onLater={() => {
@@ -198,14 +215,14 @@ export function TourProvider({ initialState, onPersist, steps: registry = TOUR_S
   );
 }
 
-function TourOffer({ open, canResume, onPick, onResume, onLater }: { open: boolean; canResume: boolean; onPick: (m: TourMode) => void; onResume: () => void; onLater: () => void }) {
+function TourOffer({ open, canResume, areas, doneAreas, onArea, onPick, onResume, onLater }: { open: boolean; canResume: boolean; areas: TourArea[]; doneAreas: string[]; onArea: (id: string) => void; onPick: (m: TourMode) => void; onResume: () => void; onLater: () => void }) {
   return (
     <Modal
       open={open}
       onClose={onLater}
       title="Want a quick tour?"
-      description="We'll point out each part of Plexo and what it's for. You can stop any time."
-      width={600}
+      description="We'll point at each part of Plexo and say what it's for. Stop any time, and carry on later."
+      width={640}
       footer={
         <>
           {canResume ? (
@@ -235,6 +252,27 @@ function TourOffer({ open, canResume, onPick, onResume, onLater }: { open: boole
           <span className="plx-tour-choice__desc">Every page one by one, including Settings.</span>
         </button>
       </div>
+      {areas.length ? (
+        <div className="plx-tour-areas">
+          <p className="plx-tour-areas__h">Or go through just one part</p>
+          <ul>
+            {areas.map((a) => (
+              <li key={a.id}>
+                <button type="button" className="plx-tour-area" onClick={() => onArea(a.id)}>
+                  <span className="plx-tour-area__txt">
+                    <b>{a.title}</b>
+                    <span>{a.desc}</span>
+                  </span>
+                  {doneAreas.includes(a.id) ? (
+                    <span className="plx-tour-area__done"><Check size={14} strokeWidth={3} aria-hidden />Seen</span>
+                  ) : null}
+                  <ChevronRight size={18} aria-hidden />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </Modal>
   );
 }
@@ -257,148 +295,6 @@ function ResumePill({ index, total, onResume, onStop }: { index: number; total: 
           <button type="button" className="plx-toast__action" style={{ color: "inherit", opacity: 0.75 }} onClick={onStop}>
             End tour
           </button>
-        </div>
-      </div>
-    </Portal>
-  );
-}
-
-type Rect = { top: number; left: number; width: number; height: number };
-const PAD = 8;
-const GAP = 14;
-
-function CoachMark({ step, index, total, onNext, onBack, onSkip, onPause, onMissing }: { step: ResolvedTourStep; index: number; total: number; onNext: () => void; onBack: () => void; onSkip: () => void; onPause: () => void; onMissing: () => void }) {
-  const [rect, setRect] = useState<Rect | null>(null);
-  const [cardPos, setCardPos] = useState<{ top: number; left: number } | null>(null);
-  const card = useRef<HTMLDivElement>(null);
-  const target = useRef<HTMLElement | null>(null);
-  const last = index === total - 1;
-
-  // Find the anchor (it may still be rendering after a page change), then follow it.
-  useEffect(() => {
-    let cancelled = false;
-    const startedAt = Date.now();
-    let timer = 0;
-    const measure = () => {
-      const el = target.current;
-      if (!el) return;
-      const r = el.getBoundingClientRect();
-      const z = pageZoom(el); // measured in what you see, placed in the dashboard's own units
-      setRect({ top: r.top / z - PAD, left: r.left / z - PAD, width: r.width / z + PAD * 2, height: r.height / z + PAD * 2 });
-    };
-    const find = () => {
-      if (cancelled) return;
-      const el = visibleAnchor(step.anchor);
-      if (el) {
-        target.current = el;
-        const r = el.getBoundingClientRect();
-        if (r.top < 80 || r.bottom > window.innerHeight - 80) el.scrollIntoView({ block: "center", behavior: "smooth" });
-        measure();
-        window.setTimeout(measure, 350);
-        return;
-      }
-      if (Date.now() - startedAt > WAIT_FOR_ANCHOR_MS) onMissing();
-      else timer = window.setTimeout(find, 120);
-    };
-    find();
-    window.addEventListener("resize", measure);
-    window.addEventListener("scroll", measure, true);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-      window.removeEventListener("resize", measure);
-      window.removeEventListener("scroll", measure, true);
-    };
-    // onMissing is stable enough per step (keyed by step id).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step.anchor]);
-
-  // Put the card next to the spotlight: below, else above, else beside; always on screen.
-  useLayoutEffect(() => {
-    if (!rect || !card.current) return;
-    const z = pageZoom(card.current);
-    const cr = card.current.getBoundingClientRect();
-    const c = { width: cr.width / z, height: cr.height / z };
-    const vw = window.innerWidth / z;
-    const vh = window.innerHeight / z;
-    const clampX = (x: number) => Math.max(16, Math.min(x, vw - c.width - 16));
-    const clampY = (y: number) => Math.max(16, Math.min(y, vh - c.height - 16));
-    let top: number;
-    let left: number;
-    if (rect.top + rect.height + GAP + c.height < vh - 16 && step.placement !== "top") {
-      top = rect.top + rect.height + GAP;
-      left = clampX(rect.left);
-    } else if (rect.top - GAP - c.height > 16) {
-      top = rect.top - GAP - c.height;
-      left = clampX(rect.left);
-    } else if (rect.left + rect.width + GAP + c.width < vw - 16) {
-      top = clampY(rect.top);
-      left = rect.left + rect.width + GAP;
-    } else {
-      top = clampY(rect.top + 24);
-      left = clampX(rect.left - c.width - GAP);
-    }
-    setCardPos({ top, left });
-  }, [rect, step.placement]);
-
-  useEffect(() => {
-    card.current?.focus();
-  }, [step.id]);
-
-  const onKey = (e: React.KeyboardEvent) => {
-    if (trapTab(e, card.current)) return;
-    if (e.key === "Escape") {
-      e.preventDefault();
-      onPause();
-    } else if (e.key === "ArrowRight") onNext();
-    else if (e.key === "ArrowLeft" && index > 0) onBack();
-  };
-
-  return (
-    <Portal>
-      <div className="plx-tour-shield" aria-hidden onClick={(e) => e.stopPropagation()} />
-      {rect ? <div className="plx-tour-spot" style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }} aria-hidden /> : null}
-      <div
-        ref={card}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={`tour-${step.id}-title`}
-        aria-describedby={`tour-${step.id}-body`}
-        tabIndex={-1}
-        className="plx-tour-card"
-        style={{ top: cardPos?.top ?? -9999, left: cardPos?.left ?? -9999, visibility: rect && cardPos ? "visible" : "hidden" }}
-        onKeyDown={onKey}
-      >
-        <div className="plx-tour-card__top">
-          <span className="plx-tour-card__step">
-            {index + 1} of {total}
-          </span>
-          <button type="button" className="plx-tour-card__skip" onClick={onSkip}>
-            Skip tour
-          </button>
-        </div>
-        <h2 id={`tour-${step.id}-title`} className="plx-tour-card__title">
-          {step.title}
-        </h2>
-        <p id={`tour-${step.id}-body`} className="plx-tour-card__body">
-          {step.body}
-        </p>
-        <div className="plx-tour-card__foot">
-          <div className="plx-tour-dots" aria-hidden>
-            {Array.from({ length: total }, (_, i) => (
-              <span key={i} data-on={i === index} data-done={i < index} />
-            ))}
-          </div>
-          <div className="plx-tour-card__btns">
-            {index > 0 ? (
-              <Button variant="secondary" size="sm" onClick={onBack}>
-                Back
-              </Button>
-            ) : null}
-            <Button size="sm" onClick={onNext}>
-              {last ? "Finish" : "Next"}
-            </Button>
-          </div>
         </div>
       </div>
     </Portal>

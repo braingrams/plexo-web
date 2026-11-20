@@ -281,6 +281,8 @@ export const WpMigrationJob = new Entity(
       cutover: { type: "any" },
       errors: { type: "any" },
       warnings: { type: "any" },
+      /** History of runs (lib/wpMigration/history.ts StoredRun[]): written the first time the move is run again. */
+      runs: { type: "any" },
       startedAt: { type: "string" },
       finishedAt: { type: "string" },
       // The owner closed the "has moved to Plexo" banner — kept on the job (not the browser)

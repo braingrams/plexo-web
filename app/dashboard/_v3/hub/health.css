@@ -1,0 +1,40 @@
+/* Site health extras: device switch, metric tips, fix previews, summary. Tokens only (tests/v3NoColorLiterals.test.ts). */
+.plx-hhead { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.plx-hhead .plx-health__headline { margin: 0; }
+.plx-hhead__tone { display: inline-flex; align-items: center; gap: 10px; }
+.plx-htrendtext { margin: 0 0 16px; font-weight: 700; font-size: 15px; color: var(--plx-text); }
+.plx-hcelebrate { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; background: var(--plx-elevated); color: var(--plx-success); font-weight: 800; margin-bottom: 18px; }
+.plx-hmetrics--rich { grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); }
+.plx-hmetrics--rich li { flex-direction: column; gap: 4px; padding: 14px 16px; border: 1px solid var(--plx-border); border-radius: 14px; }
+.plx-hmetric__top { display: flex; align-items: center; gap: 10px; }
+.plx-hmetric__name { font-size: 15px; font-weight: 800; }
+.plx-hmetric__value { margin-left: auto; font-weight: 800; font-variant-numeric: tabular-nums; }
+.plx-hmetric__verdict { font-size: 13px; font-weight: 700; }
+.plx-hmetric__line { color: var(--plx-muted); font-size: 14px; line-height: 1.45; margin: 0; }
+.plx-hmetric__tip summary { cursor: pointer; font-size: 13px; font-weight: 700; color: var(--plx-link); min-height: 28px; display: flex; align-items: center; }
+.plx-hmetric__tip p { margin: 4px 0 0; font-size: 13px; line-height: 1.5; color: var(--plx-muted); }
+.plx-hnote { color: var(--plx-muted); font-size: 13px; margin: 14px 0 0; max-width: 70ch; }
+.plx-hissue__gain { display: inline-block; align-self: flex-start; padding: 2px 10px; border-radius: 999px; background: var(--plx-elevated); color: var(--plx-text); font-size: 13px; font-weight: 700; }
+.plx-hissue__where { margin: 4px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--plx-elevated); display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.plx-hissue__where code { font-family: var(--plx-font-mono, ui-monospace, monospace); font-size: 12px; overflow-wrap: anywhere; color: var(--plx-muted); }
+.plx-hissue__where b { font-size: 13px; }
+.plx-hsummary { display: flex; flex-direction: column; gap: 10px; }
+.plx-hsummary ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.5; }
+.plx-hpreview { display: flex; flex-direction: column; gap: 12px; }
+.plx-hpreview ul { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.5; }
+.plx-hpreview textarea { width: 100%; min-height: 84px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--plx-border-strong); background: var(--plx-surface); color: var(--plx-text); font: inherit; resize: vertical; }
+.plx-hpreview__gain { font-weight: 800; color: var(--plx-success); }
+.plx-hbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
+.plx-hform { display: flex; flex-direction: column; gap: 12px; }
+.plx-hform__kind { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+.plx-hform__kind label { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.plx-hform__field { display: flex; flex-direction: column; gap: 4px; font-size: 14px; font-weight: 700; flex: 1; min-width: 0; }
+.plx-hform__field input, .plx-htexts__list input { width: 100%; min-height: 44px; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--plx-border-strong); background: var(--plx-surface); color: var(--plx-text); font: inherit; font-weight: 400; }
+.plx-hform__field small { font-weight: 400; color: var(--plx-muted); }
+.plx-hform__row { display: flex; gap: 10px; flex-wrap: wrap; }
+.plx-hform__row .plx-hform__field { min-width: 140px; }
+.plx-htexts { display: flex; flex-direction: column; gap: 12px; }
+.plx-htexts__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.plx-htexts__list li { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.plx-htexts__bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.plx-hissue__where a { color: var(--plx-link); font-weight: 700; display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; }

@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, Copy, ExternalLink, Globe } from "lucide-react";
@@ -104,7 +105,7 @@ export function AddressTab({ siteId, siteName, experience }: { siteId: string; s
   return (
     <>
       <TabBar title="Your web address" sub="This is what people type to find your site." />
-      {error ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div> : null}
+      {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}
 
       <Card data-tour="hub-address">
         <CardHeader title="Free address from Plexo" description={free ? "People can visit your site here right now." : "Pick a short name for your site. It's free and works straight away."} />

@@ -1,3 +1,4 @@
+import { aiRefusalBody } from "@/lib/credits/upgradeOffer";
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveUser } from "@/lib/auth/resolveUser";
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest): Promise<Response> {
 
   const body = await request.json().catch(() => ({}));
   const prepared = await prepareAssist(resolved.userId, body);
-  if ("refused" in prepared) return NextResponse.json({ error: prepared.refused.error }, { status: prepared.refused.status });
+  if ("refused" in prepared) return NextResponse.json(aiRefusalBody(prepared.refused), { status: prepared.refused.status });
 
   const encoder = new TextEncoder();
   const stream = new ReadableStream<Uint8Array>({

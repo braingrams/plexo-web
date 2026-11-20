@@ -4,6 +4,8 @@ import "@charisol/plexo-sdk/dist/plexo-sdk.css";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { CommentTarget, V2EditorRef } from "@charisol/plexo-sdk/v2";
+import { focusElementWhenReady } from "../focusElement";
+import type { CustomSectionType } from "@charisol/plexo-sdk/v2/compile";
 import type { DesignSystem } from "@charisol/plexo-sdk/v2/compile";
 
 import { EDITOR_THEME } from "@/lib/theme";
@@ -11,6 +13,9 @@ import { useEditorColors, useEditorV3, useSitesListHref } from "@/app/dashboard/
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import type { V2Design, V2Meta } from "@/lib/v2/design";
 import { askSolStreaming } from "@/lib/ai/clientAssist";
+import { isOutOfCreditsReply } from "@/lib/ai/requestErrors";
+import { createSaveGate } from "@/lib/editor/saveGate";
+import { useAutosavePreference } from "@/lib/editor/useAutosavePreference";
 import { PageSettings } from "./PageSettings";
 import { BRAND_EMBED_MAX_CHARS, fetchBrand, uploadBrand } from "@/lib/v2/brandClient";
 import type { DesignSystemRef } from "@/lib/v2/design";
@@ -23,7 +28,6 @@ import { buildV2SavePayload, leaveAfterSaving, newPageBody, pageSourcePages, pos
 // (the parent passes it in as `headerRight`), so there is one way to publish.
 
 type SdkV2 = typeof import("@charisol/plexo-sdk/v2");
-const AUTOSAVE_MS = 1500;
 
 export type V2TemplateEditorHandle = {
   /** Saves what's on the canvas now (even if nothing looks changed) and returns what was saved. */
@@ -49,9 +53,21 @@ type Props = {
   /** Puts the page live (saves what is on the canvas first). Rejects when it fails, so the editor's Save menu can say so. */
   onPublish: () => Promise<void>;
   onBack: () => void;
+  /** SOL answered that the owner is out of AI credits: show the top-up card. */
+  onOutOfCredits?: () => void;
   onSaved: (design: V2Design) => void;
   /** Present while this page can still go back to the classic editor. */
   canGoBack: boolean;
+  /** Does the site have its web address yet? Only changes the wording of "Publish now". */
+  hasAddress?: boolean;
+  /** The owner's saved Autosave choice (undefined = never chosen: on). */
+  initialAutosave?: boolean;
+  /** Opens "Ask SOL about several pages". Absent where the site has one page (emails, blog layouts). */
+  onAskSolManyPages?: () => void;
+  /** True while something else is saving or changing pages (going live, SOL on several pages): the editor's Autosave waits. */
+  savePaused?: boolean;
+  /** Scroll to this element and highlight it once the editor is open (Site health: "Open the editor" on a problem). */
+  focusNodeId?: string;
 };
 
 export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(function V2TemplateEditor(props, ref) {
@@ -71,11 +87,19 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
   const [meta, setMeta] = useState<V2Meta>(initialDesign.meta ?? {});
   const [customJs, setCustomJs] = useState(initialDesign.customJs ?? "");
   const [dirty, setDirty] = useState(false);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [notice, setNotice] = useState<string | null>(null);
   const [strataOn, setStrataOn] = useState(false);
+  // The site's own section types ("Testimonials", "Team members"…): they join the add-section picker. null = still loading.
+  const [sectionTypes, setSectionTypes] = useState<CustomSectionType[] | null>(props.kind === "EMAIL" ? [] : null);
 
   const editorRef = useRef<V2EditorRef>(null);
+  // From a Site health link: once the canvas has drawn the element, scroll to it and highlight it.
+  const focusNodeId = props.focusNodeId;
+  const editorReady = !!sdk;
+  useEffect(() => {
+    if (!focusNodeId || !editorReady) return;
+    return focusElementWhenReady(() => document.querySelector(`.plexo-editor [id="${CSS.escape(focusNodeId)}"]`));
+  }, [focusNodeId, editorReady]);
   const editVersion = useRef(0);
   const systemDirty = useRef(false);
   // A big brand lives in storage: the editor loads it itself (it can be larger than the page's own response may be) and, when it
@@ -113,6 +137,18 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (props.kind === "EMAIL") return;
+    let cancelled = false;
+    fetch(`/api/v1/templates/${templateId}/section-types`)
+      .then((res) => (res.ok ? res.json() : { sectionTypes: [] }))
+      .then((data: { sectionTypes?: CustomSectionType[] }) => !cancelled && setSectionTypes(data.sectionTypes ?? []))
+      .catch(() => !cancelled && setSectionTypes([])); // the picker simply has no custom sections; the editor still opens
+    return () => {
+      cancelled = true;
+    };
+  }, [templateId, props.kind]);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,7 +193,6 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
   const markDirty = useCallback(() => {
     editVersion.current += 1;
     setDirty(true);
-    setSaveState("idle");
   }, []);
 
   /** One save at a time, in order: a later save never overtakes an earlier one. */
@@ -166,7 +201,6 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       const editor = editorRef.current;
       if (!editor) throw new Error("The editor isn't ready yet.");
       const version = editVersion.current;
-      setSaveState("saving");
       const editsAtStart = systemEdits.current;
       const brandNow = editor.getDesignSystem();
       try {
@@ -185,15 +219,9 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
         if (brandRef.current && systemEdits.current === editsAtStart) systemDirty.current = false; // stored: later saves just repeat the reference
         setNotice(null);
         props.onSaved(design);
-        if (editVersion.current === version) {
-          setDirty(false);
-          setSaveState("saved");
-        } else {
-          setSaveState("idle");
-        }
+        if (editVersion.current === version) setDirty(false);
         return design;
       } catch (err) {
-        setSaveState("error");
         setNotice(err instanceof Error ? err.message : "Couldn't save this page.");
         throw err;
       }
@@ -205,14 +233,15 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateId, initialDesign.designSystem]);
 
-  useImperativeHandle(ref, () => ({ flush: saveNow, getNodeRect: (id) => editorRef.current?.getNodeRect(id) ?? null }), [saveNow]);
-
-  // Autosave a moment after the last change.
+  // The editor's own Autosave and Save button come through here: one save at a time, one waiting save at most, and nothing
+  // while the page is going live or SOL is changing pages (a save then would write over what they are doing).
+  const gate = useMemo(() => createSaveGate(() => saveNow()), [saveNow]);
   useEffect(() => {
-    if (!dirty || readOnly) return;
-    const timer = setTimeout(() => void saveNow().catch(() => undefined), AUTOSAVE_MS);
-    return () => clearTimeout(timer);
-  }, [dirty, readOnly, saveNow]);
+    gate.setPaused(Boolean(props.savePaused));
+  }, [gate, props.savePaused]);
+  const autosavePreference = useAutosavePreference(props.initialAutosave);
+
+  useImperativeHandle(ref, () => ({ flush: saveNow, getNodeRect: (id) => editorRef.current?.getNodeRect(id) ?? null }), [saveNow]);
 
   // Closing the tab with a change still waiting: ask first.
   useEffect(() => {
@@ -342,13 +371,12 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
       </Centered>
     );
   }
-  if (!sdk || !tree || brand.state === "loading") return <Centered>{brand.state === "loading" ? "Loading your site's colours and fonts…" : "Opening your page…"}</Centered>;
+  if (!sdk || !tree || sectionTypes === null || brand.state === "loading") return <Centered>{brand.state === "loading" ? "Loading your site's colours and fonts…" : "Opening your page…"}</Centered>;
 
   const V2Editor = sdk.V2Editor;
   const current = tree.find((p) => p.id === templateId);
   const slug = current ? current.slug : null;
   const listed = pageSourcePages(tree);
-  const stateForEditor = saveState === "idle" ? (dirty ? "dirty" : "idle") : saveState;
 
   return (
     <div style={{ position: "relative", width: "100%", height: "100%", display: "flex", flexDirection: "column" }}>
@@ -382,12 +410,20 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             loadMedia={loadMedia}
             stockImages={providers.length ? { providers, search: searchStock } : undefined}
             products={props.kind === "EMAIL" ? undefined : products}
+            customSections={sectionTypes}
+            onCreateCustomSection={readOnly || props.kind === "EMAIL" ? undefined : () => window.open(`/dashboard/templates/${rootId}/sections/new`, "_blank", "noopener")}
             // Plexo's own colours, so the editor looks like the rest of the app (new dashboard: live brand tokens; old: lib/theme.ts).
             theme={editorTheme}
             strata={strataOn ? strata : undefined}
-            onSave={readOnly ? undefined : () => saveNow().then(() => undefined)}
+            // Viewers and commenters get none of these: no Save, no Autosave, no Publish.
+            onSave={readOnly ? undefined : () => gate.save()}
+            // "Save as draft": keep the changes and leave for the site (the editor does the leaving).
+            onSaveDraft={readOnly ? undefined : () => saveNow().then(() => undefined)}
+            // "Publish now": the page's own publish (asks for the web address first when there is none, explains plan limits).
             onPublish={readOnly ? undefined : props.onPublish}
-            saveState={stateForEditor}
+            hasAddress={props.hasAddress}
+            autosavePreference={autosavePreference}
+            onAskSolManyPages={readOnly ? undefined : props.onAskSolManyPages}
             pageSource={{
               pages: listed,
               currentId: templateId,
@@ -411,15 +447,20 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             onAskSol={
               props.kind === "EMAIL"
                 ? undefined
-                : (question, context, io) =>
-                    askSolStreaming(
+                : async (question, context, io) => {
+                    const reply = await askSolStreaming(
                       { question, context: { nodeId: context.nodeId, nodeType: context.nodeType, nodeName: context.nodeName, pageId: context.pageId, design: context.design, catalog: context.catalog }, history: context.history },
                       io.onText,
                       io.signal,
-                    )
+                    );
+                    // Out of credits: show the card with "Top up credits" and "Use my own AI key" instead of leaving only a sentence.
+                    if (isOutOfCreditsReply(reply)) props.onOutOfCredits?.();
+                    return reply;
+                  }
             }
             pageSettings={
               <PageSettings
+                pageId={templateId}
                 name={name}
                 slug={slug}
                 email={props.kind === "EMAIL"}
@@ -440,7 +481,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
               />
             }
             headerRight={props.headerRight}
-            // The simple screen keeps saving by itself and has one "Make it live" button; the buttons passed in headerRight match the editor's own.
+            // The simple screen has its own Save menu (Autosave, Save as draft, Publish now); headerRight only adds comments and the view switch.
             experience={props.beginner ? "beginner" : undefined}
             projectName={name}
             headerSlotStyle={props.beginner ? "editor" : undefined}

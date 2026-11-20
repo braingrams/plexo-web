@@ -2,8 +2,9 @@
 
 import "./hub.css";
 import Link from "next/link";
-import { ArrowLeft, ExternalLink, Pencil, Upload } from "lucide-react";
+import { ArrowLeft, ExternalLink, Upload } from "lucide-react";
 import { Badge, ButtonLink, HelpMedia, ScrollRail, StatusPill, TabLinks } from "../ui";
+import { EditWebsiteButton } from "./EditWebsiteButton";
 import { OpenSiteButton, PreviewButton } from "../home/SiteButtons";
 import { hubTabHref, type HubTab, type HubTabId } from "@/lib/dashboardV3/hubTabs";
 import type { Experience } from "@/lib/dashboardV3/nav";
@@ -16,11 +17,13 @@ const HELP: Record<HubTabId, string> = {
   pages: "How to add and change pages",
   products: "How to add a product",
   orders: "How to handle an order",
+  shop: "How to set up payments and get paid",
   blog: "How to write a blog post",
   course: "How to add a lesson",
   brand: "How to change your colours and logo",
   address: "How to choose your web address",
   visits: "How to read your visits",
+  health: "How to make your site faster",
   settings: "How to change your site's settings",
   advanced: "How to use the advanced settings",
 };
@@ -71,9 +74,7 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
               Update app
             </ButtonLink>
           ) : (
-            <ButtonLink href={site.editHref} leftIcon={<Pencil size={16} aria-hidden />}>
-              Edit design
-            </ButtonLink>
+            <EditWebsiteButton siteId={site.id} fallbackHref={site.editHref} />
           )}
         </div>
       </header>
@@ -91,11 +92,11 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
 }
 
 /** A tab's heading row: title, one plain sentence, and the main action on the right. */
-export function TabBar({ title, sub, action }: { title: string; sub?: string; action?: React.ReactNode }) {
+export function TabBar({ title, sub, action, titleAddon }: { title: string; sub?: string; action?: React.ReactNode; /** A small control beside the title (such as a help button). */ titleAddon?: React.ReactNode }) {
   return (
     <div className="plx-hub__bar">
       <div>
-        <h2 className="plx-h2">{title}</h2>
+        <h2 className="plx-h2" style={titleAddon ? { display: "flex", alignItems: "center", gap: 10 } : undefined}>{title}{titleAddon}</h2>
         {sub ? <p className="plx-hub__sub">{sub}</p> : null}
       </div>
       {action}

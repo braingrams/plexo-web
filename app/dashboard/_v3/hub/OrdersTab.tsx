@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import { Inbox } from "lucide-react";
 import { Badge, Button, Card, EmptyState, Input, Modal, Skeleton, type BadgeTone } from "../ui";
@@ -124,15 +125,18 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
   return (
     <>
       <TabBar title="Your orders" sub="Everything people have bought. Tap an order to see what to do next." />
-      <Input label="Search orders" hideLabel type="search" fieldClassName="plx-hsearch" placeholder="Search by name, email or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
-      <div className="plx-filters" role="group" aria-label="Show orders">
-        {FILTERS.map((f) => (
-          <button key={f.id} type="button" className="plx-hchip" role="radio" aria-checked={filter === f.id} onClick={() => { setPage(1); setFilter(f.id); }}>
-            {f.label}
-          </button>
-        ))}
+      <div className="plx-toolbar" data-tour="hub-orders-tools">
+        <Input label="Search orders" hideLabel type="search" fieldClassName="plx-hsearch" placeholder="Search by name, email or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="plx-filters" role="radiogroup" aria-label="Show orders">
+          {FILTERS.map((f) => (
+            <button key={f.id} type="button" className="plx-hchip" role="radio" aria-checked={filter === f.id} onClick={() => { setPage(1); setFilter(f.id); }}>
+              {f.label}
+            </button>
+          ))}
+        </div>
       </div>
-      {error ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div> : null}
+      {orders && orders.length ? <p className="plx-count" aria-live="polite">{total} order{total === 1 ? "" : "s"}{q || filter ? (total === 1 ? " matches" : " match") : ""}</p> : null}
+      {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}
       {orders === null && !error ? (
         <Card padding="none" className="plx-listcard">
           {[0, 1, 2].map((i) => (

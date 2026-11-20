@@ -1,3 +1,4 @@
+import { planGateMessage, templateLimitGate } from "@/lib/plan/limitGates";
 import { randomUUID } from "node:crypto";
 import {
   applyCommands,
@@ -23,17 +24,22 @@ import { externalizeDesignSystem, resolveDesignSystem } from "@/lib/v2/designSys
 import { designFormatOf, parseV2Design, V2DesignError, v2DesignFromTemplate, V2_FORMAT, type V2Design } from "@/lib/v2/design";
 import { getTierFeatures } from "@/lib/subscription";
 import { ensureUniqueSlug, pathForPage } from "@/server/slugDynamo";
-import { assertCanPublishPage } from "@/lib/plan/publishGuard";
+import { assertCanPublishPage, planLimitText } from "@/lib/plan/publishGuard";
 import { setPagePublishFlags } from "@/lib/plan/sitesStore";
 import { linkDomainToTemplate } from "@/lib/sites/linkDomain";
 import { User } from "@/lib/db/coreEntities";
 import { chromeFor } from "@/lib/v2/siteFormat";
+import { ensureSiteLayout } from "@/lib/siteLayoutProvision";
+import { ensureBlankSiteLayout } from "@/lib/siteLayoutBlank";
 import { addPageToSiteMenu } from "@/lib/sites/siteNav";
 import { htmlOutline } from "@/lib/sites/htmlOutline";
 import { BRAND_COMPONENT_COMMANDS_READY, BRAND_COMPONENT_OPS, brandComponentCommandMessage } from "@/lib/brand/brandComponentCommands";
 import { sendComponentsToStrata } from "@/lib/brand/extrasWriteThrough";
 import { newBrandComponents, type DesignComponent } from "@/lib/brand/brandComponents";
+import { registerSectionsForRow } from "@/lib/customSections/register";
+import { syncPageEntries } from "@/lib/customSections/placements";
 import type { resolveUser } from "@/lib/auth/resolveUser";
+import { countsAsSite } from "@/lib/plan/countsAsSite";
 
 // The V2 page workflow behind page_describe / page_edit / page_create_from_template /
 // page_publish (lib/mcp/pageTools.ts) — the site/template twin of lib/projects/designEdit.ts
@@ -256,7 +262,7 @@ function checkCommands(raw: unknown): unknown[] {
 }
 
 /** Validates the changed design (size caps, structure) the way every save does, then compiles it with the site's header/footer. */
-async function validateAndCompile(row: Row, design: V2Design): Promise<{ design: V2Design; html: string }> {
+export async function validateAndCompile(row: Row, design: V2Design): Promise<{ design: V2Design; html: string }> {
   const parsed = parseV2Design(design);
   if (!parsed.ok) throw new PageToolError(parsed.error);
   try {
@@ -286,6 +292,8 @@ export async function editPage(resolved: ResolvedUser, args: { templateId?: unkn
 
 /** Applies commands to a V2 row and saves (draft for pages, live for layout fragments). */
 export async function saveEdit(row: Row, commands: unknown[], opts: { live: boolean; /** Who is editing, so a brand component saved from the page can be sent to the site's Strata project. */ who?: { siteId: string; userId: string; organizationId: string } }) {
+  // The site's own section types (Testimonials, Team members…) must be known before a command can add or change one.
+  await registerSectionsForRow(row);
   const before = await currentDesign(row);
   const applied = applyToDesign(before, commands);
 
@@ -321,6 +329,8 @@ export async function saveEdit(row: Row, commands: unknown[], opts: { live: bool
       .set({ draftJson: toStore, draftHtml: checked.html, ...(name ? { name } : {}) })
       .go();
   }
+
+  await syncPageEntries(row.id);
 
   // A part saved to the brand goes to the site's Strata project (kept as a copy and retried if Strata can't be reached).
   const brand = opts.who && applied.newComponents.length ? await sendComponentsToStrata({ ...opts.who, components: applied.newComponents }) : undefined;
@@ -396,15 +406,17 @@ export async function createV2Page(
     }
   } else {
     const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-    const rootCount = orgTemplates.filter((t: Row) => !t.parentId && t.kind === "LANDING_PAGE").length;
+    const rootCount = orgTemplates.filter((t: Row) => countsAsSite(t)).length;
     if (rootCount >= features.maxLandingPages) {
-      throw new PageToolError(`You've reached your plan's limit of ${features.maxLandingPages} site${features.maxLandingPages === 1 ? "" : "s"}. Upgrade to create more, or add this as a page of an existing site by passing its siteId.`);
+      throw new PageToolError(`${planGateMessage(templateLimitGate("LANDING_PAGE", features.maxLandingPages))} Or add this as a page of an existing site by passing its siteId.`);
     }
   }
 
   const id = randomUUID();
   const slug = parent ? await ensureUniqueSlug(parent.id, opts.slug ?? name) : null;
-  let design: V2Design = opts.design ?? v2DesignFromTemplate(templateId, { name, slug: slug ?? undefined, seed: id });
+  // A new site's header and footer are the site's shared ones (created right after, below), so its home page
+  // starts without its own copies — nav links and the footer then live in exactly one place.
+  let design: V2Design = opts.design ?? v2DesignFromTemplate(templateId, { name, slug: slug ?? undefined, seed: id, ...(parent ? {} : { chrome: false }) });
   // A page added to an existing site looks like the rest of it: the site's brand, its menu, and
   // no second header/footer when the site shares one.
   let shared: SiteChrome | null = null;
@@ -454,6 +466,14 @@ export async function createV2Page(
   }).go();
   const { data: row } = await Template.get({ id }).go();
   if (!row) throw new Error(`Template ${id} vanished immediately after being created`);
+  // The site-wide header and footer (site core): created on a brand-new site, never fatal.
+  if (!parent && !opts.design) {
+    await ensureSiteLayout(id, resolved.organizationId, resolved.userId).catch((err) => console.error("Couldn't add the default header and footer", err));
+  } else if (!parent) {
+    // A site made from a ready-made design keeps that design's own header and footer; it still gets the shared
+    // ones, blank, so the owner sees "Site header" / "Site footer" and can adopt them whenever they like.
+    await ensureBlankSiteLayout(id, resolved.userId).catch((err) => console.error("Couldn't add the blank header and footer", err));
+  }
 
   const siteRows = parent ? await loadSiteRows(resolved, await findRootTemplateId(parent.id, parent.parentId ?? null)) : [row];
   const route = pathForPage(row.id, siteRows);
@@ -558,7 +578,7 @@ export async function publishPage(resolved: ResolvedUser, args: { templateId?: u
   try {
     assertCanPublishPage(resolved.subscriptionPlan, row);
   } catch (err) {
-    throw new PageToolError(err instanceof Error ? err.message : "This page can't be published on the current plan.");
+    throw new PageToolError(planLimitText(err, "This page can't be published on the current plan."));
   }
 
   const design = await currentDesign(row);
@@ -579,7 +599,7 @@ export async function publishPage(resolved: ResolvedUser, args: { templateId?: u
     try {
       linked = await linkDomainToTemplate(resolved, row.id, domainArg, type);
     } catch (err) {
-      throw new PageToolError(err instanceof Error ? err.message : "I couldn't connect that address.");
+      throw new PageToolError(planLimitText(err, "I couldn't connect that address."));
     }
   }
 

@@ -1,5 +1,8 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
+import { planGateForMessage } from "@/lib/plan/planGate";
+
 type SettingsMessage = { kind: "success" | "error" | "warning"; text: string } | null;
 
 /** Shared save bar for every Settings sub-page (General/Payments/Notifications) — sticky to
@@ -23,7 +26,11 @@ export function SettingsActionBar({
         padding: "1rem 0", borderTop: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", background: "var(--bg)",
       }}
     >
-      {message && (
+      {message?.kind === "error" && planGateForMessage(message.text) ? (
+        <div style={{ flex: "1 1 100%" }}>
+          <UpgradePrompt message={message.text} requiredPlan={planGateForMessage(message.text)!.requiredPlan} />
+        </div>
+      ) : message && (
         <p style={{ fontSize: "0.85rem", margin: 0, marginRight: "auto", color: messageColor }}>{message.text}</p>
       )}
       <button

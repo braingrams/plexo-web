@@ -1,3 +1,4 @@
+import { brandVoiceBlockFor } from "@/lib/ai/brandVoiceContext";
 import { effectivePlan } from "@/lib/plan/entitlement";
 import { createHash } from "node:crypto";
 
@@ -19,7 +20,7 @@ import { ApiKey, User } from "@/lib/db/coreEntities";
 // Which AI runs, on which tier, and how it's paid for follow SOL's rules (lib/ai/solEngine.ts),
 // the same as every other AI feature; only host-managed SDK access is handled here.
 
-const VALID_MODES = new Set<AiActionMode>(["edit_element", "edit_layout", "generate_layout", "edit_raw_html", "generate_raw_html", "generate_blog_post"]);
+const VALID_MODES = new Set<AiActionMode>(["edit_element", "edit_layout", "generate_layout", "edit_raw_html", "generate_raw_html", "generate_blog_post", "write_brand_voice"]);
 const VALID_TIERS = new Set(["AUTO", "BASIC", "MEDIUM", "HIGH"]);
 
 export const NOT_ENOUGH_CREDITS = SOL_NOT_ENOUGH_CREDITS;
@@ -90,6 +91,8 @@ export interface GenerateInput {
   concreteTier: ConcreteTier;
   externalUserId?: string;
   isBlogLayout: boolean;
+  /** The site the writing is for (its brand's voice is added to what the AI is told). Optional. */
+  siteId?: string;
 }
 
 /** The request body, checked — or why it can't be run. */
@@ -103,6 +106,7 @@ export function parseGenerateBody(key: ResolvedAiKey, raw: unknown): { input: Ge
     tier?: string;
     externalUserId?: string;
     isBlogLayout?: boolean;
+    siteId?: string;
   } | null;
   if (!body || typeof body.prompt !== "string" || !body.prompt.trim()) return { error: "A prompt is required.", status: 400 };
   if (!body.mode || !VALID_MODES.has(body.mode as AiActionMode)) return { error: "Invalid mode.", status: 400 };
@@ -126,6 +130,7 @@ export function parseGenerateBody(key: ResolvedAiKey, raw: unknown): { input: Ge
       concreteTier,
       externalUserId: body.externalUserId?.trim(),
       isBlogLayout: body.isBlogLayout === true,
+      ...(typeof body.siteId === "string" && body.siteId.length <= 128 ? { siteId: body.siteId } : {}),
     },
   };
 }
@@ -207,6 +212,8 @@ export async function runGeneration(
   plan: GenerationPlan,
   onProgress?: (progress: { characters: number; attempt: number }) => void,
 ): Promise<{ summary: string; result: unknown }> {
+  // Everything the AI writes for a site is written in that site's brand voice (never for the voice writer itself).
+  const brandVoice = input.mode === "write_brand_voice" ? "" : await brandVoiceBlockFor(input, key.organizationId, key.userId);
   const outcome = await generateBuilderAction({
     provider: plan.provider,
     // The tier decided in planGeneration (incl. Free → Basic), not "AUTO" re-picked here.
@@ -217,6 +224,7 @@ export async function runGeneration(
     templateKind: input.templateKind,
     isBlogLayout: input.isBlogLayout,
     context: input.context,
+    ...(brandVoice ? { brandVoice } : {}),
     onProgress,
     beforeAttempt: plan.isSystemAi
       ? async (maxTokens, attempt) => {

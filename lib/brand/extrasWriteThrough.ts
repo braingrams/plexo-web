@@ -15,9 +15,9 @@ export type ExtrasState = "in-strata" | "waiting" | "not-set-up" | "refused";
 export type ComponentSendResult = { state: ExtrasState; message: string; created: string[]; updated: string[] };
 export type TokenSendResult = { state: ExtrasState; message: string; changed: string[]; skipped: string[] };
 
-export const COMPONENT_SENT_NOTE = "Saved in Strata. It's live on your website.";
-export const WAITING_EXTRAS_NOTE = "Saved here. It will go to Strata automatically; you can also press “Send to Strata”.";
-export const NOT_IN_STRATA_NOTE = "This site's brand isn't in Strata yet, so there is nowhere to keep it. Save the brand to Strata first (Brand tab, “Save to Strata”).";
+export const COMPONENT_SENT_NOTE = "Your brand is saved. It's live on your website.";
+export const WAITING_EXTRAS_NOTE = "Saved here. Your brand will finish saving by itself; you can also press “Save now”.";
+export const NOT_IN_STRATA_NOTE = "This site's brand isn't saved yet. Open Your brand on the site and it saves itself; then try again.";
 
 type LinkRow = { projectId: string; userId: string };
 type Who = { siteId: string; userId: string; organizationId: string };
@@ -46,6 +46,7 @@ export type ExtrasDeps = {
 const mergeRequests = (a: TokenRequest | null, b: TokenRequest): TokenRequest => ({
   colours: { ...(a?.colours ?? {}), ...(b.colours ?? {}) },
   fonts: { ...(a?.fonts ?? {}), ...(b.fonts ?? {}) },
+  fontWeights: { ...(a?.fontWeights ?? {}), ...(b.fontWeights ?? {}) },
   ...(a?.radius !== undefined || b.radius !== undefined ? { radius: b.radius ?? a?.radius } : {}),
   spacing: { ...(a?.spacing ?? {}), ...(b.spacing ?? {}) },
 });
@@ -126,7 +127,7 @@ export async function sendTokensToStrata(input: Who & { request: TokenRequest },
     if (pushed.sent.length) await deps.refreshSite(input.siteId);
     return {
       state: "in-strata",
-      message: pushed.sent.length ? `Saved in Strata (${pushed.sent.join(", ")}). Your website follows it.` : pushed.skipped.length ? pushed.skipped.join(" ") : "Your brand already has those values.",
+      message: pushed.sent.length ? `Your brand is saved (${pushed.sent.join(", ")}). Your website follows it.` : pushed.skipped.length ? pushed.skipped.join(" ") : "Your brand already has those values.",
       changed: pushed.sent,
       skipped: pushed.skipped,
     };
@@ -171,7 +172,7 @@ export const realExtrasDeps: ExtrasDeps = {
   pushComponents: async (token, projectId, rows) => {
     const { strataFetch, pid } = await import("./siteBrand");
     const list = await strataFetch(`/projects/${pid(projectId)}/components`, token);
-    if (list.status === 401 || list.status === 403 || list.status === 404) throw new StrataRefused("Plexo can't change this Strata project. Reconnect Strata (or ask its owner for edit access) and try again.");
+    if (list.status === 401 || list.status === 403 || list.status === 404) throw new StrataRefused("Plexo can't change this brand. Reconnect your brand (or ask its owner for edit access) and try again.");
     if (!list.ok) throw new Error(`Strata answered ${list.status}`);
     const existing = ((await list.json().catch(() => ({}))) as { data?: Array<{ id?: string; name?: string; variant?: string }> }).data ?? [];
     const created: string[] = [];
@@ -185,9 +186,9 @@ export const realExtrasDeps: ExtrasDeps = {
         : await strataFetch(`/projects/${pid(projectId)}/components`, token, { method: "POST", body });
       if (res.status === 400 || res.status === 422) {
         const detail = ((await res.json().catch(() => ({}))) as { error?: { message?: string } }).error?.message;
-        throw new StrataRefused(`Strata didn't accept the component "${row.name}"${detail ? `: ${detail}` : ""}.`);
+        throw new StrataRefused(`Your brand didn't accept the component "${row.name}"${detail ? `: ${detail}` : ""}.`);
       }
-      if (res.status === 401 || res.status === 403) throw new StrataRefused("Plexo can't change this Strata project. Reconnect Strata (or ask its owner for edit access) and try again.");
+      if (res.status === 401 || res.status === 403) throw new StrataRefused("Plexo can't change this brand. Reconnect your brand (or ask its owner for edit access) and try again.");
       if (!res.ok) throw new Error(`Strata answered ${res.status}`);
       (match?.id ? updated : created).push(String(row.name));
     }
@@ -197,7 +198,7 @@ export const realExtrasDeps: ExtrasDeps = {
     const { strataApiUrl } = await import("@/lib/strata/apiUrl");
     const { createStrataClient, StrataError } = await import("@charisol/plexo-sdk/v2/strata");
     const base = strataApiUrl();
-    if (!base) throw new Error("Strata isn't set up on this Plexo yet.");
+    if (!base) throw new Error("Saving your brand isn't available on this Plexo yet.");
     const client = createStrataClient({ baseUrl: base, getToken: () => token });
     const snapshot = await client.pull(projectId);
     const plan = planTokenChanges(snapshot.tokens, req);

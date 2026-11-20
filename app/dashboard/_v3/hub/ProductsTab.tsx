@@ -1,67 +1,81 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileSpreadsheet, ImagePlus, Package, Plus, Rocket, SlidersHorizontal } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, Modal, SegmentedControl, Select, Textarea, useToast } from "../ui";
-import { formatMoney } from "@/lib/commerce/formatMoney";
+import { ChevronDown, ChevronUp, FileSpreadsheet, Package, Plus, Rocket, SlidersHorizontal } from "lucide-react";
+import { Button, EmptyState, Input, Modal, SegmentedControl, Select, Textarea, useToast } from "../ui";
 import type { HubProduct } from "@/lib/dashboardV3/hubData";
 import { TabBar } from "./HubFrame";
 import { errMsg, hubApi } from "./hubApi";
 import { BLANK_EXTRAS, DeliveryPanel, DiscountsPanel, ProductExtras, extrasFromProduct, extrasPayload, type Extras } from "./ProductTools";
 import { readProductsView, resolveProductsView, saveProductsView, type ProductsView } from "@/lib/dashboardV3/hubView";
+import { joinImages, plural, splitImages } from "@/lib/dashboardV3/productList";
+import { ProductBrowser, type BulkAction } from "./ProductBrowser";
+import { ProductImages, RelatedPicker } from "./ProductMedia";
 import type { Experience } from "@/lib/dashboardV3/nav";
-import { filterProducts, type StockFilter } from "@/lib/dashboardV3/productFilter";
 import { CsvImportDialog } from "@/app/dashboard/commerce/[templateId]/products/CsvImportDialog";
 import { AiImportDialog } from "@/app/dashboard/commerce/[templateId]/products/AiImportDialog";
 import { SellProductModal } from "@/app/dashboard/commerce/[templateId]/products/SellProductModal";
 import "@/app/dashboard/commerce/_components/cmx.css";
+import { GateOrError } from "../../_components/UpgradePrompt";
 
-type Form = { id?: string; name: string; price: string; kind: HubProduct["kind"]; description: string; stock: string; minutes: string; link: string; imageUrl: string; active: boolean; x: Extras };
-const BLANK: Form = { name: "", price: "", kind: "PHYSICAL", description: "", stock: "", minutes: "60", link: "", imageUrl: "", active: true, x: BLANK_EXTRAS };
+type Form = { id?: string; name: string; price: string; kind: HubProduct["kind"]; description: string; stock: string; minutes: string; link: string; images: string[]; related: string[]; /** The rest of the product has arrived (so saving can send it all). */ loaded: boolean; /** The detailed fields are showing even in the simple view. */ adv: boolean; active: boolean; x: Extras };
+const BLANK: Form = { name: "", price: "", kind: "PHYSICAL", description: "", stock: "", minutes: "60", link: "", images: [], related: [], loaded: true, adv: false, active: true, x: BLANK_EXTRAS };
 
 const KIND_LABEL: Record<HubProduct["kind"], string> = { PHYSICAL: "Something I ship", DIGITAL: "A download", SERVICE: "A service or booking" };
 
-export function ProductsTab({ siteId, products, currency, experience, startWithService }: { siteId: string; products: HubProduct[]; currency: string; experience: Experience; startWithService?: boolean }) {
+export function ProductsTab({ siteId, products, currency, experience, startNew }: { siteId: string; products: HubProduct[]; currency: string; experience: Experience; /** Open the add form straight away (from "Add a product" on Home or the menu). */ startNew?: "product" | "service" }) {
   const router = useRouter();
   const { show } = useToast();
-  const [form, setForm] = useState<Form | null>(startWithService ? { ...BLANK, kind: "SERVICE" } : null);
+  const [form, setForm] = useState<Form | null>(startNew === "service" ? { ...BLANK, kind: "SERVICE" } : startNew === "product" ? { ...BLANK } : null);
   const [busy, setBusy] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const fileRef = useRef<HTMLInputElement>(null);
   const base = `/api/v1/commerce/${siteId}/products`;
   const [view, setView] = useState<ProductsView>(() => resolveProductsView(experience, null));
-  const [search, setSearch] = useState("");
-  const [stock, setStock] = useState<StockFilter>("all");
   const [importing, setImporting] = useState<null | "csv" | "sol">(null);
   const [sellTarget, setSellTarget] = useState<{ id: string; name: string } | null>(null);
-  const [picking, setPicking] = useState(false);
-  const [picked, setPicked] = useState<Set<string>>(new Set());
-  const [hiding, setHiding] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState<BulkAction | null>(null);
+  const [bulkCategory, setBulkCategory] = useState<{ ids: string[]; name: string } | null>(null);
   const [section, setSection] = useState<"products" | "discounts" | "delivery">("products");
   // The owner's own choice (kept on this device) beats the default for their experience.
   useEffect(() => setView(readProductsView(experience)), [experience]);
   const full = view === "full";
+  // The detailed fields show in the full view, or when the owner asks for them in this one product (no need to switch views).
+  const advOn = full || !!form?.adv;
   const switchView = (v: ProductsView) => {
     setView(v);
     saveProductsView(v);
     if (v === "simple") setSection("products");
   };
-  const shown = filterProducts(products, search, stock);
-  async function hidePicked() {
-    setHiding(true);
+  async function bulk(action: BulkAction, ids: string[]) {
+    if (!ids.length) return;
+    if (action === "category") return setBulkCategory({ ids, name: "" });
+    if (action === "delete" && !window.confirm(`Delete ${plural(ids.length, "product")}? They come off your shop and can't be bought. Past orders keep their details.`)) return;
+    setBulkBusy(action);
     try {
-      // The same call the old page used: "delete" on a product hides it from the shop and keeps its orders.
-      await Promise.all([...picked].map((id) => hubApi(`${base}/${id}`, { method: "DELETE" })));
-      show({ title: `${picked.size} product${picked.size === 1 ? "" : "s"} hidden`, description: "They are off your shop now. Open one to show it again.", tone: "success" });
-      setPicked(new Set());
-      setPicking(false);
+      // Hiding and deleting use the same calls the old page did ("delete" takes it off the shop and keeps its orders).
+      await Promise.all(ids.map((id) => (action === "hide" || action === "delete" ? hubApi(`${base}/${id}`, { method: "DELETE" }) : hubApi(`${base}/${id}`, { method: "PATCH", json: { active: true } }))));
+      show({ title: action === "show" ? `${plural(ids.length, "product")} shown in your shop` : action === "hide" ? `${plural(ids.length, "product")} hidden` : `${plural(ids.length, "product")} deleted`, description: action === "hide" ? "They are off your shop now. Select them and tap Show to bring them back." : undefined, tone: "success" });
       router.refresh();
     } catch (e) {
-      show({ title: "We couldn't hide them all", description: errMsg(e), tone: "danger" });
+      show({ title: "We couldn't change them all", description: errMsg(e, "Please try again."), tone: "danger" });
+      router.refresh();
     } finally {
-      setHiding(false);
+      setBulkBusy(null);
+    }
+  }
+  async function applyCategory() {
+    if (!bulkCategory) return;
+    setBulkBusy("category");
+    try {
+      await Promise.all(bulkCategory.ids.map((id) => hubApi(`${base}/${id}`, { method: "PATCH", json: { category: bulkCategory.name.trim() || null } })));
+      show({ title: bulkCategory.name.trim() ? `${plural(bulkCategory.ids.length, "product")} moved to ${bulkCategory.name.trim()}` : `Category cleared on ${plural(bulkCategory.ids.length, "product")}`, tone: "success" });
+      setBulkCategory(null);
+      router.refresh();
+    } catch (e) {
+      show({ title: "We couldn't change the category", description: errMsg(e, "Please try again."), tone: "danger" });
+    } finally {
+      setBulkBusy(null);
     }
   }
   const categories = [...new Set(products.map((p) => p.category).filter((c): c is string => !!c))];
@@ -69,26 +83,12 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
   async function open(p?: HubProduct) {
     setError(null);
     if (!p) return setForm({ ...BLANK });
-    setForm({ id: p.id, name: p.name, price: String(p.priceMinor / 100), kind: p.kind, description: p.description ?? "", stock: p.stockQuantity == null ? "" : String(p.stockQuantity), minutes: "60", link: "", imageUrl: p.imageUrl ?? "", active: p.active, x: BLANK_EXTRAS });
+    setForm({ id: p.id, name: p.name, price: String(p.priceMinor / 100), kind: p.kind, description: p.description ?? "", stock: p.stockQuantity == null ? "" : String(p.stockQuantity), minutes: "60", link: "", images: joinImages(p.imageUrl, []), related: [], loaded: false, adv: false, active: p.active, x: BLANK_EXTRAS });
     // The list is light; fetch the rest of this product so saving never wipes what isn't shown here.
     try {
-      const r = await hubApi<{ product: { durationMinutes?: number | null; digitalExternalUrl?: string | null } & Record<string, unknown> }>(`${base}/${p.id}`);
-      setForm((f) => (f && f.id === p.id ? { ...f, minutes: String(r.product.durationMinutes ?? 60), link: r.product.digitalExternalUrl ?? "", x: extrasFromProduct(r.product) } : f));
+      const r = await hubApi<{ product: { durationMinutes?: number | null; digitalExternalUrl?: string | null; imageUrl?: string | null; galleryImageUrls?: string[]; relatedProductIds?: string[] } & Record<string, unknown> }>(`${base}/${p.id}`);
+      setForm((f) => (f && f.id === p.id ? { ...f, minutes: String(r.product.durationMinutes ?? 60), link: r.product.digitalExternalUrl ?? "", images: joinImages(r.product.imageUrl ?? p.imageUrl, r.product.galleryImageUrls), related: r.product.relatedProductIds ?? [], loaded: true, x: extrasFromProduct(r.product) } : f));
     } catch {}
-  }
-
-  async function upload(file: File) {
-    setUploading(true);
-    try {
-      const body = new FormData();
-      body.append("file", file);
-      const { url } = await hubApi<{ url: string }>("/api/v1/media/upload", { method: "POST", body }, "We couldn't upload that photo. Try a smaller picture.");
-      setForm((f) => (f ? { ...f, imageUrl: url } : f));
-    } catch (e) {
-      setError(errMsg(e));
-    } finally {
-      setUploading(false);
-    }
   }
 
   async function save() {
@@ -96,8 +96,8 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
     const price = Number(form.price.replace(/,/g, ""));
     if (!form.name.trim()) return setError("Please give your product a name.");
     if (form.price.trim() === "" || !Number.isFinite(price) || price < 0) return setError("Please add a price, like 5000.");
-    if (!full && form.kind === "DIGITAL" && !form.link.trim()) return setError("Paste the link where buyers get their download.");
-    const extra = full ? extrasPayload(form.x, form.kind, price) : null;
+    if (!advOn && form.kind === "DIGITAL" && !form.link.trim()) return setError("Paste the link where buyers get their download.");
+    const extra = advOn ? extrasPayload(form.x, form.kind, price) : null;
     if (typeof extra === "string") return setError(extra);
     setBusy(true);
     setError(null);
@@ -106,11 +106,13 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
       description: form.description.trim() || null,
       kind: form.kind,
       priceMinor: extra?.priceMinor ?? Math.round(price * 100),
-      imageUrl: form.imageUrl || null,
+      imageUrl: splitImages(form.images).imageUrl || null,
+      // Only send what we know: if the rest of the product never loaded, saving must not wipe its gallery or "sold together".
+      ...(form.loaded ? { galleryImageUrls: splitImages(form.images).galleryImageUrls, relatedProductIds: form.related } : {}),
       active: form.active,
       ...(form.kind === "PHYSICAL" && !(extra && extra.fields.variants) ? { stockQuantity: form.stock.trim() === "" ? 0 : Number(form.stock) || 0 } : {}),
       ...(form.kind === "SERVICE" ? { durationMinutes: Number(form.minutes) || 60 } : {}),
-      ...(form.kind === "DIGITAL" && !full ? { digitalDeliveryMethod: "EXTERNAL_LINK", digitalExternalUrl: form.link.trim() } : {}),
+      ...(form.kind === "DIGITAL" && !advOn ? { digitalDeliveryMethod: "EXTERNAL_LINK", digitalExternalUrl: form.link.trim() } : {}),
       ...(extra ? extra.fields : {}),
       ...(extra && form.kind === "DIGITAL" && form.x.dMethod === "EXTERNAL_LINK" ? { digitalExternalUrl: form.link.trim() || null } : {}),
     };
@@ -171,61 +173,18 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
           <Button variant="secondary" size="sm" leftIcon={<Plus size={16} aria-hidden />} onClick={() => setImporting("sol")}>
             Let SOL read my list
           </Button>
-          {products.length > 1 ? (
-            <Button variant={picking ? "primary" : "ghost"} size="sm" aria-pressed={picking} onClick={() => { setPicking((v) => !v); setPicked(new Set()); }}>
-              {picking ? "Done choosing" : "Hide several at once"}
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-      {products.length > 4 && (!full || section === "products") ? (
-        <div className="plx-viewswitch">
-          <Input label="Search your products" hideLabel type="search" fieldClassName="plx-hsearch" placeholder="Search your products" value={search} onChange={(e) => setSearch(e.target.value)} />
-          <SegmentedControl label="Show" value={stock} onChange={setStock} options={[{ value: "all", label: "All" }, { value: "in", label: "In stock" }, { value: "out", label: "Sold out" }]} />
-        </div>
-      ) : null}
-      {picking && full && section === "products" ? (
-        <div className="plx-inlinemsg">
-          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-            <span>{picked.size ? `${picked.size} chosen. Tap more to add them.` : "Tap the products you want to hide from your shop."}</span>
-            <Button size="sm" variant="danger" disabled={!picked.size} loading={hiding} onClick={hidePicked}>
-              Hide {picked.size || ""} from my shop
-            </Button>
-          </div>
         </div>
       ) : null}
       {full && section === "discounts" ? <DiscountsPanel siteId={siteId} currency={currency} /> : full && section === "delivery" ? <DeliveryPanel siteId={siteId} currency={currency} /> : products.length === 0 ? (
         <EmptyState title="Add your first product" body="A name, a price and a photo is all it takes. Your shop, basket and checkout are already set up for you." action={<Button leftIcon={<Plus size={18} aria-hidden />} onClick={() => open()}>Add a product</Button>} illustration={<Package size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />
       ) : (
-        <Card padding="none" className="plx-listcard" data-tour="hub-products">
-          <ul className="plx-list">
-            {shown.length === 0 ? <li className="plx-hrow"><span className="plx-small">Nothing matches that. Try another word or show all.</span></li> : null}
-            {shown.map((p) => (
-              <li key={p.id} style={{ display: "contents" }}>
-                <button type="button" className="plx-hrow" aria-pressed={picking ? picked.has(p.id) : undefined} style={picking && picked.has(p.id) ? { background: "var(--plx-tint)" } : undefined} onClick={() => (picking ? setPicked((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; }) : open(p))}>
-                  <span className="plx-hrow__thumb">{p.imageUrl ? <img src={p.imageUrl} alt="" /> : <Package size={22} aria-hidden />}</span>
-                  <span className="plx-hrow__main">
-                    <span className="plx-hrow__title">{p.name}</span>
-                    <span className="plx-hrow__sub">
-                      {KIND_LABEL[p.kind]}
-                      {p.kind === "PHYSICAL" && p.stockQuantity != null ? ` · ${p.stockQuantity} in stock` : ""}
-                    </span>
-                  </span>
-                  <span className="plx-hrow__end">
-                    {!p.active ? <Badge>Hidden</Badge> : p.kind === "PHYSICAL" && p.stockQuantity === 0 ? <Badge tone="warning">Sold out</Badge> : null}
-                    <span className="plx-hrow__price">{formatMoney(p.priceMinor, currency)}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </Card>
+        <ProductBrowser products={products} currency={currency} onOpen={open} onBulk={bulk} bulkBusy={bulkBusy} />
       )}
 
       <Modal
         open={!!form}
         onClose={() => setForm(null)}
-        width={full ? 680 : 560}
+        width={advOn ? 680 : 560}
         title={form?.id ? "Change product" : "Add a product"}
         closeOnBackdrop={false}
         footer={
@@ -256,21 +215,19 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
               <Input label={`Price (${currency})`} inputMode="decimal" value={form.price} onChange={(e) => set({ price: e.target.value })} placeholder="5000" />
               <Select label="What kind is it?" value={form.kind} onChange={(e) => set({ kind: e.target.value as Form["kind"] })} options={(Object.keys(KIND_LABEL) as HubProduct["kind"][]).map((k) => ({ value: k, label: KIND_LABEL[k] }))} />
             </div>
-            {form.kind === "PHYSICAL" && !(full && form.x.hasOptions) ? <Input label="How many do you have?" inputMode="numeric" value={form.stock} onChange={(e) => set({ stock: e.target.value })} placeholder="20" /> : null}
+            {form.kind === "PHYSICAL" && !(advOn && form.x.hasOptions) ? <Input label="How many do you have?" inputMode="numeric" value={form.stock} onChange={(e) => set({ stock: e.target.value })} placeholder="20" /> : null}
             {form.kind === "SERVICE" ? <Input label="How long does it take (minutes)?" inputMode="numeric" value={form.minutes} onChange={(e) => set({ minutes: e.target.value })} /> : null}
-            {form.kind === "DIGITAL" && !full ? <Input label="Link to your download" help="Buyers get this link by email after they pay." value={form.link} onChange={(e) => set({ link: e.target.value })} placeholder="https://" /> : null}
-            {form.kind === "DIGITAL" && full && form.x.dMethod === "EXTERNAL_LINK" ? <Input label="Link to your download" help="Buyers get this link by email after they pay." value={form.link} onChange={(e) => set({ link: e.target.value })} placeholder="https://" /> : null}
+            {form.kind === "DIGITAL" && !advOn ? <Input label="Link to your download" help="Buyers get this link by email after they pay." value={form.link} onChange={(e) => set({ link: e.target.value })} placeholder="https://" /> : null}
+            {form.kind === "DIGITAL" && advOn && form.x.dMethod === "EXTERNAL_LINK" ? <Input label="Link to your download" help="Buyers get this link by email after they pay." value={form.link} onChange={(e) => set({ link: e.target.value })} placeholder="https://" /> : null}
             <Textarea label="Tell people about it" optional value={form.description} onChange={(e) => set({ description: e.target.value })} />
-            <div>
-              <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <span className="plx-hrow__thumb" style={{ width: 72, height: 72 }}>{form.imageUrl ? <img src={form.imageUrl} alt="" /> : <ImagePlus size={24} aria-hidden />}</span>
-                <Button variant="secondary" loading={uploading} leftIcon={<ImagePlus size={18} aria-hidden />} onClick={() => fileRef.current?.click()}>
-                  {form.imageUrl ? "Change photo" : "Add a photo"}
-                </Button>
-              </div>
-            </div>
-            {full ? <ProductExtras siteId={siteId} kind={form.kind} x={form.x} set={(p) => setForm((f) => (f ? { ...f, x: { ...f.x, ...p } } : f))} categories={categories} currency={currency} setError={setError} basePrice={form.price} /> : null}
+            <ProductImages images={form.images} onChange={(images) => set({ images })} onError={setError} />
+            {advOn ? <ProductExtras siteId={siteId} kind={form.kind} x={form.x} set={(p) => setForm((f) => (f ? { ...f, x: { ...f.x, ...p } } : f))} categories={categories} currency={currency} setError={setError} basePrice={form.price} /> : null}
+            <RelatedPicker options={products.filter((p) => p.id !== form.id)} chosen={form.related} onChange={(related) => set({ related })} />
+            {!full ? (
+              <Button variant="ghost" size="sm" className="plx-adv-toggle" aria-expanded={form.adv} leftIcon={form.adv ? <ChevronUp size={16} aria-hidden /> : <ChevronDown size={16} aria-hidden />} onClick={() => set({ adv: !form.adv })}>
+                {form.adv ? "Hide advanced settings" : "Show advanced settings"}
+              </Button>
+            ) : null}
             <label className="plx-toggle">
               <span>
                 <b>Show it in my shop</b>
@@ -278,7 +235,15 @@ export function ProductsTab({ siteId, products, currency, experience, startWithS
               </span>
               <input type="checkbox" className="plx-switch" checked={form.active} onChange={(e) => set({ active: e.target.checked })} />
             </label>
-            {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+            <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError>
+          </div>
+        ) : null}
+      </Modal>
+      <Modal open={!!bulkCategory} onClose={() => setBulkCategory(null)} title="Change category" description={bulkCategory ? `For ${plural(bulkCategory.ids.length, "product")}. Leave it empty to take them out of any category.` : undefined} footer={<><Button variant="secondary" onClick={() => setBulkCategory(null)}>Cancel</Button><Button loading={bulkBusy === "category"} onClick={applyCategory}>Save</Button></>}>
+        {bulkCategory ? (
+          <div className="plx-form">
+            <Input label="Category" list="plx-bulk-cats" value={bulkCategory.name} onChange={(e) => setBulkCategory({ ...bulkCategory, name: e.target.value })} placeholder="Spices" autoComplete="off" />
+            <datalist id="plx-bulk-cats">{categories.map((c) => <option key={c} value={c} />)}</datalist>
           </div>
         ) : null}
       </Modal>

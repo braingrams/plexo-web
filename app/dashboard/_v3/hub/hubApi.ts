@@ -1,3 +1,4 @@
+import { rememberPlanGate } from "@/lib/plan/planGate";
 /** fetch + JSON, with the server's plain-words message (or a friendly fallback) when it fails. */
 export async function hubApi<T = Record<string, unknown>>(url: string, init?: RequestInit & { json?: unknown }, fallback = "That didn't work. Please try again."): Promise<T> {
   const { json, ...rest } = init ?? {};
@@ -8,6 +9,7 @@ export async function hubApi<T = Record<string, unknown>>(url: string, init?: Re
     throw new Error("We couldn't reach Plexo. Check your internet and try again.");
   }
   const data = (await res.json().catch(() => ({}))) as T & { error?: string };
+  if (!res.ok) rememberPlanGate(data);
   if (!res.ok) throw Object.assign(new Error(typeof data.error === "string" && data.error ? data.error : fallback), { data, status: res.status });
   return data;
 }

@@ -9,6 +9,18 @@
  * browser to 90%) without changing any proportions. Phones and tablets keep 100%, where text needs to be easy to tap and read.
  * --plx-dvh is the screen height in the dashboard's own (zoomed) units; use it instead of 100dvh.
  */
+/*
+ * The new dashboard has no purple: Plexo's brand is lime and deep green. The shared "violet" and "info" tokens
+ * (lib/brandTokens.ts) are re-pointed here, inside the new dashboard only, to the amber accent and the green
+ * success colours. The `html` prefix outranks the theme blocks that set the tokens on the same element.
+ */
+html [data-plexo-v3] {
+  --plx-violet: var(--plx-accent);
+  --plx-violet-subtle: var(--plx-warning-subtle);
+  --plx-info: var(--plx-success);
+  --plx-info-subtle: var(--plx-success-subtle);
+}
+
 [data-plexo-v3] { --plx-zoom: 1; --plx-dvh: calc(100dvh / var(--plx-zoom)); }
 @media (min-width: 1024px) and (pointer: fine) {
   [data-plexo-v3] { --plx-zoom: 0.9; zoom: var(--plx-zoom); }
@@ -233,9 +245,13 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 @keyframes plx-fade { from { opacity: 0; } }
 @keyframes plx-pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
 @keyframes plx-rise { from { transform: translateY(100%); } }
+@keyframes plx-slide { from { transform: translateX(24px); opacity: 0; } }
+.plx-overlay--drawer { place-items: stretch end; padding: 0; }
+.plx-dialog--drawer { max-height: none; height: 100dvh; border-radius: 0; border-top: 0; border-bottom: 0; border-right: 0; animation: plx-slide .2s cubic-bezier(.2, .8, .2, 1); }
+.plx-dialog--drawer .plx-dialog__body { flex: 1; overflow: auto; }
 @media (max-width: 640px) {
   .plx-overlay { place-items: end stretch; padding: 0; }
-  .plx-dialog { max-width: none; max-height: 92dvh; border-radius: 22px 22px 0 0; border-bottom: none; animation: plx-rise .24s cubic-bezier(.2, .8, .2, 1); padding-bottom: env(safe-area-inset-bottom); }
+  .plx-dialog, .plx-dialog--drawer { max-width: none; height: auto; max-height: 92dvh; border-radius: 22px 22px 0 0; border-bottom: none; animation: plx-rise .24s cubic-bezier(.2, .8, .2, 1); padding-bottom: env(safe-area-inset-bottom); }
   .plx-dialog__grab { display: block; width: 40px; height: 5px; border-radius: 99px; background: var(--plx-border-strong); margin: 10px auto 0; }
   .plx-dialog__foot { flex-direction: column-reverse; }
   .plx-dialog__foot > .plx-btn { width: 100%; }
@@ -307,15 +323,31 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 .plx-tour-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--plx-border-strong); transition: background .2s ease, width .2s ease; }
 .plx-tour-dots span[data-on="true"] { background: var(--plx-deep); width: 18px; border-radius: 99px; }
 .plx-tour-dots span[data-done="true"] { background: var(--plx-deep); opacity: .5; }
-@media (max-width: 640px) {
-  .plx-tour-card { left: 16px !important; right: 16px; width: auto; top: auto !important; bottom: calc(16px + env(safe-area-inset-bottom)); }
-}
+.plx-tour-card--sheet { left: 12px; right: 12px; width: auto; top: auto; bottom: calc(12px + env(safe-area-inset-bottom)); max-height: 46vh; overflow-y: auto; }
+.plx-tour-arrow { position: absolute; width: 16px; height: 16px; background: var(--plx-surface); border: 1px solid var(--plx-border); transform: rotate(45deg); margin: -8px 0 0 -8px; pointer-events: none; }
+.plx-tour-arrow[data-side="bottom"] { top: 0; border-right: 0; border-bottom: 0; }
+.plx-tour-arrow[data-side="top"] { top: 100%; border-left: 0; border-top: 0; }
+.plx-tour-arrow[data-side="right"] { left: 0; border-right: 0; border-top: 0; }
+.plx-tour-arrow[data-side="left"] { left: 100%; border-left: 0; border-bottom: 0; }
+.plx-tour-spot::after { content: ""; position: absolute; inset: -6px; border-radius: 18px; border: 2px solid var(--plx-brand); opacity: 0; animation: plx-tour-pulse 1.8s ease-out infinite; }
+@keyframes plx-tour-pulse { 0% { opacity: .7; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .plx-tour-spot::after { animation: none; } .plx-tour-spot, .plx-tour-card { transition: none; } }
 .plx-tour-offer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .plx-tour-choice { font: inherit; text-align: left; color: var(--plx-text); background: var(--plx-surface); border: 2px solid var(--plx-border); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; transition: border-color .15s ease, background .15s ease; min-height: 44px; }
 .plx-tour-choice:hover { border-color: var(--plx-deep); background: var(--plx-tint); }
 .plx-tour-choice__icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--plx-tint); color: var(--plx-deep); }
 .plx-tour-choice__title { font-size: 16px; font-weight: 800; }
 .plx-tour-choice__desc { font-size: 14px; color: var(--plx-muted); line-height: 1.45; }
+.plx-tour-areas { margin-top: 18px; border-top: 1px solid var(--plx-border); padding-top: 14px; }
+.plx-tour-areas__h { margin: 0 0 8px; font-size: 14px; font-weight: 800; color: var(--plx-muted); }
+.plx-tour-areas ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.plx-tour-area { font: inherit; width: 100%; text-align: left; color: var(--plx-text); background: var(--plx-surface); border: 1px solid var(--plx-border); border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; min-height: 44px; }
+.plx-tour-area:hover { border-color: var(--plx-deep); background: var(--plx-tint); }
+.plx-tour-area__txt { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.plx-tour-area__txt b { font-size: 15px; }
+.plx-tour-area__txt span { font-size: 13px; color: var(--plx-muted); line-height: 1.4; }
+.plx-tour-area__done { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: var(--plx-deep); }
+@media (max-width: 560px) { .plx-tour-areas ul { grid-template-columns: 1fr; } }
 @media (max-width: 480px) { .plx-tour-offer { grid-template-columns: 1fr; } }
 
 /* ── Shell ────────────────────────────────────────────── */
@@ -506,6 +538,7 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 .plx-sitepick__row[aria-selected="true"] { background: var(--plx-tint); }
 .plx-sitepick__text { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
 .plx-sitepick__name { font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plx-sitepick__metatext { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .plx-sitepick__meta { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--plx-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plx-sitepick__dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--plx-border-strong); }
 .plx-sitepick__dot--live { background: var(--plx-success); }
@@ -639,3 +672,30 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 .plx-shell[data-collapsed] .plx-nav__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .plx-content.plx-content--editor { padding: 0; display: flex; flex-direction: column; }
 @media (max-width: 1023px) { .plx-sidebar__fold { display: none; } }
+
+/* The visual page editor keeps the app's menu, folded to icons; opening it is one clear, big button. */
+.plx-shell[data-frame="editor"] .plx-tabbar { display: none; }
+.plx-shell[data-frame="editor"] .plx-sidebar__fold { width: 44px; height: 44px; border: 1px solid var(--plx-border); background: var(--plx-bg); color: var(--plx-text); }
+.plx-shell[data-frame="editor"] .plx-sidebar { z-index: 45; }
+.plx-shell[data-frame="editor"]:not([data-collapsed]) .plx-sidebar { box-shadow: var(--plx-shadow-overlay); }
+/* A button-link that was just tapped: its label dims and a spinner shows until the page arrives. */
+.plx-bpend { display: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; pointer-events: none; }
+.plx-bpend[data-on="true"] { display: block; animation: plx-spin .7s linear infinite; }
+a.plx-btn { position: relative; }
+a.plx-btn > .plx-bpend { position: absolute; top: 50%; left: 50%; margin: -8px 0 0 -8px; }
+a.plx-btn:has(> .plx-bpend[data-on="true"]) { cursor: progress; }
+a.plx-btn:has(> .plx-bpend[data-on="true"]) > .plx-btn__label { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .plx-bpend[data-on="true"] { animation: none; border-right-color: currentColor; opacity: .6; } }
+
+/* While any move or switch is in flight the page behind the bar softens (after a short beat, so quick moves never flicker). */
+html[data-plx-nav="running"] { cursor: progress; }
+html[data-plx-nav="running"] [data-plexo-v3] main { opacity: .62; transition: opacity .2s ease .18s; }
+
+/* SOL's drafted post, shown as it will read (headings and paragraphs keep their weight and spacing). */
+.plx-solpost h2, .plx-solpost h3 { font-size: 16px; font-weight: 800; margin: 14px 0 4px; }
+.plx-solpost p { margin: 0 0 8px; }
+.plx-solpost ul, .plx-solpost ol { margin: 0 0 8px; padding-left: 20px; list-style: revert; }
+
+/* Older shared components (upgrade prompts, dialogs) use .btn-primary, which is the old purple outside the new dashboard. Inside it they take the brand colour. */
+[data-plexo-v3] .btn-primary { background: var(--plx-brand); color: var(--plx-on-brand); border-color: transparent; }
+[data-plexo-v3] .btn-primary:hover:not(:disabled) { background: var(--plx-brand-hover); }

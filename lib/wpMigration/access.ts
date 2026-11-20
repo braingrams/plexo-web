@@ -1,3 +1,5 @@
+import { planThatEnables } from "@/lib/plan/planNeeded";
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { getTierFeatures } from "@/lib/subscription";
@@ -28,7 +30,7 @@ export async function resolveMigrationAccess(
   const permissionError = requirePermission(resolved.role, { template: [opts.permission] });
   if (permissionError) return { error: permissionError };
   if (!getTierFeatures(resolved.subscriptionPlan).siteMigrationEnabled) {
-    return { error: NextResponse.json({ error: MIGRATION_PLAN_MESSAGE, requiresUpgrade: true }, { status: 403 }) };
+    return { error: NextResponse.json({ ...planGateBody("PLAN_MIGRATION", MIGRATION_PLAN_MESSAGE, planThatEnables((f) => f.siteMigrationEnabled)), requiresUpgrade: true }, { status: 403 }) };
   }
   return {
     access: { userId: resolved.userId, organizationId: resolved.organizationId, role: resolved.role, subscriptionPlan: resolved.subscriptionPlan },

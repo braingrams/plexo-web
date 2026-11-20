@@ -1,9 +1,11 @@
 "use client";
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
 import { PLAN } from "@/lib/plan/plans";
 
 import { getTierFeatures } from "@/lib/subscription";
 import type { PlanId } from "@/lib/plan/plans";
 import { ZipDropzone } from "../_components/ZipDropzone";
+import { WizardWords } from "./WizardWords";
 import { ServerBuildProgress } from "./ServerBuildProgress";
 import { stripEnvFilesInBrowser } from "@/lib/projects/clientSsrUpload";
 import { SolIcon, SolOutOfCredits } from "../_components/sol/SolTopUp";
@@ -18,6 +20,7 @@ import { MarketplaceRowExpandGrid } from "@/app/dashboard/marketplace/_shared/Ma
 import { MarketplaceSkeletonGrid } from "@/app/dashboard/marketplace/_shared/MarketplaceBrowse";
 import { CustomSelect } from "../../_components/CustomSelect";
 import { trackProjectCreated, templateNameFor } from "@/lib/analytics";
+import { TemplateMatcher } from "./TemplateMatcher";
 
 // Same four tiers/labels as Settings → AI's own Creativity Tier picker (AiSettingsClient.tsx)
 // — kept here as its own small copy rather than a shared import since that file's TIER_OPTIONS
@@ -182,6 +185,7 @@ function primaryButtonStyle(enabled: boolean) {
  */
 export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => void; plan?: PlanId } = {}) {
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [serverUpgradeOpen, setServerUpgradeOpen] = useState(false);
   const [startTab, setStartTab] = useState<"marketplace" | "blank" | "ai" | "upload" | "server" | "wordpress">("marketplace");
   const [creatingBlank, setCreatingBlank] = useState(false);
   const [serverFile, setServerFile] = useState<File | null>(null);
@@ -839,6 +843,15 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
                     Server app
                   </button>
                 )}
+                {!getTierFeatures(plan).ssrEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => setServerUpgradeOpen((v) => !v)}
+                    style={{ fontSize: "12.5px", fontWeight: 650, padding: "7px 14px", borderRadius: 999, border: "none", cursor: "pointer", background: "transparent", color: "var(--text-muted)", display: "inline-flex", alignItems: "center", gap: 6 }}
+                  >
+                    Server app <span style={{ fontSize: "0.66rem", fontWeight: 700, color: "var(--brand)" }}>Pro</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setStartTab("wordpress")}
@@ -857,6 +870,9 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
                   Move from WordPress
                 </button>
               </div>
+              {serverUpgradeOpen && !getTierFeatures(plan).ssrEnabled && (
+                <UpgradePrompt tone="info" requiredPlan="PRO" message="Server apps (a site with its own back end) are part of the Pro plan." />
+              )}
 
               {startTab === "marketplace" ? (
                 loadingItems ? (
@@ -874,7 +890,10 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
                     .
                   </p>
                 ) : (
-                  <MarketplaceRowExpandGrid templates={items} busyId={busyId} onSelect={(t) => void handleUseMarketplace(t)} />
+                  <>
+                    <TemplateMatcher busyId={busyId} onUse={(t) => void handleUseMarketplace(t)} />
+                    <MarketplaceRowExpandGrid templates={items} busyId={busyId} onSelect={(t) => void handleUseMarketplace(t)} />
+                  </>
                 )
               ) : startTab === "blank" ? (
                 <div>
@@ -1338,6 +1357,7 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
                   <p style={{ margin: "0 0 22px", fontSize: "13px", color: "var(--text-muted)" }}>
                     Here&rsquo;s what&rsquo;s about to go live. You can always change it later.
                   </p>
+                  <WizardWords siteId={template.id} />
 
                   <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderTop: `1px solid ${hairlineSoft}`, borderBottom: `1px solid ${hairlineSoft}` }}>
                     <IconTemplate />

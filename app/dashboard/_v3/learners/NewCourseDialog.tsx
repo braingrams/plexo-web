@@ -1,5 +1,8 @@
 "use client";
 
+import { GateOrError, UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
+import { planGateForMessage } from "@/lib/plan/planGate";
+import type { PaidPlanId } from "@/lib/plan/plans";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button, Input, Modal, useToast } from "../ui";
@@ -16,7 +19,7 @@ export function NewCourseDialog({ open, onClose }: { open: boolean; onClose: () 
   const { show } = useToast();
   const [name, setName] = useState("");
   const [sites, setSites] = useState<SiteLite[] | null>(null);
-  const [full, setFull] = useState(false);
+  const [full, setFull] = useState<{ message: string; requiredPlan: PaidPlanId; canBuySlot: boolean } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,12 +31,12 @@ export function NewCourseDialog({ open, onClose }: { open: boolean; onClose: () 
       try {
         const [t, f] = await Promise.all([
           hubApi<{ templates?: { id: string; name: string; kind?: string }[] }>("/api/templates"),
-          hubApi<{ funnels?: { templateId: string }[]; slots?: { hasSlotAvailable: boolean } }>("/api/v1/lms/funnels"),
+          hubApi<{ funnels?: { templateId: string }[]; slots?: { hasSlotAvailable: boolean }; slotsGate?: { message: string; requiredPlan: PaidPlanId; canBuySlot: boolean } | null }>("/api/v1/lms/funnels"),
         ]);
         if (!alive) return;
         const taken = new Set((f.funnels ?? []).map((x) => x.templateId));
         setSites((t.templates ?? []).filter((x) => x.kind !== "EMAIL" && !taken.has(x.id)).map((x) => ({ id: x.id, name: x.name })));
-        setFull(f.slots ? !f.slots.hasSlotAvailable : false);
+        setFull(f.slots && !f.slots.hasSlotAvailable ? (f.slotsGate ?? { message: "You have used every course your plan includes.", requiredPlan: "PRO", canBuySlot: true }) : null);
       } catch {
         if (alive) setSites([]);
       }
@@ -84,16 +87,21 @@ export function NewCourseDialog({ open, onClose }: { open: boolean; onClose: () 
       footer={
         <>
           <Button variant="secondary" onClick={onClose}>Not now</Button>
-          <Button loading={busy === "new"} disabled={full || !!busy} onClick={createNew}>Create my course</Button>
+          <Button loading={busy === "new"} disabled={!!full || !!busy} onClick={createNew}>Create my course</Button>
         </>
       }
     >
       <div className="plx-modal-stack">
         {full ? (
-          <p className="plx-field__error" role="alert">You have used every course your plan includes. Upgrade your plan to add another.</p>
+          <UpgradePrompt
+            message={full.message}
+            requiredPlan={full.requiredPlan}
+            extraActions={full.canBuySlot ? <a href={`/dashboard/settings/subscription?addon=funnel_slot&returnTo=${encodeURIComponent("/dashboard/learners")}`} className="btn-secondary" style={{ padding: "0.45rem 0.9rem", fontSize: "0.78rem" }}>Buy one extra slot</a> : null}
+          />
         ) : (
-          <Input label="Course name" placeholder="For example: Learn to bake sourdough" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void createNew(); }} error={error ?? undefined} />
+          <Input label="Course name" placeholder="For example: Learn to bake sourdough" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void createNew(); }} error={planGateForMessage(error) ? undefined : (error ?? undefined)} />
         )}
+        {error ? <GateOrError error={error}>{null}</GateOrError> : null}
         {sites && sites.length > 0 && !full ? (
           <>
             <div className="plx-divider">or turn a site you already have into your course</div>

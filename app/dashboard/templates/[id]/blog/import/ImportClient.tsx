@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { PageContainer } from "../../../../_components/PageContainer";
@@ -313,7 +314,7 @@ export function ImportClient({
               : `Images are downloaded and re-uploaded to your own storage. Only available for imports of ${MAX_REHOST_POSTS} posts or fewer.`}
           </p>
 
-          {error && <p style={{ color: "var(--ed-danger)", fontSize: "0.8rem", marginBottom: "0.75rem" }}>{error}</p>}
+          {error && <GateOrError error={error}><p style={{ color: "var(--ed-danger)", fontSize: "0.8rem", marginBottom: "0.75rem" }}>{error}</p></GateOrError>}
           <button
             type="button"
             onClick={handleStart}

@@ -1,3 +1,4 @@
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextResponse } from "next/server";
 
 import { auth } from "@/server/authDynamo";
@@ -30,6 +31,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     funnelBuilderLevel?: string;
     // v3 dashboard (lib/dashboardV3)
     experience?: string;
+    editorAutosave?: boolean;
     buildProfile?: unknown;
     themePreference?: string;
     tourState?: unknown;
@@ -55,6 +57,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     hideBranding?: boolean;
     funnelBuilderLevel?: "BEGINNER" | "INTERMEDIATE" | "PROFESSIONAL";
     experience?: Experience;
+    editorAutosave?: boolean;
     buildProfile?: SolBuildProfile;
     themePreference?: ThemePreference;
     tourState?: TourState;
@@ -109,7 +112,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     if (body.manageLandingPagePublishing === true) {
       const { data: currentUser } = await User.get({ id: session.user.id }).go();
       if (!getTierFeatures(effectivePlan(currentUser)).manageLandingPagePublishingEnabled) {
-        return NextResponse.json({ error: "This is part of the Pro plan." }, { status: 403 });
+        return NextResponse.json(planGateBody("PLAN_AI_ACCESS", "This is part of the Pro plan.", "PRO"), { status: 403 });
       }
     }
     data.manageLandingPagePublishing = body.manageLandingPagePublishing;
@@ -125,7 +128,7 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     if (body.hideBranding === true) {
       const { data: currentUser } = await User.get({ id: session.user.id }).go();
       if (!getTierFeatures(effectivePlan(currentUser)).brandingRemovalEnabled) {
-        return NextResponse.json({ error: "Removing the Plexo badge comes with the Starter plan and above." }, { status: 403 });
+        return NextResponse.json(planGateBody("PLAN_BRANDING", "Removing the Plexo badge comes with the Starter plan and above."), { status: 403 });
       }
     }
     data.hideBranding = body.hideBranding;
@@ -142,6 +145,11 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     const experience = parseExperience(body.experience);
     if (!experience) return NextResponse.json({ error: "Please choose guided, in-between or pro view." }, { status: 400 });
     data.experience = experience;
+  }
+
+  if (body.editorAutosave !== undefined) {
+    if (typeof body.editorAutosave !== "boolean") return NextResponse.json({ error: "Autosave can only be on or off." }, { status: 400 });
+    data.editorAutosave = body.editorAutosave;
   }
 
   if (body.buildProfile !== undefined) {

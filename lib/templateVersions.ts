@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { syncPageEntries } from "@/lib/customSections/placements";
 import {
   TransactWriteCommand,
   type TransactWriteCommandInput,
@@ -7,6 +8,8 @@ import {
 import { docClient } from "@/lib/db/client";
 import { Template, TemplateRevision } from "@/lib/db/contentEntities";
 import { designFormatOf } from "@/lib/v2/design";
+import { protectedRevisionIds } from "@/lib/templateRevisions";
+import { staleRevisions } from "@/lib/revisionRetention";
 
 // Retention cap — same generous-but-bounded undo window as the pre-draft/publish model
 // (lib/templateRevisions.ts), applied here to published-version history instead.
@@ -82,6 +85,7 @@ export async function publishTemplateDraft(
 
   await pruneOldVersions(existing.id);
 
+  await syncPageEntries(existing.id); // the page's uses of custom sections, for the dashboard's Entries list
   return { revisionId, createdAt };
 }
 
@@ -91,7 +95,7 @@ async function pruneOldVersions(templateId: string): Promise<void> {
   const { data: revisions } = await TemplateRevision.query
     .primary({ templateId })
     .go({ order: "desc" });
-  const stale = revisions.slice(MAX_VERSIONS_PER_TEMPLATE);
+  const stale = staleRevisions(revisions, MAX_VERSIONS_PER_TEMPLATE, await protectedRevisionIds(templateId));
   if (stale.length === 0) return;
   await Promise.all(
     stale.map((r) =>
@@ -127,6 +131,7 @@ export async function restoreTemplateVersion(
     })
     .remove(["draftJson", "draftHtml"])
     .go();
+  await syncPageEntries(templateId);
 }
 
 /**

@@ -5,6 +5,7 @@ import { isGatewayReady } from "@/lib/commerce/checkoutPayment";
 import { publicBankDetails } from "@/lib/commerce/bankTransfer";
 import { readCheckoutFields, toPublicCheckoutFields } from "@/lib/commerce/checkoutFields";
 import { resolveFulfillmentOptions } from "@/lib/commerce/delivery";
+import { termsLink } from "@/lib/commerce/terms";
 
 /**
  * Everything the storefront's checkout UI needs to decide WHAT to show — which payment
@@ -41,5 +42,6 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     fields: toPublicCheckoutFields(readCheckoutFields(settings?.checkoutFields)),
     fulfillment,
     discounts,
+    terms: termsLink(settings, request.nextUrl.origin),
   });
 }

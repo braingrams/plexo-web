@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { Check, Mail } from "lucide-react";
 import { Input, useToast } from "../ui";
@@ -82,7 +83,7 @@ export function NotificationsSection({ initial, accountEmail, mock = false }: { 
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
       <div data-tour="notif-list" className="plx-sp__main">
         {GROUPS.map((g) => (
           <Panel key={g.title} title={g.title} description={g.blurb}>

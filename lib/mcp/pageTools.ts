@@ -21,6 +21,7 @@ import {
   saveEdit,
   summarizeSections,
 } from "./v2Pages";
+import { SITE_CORE_MCP_TOOLS, SITE_CORE_TOOL_NAMES, handleSiteCoreTool } from "./siteCoreTools";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
 
@@ -38,7 +39,7 @@ const COMMANDS_HELP =
   "sectionId values come from page_describe and are only valid for that page. Write real, specific copy for the business — never lorem ipsum. " +
   "Each command is checked on its own: good ones are saved, bad ones come back with a plain-English reason, so read the results and resend only the ones that failed.";
 
-export const PAGE_MCP_TOOLS = [
+const BASE_PAGE_MCP_TOOLS = [
   {
     name: "page_describe",
     title: "Describe Page",
@@ -79,7 +80,7 @@ export const PAGE_MCP_TOOLS = [
     title: "Create Page From Template",
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
     description:
-      "Creates a visual page that is already complete: header, sections and footer all filled in with starting wording. Without siteId it starts a NEW single-page SITE (for a whole multi-page site use site_create instead); with siteId it adds a page to that site — it takes the site's brand and menu, and joins the site's shared menu (any plan can build and preview a multi-page site; Free publishes only the home page). templateId is a page template: blank, home, landing, about, services, contact, pricing, store, blog, product, faq, gallery, team or menu, or any layout id from list_site_templates (home for a first page, landing for a one-page sales site). " +
+      "Creates a visual page that is already complete: sections filled in with starting wording. A NEW site also gets its shared site-wide header and footer (\"site core\", editable once for every page with site_layout_edit), so the page itself carries no header or footer; a page added with siteId shows the site's shared ones. Without siteId it starts a NEW single-page SITE (for a whole multi-page site use site_create instead); with siteId it adds a page to that site — it takes the site's brand and menu, and joins the site's shared menu (any plan can build and preview a multi-page site; Free publishes only the home page). templateId is a page template: blank, home, landing, about, services, contact, pricing, store, blog, product, faq, gallery, team or menu, or any layout id from list_site_templates (home for a first page, landing for a one-page sales site). " +
       "Pass content — the same commands as page_edit — to personalise it in the same call (headline, copy, brand colours with setBrand), so the owner sees a finished page for their business straight away; any wording you don't change stays as the template's sample text, so replace the key copy. It isn't published: call page_publish with a domain when the owner is ready. Never ask the owner for a name or address first — name the page yourself from what it's about.",
     inputSchema: {
       type: "object",
@@ -180,6 +181,8 @@ export const PAGE_MCP_TOOLS = [
   },
 ];
 
+// Site core (shared header/footer, per-page switches, header/footer code) rides with the page tools.
+export const PAGE_MCP_TOOLS = [...BASE_PAGE_MCP_TOOLS, ...SITE_CORE_MCP_TOOLS];
 export const PAGE_TOOL_NAMES = new Set(PAGE_MCP_TOOLS.map((t) => t.name));
 
 // ------------------------------------------------------------------ blog layouts
@@ -301,6 +304,8 @@ async function editBlogLayout(resolved: ResolvedUser, args: { templateId?: unkno
 // ------------------------------------------------------------------ dispatcher
 
 export async function handlePageTool(toolName: string, args: any, resolved: ResolvedUser): Promise<any> {
+ 
+  if (SITE_CORE_TOOL_NAMES.has(toolName)) return handleSiteCoreTool(toolName, args, resolved);
   try {
     switch (toolName) {
       case "page_describe":

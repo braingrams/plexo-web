@@ -10,6 +10,7 @@ import * as bedrockProvider from "./providers/bedrockClaude";
 import * as geminiProvider from "./providers/gemini";
 import * as openaiProvider from "./providers/openai";
 import type { ProviderCallResult } from "./providers/shared";
+import { TONES } from "@/lib/brand/brandVoice";
 import type { AiActionMode, AiProvider, ConcreteTier, GenerateOutcome } from "./types";
 
 export const MAX_TOKENS: Record<AiActionMode, number> = {
@@ -28,6 +29,8 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   // a builder layout's nested JSON per token, so a smaller ceiling than edit_layout/
   // generate_layout is enough for a genuinely long post.
   generate_blog_post: 6000,
+  // A tagline, a two-sentence description and a few short lists.
+  write_brand_voice: 1500,
   // SOL (lib/ai/solAgent.ts) — one turn of the agent loop: some conversational text plus,
   // often, a tool_use block whose "input" can itself be a full designJson/htmlContent
   // payload (e.g. calling publish_landing_page or create_raw_landing_page) — the same
@@ -38,6 +41,7 @@ export const MAX_TOKENS: Record<AiActionMode, number> = {
   agent_chat: 32000,
   // A catalog's product rows as JSON — ample for a few hundred products in one pass.
   import_products: 8000,
+  design_section_type: 6000,
   // A few sentences plus the section and element commands — rebuilding a hand-designed section writes a whole element tree. It sets the credit hold.
   page_assist: 16000,
   // A JSON list of the pieces in one picture (up to ~250 elements).
@@ -77,6 +81,14 @@ function cleanJsonString(raw: string): string {
 
 function buildSystemPrompt(mode: AiActionMode, templateKind: "EMAIL" | "LANDING_PAGE", isBlogLayout: boolean): string {
   const kindLabel = templateKind === "EMAIL" ? "email template" : "landing page";
+
+  if (mode === "write_brand_voice") {
+    return `You are Plexo's brand writer. From what the owner tells you about their business, write the words of their brand.
+Write simply and specifically for THIS business: no buzzwords, no "we are passionate about", no empty superlatives. The tagline is a short line (max 8 words) a real shop would put under its name. The description ("aboutLine") is one or two plain sentences (max 220 characters) saying what the business does and for whom. "tones" are 2-4 ids chosen ONLY from: ${TONES.map((t) => t.id).join(", ")}. "formality" is one of casual, balanced, formal. "audience" is a short phrase (max 120 characters) naming who they speak to. "wordsLike" are up to 6 words or short phrases that suit the voice; "wordsAvoid" are up to 6 words or phrases this voice would never use (jargon, cliches).
+If the owner already has words (in the context), keep what they have unless the instruction asks you to change it, and improve only what is missing or weak. Never invent facts like years in business, awards, prices or locations.
+Respond with ONLY a JSON object of this exact shape, no markdown fences, no prose outside the JSON:
+{ "summary": "<one short sentence about the voice you chose>", "result": { "tagline": "...", "aboutLine": "...", "tones": ["..."], "formality": "casual|balanced|formal", "audience": "...", "wordsLike": ["..."], "wordsAvoid": ["..."] } }`;
+  }
 
   if (mode === "generate_blog_post") {
     return `You are Plexo's blog writing assistant. Write a complete, publish-ready blog post based on the user's topic.
@@ -178,6 +190,20 @@ function resultSchemaFor(mode: AiActionMode) {
   if (mode === "generate_raw_html") {
     return z.object({ summary: z.string().max(2000), result: z.string().min(1) });
   }
+  if (mode === "write_brand_voice") {
+    return z.object({
+      summary: z.string().max(2000),
+      result: z.object({
+        tagline: z.string().max(200).optional().default(""),
+        aboutLine: z.string().max(500).optional().default(""),
+        tones: z.array(z.string()).max(8).optional().default([]),
+        formality: z.string().optional().default(""),
+        audience: z.string().max(300).optional().default(""),
+        wordsLike: z.array(z.string()).max(20).optional().default([]),
+        wordsAvoid: z.array(z.string()).max(20).optional().default([]),
+      }),
+    });
+  }
   if (mode === "generate_blog_post") {
     return z.object({
       summary: z.string().max(2000),
@@ -201,7 +227,7 @@ function resultSchemaFor(mode: AiActionMode) {
 
 /** Drops heavy/irrelevant fields before sending the template to the model — token efficiency. */
 function trimContext(mode: AiActionMode, context: unknown): unknown {
-  if (mode === "edit_element" || mode === "edit_raw_html" || mode === "generate_blog_post" || context === null || typeof context !== "object") {
+  if (mode === "edit_element" || mode === "edit_raw_html" || mode === "generate_blog_post" || mode === "write_brand_voice" || context === null || typeof context !== "object") {
     return context;
   }
   const clone = JSON.parse(JSON.stringify(context));
@@ -252,6 +278,8 @@ export interface GenerateParams {
    * types are offered to the model at all (see BLOG_ELEMENT_TYPES above). */
   isBlogLayout?: boolean;
   context: unknown;
+  /** The brand's words as a prompt block (lib/brand/brandVoice.ts voicePromptBlock), added to the system prompt. */
+  brandVoice?: string;
   /** Called as the page is written — how much so far, and which attempt (a cut-off answer is retried once). */
   onProgress?: (progress: { characters: number; attempt: number }) => void;
   /** Runs before every call to the AI (including the retry) with that call's output budget —
@@ -292,7 +320,7 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       : (params.tier as ConcreteTier);
 
   const model = resolveModel(params.provider, concreteTier);
-  const systemPrompt = buildSystemPrompt(params.mode, params.templateKind, params.isBlogLayout ?? false);
+  const systemPrompt = buildSystemPrompt(params.mode, params.templateKind, params.isBlogLayout ?? false) + (params.brandVoice ? `\n\n${params.brandVoice}` : "");
   const trimmedContext = trimContext(params.mode, params.context);
   const schema = resultSchemaFor(params.mode);
   const maxTokens = MAX_TOKENS[params.mode];

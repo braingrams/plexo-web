@@ -1,7 +1,9 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Code2, FilePlus2, MessagesSquare, RefreshCw, Rocket, ScrollText, Upload } from "lucide-react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
+import { Code2, FilePlus2, RefreshCw, Rocket, ScrollText, Upload } from "lucide-react";
 import { Badge, Button, ButtonLink, Card, CardHeader, Modal, useToast } from "../ui";
 import { uploadSsrZip, queueSsrBuild } from "@/lib/projects/clientSsrUpload";
 import { useBuildLog } from "@/app/dashboard/templates/[id]/detail/useBuildLog";
@@ -191,7 +193,7 @@ export function AppTab({ siteId, siteName, info, only, experience }: { siteId: s
           {!server && file && file.size > 4_000_000 ? <div className="plx-inlinemsg plx-inlinemsg--warn">That file is big. Use the full uploader instead: <a href={experience === "pro" ? advancedHref(siteId, "deploy") : `/dashboard/templates/${siteId}/detail?classic=1`}>open it here</a>, then come back with the Back button.</div> : null}
           <label className="plx-toggle" style={{ alignItems: "flex-start" }}><span className="plx-small">I agree to the <a href="/legal/acceptable-use" target="_blank" rel="noreferrer">rules for what&apos;s allowed</a>. My app runs on Plexo&apos;s servers exactly as I wrote it.</span><input type="checkbox" className="plx-switch" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} aria-label="I agree to the rules" /></label>
           {progress ? <p className="plx-small" role="status">{progress}</p> : null}
-          {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+          {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
         </div>
       </Modal>
 
@@ -200,7 +202,7 @@ export function AppTab({ siteId, siteName, info, only, experience }: { siteId: s
           <p className="plx-body">Add the page to your project, then {server ? (git?.linked ? "save it on GitHub and your app updates by itself." : "upload a new version.") : "upload a new version."}</p>
           <div className="plx-hub__actions">
             {git?.linked && git.repo ? <ButtonLink href={`https://github.com/${git.repo}`} target="_blank" rel="noreferrer" leftIcon={<Code2 size={18} aria-hidden />}>Open code on GitHub</ButtonLink> : null}
-            <ButtonLink href={solPage} variant={git?.linked ? "secondary" : "primary"} leftIcon={<MessagesSquare size={18} aria-hidden />}>Ask SOL to add a page</ButtonLink>
+            <ButtonLink href={solPage} variant={git?.linked ? "secondary" : "primary"} leftIcon={<SolGlyph size={18} />}>Ask SOL to add a page</ButtonLink>
           </div>
         </div>
       </Modal>

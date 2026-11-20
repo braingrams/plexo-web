@@ -1,5 +1,6 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSitesListHref } from "../../_components/EditorTheme";
@@ -866,8 +867,8 @@ function ManagePagesModal({
 
 				<div style={{ flex: 1, overflowY: "auto", padding: "0.75rem" }}>
 					{homeOnly && (
-						<div style={{ margin: "0.25rem 0.25rem 0.75rem", padding: "0.75rem 0.9rem", borderRadius: 10, background: "var(--brand-subtle)", border: "1px solid color-mix(in srgb, var(--brand) 25%, transparent)", fontSize: "0.8rem", color: "var(--ed-t-800)" }}>
-							Build and preview as many pages as you like. On the Free plan only your <strong>home page</strong> goes live for visitors — upgrade to <strong>Starter</strong> to publish the rest.
+						<div style={{ margin: "0.25rem 0.25rem 0.75rem" }}>
+							<UpgradePrompt tone="info" requiredPlan="STARTER" message="Build and preview as many pages as you like. On the Free plan only your home page goes live for visitors. Upgrade to publish the rest." />
 						</div>
 					)}
 					{root && renderNode(root, 0)}

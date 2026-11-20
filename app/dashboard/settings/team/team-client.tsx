@@ -1,5 +1,7 @@
 "use client";
 
+import { GateOrError } from "../../_components/UpgradePrompt";
+import { rememberPlanGate } from "@/lib/plan/planGate";
 import { useEffect, useState } from "react";
 
 import { Card } from "@/app/dashboard/_components/Card";
@@ -183,6 +185,7 @@ export function TeamClient({
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
+        rememberPlanGate(body);
         throw new Error(body.error ?? "Couldn't send that invite.");
       }
       const invitation = body.invitation;
@@ -318,7 +321,7 @@ export function TeamClient({
               <TemplateChecklist templates={templates} selected={inviteScopedTemplateIds} onChange={setInviteScopedTemplateIds} />
             </div>
           )}
-          {error && <p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)", marginTop: "0.5rem" }}>{error}</p>}
+          {error && <div style={{ marginTop: "0.5rem" }}><GateOrError error={error}><p style={{ fontSize: "0.78rem", color: "var(--plx-danger, #f87171)", margin: 0 }}>{error}</p></GateOrError></div>}
         </Card>
       )}
 

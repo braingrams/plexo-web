@@ -417,6 +417,16 @@
     return checkoutConfigPromise;
   }
 
+  // "By placing your order you agree to our Terms of sale" — only when the owner has set terms (checkout-config.terms).
+  function termsNote(config) {
+    if (!config || !config.terms || !config.terms.url) return null;
+    return el("p", { class: "pc-muted", style: { fontSize: "12px", textAlign: "center", margin: "0" } }, [
+      "By placing your order you agree to our ",
+      el("a", { href: config.terms.url, target: "_blank", rel: "noopener noreferrer", style: { color: "inherit", textDecoration: "underline" } }, ["terms of sale and refund policy"]),
+      ".",
+    ]);
+  }
+
   function defaultPaymentMethod(config) {
     if (checkoutFormState.paymentMethod === "BANK_TRANSFER" && config.payment.bankTransfer) return "BANK_TRANSFER";
     if (checkoutFormState.paymentMethod === "ONLINE" && config.payment.online) return "ONLINE";
@@ -979,6 +989,8 @@
       var extra = customFieldsSection(config.fields, answers, null);
       if (extra) body.appendChild(extra);
       body.appendChild(paymentBox);
+      var bookingTerms = termsNote(config);
+      if (bookingTerms) body.appendChild(bookingTerms);
       body.appendChild(payBtn);
       body.appendChild(el("p", { class: "pc-muted", style: { margin: "0", fontSize: "11.5px", textAlign: "center" } }, ["Secure checkout — you'll stay on this page."]));
       emailField.input.focus();
@@ -2464,6 +2476,7 @@
             el("span", {}, [money(total, snapshot.currency)]),
           ]),
           paymentSection,
+          termsNote(config),
           payBtn,
           el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, [
             isBankTransfer ? "Direct bank transfer · confirmed by the store once received" : "Secured by " + (snapshot.paymentGateway === "stripe" ? "Stripe" : "Paystack"),

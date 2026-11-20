@@ -6,7 +6,7 @@
 export type Experience = "beginner" | "intermediate" | "pro";
 export type BuildGoal = "store" | "business-site" | "blog" | "course" | "link-in-bio" | "landing" | "app" | "explore";
 
-export type NavIcon = "home" | "sites" | "orders" | "learners" | "sol" | "emails" | "domains" | "developers" | "settings";
+export type NavIcon = "home" | "sites" | "orders" | "products" | "learners" | "sol" | "emails" | "domains" | "developers" | "settings";
 
 export type V3NavItem = {
   id: NavIcon;
@@ -27,6 +27,10 @@ export type NavInput = {
   siteCount?: number;
 };
 
+/** Both open the shop that is switched on (/dashboard/commerce picks it), on the right tab. */
+export const SHOP_ORDERS_HREF = "/dashboard/commerce";
+export const SHOP_PRODUCTS_HREF = "/dashboard/commerce?to=products";
+
 export const EXPERIENCES: readonly Experience[] = ["beginner", "intermediate", "pro"] as const;
 
 export function parseExperience(value: unknown): Experience | null {
@@ -44,7 +48,9 @@ export function buildV3Nav(input: NavInput): V3NavItem[] {
     { id: "home", label: "Home", href: "/dashboard", icon: "home", primary: true },
     { id: "sites", label: sitesLabel, href: "/dashboard/sites", icon: "sites", primary: true },
   ];
-  if (sells) items.push({ id: "orders", label: "Orders", href: "/dashboard/commerce", icon: "orders", primary: true });
+  // A shop's two everyday jobs sit in the menu for beginners and pros alike: what people bought, and what you sell.
+  if (sells) items.push({ id: "orders", label: "Orders", href: SHOP_ORDERS_HREF, icon: "orders", primary: true });
+  if (sells) items.push({ id: "products", label: "Products", href: SHOP_PRODUCTS_HREF, icon: "products", primary: false });
   if (teaches) items.push({ id: "learners", label: "Learners", href: "/dashboard/learners", icon: "learners", primary: !sells });
   items.push({ id: "sol", label: "Ask SOL", href: "/dashboard/sol", icon: "sol", primary: true });
   // Emails is for everyone: a beginner who can't find it can't make an email. On a phone it sits in "More".
@@ -64,8 +70,9 @@ export function activeNavId(items: V3NavItem[], pathname: string): NavIcon | nul
   else if (pathname === "/dashboard/templates") pathname = "/dashboard/emails";
   let best: V3NavItem | null = null;
   for (const item of items) {
-    const match = item.href === "/dashboard" ? pathname === "/dashboard" : pathname === item.href || pathname.startsWith(`${item.href}/`);
-    if (match && (!best || item.href.length > best.href.length)) best = item;
+    const path = item.href.split("?")[0];
+    const match = path === "/dashboard" ? pathname === "/dashboard" : pathname === path || pathname.startsWith(`${path}/`);
+    if (match && (!best || path.length > best.href.split("?")[0].length)) best = item;
   }
   return best?.id ?? null;
 }

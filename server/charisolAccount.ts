@@ -45,7 +45,7 @@ export function isEmailVerifiedClaim(value: unknown): boolean {
  */
 export async function resolveCharisolUser(
   claims: CharisolClaims,
-  opts: { viaPassword?: boolean } = {},
+  opts: { viaPassword?: boolean; /** Which app the person came from; defaults to "charisol" — never a deliberate Plexo sign-up (only the email form in app/api/auth/register is). */ source?: string } = {},
 ): Promise<CharisolLocalUser | null> {
   if (!isEmailVerifiedClaim(claims.email_verified)) return null;
   const email = typeof claims.email === "string" ? claims.email.trim().toLowerCase() : "";
@@ -69,7 +69,7 @@ export async function resolveCharisolUser(
   try {
     // Same email-lock transaction as password registration, so one email can never end up
     // with two Plexo accounts (see lib/db/coreOperations.ts).
-    await createUserWithEmailLock({ id, email, name, image, isConfirmed: true, passwordHash: await unusablePasswordHash() });
+    await createUserWithEmailLock({ id, email, name, image, isConfirmed: true, passwordHash: await unusablePasswordHash(), signupSource: opts.source ?? "charisol" });
   } catch (err) {
     if (!(err instanceof EmailAlreadyInUseError)) throw err;
     // Lost a race with a concurrent registration/sign-in for this same email. The winning

@@ -21,3 +21,28 @@ export function sidebarViewFor(mode: SidebarMode, choice: SidebarView | null | u
 export function parseSidebarChoice(value: unknown): SidebarView | null {
   return value === "chats" || value === "menu" ? value : null;
 }
+
+/**
+ * How the dashboard frame is drawn around a screen:
+ *  - "editor": the visual page editor keeps the app's side menu, folded to icons so it feels like Plexo without
+ *    crowding the canvas, with an obvious button to open it. No top bar (the editor has its own).
+ *  - "none": an app's editor brings all of its own chrome.
+ *  - "full": everything else.
+ */
+export type ShellFrame = "full" | "editor" | "none";
+
+export function shellFrameFor(pathname: string | null | undefined): ShellFrame {
+  const p = (pathname ?? "").split(/[?#]/)[0].replace(/\/+$/, "");
+  const page = p.match(/^\/dashboard\/templates\/([^/]+)$/);
+  if (page && page[1] !== "upload") return "editor";
+  return /^\/dashboard\/apps\/[^/]+$/.test(p) ? "none" : "full";
+}
+
+/** The editor's menu starts folded; the choice to open it is remembered separately from the normal pages' choice. */
+export const EDITOR_SIDEBAR_KEY = "plx-sidebar-folded-editor";
+export const PAGES_SIDEBAR_KEY = "plx-sidebar-folded";
+export function foldedFromStorage(frame: ShellFrame, stored: string | null): boolean | null {
+  if (stored === "1") return true;
+  if (stored === "0") return false;
+  return frame === "editor" ? true : null;
+}
