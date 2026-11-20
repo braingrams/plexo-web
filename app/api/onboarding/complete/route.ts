@@ -42,7 +42,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (err) {
     if (err instanceof MarketplaceUseError) return NextResponse.json({ error: err.message, ...err.extra, needsPurchase: err.status === 403 && !err.extra.plan }, { status: err.status });
     if (err instanceof OnboardingError) return NextResponse.json({ error: err.message }, { status: 400 });
-    const message = err instanceof Error && err.message ? err.message : "";
+    const raw = err instanceof Error && err.message ? err.message : "";
+    const isInternal = raw.includes("DynamoDB") || raw.includes("electrodb") || raw.includes("aws-error");
+    const message = isInternal ? "" : raw;
     console.error("onboarding complete failed", err);
     return NextResponse.json(
       { error: message || "We couldn't make your site just now. Nothing was lost: please try again in a moment." },

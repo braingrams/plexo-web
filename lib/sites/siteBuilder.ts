@@ -294,7 +294,7 @@ export async function createSite(resolved: ResolvedUser, args: SiteCreateArgs, d
   // 1. The home page — the site itself.
   const homeDesign = plannedPageDesign(plan, plan.home, randomUUID());
   warnings.push(...homeDesign.warnings);
-  const home = await deps.createPage({ name: plan.brief.name }, { design: homeDesign.design });
+  const home = await deps.createPage({ name: plan.brief.name }, { design: homeDesign.design, skipSiteLayout: true } as any);
   const siteId = home.row.id;
   const pages: CreatedSitePage[] = [{ type: plan.home.type, name: plan.home.name, templateId: siteId, route: "/", layout: homeDesign.recipeId }];
 
@@ -307,7 +307,12 @@ export async function createSite(resolved: ResolvedUser, args: SiteCreateArgs, d
   };
   const headerTemplateId = await fragment("Site Header", chrome.header);
   const footerTemplateId = await fragment("Site Footer", chrome.footer);
-  await SiteLayout.create({ id: randomUUID(), templateId: siteId, organizationId: resolved.organizationId, enabled: true, headerTemplateId, footerTemplateId }).go();
+  const { data: existingLayout } = await SiteLayout.get({ templateId: siteId }).go();
+  if (existingLayout) {
+    await SiteLayout.patch({ templateId: siteId }).set({ headerTemplateId, footerTemplateId, enabled: true }).go();
+  } else {
+    await SiteLayout.create({ id: randomUUID(), templateId: siteId, organizationId: resolved.organizationId, enabled: true, headerTemplateId, footerTemplateId }).go();
+  }
 
   // 3. The other pages.
   for (const page of plan.pages) {

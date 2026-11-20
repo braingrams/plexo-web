@@ -13,9 +13,9 @@
 .plx-ab__tile:hover { border-color: var(--plx-border-strong); }
 .plx-ab__tile[data-current] { border-color: var(--plx-brand); box-shadow: 0 0 0 1px var(--plx-brand); }
 .plx-ab__top { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-.plx-ab__titles { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.plx-ab__name { margin: 0; font-size: 20px; font-weight: 900; overflow-wrap: anywhere; }
-.plx-ab__name a { color: inherit; text-decoration: none; }
+.plx-ab__titles { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 2px; }
+.plx-ab__name { margin: 0; font-size: 20px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plx-ab__name a { color: inherit; text-decoration: none; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plx-ab__name a:hover { text-decoration: underline; }
 .plx-ab__kind { font-size: 13px; color: var(--plx-muted); font-weight: 600; }
 .plx-ab__status { flex-shrink: 0; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 800; background: var(--plx-tint); color: var(--plx-muted); }

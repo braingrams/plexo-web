@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AppWindow, ArrowDown, BookOpen, ChevronRight, CornerUpRight, Database, Download, GraduationCap, LayoutTemplate, MessageSquare, PanelTop, ShoppingBag, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { AppWindow, BookOpen, ChevronRight, CornerUpRight, Database, Download, GraduationCap, LayoutTemplate, MessageSquare, PanelTop, ShoppingBag, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { Button, Card, Input, useToast } from "../ui";
 import { builderLabel } from "./HubFrame";
 import type { HubFrameSite } from "./HubFrame";
@@ -15,41 +15,6 @@ import { errMsg, hubApi } from "./hubApi";
 import { shopHref } from "@/lib/dashboardV3/shopSections";
 import { advancedHref, advancedKind } from "@/lib/dashboardV3/hubAdvanced";
 import { MigrationHistory } from "../settings/MigrationHistory";
-
-function FloatingAddMoreButton() {
-  const [visible, setVisible] = useState(true);
-
-  useEffect(() => {
-    const check = () => {
-      const el = document.getElementById("addmore");
-      if (!el) return;
-      const rect = el.getBoundingClientRect();
-      setVisible(rect.top > window.innerHeight * 0.7);
-    };
-    check();
-    window.addEventListener("scroll", check, { passive: true });
-    return () => window.removeEventListener("scroll", check);
-  }, []);
-
-  if (!visible) return null;
-
-  return (
-    <div className="plx-floating-cta">
-      <button
-        type="button"
-        className="plx-floating-btn"
-        onClick={() => {
-          const el = document.getElementById("addmore");
-          el?.scrollIntoView({ behavior: "smooth" });
-        }}
-        aria-label="Add more to your site"
-      >
-        <span>Add more to your site</span>
-        <ArrowDown size={16} aria-hidden />
-      </button>
-    </div>
-  );
-}
 
 export function SettingsTab({ site, features, experience }: { site: HubFrameSite; features: HubFeatures; experience: string }) {
   const router = useRouter();
@@ -158,7 +123,6 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
         </div>
       </div>
       <DeleteSiteDialog site={deleting ? { id: site.id, name: site.name, status: site.status, address: site.address, kind: site.kind } : null} onClose={() => setDeleting(false)} />
-      <FloatingAddMoreButton />
     </>
   );
 }

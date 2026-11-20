@@ -89,8 +89,8 @@ html [data-plexo-v3] {
 .plx-btn--primary { background: var(--plx-brand); color: var(--plx-on-brand); font-weight: 800; }
 .plx-btn--primary:hover:not([disabled]) { background: var(--plx-brand-hover); }
 .plx-btn--primary:active:not([disabled]) { background: var(--plx-brand-active); }
-.plx-btn--secondary { background: var(--plx-secondary-bg); color: var(--plx-secondary-text); border-color: var(--plx-secondary-border); }
-.plx-btn--secondary:hover:not([disabled]) { background: var(--plx-secondary-hover); }
+.plx-btn--secondary { background: var(--plx-secondary-bg); color: var(--plx-secondary-text); border-color: var(--plx-secondary-border); box-shadow: var(--plx-shadow-card); }
+.plx-btn--secondary:hover:not([disabled]) { background: var(--plx-secondary-hover); border-color: var(--plx-border-strong); }
 .plx-btn--ghost { background: transparent; color: var(--plx-text); }
 .plx-btn--ghost:hover:not([disabled]) { background: var(--plx-ghost-hover); }
 .plx-btn--strong { background: var(--plx-strong); color: var(--plx-on-strong); font-weight: 800; }

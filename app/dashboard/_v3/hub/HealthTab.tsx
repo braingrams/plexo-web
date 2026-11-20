@@ -209,6 +209,7 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
   const [everything, setEverything] = useState<EverythingPreview | "loading" | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [justFixed, setJustFixed] = useState(false);
+  const [clearedDone, setClearedDone] = useState(false);
   const autoRan = useRef(false);
 
   const load = useCallback(async () => {
@@ -484,11 +485,18 @@ export function HealthTab({ siteId, live, editHref }: { siteId: string; live: bo
             )}
           </Card>
 
-          {fixed.length ? (
+          {!clearedDone && fixed.length ? (
             <Card>
-              <CardHeader title="Already done" description="Press Undo on any of these and your pages go back exactly as they were." />
+              <CardHeader
+                title="Already done"
+                description="Press Undo on any of these and your pages go back exactly as they were."
+                action={<Button size="sm" variant="secondary" onClick={() => setClearedDone(true)}>Clear all</Button>}
+              />
               <ul className="plx-hissues">{fixed.map((i) => <IssueRow key={i.id} issue={i} busy={fixing === i.id} editHref={editHref} onFix={openPreview} onUndo={(is) => apply(is, false)} />)}</ul>
-              {anyOn ? <div style={{ marginTop: 12 }}><Button size="sm" variant="ghost" leftIcon={<Undo2 size={16} />} loading={fixing === "all"} onClick={undoEverything}>Undo everything</Button></div> : null}
+              <div style={{ marginTop: 12, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {anyOn ? <Button size="sm" variant="secondary" leftIcon={<Undo2 size={16} />} loading={fixing === "all"} onClick={undoEverything}>Undo everything</Button> : null}
+                <Button size="sm" variant="secondary" onClick={() => setClearedDone(true)}>Clear all</Button>
+              </div>
             </Card>
           ) : null}
 

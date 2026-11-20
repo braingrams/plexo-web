@@ -36,7 +36,7 @@ function SiteTile({ row, isCurrent, onDelete }: { row: BoardSite; isCurrent?: bo
     <article className="plx-ab__tile" data-status={site.status} data-current={isCurrent ? "" : undefined} style={{ ["--ab-c" as string]: colour, ["--ab-ink" as string]: ink }}>
       <header className="plx-ab__top">
         <div className="plx-ab__titles">
-          <h2 className="plx-ab__name"><Link href={siteHubHref(site.id)}>{site.name}</Link></h2>
+          <h2 className="plx-ab__name" title={site.name}><Link href={siteHubHref(site.id)}>{site.name}</Link></h2>
           <span className="plx-ab__kind">{site.kind}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

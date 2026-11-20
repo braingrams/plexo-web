@@ -1,10 +1,10 @@
 "use client";
 
 import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Check, Clock, } from "lucide-react";
+import { ArrowDown, ArrowRight, Check, Clock } from "lucide-react";
 import { Button, ButtonLink, Modal, useToast } from "../ui";
 import { addOnsFor, hubTabHref, type AddOnId, type HubFeatures } from "@/lib/dashboardV3/hubTabs";
 import { addMoreExample, type ExamplePage } from "@/lib/dashboardV3/addMoreExamples";
@@ -102,6 +102,7 @@ export function AddMoreCards({ siteId, siteName, features, pages = [] }: { siteI
   const solHref = `/dashboard/sol?new=1&draft=${encodeURIComponent(`Add an email sign-up form to my site "${siteName}".`)}`;
 
   return (
+    <>
     <section aria-labelledby="addmore" data-tour="hub-add-more" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div>
         <h2 id="addmore" className="plx-h2">Add more to your site</h2>
@@ -162,5 +163,49 @@ export function AddMoreCards({ siteId, siteName, features, pages = [] }: { siteI
         {error ? <GateOrError error={error}><p className="plx-field__error" role="alert" style={{ marginTop: 16 }}>{error}</p></GateOrError> : null}
       </Modal>
     </section>
+    <FloatingAddMoreButton />
+    </>
+  );
+}
+
+export function FloatingAddMoreButton() {
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      const el = document.getElementById("addmore");
+      if (!el) {
+        setVisible(false);
+        return;
+      }
+      const rect = el.getBoundingClientRect();
+      setVisible(rect.top > window.innerHeight * 0.7);
+    };
+    check();
+    window.addEventListener("scroll", check, { passive: true });
+    window.addEventListener("resize", check, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", check);
+      window.removeEventListener("resize", check);
+    };
+  }, []);
+
+  if (!visible) return null;
+
+  return (
+    <div className="plx-floating-cta">
+      <button
+        type="button"
+        className="plx-floating-btn"
+        onClick={() => {
+          const el = document.getElementById("addmore");
+          el?.scrollIntoView({ behavior: "smooth" });
+        }}
+        aria-label="Add more to your site"
+      >
+        <span>Add more to your site</span>
+        <ArrowDown size={16} aria-hidden />
+      </button>
+    </div>
   );
 }

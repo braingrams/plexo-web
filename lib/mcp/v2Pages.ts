@@ -384,7 +384,7 @@ export type CreatedPage = {
 export async function createV2Page(
   resolved: ResolvedUser,
   args: CreateArgs,
-  opts: { design?: V2Design; fallbackName?: string; slug?: string; skipMenu?: boolean } = {},
+  opts: { design?: V2Design; fallbackName?: string; slug?: string; skipMenu?: boolean; skipSiteLayout?: boolean } = {},
 ): Promise<CreatedPage> {
   const name = str(args.name) || opts.fallbackName || "";
   if (!name) throw new PageToolError("Give the page a name, for example \"Home\" or \"Pricing\".");
@@ -467,12 +467,14 @@ export async function createV2Page(
   const { data: row } = await Template.get({ id }).go();
   if (!row) throw new Error(`Template ${id} vanished immediately after being created`);
   // The site-wide header and footer (site core): created on a brand-new site, never fatal.
-  if (!parent && !opts.design) {
-    await ensureSiteLayout(id, resolved.organizationId, resolved.userId).catch((err) => console.error("Couldn't add the default header and footer", err));
-  } else if (!parent) {
-    // A site made from a ready-made design keeps that design's own header and footer; it still gets the shared
-    // ones, blank, so the owner sees "Site header" / "Site footer" and can adopt them whenever they like.
-    await ensureBlankSiteLayout(id, resolved.userId).catch((err) => console.error("Couldn't add the blank header and footer", err));
+  if (!parent && !opts.skipSiteLayout) {
+    if (!opts.design) {
+      await ensureSiteLayout(id, resolved.organizationId, resolved.userId).catch((err) => console.error("Couldn't add the default header and footer", err));
+    } else {
+      // A site made from a ready-made design keeps that design's own header and footer; it still gets the shared
+      // ones, blank, so the owner sees "Site header" / "Site footer" and can adopt them whenever they like.
+      await ensureBlankSiteLayout(id, resolved.userId).catch((err) => console.error("Couldn't add the blank header and footer", err));
+    }
   }
 
   const siteRows = parent ? await loadSiteRows(resolved, await findRootTemplateId(parent.id, parent.parentId ?? null)) : [row];

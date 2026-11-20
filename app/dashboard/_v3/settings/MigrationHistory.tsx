@@ -72,12 +72,12 @@ export function MigrationHistory({ siteId, emptyHint }: { siteId?: string; empty
           key={row.templateId}
           title={row.siteName}
           description={`Moved from ${host(row.sourceUrl)}`}
-          action={<ButtonLink href={`/dashboard/migrate/wordpress?job=${row.latestJobId}&site=${row.templateId}`} variant="ghost" size="sm">See the full report</ButtonLink>}
+          action={<ButtonLink href={`/dashboard/migrate/wordpress?job=${row.latestJobId}&site=${row.templateId}`} variant="secondary" size="sm">See the full report</ButtonLink>}
         >
           <div style={{ padding: "0 24px 8px", display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center" }} aria-label={`Run again for ${row.siteName}`} role="group">
             <Button variant="secondary" size="sm" leftIcon={<RefreshCw size={16} aria-hidden />} disabled={!row.canRerun} onClick={() => void choose(row, "all")}>Run the whole move again</Button>
             {row.steps.map((s) => (
-              <Button key={s} variant="ghost" size="sm" disabled={!row.canRerun} onClick={() => void choose(row, s)}>{SCOPE_LABEL[s]} again</Button>
+              <Button key={s} variant="secondary" size="sm" disabled={!row.canRerun} onClick={() => void choose(row, s)}>{SCOPE_LABEL[s]} again</Button>
             ))}
             {row.active ? <span className="plx-small">A move is running right now, so it can&apos;t be started again yet.</span> : null}
           </div>

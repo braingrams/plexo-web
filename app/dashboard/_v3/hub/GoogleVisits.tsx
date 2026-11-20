@@ -42,7 +42,7 @@ function stay(s: number): string {
   return s < 60 ? `${s} sec` : `${Math.floor(s / 60)} min ${s % 60} sec`;
 }
 
-function Rank({ title, description, items, unit }: { title: string; description?: string; items: Ranked[]; unit: string }) {
+export function Rank({ title, description, items, unit }: { title: string; description?: string; items: Ranked[]; unit: string }) {
   const max = Math.max(1, ...items.map((i) => i.value));
   return (
     <Card>
@@ -61,7 +61,7 @@ function Rank({ title, description, items, unit }: { title: string; description?
   );
 }
 
-export function GoogleVisits({ siteId, live, result }: { siteId: string; live: boolean; result?: string }) {
+export function GoogleVisits({ siteId, live, result, embedded }: { siteId: string; live: boolean; result?: string; embedded?: boolean }) {
   const [days, setDays] = useState<RangeDays>(28);
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -110,7 +110,7 @@ export function GoogleVisits({ siteId, live, result }: { siteId: string; live: b
         <Card>
           <div className="plx-hga__connect">
             <Lock size={28} aria-hidden />
-            <h3 className="plx-h3">See where your visitors come from</h3>
+            <h3 className="plx-h3">{embedded ? "Detailed visitor numbers" : "See where your visitors come from"}</h3>
             <p className="plx-body">{data.message ?? "Detailed visitor numbers come with a paid plan (Starter and above). Your simple visit counts above stay free."}</p>
             <ButtonLink href="/dashboard/settings/plan">See plans</ButtonLink>
           </div>
@@ -131,7 +131,7 @@ export function GoogleVisits({ siteId, live, result }: { siteId: string; live: b
         <Card>
           <div className="plx-hga__connect">
             <BarChart3 size={32} aria-hidden />
-            <h3 className="plx-h3">See where your visitors come from</h3>
+            <h3 className="plx-h3">{embedded ? "Connect Google Analytics" : "See where your visitors come from"}</h3>
             {!live ? (
               <p className="plx-body">Publish your site first. Counting starts from its web address.</p>
             ) : (
@@ -139,8 +139,10 @@ export function GoogleVisits({ siteId, live, result }: { siteId: string; live: b
                 {data.options?.managed !== false ? (
                   <>
                     <p className="plx-body">See who visits, which pages they like, where they come from and what they use, explained in plain words. One click. Plexo does the setup, so you don&apos;t need a Google account.</p>
-                    <Button loading={busy === "use_plexo"} onClick={() => act({ action: "use_plexo" }, "use_plexo")}>Turn on visitor numbers</Button>
-                    {data.options?.own ? <Button variant="ghost" onClick={() => { window.location.href = connectHref; }}>I&apos;d rather use my own Google account</Button> : null}
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <Button loading={busy === "use_plexo"} onClick={() => act({ action: "use_plexo" }, "use_plexo")}>Turn on visitor numbers</Button>
+                      {data.options?.own ? <Button variant="secondary" onClick={() => { window.location.href = connectHref; }}>I&apos;d rather use my own Google account</Button> : null}
+                    </div>
                   </>
                 ) : (
                   <>

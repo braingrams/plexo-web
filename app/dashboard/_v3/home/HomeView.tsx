@@ -60,22 +60,7 @@ export function HomeView(props: HomeProps) {
   }
 
   const { progress } = site;
-  const addMoreHref = `/dashboard/sites/${site.site.id}?tab=settings#addmore`;
-  const addMore = site.addMore ? (
-    <Card padding="none" style={{ overflow: "hidden", border: "1px solid var(--plx-border)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16, padding: "18px 24px", flexWrap: "wrap" }}>
-        <div>
-          <b style={{ fontSize: 16, display: "block" }}>Do more with your site</b>
-          <span className="plx-small" style={{ color: "var(--plx-muted)" }}>
-            Turn on a shop, bookings, blog, course, or email sign-up whenever you&apos;re ready.
-          </span>
-        </div>
-        <ButtonLink href={addMoreHref} variant="secondary" rightIcon={<ArrowRight size={16} aria-hidden />}>
-          Add more to your site
-        </ButtonLink>
-      </div>
-    </Card>
-  ) : null;
+  const addMore = null;
   const showGuide = !progress.allDone || celebrate;
 
   if (showGuide) {

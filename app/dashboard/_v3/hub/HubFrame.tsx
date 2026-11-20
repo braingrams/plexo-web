@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronDown, ExternalLink, Eye, Upload } from "lucide-react";
 import { Badge, Button, ButtonLink, HelpMedia, ScrollRail, StatusPill, TabLinks } from "../ui";
 import { EditWebsiteButton } from "./EditWebsiteButton";
-import { OpenSiteButton, PreviewButton } from "../home/SiteButtons";
 import { liveHref, previewHref } from "@/lib/dashboardV3/siteLinks";
 import { hubTabHref, type HubTab, type HubTabId } from "@/lib/dashboardV3/hubTabs";
 import type { Experience } from "@/lib/dashboardV3/nav";
@@ -55,7 +54,7 @@ function FoldedSiteActions({ site }: { site: HubFrameSite }) {
 
   return (
     <div ref={ref} style={{ position: "relative" }}>
-      <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)} rightIcon={<ChevronDown size={14} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s ease" }} />}>
+      <Button variant="secondary" size="sm" onClick={() => setOpen((o) => !o)} leftIcon={<Eye size={15} aria-hidden />} rightIcon={<ChevronDown size={14} aria-hidden style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s ease" }} />}>
         View site
       </Button>
       {open ? (
@@ -108,14 +107,7 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
           </div>
         </div>
         <div className="plx-hub__actions" data-tour="hub-actions">
-          {current === "settings" ? (
-            <FoldedSiteActions site={site} />
-          ) : (
-            <>
-              <PreviewButton site={site} />
-              <OpenSiteButton site={site} />
-            </>
-          )}
+          <FoldedSiteActions site={site} />
           {site.deployed ? (
             <ButtonLink href={hubTabHref(site.id, "app")} leftIcon={<Upload size={16} aria-hidden />}>
               Update app
