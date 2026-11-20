@@ -215,6 +215,8 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
   const [preview, setPreview] = useState<{ issue: Issue; loaded: Preview | null; text: string; business?: BusinessValues; items?: TextItem[]; regenerating?: boolean } | null>(null);
   const [everything, setEverything] = useState<EverythingPreview | "loading" | null>(null);
   const [solTarget, setSolTarget] = useState<"all" | Issue | null>(null);
+  const [solBusy, setSolBusy] = useState(false);
+  const [solDoneSummary, setSolDoneSummary] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [justFixed, setJustFixed] = useState(false);
   const clearedKey = `plx_health_cleared_${siteId}`;
@@ -394,6 +396,30 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
     }
   }
 
+  async function runSolFix() {
+    setSolBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/sites/${siteId}/health/sol-fix`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ target: solTarget === "all" ? "all" : solTarget?.id }),
+      });
+      const json = (await res.json().catch(() => ({}))) as { error?: string; payload?: Payload; done?: Array<{ label: string }> };
+      if (!res.ok || !json.payload) {
+        throw new Error(json.error ?? "SOL could not complete all fixes. Please try again.");
+      }
+      setData(json.payload);
+      setJustFixed(true);
+      setSolTarget(null);
+      setSolDoneSummary(`SOL knocked out ${json.done?.length ?? "all"} issues on your site! All speed, picture, contrast, and AI visibility optimizations are live.`);
+    } catch (e) {
+      setError(e instanceof Error && e.message ? e.message : "SOL fix failed. Please try again.");
+    } finally {
+      setSolBusy(false);
+    }
+  }
+
   const report = data?.last?.report ?? null;
   const when = data?.last ? new Date(data.last.createdAt).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" }) : null;
   const sub = "How fast your site opens, and how easy it is for Google and AI assistants to understand.";
@@ -520,6 +546,13 @@ Please analyze my page, make the necessary updates in one pass, and tell me what
                 ) : null}
               </div>
             </div>
+            {solDoneSummary ? (
+              <div style={{ padding: "0 22px 16px" }}>
+                <Notice kind="success" title="SOL fixes complete">
+                  {solDoneSummary}
+                </Notice>
+              </div>
+            ) : null}
             {summary ? (
               <div className="plx-hsummary">
                 <Notice kind="success" title={`We fixed ${summary.done.length} ${summary.done.length === 1 ? "thing" : "things"}`}>
@@ -564,19 +597,20 @@ Please analyze my page, make the necessary updates in one pass, and tell me what
         title={solTarget === "all" ? "Let SOL fix all issues for you" : `Fix "${solTarget?.title}" with SOL`}
         description={
           solTarget === "all"
-            ? "SOL will analyze your site and fix all detected issues in one pass — heading structure, summaries, and meta tags."
+            ? "SOL will analyze your site and fix all detected issues in one pass — picture loading, code minification, text contrast, AI guides, and heading structure."
             : solTarget?.why ?? "SOL will analyze your page and apply this fix in one pass."
         }
         footer={
           <>
             <Button variant="ghost" onClick={() => setSolTarget(null)}>Not now</Button>
-            <ButtonLink
-              href={solTarget === "all" ? solAllHref : solIssueHref}
+            <Button
+              variant="primary"
               leftIcon={<SolGlyph size={16} />}
-              onClick={() => setSolTarget(null)}
+              loading={solBusy}
+              onClick={runSolFix}
             >
-              {solTarget === "all" ? "Open SOL to fix all" : "Open SOL to fix this"}
-            </ButtonLink>
+              {solTarget === "all" ? "Fix all with SOL" : "Fix this with SOL"}
+            </Button>
           </>
         }
       >

@@ -113,10 +113,10 @@ export function headline(r: HealthReport): { text: string; tone: Rating | null; 
 
 type Ctx = { speed: SpeedReport | null; aeo: AeoReport | null; settings: HealthSettingsView; /** The page's own HTML, to spot what is missing without a new test. */ html?: string; facts?: { productCount: number } };
 
-const failedAudit = (s: SpeedReport | null, ...ids: string[]) => !!s && ids.some((id) => s.failedAudits.includes(id));
-const aeoFailed = (a: AeoReport | null, id: string) => !!a && a.checks.some((c) => c.id === id && !c.passed);
+const failedAudit = (s: SpeedReport | null, ...ids: string[]) => !!s && Array.isArray(s.failedAudits) && ids.some((id) => s.failedAudits.includes(id));
+const aeoFailed = (a: AeoReport | null, id: string) => !!a && Array.isArray(a.checks) && a.checks.some((c) => c.id === id && !c.passed);
 const where = (s: SpeedReport | null, ...ids: string[]): ElementPointer[] | undefined => {
-  if (!s) return undefined;
+  if (!s || !s.elements) return undefined;
   const found = ids.flatMap((id) => s.elements[id] ?? []);
   return found.length ? found.slice(0, 5) : undefined;
 };
@@ -128,7 +128,7 @@ export function gainWords(ms: number | undefined): string | undefined {
   return `Could save about ${(ms / 1000).toFixed(1)} seconds`;
 }
 
-const savings = (s: SpeedReport | null, ...ids: string[]) => Math.max(0, ...(s?.opportunities.filter((o) => ids.includes(o.id)).map((o) => o.savingsMs ?? 0) ?? [0]));
+const savings = (s: SpeedReport | null, ...ids: string[]) => Math.max(0, ...(s?.opportunities ? s.opportunities.filter((o) => ids.includes(o.id)).map((o) => o.savingsMs ?? 0) : [0]));
 const aeoGain = (id: keyof typeof AEO_WEIGHTS) => `Worth up to ${AEO_WEIGHTS[id]} points of AI visibility`;
 
 /** Every problem we found, biggest first. Each has a one-click fix when Plexo can do it, and steps for doing it by hand. */

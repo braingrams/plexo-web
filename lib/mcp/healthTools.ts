@@ -1,6 +1,7 @@
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
 import { fixEverything, previewEverything, isAutoFixId, previewFix, setAutoFix, undoEverything } from "@/lib/siteHealth/fixes";
+import { solFixSite } from "@/lib/siteHealth/solFix";
 import { setDigestEnabled } from "@/lib/siteHealth/digest";
 import { presentHealth } from "@/lib/siteHealth/present";
 import { loadHealthStatus, runSiteCheck } from "@/lib/siteHealth/service";
@@ -89,11 +90,13 @@ export async function handleHealthTool(toolName: string, args: any, resolved: Re
       const settings = await undoEverything(fixSite, status.settings);
       return { settings, next: "Every fix is off. The pages are back to how the owner built them." };
     }
-    const last = status.last?.report ?? null;
-    if (!last) throw new Error("Run check_site_health first, so we know what to fix.");
-    if (args?.preview === true) return { ...(await previewEverything(fixSite, status.settings, last)), next: "Describe what will change in simple words, then ask if they want everything applied." };
-    const { summary, settings } = await fixEverything(fixSite, status.settings, last);
-    return { summary, settings, next: "Tell the owner what was done (summary.done) and what was skipped and why. It shows on the live site within a few minutes. Run check_site_health to see the new scores." };
+    const result = await solFixSite(site.id);
+    return {
+      summary: { done: result.done.map((d) => ({ fix: d.id, label: d.label, notes: d.notes })), skipped: [] },
+      settings: result.payload.settings,
+      scores: result.score,
+      next: `Done! SOL knocked out all issues: ${result.done.map((d) => d.label).join(", ")}. New scores: Speed ${result.score.speed}/100, AI visibility ${result.score.aeo}/100.`,
+    };
   }
   if (!isAutoFixId(args?.fix)) throw new Error("fix must be one of: meta_description, page_title, social_tags, llms_txt, ai_robots, organization_schema, faq_schema, alt_text, language, lazy_embeds, hero_image, fast_fonts, smaller_html, image_sizes, product_schema, or all.");
   if (args?.preview === true) return { ...(await previewFix(fixSite, args.fix, status.settings, status.last?.report ?? null, { regenerate: args?.regenerate === true })), next: "Describe the changes to the owner in simple words, then ask if they want it applied." };
