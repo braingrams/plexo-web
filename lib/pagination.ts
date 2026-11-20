@@ -2,7 +2,7 @@
 // pager needs out. Lists are fetched whole and cut here (the same "small in practice" assumption the rest of
 // the data layer makes), so nothing is ever capped — the total is always the real total.
 
-export const PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
+export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 export const DEFAULT_PAGE_SIZE = 25;
 
 export type PageRequest = { page: number; pageSize: number };

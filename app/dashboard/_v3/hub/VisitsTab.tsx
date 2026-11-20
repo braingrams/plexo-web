@@ -19,7 +19,7 @@ function formatVisitDevice(v: HubVisitRow): string {
 
 export function VisitsTab({ visits, siteId, live, gaResult }: { visits: HubVisits; siteId: string; live: boolean; gaResult?: string }) {
   const [source, setSource] = useState<"plexo" | "google">(gaResult ? "google" : "plexo");
-  const [paging, setPaging] = useState<{ page: number; pageSize: number }>({ page: 1, pageSize: 10 });
+  const [paging, setPaging] = useState<{ page: number; pageSize: number }>({ page: 1, pageSize: 25 });
   const max = Math.max(1, ...visits.days.map((d) => d.views));
   const last7 = visits.days.slice(-7).reduce((s, d) => s + d.views, 0);
   const best = visits.days.reduce((b, d) => (d.views > b.views ? d : b), visits.days[0] ?? { label: "", views: 0 });

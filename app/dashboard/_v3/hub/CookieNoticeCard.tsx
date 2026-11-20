@@ -15,6 +15,7 @@ export function CookieNoticeCard({ siteId }: { siteId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   useEffect(() => {
     let live = true;
@@ -37,12 +38,37 @@ export function CookieNoticeCard({ siteId }: { siteId: string }) {
       const res = await fetch(`/api/v1/sites/${siteId}/cookie-notice`, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(s) });
       const json = (await res.json().catch(() => ({}))) as { error?: string; settings?: Settings };
       if (!res.ok || !json.settings) setError(json.error ?? "That didn't save. Please try again.");
-      else { setS(json.settings); setSaved(json.settings); setDone(true); }
+      else { setS(json.settings); setSaved(json.settings); setDone(true); setEditing(false); }
     } catch {
       setError("We couldn't reach Plexo. Check your connection and try again.");
     } finally {
       setBusy(false);
     }
+  }
+
+  if (!editing) {
+    return (
+      <Card>
+        <CardHeader
+          title="Cookie notice"
+          description={
+            saved.enabled
+              ? "Active: shown to visitors in Europe, the UK, Switzerland, and Brazil."
+              : "Turned off: visitors in Europe are counted without being asked."
+          }
+          action={
+            <Button size="sm" variant="secondary" onClick={() => setEditing(true)}>
+              Change settings
+            </Button>
+          }
+        />
+        {done ? (
+          <p className="plx-small" style={{ color: "var(--plx-success)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6, margin: "8px 0 0" }}>
+            <Cookie size={14} aria-hidden /> Settings saved. Live updates apply within a minute.
+          </p>
+        ) : null}
+      </Card>
+    );
   }
 
   const defaultBrandHex = DEFAULT_BRAND_TOKENS.light["color-brand-primary"];
@@ -137,6 +163,15 @@ export function CookieNoticeCard({ siteId }: { siteId: string }) {
         <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", marginTop: 4 }}>
           <Button loading={busy} variant={dirty ? "primary" : "secondary"} onClick={save}>
             Save cookie notice
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              setS(saved);
+              setEditing(false);
+            }}
+          >
+            Cancel
           </Button>
           {done && !dirty ? (
             <span className="plx-small" role="status" style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "var(--plx-success)", fontWeight: 600 }}>

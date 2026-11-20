@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeftRight,
+  ArrowUpRight,
   CircleHelp,
   CirclePlay,
   CodeXml,
@@ -26,7 +27,6 @@ import {
   Settings,
   ShoppingBag,
   SlidersHorizontal,
-  Sparkles,
   UserRound,
 } from "lucide-react";
 import { activeNavId, type Experience, type NavIcon, type V3NavItem } from "@/lib/dashboardV3/nav";
@@ -126,6 +126,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
   const active = activeNavId(nav, pathname);
   const beginner = experience === "beginner";
   const [moreOpen, setMoreOpen] = useState(false);
+  const tour = useTour();
 
   // The sidebar can fold to icons. It remembers the choice, and on a full-width editor it starts folded to leave room.
   const frame = shellFrameFor(pathname);
@@ -237,18 +238,16 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
               <div className="plx-sidebar__foot-collapsed">
                 <Link
                   href="/dashboard/testimonial/submit"
-                  className="plx-nav__link plx-sidebar__testimonial-collapsed"
-                  title="Loving Plexo? Drop a testimonial"
-                  aria-label="Loving Plexo? Drop a testimonial"
+                  className="plx-iconbtn"
+                  title="Loving Plexo? Share a review"
+                  aria-label="Loving Plexo? Share a review"
                 >
-                  <Sparkles size={20} aria-hidden />
-                  <span className="plx-sr-only">Drop a testimonial</span>
+                  <Heart size={20} aria-hidden />
                 </Link>
               </div>
             ) : (
               <div className="plx-sidebar__foot">
                 <TestimonialCard />
-                <HelpCard />
               </div>
             )}
           </>
@@ -345,16 +344,19 @@ function Brand({ orgBranding }: { orgBranding?: OrgBranding }) {
 function TestimonialCard() {
   return (
     <div className="plx-sidebar__shout">
-      <div className="plx-sidebar__shout-badge">
-        <Sparkles size={12} aria-hidden />
-        <span>Wall of fame</span>
+      <div className="plx-sidebar__shout-head">
+        <span className="plx-sidebar__shout-icon">
+          <Heart size={12} aria-hidden style={{ fill: "currentColor" }} />
+        </span>
+        <strong className="plx-sidebar__shout-title">Loving Plexo?</strong>
       </div>
-      <strong className="plx-sidebar__shout-title">Loving Plexo? ⭐</strong>
-      <p className="plx-sidebar__shout-desc">Drop a 30s review & get your site featured on our showcase!</p>
-      <Link href="/dashboard/testimonial/submit" className="plx-btn plx-btn--primary plx-btn--sm plx-sidebar__shout-btn">
+      <p className="plx-sidebar__shout-desc">
+        Drop a quick review &amp; get your site featured on our showcase.
+      </p>
+      <Link href="/dashboard/testimonial/submit" className="plx-btn plx-btn--secondary plx-btn--sm plx-sidebar__shout-btn">
         <span className="plx-btn__label">
-          <Heart size={14} aria-hidden style={{ fill: "currentColor" }} />
-          Drop a testimonial
+          Share your review
+          <ArrowUpRight size={13} aria-hidden style={{ opacity: 0.75 }} />
         </span>
       </Link>
     </div>
@@ -447,6 +449,11 @@ function HelpMenu() {
             <LifeBuoy size={18} aria-hidden />
             Email our team
           </a>
+          <div className="plx-menu__sep" />
+          <Link role="menuitem" className="plx-menu__item" href="/dashboard/testimonial/submit" onClick={() => menu.close(false)}>
+            <Heart size={18} aria-hidden />
+            Drop a testimonial
+          </Link>
         </MenuPanel>
       ) : null}
     </div>

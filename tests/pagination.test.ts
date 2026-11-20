@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { pageWindow, paginate, parsePageRequest } from "@/lib/pagination";
+import { PAGE_SIZE_OPTIONS, pageWindow, paginate, parsePageRequest } from "@/lib/pagination";
 
 const q = (s: string) => new URLSearchParams(s);
 
 describe("parsePageRequest", () => {
-  it("reads page and pageSize", () => expect(parsePageRequest(q("page=3&pageSize=50"))).toEqual({ page: 3, pageSize: 50 }));
+  it("reads page and pageSize", () => {
+    expect(parsePageRequest(q("page=3&pageSize=50"))).toEqual({ page: 3, pageSize: 50 });
+    expect(parsePageRequest(q("page=1&pageSize=10"))).toEqual({ page: 1, pageSize: 10 });
+    expect(PAGE_SIZE_OPTIONS).toContain(10);
+  });
   it("falls back on garbage, zero, negatives and unoffered sizes", () => {
     expect(parsePageRequest(q("page=abc&pageSize=x"))).toEqual({ page: 1, pageSize: 25 });
     expect(parsePageRequest(q("page=0&pageSize=7"))).toEqual({ page: 1, pageSize: 25 });
