@@ -45,13 +45,14 @@ const TONE_VAR: Record<Rating, string> = { good: "var(--plx-success)", okay: "va
 function Ring({ score, label, hint, size = 132, delta }: { score: number | null; label: string; hint: string; size?: number; delta?: number | null }) {
   const r = 52;
   const c = 2 * Math.PI * r;
-  const look = score == null ? null : scoreLook(score);
+  const raw = typeof score === "number" && !Number.isNaN(score) ? score : typeof (score as unknown as { score?: number })?.score === "number" ? (score as unknown as { score: number }).score : null;
+  const look = raw == null ? null : scoreLook(raw);
   return (
     <div className="plx-hring" style={{ ["--ring-size" as string]: `${size}px` }}>
-      <svg viewBox="0 0 120 120" width={size} height={size} role="img" aria-label={score == null ? `${label}: not measured` : `${label}: ${score} out of 100, ${look!.label}`}>
+      <svg viewBox="0 0 120 120" width={size} height={size} role="img" aria-label={raw == null ? `${label}: not measured` : `${label}: ${raw} out of 100, ${look!.label}`}>
         <circle cx="60" cy="60" r={r} fill="none" stroke="var(--plx-border)" strokeWidth="10" />
-        {score != null && look ? <circle cx="60" cy="60" r={r} fill="none" stroke={TONE_VAR[look.tone]} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${(score / 100) * c} ${c}`} transform="rotate(-90 60 60)" /> : null}
-        <text x="60" y="68" textAnchor="middle" className="plx-hring__num">{score == null ? "–" : score}</text>
+        {raw != null && look ? <circle cx="60" cy="60" r={r} fill="none" stroke={TONE_VAR[look.tone]} strokeWidth="10" strokeLinecap="round" strokeDasharray={`${(raw / 100) * c} ${c}`} transform="rotate(-90 60 60)" /> : null}
+        <text x="60" y="68" textAnchor="middle" className="plx-hring__num">{raw == null ? "–" : raw}</text>
       </svg>
       <b className="plx-hring__label">{label}</b>
       <span className="plx-hring__word" style={{ color: look ? TONE_VAR[look.tone] : undefined }}>{look?.label ?? "Not measured"}</span>
@@ -111,7 +112,7 @@ function withQuery(href: string, query: string | undefined): string {
 
 function IssueRow({ issue, busy, editHref, onFix, onUndo, onSolFix }: { issue: Issue; busy: boolean; editHref?: string; onFix: (issue: Issue) => void; onUndo: (issue: Issue) => void; onSolFix: (issue: Issue) => void }) {
   const done = issue.autoFix?.on;
-  const manualHere = issue.steps.length > 0;
+  const manualHere = Array.isArray(issue.steps) && issue.steps.length > 0;
   return (
     <li className="plx-hissue" data-tone={issue.severity}>
       <span className="plx-hissue__dot" aria-hidden />
@@ -153,7 +154,7 @@ function IssueRow({ issue, busy, editHref, onFix, onUndo, onSolFix }: { issue: I
                 ))}
               </div>
             ) : null}
-            <ol>{issue.steps.map((s, i) => <li key={i}>{s}</li>)}</ol>
+            <ol>{Array.isArray(issue.steps) ? issue.steps.map((s, i) => <li key={i}>{s}</li>) : null}</ol>
           </details>
         ) : null}
       </div>
@@ -511,13 +512,13 @@ Please analyze my page, make the necessary updates in one pass, and tell me what
             {data?.newSiteNote ? <p className="plx-hnote">{data.newSiteNote}</p> : null}
             <div className="plx-health__card-footer">
               <span className="plx-health__when" style={{ margin: 0 }}>
-                {when ? `Checked ${when} on ${report.url.replace(/^https?:\/\//, "")}` : ""}
+                {when && report?.url ? `Checked ${when} on ${report.url.replace(/^https?:\/\//, "")}` : ""}
                 {data?.auto?.nextAt ? ` · Next check around ${new Date(data.auto.nextAt).toLocaleDateString("en", { dateStyle: "medium" })}` : ""}
               </span>
               {data && report && data.url ? (
                 <label className="plx-health__email-toggle">
                   <span><b>Weekly email</b> — 3 things to fix first</span>
-                  <input type="checkbox" className="plx-switch" role="switch" checked={data.settings.emailDigest} aria-label="Weekly Site health email" onChange={(e) => void setDigest(e.target.checked)} />
+                  <input type="checkbox" className="plx-switch" role="switch" checked={!!data.settings?.emailDigest} aria-label="Weekly Site health email" onChange={(e) => void setDigest(e.target.checked)} />
                 </label>
               ) : null}
             </div>

@@ -25,7 +25,21 @@ export function withEditorLinks(issues: Issue[], page: PageForLinks | undefined)
   });
 }
 
-const scores = (s: SpeedReport | null | undefined) => (s ? { speed: s.speed, search: s.seo, easyToUse: s.accessibility, safeAndTidy: s.bestPractices } : null);
+const toScore = (v: unknown): number | null => {
+  if (typeof v === "number" && !Number.isNaN(v)) return v;
+  if (v && typeof v === "object" && "score" in v && typeof (v as { score?: unknown }).score === "number") return (v as { score: number }).score;
+  return null;
+};
+
+const scores = (s: SpeedReport | null | undefined) =>
+  s
+    ? {
+        speed: toScore(s.speed) ?? 0,
+        search: toScore(s.seo) ?? 0,
+        easyToUse: toScore(s.accessibility) ?? 0,
+        safeAndTidy: toScore(s.bestPractices) ?? 0,
+      }
+    : null;
 
 /** A health status plus everything written in plain words: used by the Site health tab and the MCP tools. */
 export function presentHealth(status: HealthStatus, opts: { html?: string; page?: PageForLinks } = {}) {
