@@ -132,18 +132,54 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     setIsPersonalized(false);
     const id = ++request.current;
     try {
-      const res = await fetch("/api/onboarding/designs", {
+      const res = await fetch("/api/onboarding/market-designs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile: { goal, brand: { ...(brand ?? {}), name: name.trim(), ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}) } } }),
+        body: JSON.stringify({
+          profile: {
+            goal,
+            brand: {
+              ...(brand ?? {}),
+              name: name.trim(),
+              ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}),
+            },
+          },
+          mock: preview?.mock,
+        }),
       });
       const data = await res.json();
       if (id !== request.current) return;
       if (!res.ok) throw new Error(data?.error || "");
+
+      let loadedDesigns = data.designs || [];
+      let totalCount = data.total || 0;
+      if (!loadedDesigns.length) {
+        // Fallback if no marketplace designs are seeded yet
+        const fallbackRes = await fetch("/api/onboarding/designs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            profile: {
+              goal,
+              brand: {
+                ...(brand ?? {}),
+                name: name.trim(),
+                ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}),
+              },
+            },
+          }),
+        });
+        const fallbackData = await fallbackRes.json();
+        if (fallbackRes.ok && fallbackData.designs?.length) {
+          loadedDesigns = fallbackData.designs;
+          totalCount = fallbackData.total;
+        }
+      }
+
       setFeel(data.understood ?? null);
-      setDesigns(data.designs);
-      setTotal(data.total);
-      setDesignId(data.designs[0]?.id ?? "");
+      setDesigns(loadedDesigns);
+      setTotal(totalCount);
+      setDesignId(loadedDesigns[0]?.id ?? "");
     } catch {
       if (id === request.current) setError("We couldn't show the designs just now. You can still make your website: we'll pick a good one for you.");
     } finally {
@@ -223,7 +259,8 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
       setScreen(extra.marketDesignId ? "all" : "look");
     }
   };
-  const create = () => (goal ? make({ designId }, { goal, name: name.trim() }) : undefined);
+  const isKit = ["home-sales", "home-showcase", "home-simple", "home-shop", "home-blog"].includes(designId);
+  const create = () => (goal ? make(isKit ? { designId } : { marketDesignId: designId, designId }, { goal, name: name.trim() }) : undefined);
   const useMarketDesign = (d: PickerDesign) => (goal ? make({ marketDesignId: d.id }, { goal, name: name.trim() }) : undefined);
 
   // Back from paying for a design in the card window (?paidDesign=): make the site from it with what they had typed.

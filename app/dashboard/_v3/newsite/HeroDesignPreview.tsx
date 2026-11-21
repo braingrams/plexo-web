@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Laptop, Smartphone, Tablet, RefreshCw } from "lucide-react";
 import { SolGlyph } from "../sol/SolGlyph";
 import { Button } from "../ui";
@@ -30,6 +30,29 @@ export function HeroDesignPreview({
   totalDesigns = 0,
 }: HeroDesignPreviewProps) {
   const [device, setDevice] = useState<ViewportMode>("desktop");
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>({ width: 0, height: 600 });
+
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el) return;
+    const update = () => {
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        setCanvasSize({ width: el.clientWidth, height: el.clientHeight });
+      }
+    };
+    update();
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setCanvasSize({ width, height });
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   useEffect(() => {
     setDevice(getStoredViewport());
@@ -66,18 +89,19 @@ export function HeroDesignPreview({
           background: "var(--plx-sunken)",
           borderBottom: "1px solid var(--plx-border)",
           gap: 12,
-          flexWrap: "wrap",
+          flexWrap: "nowrap",
+          minWidth: 0,
         }}
       >
         {/* Left: Window Dots & Template Name */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 0 }}>
           <div style={{ display: "flex", gap: 6 }} aria-hidden>
             <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--plx-danger)", display: "inline-block" }} />
             <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--plx-warning)", display: "inline-block" }} />
             <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--plx-success)", display: "inline-block" }} />
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--plx-text)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--plx-text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
               {designName || "Selected Design"}
             </span>
             {personalized && (
@@ -93,9 +117,10 @@ export function HeroDesignPreview({
                   background: "color-mix(in srgb, var(--plx-brand) 20%, transparent)",
                   color: "var(--plx-deep, var(--plx-brand))",
                   border: "1px solid color-mix(in srgb, var(--plx-brand) 30%, transparent)",
+                  whiteSpace: "nowrap",
                 }}
               >
-                <SolGlyph size={12} /> Personalized by SOL
+                <SolGlyph size={12} /> Personalized
               </span>
             )}
           </div>
@@ -108,15 +133,17 @@ export function HeroDesignPreview({
             alignItems: "center",
             gap: 6,
             background: "var(--plx-surface)",
-            padding: "4px 14px",
+            padding: "4px 12px",
             borderRadius: 8,
             border: "1px solid var(--plx-border)",
             fontSize: 12,
             color: "var(--plx-muted)",
-            maxWidth: 280,
+            maxWidth: 240,
+            minWidth: 0,
             overflow: "hidden",
             textOverflow: "ellipsis",
             whiteSpace: "nowrap",
+            flexShrink: 1,
           }}
         >
           <span style={{ color: "var(--plx-text)", fontWeight: 600 }}>https://</span>
@@ -124,7 +151,7 @@ export function HeroDesignPreview({
         </div>
 
         {/* Right: Device switch + Personalize button */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
           {/* Device toggle */}
           <div
             role="radiogroup"
@@ -210,13 +237,7 @@ export function HeroDesignPreview({
               leftIcon={<SolGlyph size={14} />}
               onClick={onPersonalize}
             >
-              {personalized ? "Re-personalize with SOL" : "Personalize this template with SOL"}
-            </Button>
-          )}
-
-          {onSeeAll && (
-            <Button size="sm" variant="ghost" onClick={onSeeAll}>
-              {totalDesigns > 1 ? `Change design (${totalDesigns})` : "Change design"}
+              {personalized ? "Re-personalize" : "Personalize with SOL"}
             </Button>
           )}
         </div>
@@ -224,6 +245,7 @@ export function HeroDesignPreview({
 
       {/* Main Interactive Scrollable Preview Canvas */}
       <div
+        ref={canvasRef}
         style={{
           position: "relative",
           width: "100%",
@@ -252,21 +274,44 @@ export function HeroDesignPreview({
               <span>Preparing high-resolution design preview…</span>
             </div>
           </div>
-        ) : device === "desktop" ? (
-          <iframe
-            key="desktop-frame"
-            title={`${designName} preview`}
-            srcDoc={html}
-            sandbox="allow-same-origin allow-scripts"
-            style={{
-              width: "100%",
-              height: "100%",
-              border: 0,
-              background: "var(--plx-surface)",
-              display: "block",
-            }}
-          />
-        ) : device === "tablet" ? (
+        ) : device === "desktop" ? (() => {
+          const targetW = 1280;
+          const availW = canvasSize.width || targetW;
+          const availH = canvasSize.height || 600;
+          const scale = availW < targetW ? availW / targetW : 1;
+          const visualW = Math.round(targetW * scale);
+          const frameH = scale > 0 ? Math.round(availH / scale) : availH;
+          return (
+            <div
+              style={{
+                position: "relative",
+                width: `${visualW}px`,
+                height: "100%",
+                overflow: "hidden",
+                margin: "0 auto",
+              }}
+            >
+              <iframe
+                key="desktop-frame"
+                title={`${designName} preview`}
+                srcDoc={html}
+                sandbox="allow-same-origin allow-scripts"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: `${targetW}px`,
+                  height: `${frameH}px`,
+                  transform: scale < 1 ? `scale(${scale})` : undefined,
+                  transformOrigin: "top left",
+                  border: 0,
+                  background: "var(--plx-surface)",
+                  display: "block",
+                }}
+              />
+            </div>
+          );
+        })() : device === "tablet" ? (
           <div
             style={{
               width: "100%",

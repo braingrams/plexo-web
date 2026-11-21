@@ -747,7 +747,7 @@ export function buildDonationReceiptEmail(input: {
       <p style="margin:0 0 24px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${message}</p>
       <p style="margin:0 0 24px;font-size:30px;font-weight:800;color:#517A12;letter-spacing:-0.5px;text-align:left;">${esc(input.amountFormatted)}${input.monthly ? '<span style="font-size:15px;color:#5B5B58;font-weight:600"> / month</span>' : ""}</p>
       <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">${detailRows(rows)}</table>
-      <p style="margin:0 0 ${input.manageUrl ? "20px" : "0"};font-size:12.5px;color:#76766F;line-height:1.6;text-align:left;">Please keep this email as your donation receipt.</p>
+      <p style="margin:0 0 ${input.manageUrl ? "20px" : "0"};font-size:12.5px;color:#76766F;line-height:1.6;text-align:left;">Please keep this email as your payment receipt.</p>
       ${input.manageUrl ? `${CTA_BUTTON(input.manageUrl, "Manage your monthly gift", accent)}${FALLBACK_LINK(input.manageUrl, accent)}` : ""}
     `,
     brand: input.brand,
