@@ -551,8 +551,15 @@ export const CommerceSettings = new Entity(
         default: "BYO_PAYSTACK",
       },
       maildripApiKeyEncrypted: { type: "string" },
+      maildripConnectedEmail: { type: "string" },
       maildripPaidGroupId: { type: "string" },
       maildripNewsletterGroupId: { type: "string" },
+      emailBrandEnabled: { type: "boolean", default: false },
+      emailSenderName: { type: "string" },
+      emailSenderEmail: { type: "string" },
+      emailLogoUrl: { type: "string" },
+      emailBrandColor: { type: "string" },
+      emailFooterText: { type: "string" },
       // Shows a site-wide newsletter popup (public/newsletter-popup.js) on every published
       // page, independent of `enabled` (Commerce/payments) — a site doesn't need to sell
       // anything to want newsletter capture. Only takes effect once

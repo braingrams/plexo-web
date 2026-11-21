@@ -64,3 +64,56 @@ describe("onboardingReturnPath", () => {
     expect(onboardingReturnPath(undefined, "abc")).toBeNull();
   });
 });
+
+describe("personalizeTemplateHtml", () => {
+  it("edits the chosen template directly instead of generating an old orchestrator mock", async () => {
+    const { personalizeTemplateHtml } = await import("@/lib/onboarding/personalize");
+
+    const templateHtml = `<!doctype html>
+<html>
+<head><title>Chef Tomi: food creator link in bio</title></head>
+<body>
+  <nav><span class="logo">Chef Tomi</span></nav>
+  <div class="hero">
+    <h1>Original Chef Tomi Headline</h1>
+    <p class="lead">Original recipe and culinary blog description.</p>
+    <a href="#cta" class="btn primary">Get started</a>
+  </div>
+  <div class="bento-grid">
+    <div class="card">Recipe Video</div>
+  </div>
+</body>
+</html>`;
+
+    const result = personalizeTemplateHtml({
+      html: templateHtml,
+      name: "Murano",
+      about: "I want people to see my shows and performances",
+      templateName: "Chef Tomi: food creator link in bio",
+      brandColor: "#7c3aed",
+    });
+
+    // 1. Must preserve the original template structure (e.g. bento-grid, nav)
+    expect(result.html).toContain('class="bento-grid"');
+    expect(result.html).toContain('class="card">Recipe Video');
+
+    // 2. Must replace the original brand name with the owner's name
+    expect(result.html).toContain('<span class="logo">Murano</span>');
+    expect(result.html).not.toContain('<span class="logo">Chef Tomi</span>');
+
+    // 3. Must tailor the headline to the owner's name and performance intent
+    expect(result.html).toContain("Murano — Live Shows &amp; Performances");
+
+    // 4. Must personalize the subhero text with the owner's about description
+    expect(result.html).toContain("I want people to see my shows and performances");
+
+    // 5. Must personalize the CTA button
+    expect(result.html).toContain("See upcoming shows");
+
+    // 6. Must update document title
+    expect(result.html).toContain("<title>Murano — Live Shows &amp; Performances</title>");
+
+    // 7. Must inject brand accent color
+    expect(result.html).toContain("--brand:#7c3aed");
+  });
+});

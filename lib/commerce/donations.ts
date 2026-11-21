@@ -21,6 +21,7 @@ import { formatMoney } from "@/lib/commerce/formatMoney";
 import { ensureOrderConfirmationPage } from "@/lib/commerce/storefrontLayout";
 import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { resolveMaildripApiKey, sendCommerceEmail } from "@/lib/mail/maildrip";
+import { resolveSiteEmailConfig } from "@/lib/mail/siteEmailSettings";
 import { buildDonationReceiptEmail } from "@/lib/mail/templates";
 import { getOrgBrandDynamo } from "@/server/orgDynamo";
 import { Template } from "@/lib/db/contentEntities";
@@ -433,17 +434,18 @@ export async function handleDonationPaid(order: OrderItem, settings: SettingsIte
 }
 
 async function sendDonationReceipt(order: OrderItem, subscription: DonationSubscriptionItem | null): Promise<void> {
-  const { data: settings } = await CommerceSettings.get({ templateId: order.templateId }).go();
-  const apiKey = settings ? resolveMaildripApiKey(settings) : null;
+  const [emailConfig, { data: site }, siteUrl] = await Promise.all([
+    resolveSiteEmailConfig(order.templateId, order.organizationId),
+    Template.get({ id: order.templateId }).go(),
+    resolveSitePublicUrl(order.templateId),
+  ]);
+  const apiKey = emailConfig.apiKey;
   if (!apiKey) return;
   const meta = (order.metadata ?? {}) as { campaignId?: string; campaignName?: string };
-  const [{ data: site }, brand, siteUrl, campaignRes] = await Promise.all([
-    Template.get({ id: order.templateId }).go(),
-    getOrgBrandDynamo(order.organizationId),
-    resolveSitePublicUrl(order.templateId),
-    meta.campaignId ? CommerceDonationCampaign.get({ templateId: order.templateId, id: meta.campaignId }).go() : Promise.resolve({ data: null }),
-  ]);
-  const siteName = site?.name ?? "our organization";
+  const campaignRes = meta.campaignId
+    ? await CommerceDonationCampaign.get({ templateId: order.templateId, id: meta.campaignId }).go()
+    : { data: null };
+  const siteName = emailConfig.brand?.name || site?.name || "our organization";
   const { subject, html } = buildDonationReceiptEmail({
     siteName,
     donorName: order.customerName ?? null,
@@ -457,7 +459,8 @@ async function sendDonationReceipt(order: OrderItem, subscription: DonationSubsc
     emailHeading: campaignRes.data?.emailHeading ?? null,
     emailBody: campaignRes.data?.emailBody ?? null,
     manageUrl: subscription ? `${siteUrl}/donation/manage?token=${encodeURIComponent(subscription.manageToken)}` : null,
-    brand,
+    brand: emailConfig.brand,
+    footerText: emailConfig.footerText,
   });
   await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, context: "commerce_donation_receipt", organizationId: order.organizationId, templateId: order.templateId });
 }

@@ -16,6 +16,7 @@ import { suggestedMetaDescription, type BrandVoice } from "@/lib/brand/brandVoic
 import { BRAND_COPY, saveStatusText, type SaveStatus } from "@/lib/dashboardV3/brandDefinition";
 import type { SiteBrand } from "@/lib/dashboardV3/brandLook";
 import { TabBar } from "./HubFrame";
+import { EmailBrandingCard } from "./EmailBrandingCard";
 import { errMsg, hubApi } from "./hubApi";
 
 type Meta = { htmlTitle: string; favicon: string; metaDescription: string; ogImageUrl: string };
@@ -441,6 +442,7 @@ export function BrandTab({ siteId, siteName, brand, defaults = null, experience,
           )}
         </Card>
       </div>
+      <EmailBrandingCard siteId={siteId} siteName={siteName} defaultLogo={brand?.logoUrl} defaultColor={brand?.colors?.[0]} />
       </div>
     </>
   );

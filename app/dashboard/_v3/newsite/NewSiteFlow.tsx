@@ -191,6 +191,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const personalizeWithSol = async () => {
     if (!goal || isPersonalizing) return;
     setIsPersonalizing(true);
+    const chosen = designs.find((d) => d.id === designId) ?? designs[0] ?? null;
     try {
       const res = await fetch("/api/onboarding/personalize", {
         method: "POST",
@@ -198,6 +199,9 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         body: JSON.stringify({
           profile: { goal, brand: { ...(brand ?? {}), name: name.trim(), ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}) } },
           designId,
+          templateHtml: chosen?.html ?? undefined,
+          templateName: chosen?.name ?? undefined,
+          templateDescription: chosen?.description ?? undefined,
         }),
       });
       const data = await res.json();
@@ -236,6 +240,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
             goal: who.goal,
             name: who.name,
             ...extra,
+            ...(personalizedHtml ? { personalizedHtml } : {}),
             ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}),
             ...(feel ? { industry: feel.industry, style: feel.style } : {}),
             ...(selectionToChoice(brandPick) ? { brand: selectionToChoice(brandPick) } : {}),

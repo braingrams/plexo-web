@@ -128,7 +128,7 @@ export function paidDesignFrom(search: string): string | null {
   return id && /^[\w-]{1,80}$/.test(id) ? id : null;
 }
 
-export type CreateRequest = { goal: NewSiteGoal; name: string; designId: string; marketDesignId?: string; /** What the owner said the website is for and should look like: shapes the design picked and the words on the site. */ about?: string; /** What SOL understood from it (only the allowed words). */ industry?: string; style?: string };
+export type CreateRequest = { goal: NewSiteGoal; name: string; designId: string; marketDesignId?: string; personalizedHtml?: string; /** What the owner said the website is for and should look like: shapes the design picked and the words on the site. */ about?: string; /** What SOL understood from it (only the allowed words). */ industry?: string; style?: string };
 
 export function parseCreateRequest(body: unknown): { ok: true; value: CreateRequest } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
@@ -137,10 +137,11 @@ export function parseCreateRequest(body: unknown): { ok: true; value: CreateRequ
   const name = typeof b.name === "string" ? clean(b.name) : "";
   if (!name) return { ok: false, error: "Give your website a name, like your business name." };
   const market = typeof b.marketDesignId === "string" && b.marketDesignId.trim() ? b.marketDesignId.trim() : undefined;
+  const personalizedHtml = typeof b.personalizedHtml === "string" && b.personalizedHtml.trim() ? b.personalizedHtml.trim() : undefined;
   const about = typeof b.about === "string" ? clean(b.about).slice(0, 500) : "";
   const industry = (INDUSTRIES as readonly string[]).find((i) => i === b.industry);
   const style = (STYLES as readonly string[]).find((i) => i === b.style);
-  return { ok: true, value: { goal, name: name.slice(0, 80), designId: typeof b.designId === "string" ? b.designId : "", ...(market ? { marketDesignId: market } : {}), ...(about ? { about } : {}), ...(industry ? { industry } : {}), ...(style ? { style } : {}) } };
+  return { ok: true, value: { goal, name: name.slice(0, 80), designId: typeof b.designId === "string" ? b.designId : "", ...(market ? { marketDesignId: market } : {}), ...(personalizedHtml ? { personalizedHtml } : {}), ...(about ? { about } : {}), ...(industry ? { industry } : {}), ...(style ? { style } : {}) } };
 }
 
 /** The arguments for site_create: the same ones onboarding builds. */

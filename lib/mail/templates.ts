@@ -716,6 +716,7 @@ export function buildDonationReceiptEmail(input: {
   /** Monthly gifts only — the donor's private link to stop their gift. */
   manageUrl: string | null;
   brand?: EmailBrand;
+  footerText?: string | null;
 }): { subject: string; html: string } {
   const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const greeting = input.donorName ? `Dear ${esc(input.donorName.split(" ")[0])},` : "Thank you,";
@@ -750,6 +751,7 @@ export function buildDonationReceiptEmail(input: {
       <p style="margin:0 0 ${input.manageUrl ? "20px" : "0"};font-size:12.5px;color:#76766F;line-height:1.6;text-align:left;">Please keep this email as your payment receipt.</p>
       ${input.manageUrl ? `${CTA_BUTTON(input.manageUrl, "Manage your monthly gift", accent)}${FALLBACK_LINK(input.manageUrl, accent)}` : ""}
     `,
+    footerHtml: input.footerText ? `<p style="margin:0 0 10px;font-size:12px;line-height:1.6;color:#76766F;">${esc(input.footerText)}</p>` : undefined,
     brand: input.brand,
   });
   return { subject, html };

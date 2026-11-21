@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/commerceEntities";
 import { handleOrderPaid } from "@/lib/db/commerceWebhookOperations";
 import { resolveMaildripApiKey, sendCommerceEmail, sendMaildripEmail } from "@/lib/mail/maildrip";
+import { resolveSiteEmailConfig } from "@/lib/mail/siteEmailSettings";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { buildBankTransferOwnerEmail, buildBankTransferCustomerEmail, buildBankTransferRejectedEmail } from "@/lib/mail/templates";
 import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
@@ -107,12 +108,13 @@ export function orderDeliveryDetails(order: Pick<OrderItem, "deliveryMethodNameS
  * failure is surfaced to the customer — their order is already real and visible in the
  * dashboard regardless. */
 export async function notifyBankTransferPlaced(order: OrderItem, settings: SettingsItem): Promise<void> {
-  const [{ data: site }, brand, storeUrl] = await Promise.all([
+  const [{ data: site }, emailConfig, storeUrl] = await Promise.all([
     Template.get({ id: order.templateId }).go(),
-    getOrgBrandDynamo(order.organizationId),
+    resolveSiteEmailConfig(order.templateId, order.organizationId),
     resolveSitePublicUrl(order.templateId),
   ]);
-  const siteName = site?.name ?? "Your store";
+  const brand = emailConfig.brand;
+  const siteName = brand?.name || site?.name || "Your store";
   const amountFormatted = formatMoney(order.amountMinor, order.currency ?? "NGN");
 
   const tasks: Promise<void>[] = [];
@@ -132,7 +134,11 @@ export async function notifyBankTransferPlaced(order: OrderItem, settings: Setti
         brand,
       });
       try {
-        await sendMaildripEmail({ to, subject, html });
+        if (emailConfig.apiKey) {
+          await sendCommerceEmail(emailConfig.apiKey, { to, subject, html, context: "commerce_bank_transfer", organizationId: order.organizationId, templateId: order.templateId });
+        } else {
+          await sendMaildripEmail({ to, subject, html });
+        }
         logEmailDelivery({ kind: "maildrip", to, subject, status: "sent", context: "commerce_bank_transfer", organizationId: order.organizationId, templateId: order.templateId });
       } catch (err) {
         logEmailDelivery({
@@ -145,7 +151,7 @@ export async function notifyBankTransferPlaced(order: OrderItem, settings: Setti
   );
 
   const bank = publicBankDetails(settings);
-  const apiKey = resolveMaildripApiKey(settings);
+  const apiKey = emailConfig.apiKey ?? resolveMaildripApiKey(settings);
   if (bank && apiKey && (settings.notifyCustomerOnPaid ?? true)) {
     const { subject, html } = buildBankTransferCustomerEmail({
       siteName,
@@ -221,16 +227,17 @@ export async function resolveBankTransferOrder(params: {
   }
 
   await releaseOrderHolds(updated);
-  const apiKey = settings ? resolveMaildripApiKey(settings) : null;
+  const [emailConfig, storeUrl] = await Promise.all([
+    resolveSiteEmailConfig(templateId, updated.organizationId),
+    resolveSitePublicUrl(templateId),
+  ]);
+  const apiKey = emailConfig.apiKey ?? (settings ? resolveMaildripApiKey(settings) : null);
   if (apiKey) {
     try {
-      const [{ data: site }, brand, storeUrl] = await Promise.all([
-        Template.get({ id: templateId }).go(),
-        getOrgBrandDynamo(updated.organizationId),
-        resolveSitePublicUrl(templateId),
-      ]);
+      const { data: site } = await Template.get({ id: templateId }).go();
+      const brand = emailConfig.brand;
       const { subject, html } = buildBankTransferRejectedEmail({
-        siteName: site?.name ?? "Your store",
+        siteName: brand?.name || site?.name || "Your store",
         orderNumber: updated.orderNumber,
         amountFormatted: formatMoney(updated.amountMinor, updated.currency ?? "NGN"),
         reason,
