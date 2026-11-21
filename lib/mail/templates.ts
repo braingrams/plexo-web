@@ -313,8 +313,12 @@ export function buildPaymentReceivedEmail(input: {
   customerEmail: string;
   orderNumber: string;
   orderUrl: string;
+  isDonation?: boolean;
   brand?: EmailBrand;
 }): string {
+  const isDonation = input.isDonation || input.orderNumber.startsWith("DON-");
+  const noun = isDonation ? "Payment" : "Order";
+  const cta = isDonation ? "View Payment" : "View Order";
   const productName = input.brand?.name ?? "Plexo";
   const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
@@ -323,9 +327,9 @@ export function buildPaymentReceivedEmail(input: {
       <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">You've been paid</h1>
       <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#517A12;letter-spacing:-0.5px;text-align:left;">${input.amountFormatted}</p>
       <p style="margin:0 0 28px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">
-        Order <strong>${input.orderNumber}</strong> on <strong>${input.siteName}</strong>, paid by <strong>${input.customerEmail}</strong>.
+        ${noun} <strong>${input.orderNumber}</strong> on <strong>${input.siteName}</strong>, paid by <strong>${input.customerEmail}</strong>.
       </p>
-      ${CTA_BUTTON(input.orderUrl, "View Order", accent)}
+      ${CTA_BUTTON(input.orderUrl, cta, accent)}
       ${FALLBACK_LINK(input.orderUrl, accent)}
     `,
     brand: input.brand,

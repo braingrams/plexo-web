@@ -20,8 +20,8 @@ export function useReportDirty(dirty: boolean) {
   }, [ctx, dirty]);
 }
 
-/** The Shop tab frame: ONE menu (left on wide screens, a single dropdown on phones) and the open section beside it. */
-export function ShopLayout({ siteId, groups, current, label = "Shop", children }: { siteId: string; groups: ShopNavGroup[]; current: string; label?: string; children: React.ReactNode }) {
+/** The Shop or Donations tab frame: ONE menu (left on wide screens, a single dropdown on phones) and the open section beside it. */
+export function ShopLayout({ siteId, groups, current, label = "Shop", tab = "shop", children }: { siteId: string; groups: ShopNavGroup[]; current: string; label?: string; tab?: string; children: React.ReactNode }) {
   const router = useRouter();
   const dirty = useRef(false);
   const ctx = useRef({ set: (d: boolean) => { dirty.current = d; } }).current;
@@ -35,7 +35,7 @@ export function ShopLayout({ siteId, groups, current, label = "Shop", children }
     return () => window.removeEventListener("beforeunload", warn);
   }, []);
   const mayLeave = useCallback(() => !dirty.current || window.confirm(LEAVE_MESSAGE), []);
-  const hrefOf = (i: ShopNavItem) => shopHref(siteId, i.section, i.part);
+  const hrefOf = (i: ShopNavItem) => shopHref(siteId, i.section, i.part, tab);
   const all = groups.flatMap((g) => g.items);
   const here = all.find((i) => i.key === current);
 

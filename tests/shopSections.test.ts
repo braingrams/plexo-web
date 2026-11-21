@@ -7,7 +7,7 @@ describe("Shop tab", () => {
   it("only shops get it, right after Orders", () => {
     const ids = (f = NO_FEATURES) => hubTabs(f, "beginner").map((t) => t.id);
     expect(ids()).not.toContain("shop");
-    expect(ids({ ...NO_FEATURES, store: true })).toEqual(["pages", "products", "orders", "shop", "brand", "address", "visits", "health", "settings"]);
+    expect(ids({ ...NO_FEATURES, store: true })).toEqual(["pages", "products", "orders", "shop", "brand", "address", "visits", "health", "settings", "more"]);
     expect(resolveHubTab("shop", NO_FEATURES)).toBe("pages");
     expect(resolveHubTab("shop", { ...NO_FEATURES, store: true })).toBe("shop");
   });

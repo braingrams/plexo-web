@@ -4,7 +4,7 @@ import { PagesTab } from "../../_v3/hub/PagesTab";
 import { ProductsTab } from "../../_v3/hub/ProductsTab";
 import { OrdersTab } from "../../_v3/hub/OrdersTab";
 import { ShopArea } from "../../_v3/hub/shop/ShopArea";
-import { DonationsContent } from "@/app/dashboard/commerce/[templateId]/donations/Content";
+import { DonationsArea } from "../../_v3/hub/shop/DonationsArea";
 import { AddressTab } from "../../_v3/hub/AddressTab";
 import { BlogTab } from "../../_v3/hub/BlogTab";
 import { CourseTab } from "../../_v3/hub/CourseTab";
@@ -48,7 +48,7 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       content = <ShopArea siteId={id} section={Array.isArray(query.section) ? query.section[0] : query.section} part={Array.isArray(query.part) ? query.part[0] : query.part} searchParams={query} />;
       break;
     case "donations":
-      content = <DonationsContent templateId={id} hub />;
+      content = <DonationsArea siteId={id} section={Array.isArray(query.section) ? query.section[0] : query.section} part={Array.isArray(query.part) ? query.part[0] : query.part} searchParams={query} />;
       break;
     case "blog":
       content = <BlogTab siteId={id} experience={ctx.experience} />;

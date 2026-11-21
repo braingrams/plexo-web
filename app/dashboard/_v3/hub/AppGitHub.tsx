@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { GitBranch } from "lucide-react";
-import { Button, ButtonLink, Card, CardHeader, Input, Select, Skeleton, useToast } from "../ui";
+import { Button, ButtonLink, Card, CardHeader, Input, OptimisticLoader, Select, Skeleton, useToast } from "../ui";
 import { errMsg, hubApi } from "./hubApi";
 import { GateOrError } from "../../_components/UpgradePrompt";
 
@@ -74,7 +74,7 @@ export function AppGitHub({ siteId, git, onChanged, onBuildStarted }: { siteId: 
   }
 
   if (loadError) return <Card><CardHeader title="GitHub" /><p className="plx-field__error" role="alert">{loadError}</p></Card>;
-  if (!status) return <Card><Skeleton height={20} width="30%" style={{ marginBottom: 12 }} /><Skeleton height={48} /></Card>;
+  if (!status) return <Card><div style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Connecting to GitHub" subtitle="Retrieving repository and branch status" steps={["Connecting to GitHub API…", "Checking repository branches…", "Ready."]} /></div></Card>;
   if (!status.configured) return null;
   const linked = git?.linked ? git : null;
   const hasAccount = status.installations.length > 0;

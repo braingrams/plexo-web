@@ -3,7 +3,7 @@
  * donations, settings) in one place, in plain words. Pure — the hub page asks it which section to show and where
  * each old shop address now lives, so no owner is ever sent back to the old shop pages.
  */
-export type ShopSectionId = "money" | "customers" | "discounts" | "delivery" | "bookings" | "donations" | "settings";
+export type ShopSectionId = "money" | "customers" | "discounts" | "delivery" | "bookings" | "donations" | "orders" | "settings";
 export type ShopSettingsPart = "general" | "payments" | "checkout" | "notifications";
 
 export type ShopSection = { id: ShopSectionId; label: string; help: string };
@@ -15,6 +15,7 @@ export const SHOP_SECTIONS: ShopSection[] = [
   { id: "delivery", label: "Delivery", help: "How you get things to people, and what it costs." },
   { id: "bookings", label: "Booking times", help: "The days and hours people can book you." },
   { id: "donations", label: "Donations", help: "Gifts people give, one-off or every month." },
+  { id: "orders", label: "Donation orders", help: "Detailed list of every gift and donor." },
   { id: "settings", label: "Shop settings", help: "Payments, checkout, emails and how your shop looks." },
 ];
 
@@ -62,7 +63,7 @@ export function parseSettingsPart(v: unknown): ShopSettingsPart {
 export function shopSections(opts: { sellsServices?: boolean; store?: boolean } = {}): ShopSection[] {
   return SHOP_SECTIONS.filter((s) => {
     if (s.id === "bookings" && opts.sellsServices === false) return false;
-    if (opts.store === false && (s.id === "customers" || s.id === "discounts" || s.id === "delivery" || s.id === "bookings")) return false;
+    if (opts.store === false && (s.id === "customers" || s.id === "discounts" || s.id === "delivery" || s.id === "bookings" || s.id === "orders")) return false;
     return true;
   });
 }
@@ -72,9 +73,37 @@ export function resolveShopSection(requested: unknown, sections: ShopSection[]):
   return wanted && sections.some((s) => s.id === wanted) ? wanted : sections[0].id;
 }
 
-/** A shop tool as a hub address. */
-export function shopHref(siteId: string, section: ShopSectionId = "money", part?: ShopSettingsPart): string {
-  return `/dashboard/sites/${siteId}?tab=shop&section=${section}${part && section === "settings" ? `&part=${part}` : ""}`;
+/** A shop or donations tool as a hub address. */
+export function shopHref(siteId: string, section: ShopSectionId = "money", part?: ShopSettingsPart, tab: string = "shop"): string {
+  return `/dashboard/sites/${siteId}?tab=${tab}&section=${section}${part && section === "settings" ? `&part=${part}` : ""}`;
+}
+
+/** The dedicated side menu for the Donations tab. */
+export function donationsNavGroups(): ShopNavGroup[] {
+  return [
+    {
+      label: "Gifts",
+      items: [
+        { key: "donations", label: "Donation forms", help: "Forms where people give, one-off or every month.", section: "donations" },
+        { key: "orders", label: "Donation orders", help: "Detailed list of every gift and donor.", section: "orders" },
+        { key: "money", label: "Your money", help: "What you've earned, and how to move it to your bank account.", section: "money" },
+      ],
+    },
+    {
+      label: "Settings",
+      items: [
+        { key: "settings:general", label: "General", help: "Your currency and form settings.", section: "settings", part: "general" },
+        { key: "settings:payments", label: "Payments", help: "How donors pay (Stripe or Paystack).", section: "settings", part: "payments" },
+        { key: "settings:checkout", label: "Receipts & emails", help: "On-page confirmation and receipt emails.", section: "settings", part: "checkout" },
+      ],
+    },
+  ];
+}
+
+export function resolveDonationSection(requested: unknown): ShopSectionId {
+  const s = typeof requested === "string" ? requested : "";
+  if (s === "orders" || s === "money" || s === "settings" || s === "donations") return s as ShopSectionId;
+  return "donations";
 }
 
 /** The old shop pages (by the end of their address, e.g. "wallet" or "settings:payments") and where each lives now. */

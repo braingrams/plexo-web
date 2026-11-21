@@ -3,7 +3,7 @@
 import "./strataPicker.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Link2, Plus } from "lucide-react";
-import { Button, Skeleton } from "../ui";
+import { Button, OptimisticLoader, Skeleton } from "../ui";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import { brandFromDesignSystem, type ResolvedBrand } from "@/lib/brand/brandModel";
 import {
@@ -203,8 +203,8 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
 
   if (stage === "loading") {
     return (
-      <div className={cls} role="status" aria-live="polite" aria-label="Loading your brands">
-        <div className="plx-sbp__skel"><Skeleton height={64} /><Skeleton height={64} /><Skeleton height={64} /></div>
+      <div className={cls} role="status" aria-live="polite" aria-label="Loading your brands" style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}>
+        <OptimisticLoader title="Connecting to brand library" subtitle="Retrieving logos, colors, and typography" steps={["Connecting to brand workspace…", "Loading brand assets and palettes…", "Ready."]} />
       </div>
     );
   }

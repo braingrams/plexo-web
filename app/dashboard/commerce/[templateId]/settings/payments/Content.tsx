@@ -42,6 +42,8 @@ export async function PaymentsSettingsContent({ templateId, hub }: { templateId:
         bankTransferAccountName: settings?.bankTransferAccountName ?? "",
         bankTransferAccountNumber: settings?.bankTransferAccountNumber ?? "",
         bankTransferInstructions: settings?.bankTransferInstructions ?? "",
+        currency: settings?.currency ?? "USD",
+        notificationEmail: settings?.notificationEmail ?? "",
       }}
     />
   );

@@ -24,13 +24,13 @@ export function PageSkeleton({ withSidebar = false }: { withSidebar?: boolean })
       }}
     >
       <OptimisticLoader
+        title="Constructing your workspace view"
+        subtitle="Assembling layout, live data, and controls"
         steps={[
-          "Loading your workspace…",
-          "Retrieving pages and configurations…",
-          "Putting everything together…",
-          "Ready!",
+          "Retrieving records and live data…",
+          "Connecting workspace tools and assets…",
+          "Revealing view.",
         ]}
-        subtitle="Loading your content and features"
       />
     </div>
   );

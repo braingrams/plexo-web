@@ -51,7 +51,7 @@ const NEXT: { to: Order["fulfillmentStatus"]; label: string }[] = [
   { to: "COMPLETED", label: "Mark as done" },
 ];
 
-export function OrdersTab({ siteId, currency }: { siteId: string; currency: string }) {
+export function OrdersTab({ siteId, currency, hideHeader }: { siteId: string; currency: string; hideHeader?: boolean }) {
   const [filter, setFilter] = useState("");
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -124,7 +124,7 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
 
   return (
     <>
-      <TabBar title="Your orders" sub="Everything people have bought. Tap an order to see what to do next." />
+      {!hideHeader ? <TabBar title="Your orders" sub="Everything people have bought. Tap an order to see what to do next." /> : null}
       <div className="plx-toolbar" data-tour="hub-orders-tools">
         <Input label="Search orders" hideLabel type="search" fieldClassName="plx-hsearch" placeholder="Search by name, email or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
         <div className="plx-filters" role="radiogroup" aria-label="Show orders">

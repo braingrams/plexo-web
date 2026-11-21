@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Copy, HeartHandshake, Pencil, Plus, Power, Wallet, X } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, HeartHandshake, Pencil, Plus, Power, Wallet, X } from "lucide-react";
 import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, Textarea } from "../../ui";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import type { DonationsOverview } from "@/lib/commerce/donations";
 import { draftFrom, goalPercent, monthlyStatusWords, newDraft } from "@/lib/commerce/donationForm";
 import { paginate } from "@/lib/dashboardV3/productList";
-import { shopHref } from "@/lib/dashboardV3/shopSections";
 import { useDonations } from "@/app/dashboard/commerce/[templateId]/donations/useDonations";
 
 function Pager({ page, pages, onChange }: { page: number; pages: number; onChange: (p: number) => void }) {
@@ -28,13 +27,20 @@ export function DonationsPanel({ templateId, initial }: { templateId: string; in
   const { data, draft, setDraft } = d;
   const [donorPage, setDonorPage] = useState(1);
   const [giftPage, setGiftPage] = useState(1);
+  const [showOptional, setShowOptional] = useState(false);
   const money = (n: number) => formatMoney(n, data.currency);
   const donors = paginate(data.monthlyDonors, donorPage, 10);
   const gifts = paginate(data.recentGifts, giftPage, 10);
-  const payments = shopHref(templateId, "settings", "payments");
+  const paymentsHref = `/dashboard/sites/${templateId}?tab=donations&sub=payments`;
+
+  const openNew = () => {
+    d.setError(null);
+    setShowOptional(false);
+    setDraft(newDraft());
+  };
 
   const start = (
-    <Button leftIcon={<Plus size={18} aria-hidden />} onClick={() => { d.setError(null); setDraft(newDraft()); }}>New donation form</Button>
+    <Button leftIcon={<Plus size={18} aria-hidden />} onClick={openNew}>New donation form</Button>
   );
 
   return (
@@ -46,7 +52,7 @@ export function DonationsPanel({ templateId, initial }: { templateId: string; in
             <b>Connect a way to get paid first</b>
             <p className="plx-small" style={{ margin: "4px 0 0" }}>Link Stripe or Paystack to take cards and monthly gifts, or add your bank details for one-off transfers. Until then your donation forms say &ldquo;being set up&rdquo;.</p>
           </div>
-          <Link className="plx-btn plx-btn--primary" href={payments}>Set up payments</Link>
+          <Link className="plx-btn plx-btn--primary" href={paymentsHref}>Set up payments</Link>
         </Card>
       ) : null}
       {d.notice ? <div className="plx-inlinemsg" role="status">{d.notice}</div> : null}
@@ -83,9 +89,9 @@ export function DonationsPanel({ templateId, initial }: { templateId: string; in
                         <span className="plx-small">{money(c.raisedMinor)} of {money(c.goalAmountMinor as number)} ({pct}%)</span>
                       </div>
                     ) : <span className="plx-small">{money(c.raisedMinor)} raised from {c.donationCount} {c.donationCount === 1 ? "gift" : "gifts"}</span>}
-                    {c.paymentIssue ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert"><span><b>Gifts aren&apos;t going through:</b> {c.paymentIssue} <Link href={payments} style={{ color: "var(--plx-link)", fontWeight: 700 }}>Check payment settings</Link></span></div> : null}
+                    {c.paymentIssue ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert"><span><b>Gifts aren&apos;t going through:</b> {c.paymentIssue} <Link href={paymentsHref} style={{ color: "var(--plx-link)", fontWeight: 700 }}>Check payment settings</Link></span></div> : null}
                     <div className="plx-don__btns">
-                      <Button size="sm" variant="secondary" leftIcon={<Pencil size={16} aria-hidden />} onClick={() => { d.setError(null); setDraft(draftFrom(c)); }}>Edit</Button>
+                      <Button size="sm" variant="secondary" leftIcon={<Pencil size={16} aria-hidden />} onClick={() => { d.setError(null); setShowOptional(false); setDraft(draftFrom(c)); }}>Edit</Button>
                       <Button size="sm" variant="secondary" leftIcon={<Copy size={16} aria-hidden />} onClick={() => d.copyEmbed(c.id)}>{d.copied === c.id ? "Copied" : "Copy code for my page"}</Button>
                       <Button size="sm" variant="ghost" leftIcon={<Power size={16} aria-hidden />} loading={d.busy === c.id} onClick={() => void d.toggleActive(c)}>{c.active ? "Pause" : "Turn back on"}</Button>
                       {data.monthlyReady && c.allowMonthly ? <Button size="sm" variant="ghost" loading={d.busy === `adopt-${c.id}`} onClick={() => void d.adoptDonors(c)}>Bring over my existing monthly donors</Button> : null}
@@ -130,15 +136,6 @@ export function DonationsPanel({ templateId, initial }: { templateId: string; in
               </>
             )}
           </Card>
-
-          <Card padding="lg">
-            <CardHeader title="Where the money goes" />
-            <p className="plx-small" style={{ margin: "8px 0 12px" }}>{data.paymentsReady ? "Gifts go to the payment account you connected. Money in your Plexo balance can be taken out under Your money." : "No payment account is connected yet, so gifts can't come in."}</p>
-            <div className="plx-don__btns">
-              <Link className="plx-btn plx-btn--secondary plx-btn--sm" href={payments}>Payment settings</Link>
-              <Link className="plx-btn plx-btn--secondary plx-btn--sm" href={shopHref(templateId, "money")}>Your money</Link>
-            </div>
-          </Card>
         </>
       )}
 
@@ -154,8 +151,6 @@ export function DonationsPanel({ templateId, initial }: { templateId: string; in
           <div className="plx-form">
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <Input label="What is it called?" value={draft.name} placeholder="e.g. Payment Order or Support our mission" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-              <Input label="A line about it" optional value={draft.description} placeholder="Short subtitle shown below the title" onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
-              <Input label="Button words" optional value={draft.buttonLabel} placeholder="e.g. MAKE PAYMENT or Donate" onChange={(e) => setDraft({ ...draft, buttonLabel: e.target.value })} />
             </div>
 
             <section className="plx-pt__sec" aria-label="Suggested amounts" style={{ marginTop: 8 }}>
@@ -176,41 +171,60 @@ export function DonationsPanel({ templateId, initial }: { templateId: string; in
               {draft.allowCustomAmount ? <Input label="Smallest gift you'll take" inputMode="decimal" value={draft.minAmount} onChange={(e) => setDraft({ ...draft, minAmount: e.target.value })} /> : null}
               <label className="plx-toggle"><span><b>Offer monthly giving</b><span className="plx-small" style={{ display: "block" }}>People can choose to give every month.</span></span><input type="checkbox" className="plx-switch" checked={draft.allowMonthly} onChange={(e) => setDraft({ ...draft, allowMonthly: e.target.checked })} /></label>
               {draft.allowMonthly ? <label className="plx-toggle"><span><b>Start on &ldquo;every month&rdquo;</b></span><input type="checkbox" className="plx-switch" checked={draft.defaultFrequency === "MONTHLY"} onChange={(e) => setDraft({ ...draft, defaultFrequency: e.target.checked ? "MONTHLY" : "ONCE" })} /></label> : null}
-              <Input label="Your goal" optional help="Shows a progress bar on your form." inputMode="decimal" value={draft.goal} onChange={(e) => setDraft({ ...draft, goal: e.target.value })} placeholder="500000" />
             </div>
 
-            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--plx-border)", display: "flex", flexDirection: "column", gap: 14 }}>
-              <div>
-                <b>After payment &amp; receipt emails</b>
-                <span className="plx-small" style={{ display: "block" }}>Customize what people see right on the website and in the receipt email they receive.</span>
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--plx-border)" }}>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                leftIcon={showOptional ? <ChevronUp size={16} aria-hidden /> : <ChevronDown size={16} aria-hidden />}
+                onClick={() => setShowOptional(!showOptional)}
+              >
+                {showOptional ? "Hide optional fields" : "Show optional fields"}
+              </Button>
+            </div>
+
+            {showOptional && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 12 }}>
+                <Input label="A line about it" optional value={draft.description} placeholder="Short subtitle shown below the title" onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+                <Input label="Button words" optional value={draft.buttonLabel} placeholder="e.g. MAKE PAYMENT or Donate" onChange={(e) => setDraft({ ...draft, buttonLabel: e.target.value })} />
+                <Input label="Your goal" optional help="Shows a progress bar on your form." inputMode="decimal" value={draft.goal} onChange={(e) => setDraft({ ...draft, goal: e.target.value })} placeholder="500000" />
+
+                <div style={{ marginTop: 6, paddingTop: 14, borderTop: "1px solid var(--plx-border)", display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div>
+                    <b>After payment &amp; receipt emails</b>
+                    <span className="plx-small" style={{ display: "block" }}>Customize what people see right on the website and in the receipt email they receive.</span>
+                  </div>
+                  <Textarea
+                    label="Message shown on page after payment"
+                    optional
+                    help="Shown in the confirmation banner immediately after someone pays."
+                    placeholder="e.g. Your payment has been received successfully."
+                    value={draft.thankYouMessage}
+                    onChange={(e) => setDraft({ ...draft, thankYouMessage: e.target.value })}
+                  />
+                  <Input
+                    label="Email receipt subject"
+                    optional
+                    help="The subject line of their receipt email."
+                    placeholder="e.g. Thank you for your payment"
+                    value={draft.emailSubject}
+                    onChange={(e) => setDraft({ ...draft, emailSubject: e.target.value })}
+                  />
+                  <Textarea
+                    label="Email receipt message / body"
+                    optional
+                    help="The personal note or thank-you body inside their receipt email."
+                    placeholder="e.g. Hi! We've received your payment successfully. Thank you for choosing Charisol. We appreciate your business and look forward to serving you! 😊"
+                    value={draft.emailBody}
+                    onChange={(e) => setDraft({ ...draft, emailBody: e.target.value })}
+                  />
+                </div>
               </div>
-              <Textarea
-                label="Message shown on page after payment"
-                optional
-                help="Shown in the confirmation banner immediately after someone pays."
-                placeholder="e.g. Your payment has been received successfully."
-                value={draft.thankYouMessage}
-                onChange={(e) => setDraft({ ...draft, thankYouMessage: e.target.value })}
-              />
-              <Input
-                label="Email receipt subject"
-                optional
-                help="The subject line of their receipt email."
-                placeholder="e.g. Thank you for your payment"
-                value={draft.emailSubject}
-                onChange={(e) => setDraft({ ...draft, emailSubject: e.target.value })}
-              />
-              <Textarea
-                label="Email receipt message / body"
-                optional
-                help="The personal note or thank-you body inside their receipt email."
-                placeholder="e.g. Hi! We've received your payment successfully. Thank you for choosing Charisol. We appreciate your business and look forward to serving you! 😊"
-                value={draft.emailBody}
-                onChange={(e) => setDraft({ ...draft, emailBody: e.target.value })}
-              />
-            </div>
+            )}
 
-            {d.error ? <p className="plx-field__error" role="alert">{d.error}</p> : null}
+            {d.error ? <p className="plx-field__error" role="alert" style={{ marginTop: 12 }}>{d.error}</p> : null}
           </div>
         ) : null}
       </Modal>

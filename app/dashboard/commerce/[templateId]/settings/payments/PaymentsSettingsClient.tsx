@@ -28,6 +28,8 @@ export type InitialPaymentsSettings = {
   bankTransferAccountName: string;
   bankTransferAccountNumber: string;
   bankTransferInstructions: string;
+  currency?: string;
+  notificationEmail?: string;
 };
 
 const inputStyle: React.CSSProperties = {

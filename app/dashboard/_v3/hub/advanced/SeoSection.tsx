@@ -3,7 +3,7 @@
 import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Globe, ImagePlus, FileText } from "lucide-react";
-import { Badge, Button, Card, CardHeader, Input, Skeleton, Textarea, useToast } from "../../ui";
+import { Badge, Button, Card, CardHeader, Input, OptimisticLoader, Skeleton, Textarea, useToast } from "../../ui";
 import { seoGap, seoLengthHint, type SeoPageRow } from "@/lib/dashboardV3/hubAdvanced";
 import { errMsg, hubApi } from "../hubApi";
 
@@ -92,7 +92,7 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
   return (
     <div className="plx-adv__stack">
       {pages === null ? (
-        <Card><div className="plx-form"><Skeleton height={56} /><Skeleton height={56} /><Skeleton height={56} /></div></Card>
+        <Card><div style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Loading SEO metadata" subtitle="Reading search tags and social share previews" steps={["Loading page meta tags…", "Generating search snippets…", "Ready."]} /></div></Card>
       ) : pages.length === 0 ? (
         <Card><p className="plx-body" role="alert">{error ?? "This site has no pages yet."}</p></Card>
       ) : (

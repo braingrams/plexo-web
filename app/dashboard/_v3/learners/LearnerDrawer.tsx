@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Check, Clock, Lock, Mail, UserCheck, UserMinus, X } from "lucide-react";
-import { Avatar, Badge, Button, Portal, ProgressBar, Skeleton } from "../ui";
+import { Avatar, Badge, Button, OptimisticLoader, Portal, ProgressBar, Skeleton } from "../ui";
 import { hubApi } from "../hub/hubApi";
 import { displayName, lastActiveLabel, learnerState, progressPercent, type LearnerRow } from "@/lib/dashboardV3/learners";
 import { lessonStates, type LessonLite, type LessonProgressState, type ProgressRow } from "@/lib/dashboardV3/lessonRules";
@@ -87,7 +87,7 @@ export function LearnerDrawer({ courseId, row, lessons, onClose, onResend, onApp
             <div>
               <h3 className="plx-h3" style={{ marginBottom: 6 }}>Lesson by lesson</h3>
               {failed ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">We couldn&apos;t load their lessons. Close this and try again.</div> : null}
-              {!steps && !failed ? <div style={{ display: "grid", gap: 10 }}>{[0, 1, 2].map((i) => <Skeleton key={i} style={{ height: 36 }} />)}</div> : null}
+              {!steps && !failed ? <div style={{ padding: "24px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Loading course progress" subtitle="Mapping lesson completions" steps={["Retrieving learner milestone records…", "Calculating lesson states…", "Ready."]} /></div> : null}
               {steps && steps.length === 0 ? <p className="plx-small">This course has no lessons yet.</p> : null}
               {steps ? (
                 <ol className="plx-steps-l">

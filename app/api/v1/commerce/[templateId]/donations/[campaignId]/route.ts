@@ -4,6 +4,9 @@ import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
 import { CommerceDonationCampaign } from "@/lib/db/commerceEntities";
 import { normalizeCampaignInput } from "@/lib/commerce/donations";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 /** PATCH — edit a campaign (amounts, monthly option, goal, thank-you message, on/off). */
 export async function PATCH(request: NextRequest, context: { params: Promise<{ templateId: string; campaignId: string }> }): Promise<NextResponse> {
   const { templateId, campaignId } = await context.params;
@@ -20,7 +23,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ t
   const values = Object.fromEntries(Object.entries(normalized.values).filter(([, v]) => v !== undefined));
   if (Object.keys(values).length > 0) await CommerceDonationCampaign.patch({ templateId, id: campaignId }).set(values).go();
   const { data: campaign } = await CommerceDonationCampaign.get({ templateId, id: campaignId }).go();
-  return NextResponse.json({ campaign });
+  return NextResponse.json({ campaign }, { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } });
 }
 
 /**

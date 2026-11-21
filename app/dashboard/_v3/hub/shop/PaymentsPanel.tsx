@@ -1,14 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Copy, Landmark } from "lucide-react";
+import { Copy, Landmark, Mail } from "lucide-react";
 import { Badge, Button, Input, Textarea } from "../../ui";
 import type { InitialPaymentsSettings } from "@/app/dashboard/commerce/[templateId]/settings/payments/PaymentsSettingsClient";
 import { PROVIDERS, bankProblem, cardSetupGaps, cardStatus, type BankFields, type PaymentFields, type Provider } from "@/lib/commerce/shopSettingsForm";
+import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";
 import { Group, SaveBar, Switch, putSettings, useSettingsForm } from "./useSettingsForm";
 
 type Access = "NONE" | "PENDING" | "APPROVED" | "REJECTED" | "LOADING";
-type V = PaymentFields & { bank: BankFields };
+type V = PaymentFields & { bank: BankFields; currency: string; notificationEmail: string };
 
 function CopyBox({ label, value }: { label: string; value: string }) {
   const [copied, setCopied] = useState(false);
@@ -46,6 +47,8 @@ export function PaymentsPanel({ templateId, initial }: { templateId: string; ini
     stripeSecretSet: { TEST: !!initial.stripeTestSecretKeyMasked, LIVE: !!initial.stripeLiveSecretKeyMasked },
     stripeSecretNew: { TEST: "", LIVE: "" },
     bank: { enabled: initial.bankTransferEnabled, bankName: initial.bankTransferBankName, accountName: initial.bankTransferAccountName, accountNumber: initial.bankTransferAccountNumber, instructions: initial.bankTransferInstructions },
+    currency: initial.currency ?? "USD",
+    notificationEmail: initial.notificationEmail ?? "",
   };
 
   const form = useSettingsForm<V>(start, async (v) => {
@@ -56,6 +59,8 @@ export function PaymentsPanel({ templateId, initial }: { templateId: string; ini
     if (bad) return { error: bad };
     const res = await putSettings(templateId, {
       paymentProvider: v.provider,
+      currency: v.currency,
+      notificationEmail: v.notificationEmail.trim() || undefined,
       paystackMode: v.paystackMode,
       paystackTestPublicKey: v.paystackPublic.TEST,
       paystackLivePublicKey: v.paystackPublic.LIVE,
@@ -165,6 +170,35 @@ export function PaymentsPanel({ templateId, initial }: { templateId: string; ini
           </>
         ) : null}
       </Group>
+      <Group title="Currency" help="The currency people donate or pay in.">
+        <div className="plx-hchips" role="radiogroup" aria-label="Currency options">
+          {SUPPORTED_STORE_CURRENCIES.map((c) => (
+            <button
+              key={c.code}
+              type="button"
+              role="radio"
+              aria-checked={v.currency === c.code}
+              className="plx-hchip"
+              onClick={() => form.patch({ currency: c.code })}
+            >
+              {c.symbol} {c.code} — {c.label}
+            </button>
+          ))}
+        </div>
+      </Group>
+
+      <Group title="Payment notification email" help="Where alerts are sent whenever someone pays or donates." status={<Mail size={20} aria-hidden style={{ color: "var(--plx-deep)" }} />}>
+        <Input
+          label="Notification email address"
+          optional
+          type="email"
+          value={v.notificationEmail}
+          onChange={(e) => form.patch({ notificationEmail: e.target.value })}
+          placeholder="e.g. alerts@example.com"
+          help="Leave empty to send payment notices to your personal Plexo account email."
+        />
+      </Group>
+
       <SaveBar form={form} />
     </div>
   );

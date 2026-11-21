@@ -49,11 +49,13 @@ export function OptimisticLoader({
     if (currentStepIndex >= steps.length - 1) return;
     const timer = setTimeout(() => {
       setCurrentStepIndex((prev) => (prev < steps.length - 1 ? prev + 1 : prev));
-    }, 1800);
+    }, 1600);
     return () => clearTimeout(timer);
   }, [currentStepIndex, steps.length]);
 
   const activeStepText = steps[currentStepIndex];
+  const resolvedTitle = title ?? (stage === "making-site" ? `Making ${siteName}…` : stage === "finding-designs" ? `Finding the best look for ${siteName}…` : "Constructing your workspace…");
+  const progressPercent = Math.min(100, Math.round(((currentStepIndex + 1) / steps.length) * 100));
 
   return (
     <div
@@ -65,18 +67,20 @@ export function OptimisticLoader({
         flexDirection: "column",
         alignItems: "center",
         justifyContent: "center",
-        padding: "48px 24px",
+        padding: "40px 24px",
         textAlign: "center",
-        gap: 24,
-        maxWidth: 580,
+        gap: 20,
+        maxWidth: 520,
         margin: "0 auto",
+        width: "100%",
       }}
     >
+      {/* Sleek architectural reveal emblem */}
       <div
         style={{
           position: "relative",
-          width: 72,
-          height: 72,
+          width: 58,
+          height: 58,
           display: "grid",
           placeItems: "center",
         }}
@@ -86,131 +90,160 @@ export function OptimisticLoader({
             position: "absolute",
             inset: 0,
             borderRadius: "50%",
-            background: "color-mix(in srgb, var(--plx-brand) 25%, transparent)",
-            animation: "plx-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+            background: "color-mix(in srgb, var(--plx-brand) 18%, transparent)",
+            animation: "plx-pulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite",
           }}
           aria-hidden
         />
         <div
           style={{
-            width: 54,
-            height: 54,
-            borderRadius: "50%",
-            background: "var(--plx-tint)",
-            border: "2px solid var(--plx-deep, var(--plx-brand))",
+            width: 46,
+            height: 46,
+            borderRadius: 14,
+            background: "var(--plx-surface)",
+            border: "1px solid var(--plx-border-strong)",
             color: "var(--plx-deep, var(--plx-brand))",
             display: "grid",
             placeItems: "center",
-            boxShadow: "0 0 16px color-mix(in srgb, var(--plx-brand) 30%, transparent)",
+            boxShadow: "0 0 20px color-mix(in srgb, var(--plx-brand) 20%, transparent)",
             zIndex: 1,
           }}
         >
-          <RefreshCw size={24} className="plx-spin-slow" />
+          <Loader2 size={22} className="plx-spin" />
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, width: "100%" }}>
+      {/* Main title & subtitle with refined typography */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, width: "100%" }}>
         <h2
           style={{
-            fontSize: 22,
-            fontWeight: 800,
+            fontSize: 20,
+            fontWeight: 700,
             letterSpacing: "-0.015em",
             color: "var(--plx-text)",
             margin: 0,
           }}
         >
-          {title ?? (stage === "making-site" ? `Making ${siteName}…` : `Finding the best look for ${siteName}…`)}
+          {resolvedTitle}
         </h2>
-        <p
-          style={{
-            fontSize: 15,
-            color: "var(--plx-muted)",
-            margin: 0,
-            minHeight: 24,
-            transition: "opacity 0.2s ease, transform 0.2s ease",
-          }}
-        >
-          {subtitle ?? activeStepText}
-        </p>
+        {subtitle ? (
+          <p
+            style={{
+              fontSize: 14,
+              color: "var(--plx-muted)",
+              margin: 0,
+              lineHeight: 1.5,
+            }}
+          >
+            {subtitle}
+          </p>
+        ) : null}
       </div>
 
-      {/* Progress pill steps list */}
+      {/* Refined construction progression track */}
       <div
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: 10,
+          gap: 12,
           width: "100%",
-          maxWidth: 420,
-          background: "var(--plx-surface)",
-          border: "1px solid var(--plx-border)",
-          borderRadius: 14,
-          padding: "16px 20px",
-          textAlign: "left",
-          boxShadow: "var(--plx-shadow-card)",
+          maxWidth: 380,
+          margin: "4px auto 0",
         }}
       >
-        {steps.map((step, idx) => {
-          const isDone = idx < currentStepIndex;
-          const isCurrent = idx === currentStepIndex;
-          return (
-            <div
-              key={step}
+        <div
+          style={{
+            width: "100%",
+            height: 3,
+            borderRadius: 999,
+            background: "var(--plx-border)",
+            overflow: "hidden",
+            position: "relative",
+          }}
+        >
+          <div
+            style={{
+              width: `${progressPercent}%`,
+              height: "100%",
+              background: "var(--plx-brand)",
+              borderRadius: 999,
+              transition: "width 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
+              boxShadow: "0 0 8px var(--plx-brand)",
+            }}
+          />
+        </div>
+
+        {/* Active construction milestone */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 12,
+            minHeight: 22,
+          }}
+        >
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              textAlign: "left",
+              minWidth: 0,
+            }}
+          >
+            <span
               style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
+                width: 6,
+                height: 6,
+                borderRadius: "50%",
+                background: "var(--plx-brand)",
+                boxShadow: "0 0 6px var(--plx-brand)",
+                flexShrink: 0,
+              }}
+              aria-hidden
+            />
+            <span
+              style={{
                 fontSize: 13,
-                fontWeight: isCurrent ? 700 : isDone ? 600 : 500,
-                color: isCurrent ? "var(--plx-text)" : isDone ? "var(--plx-muted)" : "color-mix(in srgb, var(--plx-muted) 60%, transparent)",
-                transition: "all 0.25s ease",
+                fontWeight: 600,
+                color: "var(--plx-text)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                transition: "opacity 0.2s ease",
               }}
             >
-              <div
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: "50%",
-                  display: "grid",
-                  placeItems: "center",
-                  flexShrink: 0,
-                  background: isDone
-                    ? "var(--plx-deep, var(--plx-brand))"
-                    : isCurrent
-                    ? "color-mix(in srgb, var(--plx-brand) 25%, transparent)"
-                    : "var(--plx-sunken)",
-                  color: isDone ? "var(--plx-on-brand, var(--plx-surface))" : "var(--plx-deep, var(--plx-brand))",
-                  border: isCurrent ? "1.5px solid var(--plx-deep, var(--plx-brand))" : "none",
-                }}
-              >
-                {isDone ? (
-                  <Check size={12} strokeWidth={3} />
-                ) : isCurrent ? (
-                  <Loader2 size={12} className="plx-spin" />
-                ) : (
-                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: "currentColor", opacity: 0.4 }} />
-                )}
-              </div>
-              <span style={{ flex: 1 }}>{step}</span>
-            </div>
-          );
-        })}
+              {activeStepText}
+            </span>
+          </div>
+
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: "var(--plx-faint)",
+              textTransform: "uppercase",
+              letterSpacing: "0.06em",
+              flexShrink: 0,
+            }}
+          >
+            {currentStepIndex + 1}/{steps.length}
+          </span>
+        </div>
       </div>
 
       <style>{`
         @keyframes plx-pulse {
-          0%, 100% { opacity: 0.4; transform: scale(1); }
-          50% { opacity: 0.8; transform: scale(1.15); }
+          0%, 100% { opacity: 0.35; transform: scale(1); }
+          50% { opacity: 0.8; transform: scale(1.18); }
         }
         @keyframes plx-spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
         }
         .plx-spin {
-          animation: plx-spin 1s linear infinite;
-        }
-        .plx-spin-slow {
-          animation: plx-spin 8s linear infinite;
+          animation: plx-spin 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
         }
       `}</style>
     </div>

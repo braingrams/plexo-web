@@ -9,7 +9,7 @@ import {
   CommerceDigitalDelivery,
   CommerceSettings,
 } from "./commerceEntities";
-import { NotificationPreferences } from "./coreEntities";
+import { NotificationPreferences, User } from "./coreEntities";
 import { Template, LmsFunnel } from "./contentEntities";
 import { activateLmsEnrollmentFromOrder } from "@/lib/lms/enrollment";
 import { handleDonationPaid, isDonationOrder } from "@/lib/commerce/donations";
@@ -148,18 +148,27 @@ async function notifyPaymentReceived(order: OrderItem): Promise<void> {
   const { data: template } = await Template.get({ id: order.templateId }).go();
   if (!template || !("id" in template)) return;
 
-  const recipient = await resolveNotificationRecipient(order.organizationId, order.customerEmail);
+  const { data: owner } = template.userId ? await User.get({ id: template.userId }).go() : { data: null };
+  const recipient = await resolveNotificationRecipient(order.organizationId, order.templateId, owner?.email);
   if (!recipient) return;
 
-  const base = await resolveSitePublicUrl(order.templateId);
+  const appBase = process.env.NEXT_PUBLIC_APP_URL || "https://plexopages.com";
+  const isDonation = isDonationOrder(order);
+  const orderUrl = isDonation
+    ? `${appBase}/dashboard/sites/${order.templateId}?tab=donations&sub=wallet`
+    : `${appBase}/dashboard/sites/${order.templateId}?tab=shop&section=orders`;
+
   const html = buildPaymentReceivedEmail({
     siteName: template.name,
     amountFormatted: formatMoney(order.amountMinor, order.currency ?? "NGN"),
     customerEmail: order.customerEmail,
     orderNumber: order.orderNumber,
-    orderUrl: `${base}/dashboard/commerce/${order.templateId}/orders`,
+    orderUrl,
+    isDonation,
   });
-  const subject = `Payment received on ${template.name} — ${order.orderNumber}`;
+  const subject = isDonation
+    ? `Donation received on ${template.name} — ${order.orderNumber}`
+    : `Payment received on ${template.name} — ${order.orderNumber}`;
   try {
     await sendMaildripEmail({ to: recipient, subject, html });
     logEmailDelivery({
@@ -178,13 +187,21 @@ async function notifyPaymentReceived(order: OrderItem): Promise<void> {
 
 /** Ported from lib/notificationPreferences.ts's resolveNotificationRecipient, "payments"
  * type only (the one this webhook needs) — same semantics: a missing preferences row
- * means the field's own schema default applies (payments defaults to true), not "off." */
-async function resolveNotificationRecipient(organizationId: string, fallbackEmail: string): Promise<string | null> {
-  const { data: prefs } = await NotificationPreferences.get({ organizationId }).go();
+ * means the field's own schema default applies (payments defaults to true), not "off."
+ * Never falls back to the customer/payer email. */
+async function resolveNotificationRecipient(
+  organizationId: string,
+  templateId: string,
+  fallbackEmail?: string | null,
+): Promise<string | null> {
+  const [{ data: prefs }, { data: settings }] = await Promise.all([
+    NotificationPreferences.get({ organizationId }).go(),
+    CommerceSettings.get({ templateId }).go(),
+  ]);
   const found = prefs && "organizationId" in prefs;
   const enabled = found ? prefs.payments : true;
   if (!enabled) return null;
-  const to = (found ? prefs.notificationEmail : null) || fallbackEmail;
+  const to = settings?.notificationEmail || (found ? prefs.notificationEmail : null) || fallbackEmail;
   return to || null;
 }
 

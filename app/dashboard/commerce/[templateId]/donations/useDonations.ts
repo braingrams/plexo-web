@@ -16,9 +16,10 @@ export function useDonations(templateId: string, initial: DonationsOverview) {
   const apiBase = `/api/v1/commerce/${templateId}/donations`;
 
   async function reload() {
-    const res = await fetch(apiBase);
+    const res = await fetch(apiBase, { cache: "no-store" });
     if (res.ok) setData(await res.json());
   }
+
   async function save() {
     if (!draft) return;
     setError(null);
@@ -26,9 +27,23 @@ export function useDonations(templateId: string, initial: DonationsOverview) {
     if (typeof body === "string") return setError(body);
     setSaving(true);
     try {
-      const res = await fetch(draft.id ? `${apiBase}/${draft.id}` : apiBase, { method: draft.id ? "PATCH" : "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const res = await fetch(draft.id ? `${apiBase}/${draft.id}` : apiBase, {
+        method: draft.id ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      });
       const out = await res.json();
       if (!res.ok) throw new Error(out.error ?? "We couldn't save that donation form. Please try again.");
+
+      if (out.campaign) {
+        setData((prev) => ({
+          ...prev,
+          campaigns: prev.campaigns.some((c) => c.id === out.campaign.id)
+            ? prev.campaigns.map((c) => (c.id === out.campaign.id ? { ...c, ...out.campaign } : c))
+            : [out.campaign, ...prev.campaigns],
+        }));
+      }
       setDraft(null);
       await reload();
     } catch (err) {
@@ -37,12 +52,14 @@ export function useDonations(templateId: string, initial: DonationsOverview) {
       setSaving(false);
     }
   }
+
   async function toggleActive(c: Campaign) {
     setBusy(c.id);
     await fetch(`${apiBase}/${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: !c.active }) });
     await reload();
     setBusy(null);
   }
+
   async function adoptDonors(c: Campaign) {
     setBusy(`adopt-${c.id}`);
     setNotice(null);
@@ -52,6 +69,7 @@ export function useDonations(templateId: string, initial: DonationsOverview) {
     await reload();
     setBusy(null);
   }
+
   async function stopGift(id: string) {
     setBusy(id);
     const res = await fetch(`${apiBase}/subscriptions/${id}`, { method: "DELETE" });
@@ -59,10 +77,12 @@ export function useDonations(templateId: string, initial: DonationsOverview) {
     await reload();
     setBusy(null);
   }
+
   function copyEmbed(id: string) {
     void navigator.clipboard.writeText(embedCode(id));
     setCopied(id);
     setTimeout(() => setCopied(null), 2000);
   }
+
   return { data, draft, setDraft, saving, error, setError, notice, copied, busy, save, toggleActive, adoptDonors, stopGift, copyEmbed };
 }

@@ -129,7 +129,9 @@ export function MigrationHistory({ siteId, emptyHint }: { siteId?: string; empty
             <p className="plx-small" style={{ margin: 0 }}>It&apos;s safe to run more than once: nothing is copied twice, and your old WordPress site isn&apos;t touched.</p>
           </div>
         ) : (
-          <Skeleton height={20} width="70%" />
+          <div style={{ padding: "24px 16px", display: "grid", placeItems: "center" }}>
+            <OptimisticLoader title="Inspecting migration snapshot" subtitle="Comparing changes and preparing preview" steps={["Loading migration snapshot…", "Comparing changes…", "Ready."]} />
+          </div>
         )}
       </Modal>
     </>

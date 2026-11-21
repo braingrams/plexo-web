@@ -4,7 +4,7 @@ import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { Check, Copy } from "lucide-react";
-import { Button, Card, CardHeader, Notice, SegmentedControl, Skeleton, useToast } from "../../ui";
+import { Button, Card, CardHeader, Notice, OptimisticLoader, SegmentedControl, Skeleton, useToast } from "../../ui";
 import { ensureMonaco, languageFor } from "@/app/dashboard/apps/_components/monaco";
 import { useMonacoTheme } from "../../../_components/EditorTheme";
 import { errMsg, hubApi } from "../hubApi";
@@ -24,7 +24,7 @@ export function CodeSection({ siteId }: { siteId: string }) {
   useEffect(() => { if (pages?.length) setPageId((p) => p ?? pages[0].id); }, [pages]);
   const page = pages?.find((p) => p.id === pageId) ?? null;
 
-  if (!pages) return <Card><Skeleton height={64} /></Card>;
+  if (!pages) return <Card><div style={{ padding: "28px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Loading site code" subtitle="Reading page templates and markup" steps={["Loading pages…", "Preparing code inspector…", "Ready."]} /></div></Card>;
   if (!page) return <Card><p className="plx-body" role="alert">{error ?? "This site has no pages yet."}</p></Card>;
   return (
     <div className="plx-adv__stack">
@@ -59,7 +59,7 @@ function GeneratedCode({ page }: { page: PickerPage }) {
       />
       <div className="plx-adv__stack">
         <SegmentedControl<Mode> label="What to show" value={mode} onChange={setMode} options={[{ value: "html", label: "Page code" }, { value: "json", label: "Design data" }, { value: "text", label: "Just the words" }]} />
-        {error ? <p className="plx-field__error" role="alert">{error}</p> : !data ? <Skeleton height={220} /> : <pre className="plx-adv__code" tabIndex={0} aria-label="Code">{text || "Nothing here yet."}</pre>}
+        {error ? <p className="plx-field__error" role="alert">{error}</p> : !data ? <div style={{ padding: "40px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Compiling code view" subtitle="Formatting markup and structure" steps={["Fetching source code…", "Formatting syntax…", "Ready."]} /></div> : <pre className="plx-adv__code" tabIndex={0} aria-label="Code">{text || "Nothing here yet."}</pre>}
       </div>
     </Card>
   );
@@ -107,7 +107,7 @@ function OwnCode({ page }: { page: PickerPage }) {
     }
   }
 
-  if (!files) return <Card><Skeleton height={240} /></Card>;
+  if (!files) return <Card><div style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Loading project files" subtitle="Scanning uploaded files and assets" steps={["Reading project file manifest…", "Preparing editor…", "Ready."]} /></div></Card>;
   const editable = files.filter((f) => f.editable);
   const current = files.find((f) => f.path === active) ?? editable[0];
   return (

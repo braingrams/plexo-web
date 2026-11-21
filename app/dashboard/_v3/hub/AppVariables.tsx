@@ -3,7 +3,7 @@
 import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
-import { Badge, Button, Card, CardHeader, Input, Select, Skeleton, useToast } from "../ui";
+import { Badge, Button, Card, CardHeader, Input, OptimisticLoader, Select, Skeleton, useToast } from "../ui";
 import { ENV_NAME, isPublicName } from "@/lib/dashboardV3/hubApp";
 import { errMsg, hubApi } from "./hubApi";
 
@@ -70,7 +70,7 @@ export function AppVariables({ siteId, onRebuild }: { siteId: string; onRebuild:
     }
   }
 
-  if (!vars) return <Card><Skeleton height={20} width="40%" style={{ marginBottom: 12 }} /><Skeleton height={56} /></Card>;
+  if (!vars) return <Card><div style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Loading environment settings" subtitle="Reading configuration variables and secrets" steps={["Connecting to encrypted environment storage…", "Loading variables and scope keys…", "Ready."]} /></div></Card>;
   if (locked) return <Card><CardHeader title="Settings and passwords" description={locked} /></Card>;
   return (
     <Card data-tour="hub-app-env">

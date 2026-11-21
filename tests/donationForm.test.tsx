@@ -57,7 +57,7 @@ describe("DonationsPanel", () => {
     const host = await mount(<DonationsPanel templateId="s1" initial={overview()} />);
     expect(host.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("25");
     expect(host.textContent).toContain("Build a well");
-    expect(host.textContent).toContain("Where the money goes");
+    expect(host.textContent).not.toContain("Where the money goes");
     const empty = await mount(<DonationsPanel templateId="s1" initial={overview({ campaigns: [] })} />);
     expect(empty.textContent).toContain("Start taking donations");
     expect(Array.from(empty.querySelectorAll("button")).some((b) => b.textContent?.includes("New donation form"))).toBe(true);
@@ -65,7 +65,7 @@ describe("DonationsPanel", () => {
   it("tells an owner with no payment account to connect one, linking to the Payments section", async () => {
     const host = await mount(<DonationsPanel templateId="s1" initial={overview({ paymentsReady: false })} />);
     expect(host.textContent).toContain("Connect a way to get paid first");
-    expect(host.querySelector('a[href="/dashboard/sites/s1?tab=shop&section=settings&part=payments"]')).not.toBeNull();
+    expect(host.querySelector('a[href="/dashboard/sites/s1?tab=donations&sub=payments"]')).not.toBeNull();
   });
   it("pauses a form through the existing PATCH call", async () => {
     const calls: { url: string; method?: string; body?: string }[] = [];

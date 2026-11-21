@@ -65,7 +65,9 @@ function score(r: PageRecipe, industry: SiteIndustry, style: SiteStyle, goal: st
   if (/\b(food|restaurant|chef|cook|cooking|bake|bakery|cafe|kitchen|menu)\b/i.test(text)) {
     if (r.id === "home-hospitality" || r.id === "home-local") s += 8;
   }
-  if (/\b(shop|store|sell|product|merch|clothing|boutique|order|buy)\b/i.test(text) || goal === "store") {
+  if (goal === "store") {
+    if (r.id === "home-shop") s += 12;
+  } else if (/\b(shop|store|sell|product|merch|clothing|boutique|order|buy)\b/i.test(text)) {
     if (r.id === "home-shop" || r.id === "landing-sales") s += 7;
   }
   if (/\b(course|class|learn|lesson|coach|coaching|train|academy|book|guide)\b/i.test(text) || goal === "course") {
@@ -90,8 +92,10 @@ export function rankDesigns(p: SolBuildProfile): PageRecipe[] {
   const industry = detectIndustry(brief);
   const style = detectStyle({ tone: brief.tone, industry: brief.industry, about: brief.about, name: brief.name });
   const aboutText = `${brief.name} ${brief.about ?? ""} ${p.goal ?? ""}`;
+  const targetType = pageTypeForGoal(p.goal);
+  const candidates = PAGE_RECIPES.filter((r) => r.pageType === targetType);
 
-  return [...PAGE_RECIPES]
+  return candidates
     .map((r, i) => ({ r, i, s: score(r, industry, style, p.goal, aboutText) }))
     .sort((a, b) => b.s - a.s || a.i - b.i)
     .map((x) => x.r);
@@ -99,8 +103,8 @@ export function rankDesigns(p: SolBuildProfile): PageRecipe[] {
 
 export const toChoice = (r: PageRecipe): DesignChoice => ({ id: r.id, name: r.name, description: r.description });
 
-/** Top design chosen for this owner, and the full ranked catalog for "Change design" and "See all designs". */
-export function pickDesigns(p: SolBuildProfile, count = 1): { top: DesignChoice[]; others: DesignChoice[] } {
+/** Top designs chosen for this owner, and the full ranked catalog for "Change design" and "See all designs". */
+export function pickDesigns(p: SolBuildProfile, count = 3): { top: DesignChoice[]; others: DesignChoice[] } {
   const ranked = rankDesigns(p).map(toChoice);
   return { top: ranked.slice(0, count), others: ranked.slice(count) };
 }
