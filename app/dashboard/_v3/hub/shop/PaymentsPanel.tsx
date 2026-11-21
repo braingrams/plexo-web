@@ -187,15 +187,16 @@ export function PaymentsPanel({ templateId, initial }: { templateId: string; ini
         </div>
       </Group>
 
-      <Group title="Payment notification email" help="Where alerts are sent whenever someone pays or donates." status={<Mail size={20} aria-hidden style={{ color: "var(--plx-deep)" }} />}>
+      <Group title="Who to tell about donations & payments" help="We email this address every time someone gives or makes a payment. Leave it empty to use your account email." status={<Mail size={20} aria-hidden style={{ color: "var(--plx-deep)" }} />}>
         <Input
-          label="Notification email address"
-          optional
+          label="Email for payment alerts"
           type="email"
+          inputMode="email"
           value={v.notificationEmail}
           onChange={(e) => form.patch({ notificationEmail: e.target.value })}
-          placeholder="e.g. alerts@example.com"
-          help="Leave empty to send payment notices to your personal Plexo account email."
+          placeholder="you@example.com"
+          autoComplete="email"
+          help="Leave empty to send payment notices to your Plexo account email."
         />
       </Group>
 
