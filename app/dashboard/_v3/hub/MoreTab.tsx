@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Layers, Wallet } from "lucide-react";
-import { Card } from "../ui";
+import { ArrowRight, BadgeDollarSign, Download, Layers, LayoutGrid, Store, Wallet, Zap } from "lucide-react";
+import { ButtonLink, Card } from "../ui";
 import { SellTemplateCard } from "./SellTemplateCard";
 import { AddMoreCards } from "./AddMore";
 import type { HubFrameSite } from "./HubFrame";
@@ -13,6 +13,7 @@ export function MoreTab({
   site,
   features,
   pages = [],
+  experience,
 }: {
   site: HubFrameSite;
   features: HubFeatures;
@@ -21,23 +22,13 @@ export function MoreTab({
 }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 36, paddingBottom: 64 }}>
-      {/* Top Header */}
-      <div>
-        <h1 className="plx-h1">More for &ldquo;{site.name}&rdquo;</h1>
-        <p className="plx-hub__sub">
-          Add modular capabilities to this site, or monetize your custom design on the creator marketplace.
-        </p>
-      </div>
-
-      {/* 1. Add More to Your Site Section - clean feature cards first */}
-      <section aria-labelledby="addmore-section" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-        <AddMoreCards
-          siteId={site.id}
-          siteName={site.name}
-          features={features}
-          pages={pages}
-        />
-      </section>
+      {/* 1. Add More to Your Site Section */}
+      <AddMoreCards
+        siteId={site.id}
+        siteName={site.name}
+        features={features}
+        pages={pages}
+      />
 
       {/* 2. Template Marketplace & Monetization Section */}
       <section aria-labelledby="marketplace-monetization-heading" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -52,14 +43,50 @@ export function MoreTab({
 
         <SellTemplateCard siteId={site.id} siteName={site.name} />
 
-        {/* Quick links to Marketplace management without redundant browse button */}
+        {/* Quick links to Marketplace management */}
         <div
           style={{
             display: "grid",
             gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
             gap: 16,
+            marginTop: 4,
           }}
         >
+          <Card padding="md">
+            <Link
+              href="/dashboard/marketplace"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                textDecoration: "none",
+                color: "var(--plx-text)",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <span
+                  style={{
+                    width: 38,
+                    height: 38,
+                    borderRadius: 10,
+                    background: "var(--plx-tint)",
+                    color: "var(--plx-deep)",
+                    display: "grid",
+                    placeItems: "center",
+                  }}
+                  aria-hidden
+                >
+                  <Store size={20} />
+                </span>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                  <b style={{ fontSize: 14, fontWeight: 700 }}>Browse marketplace</b>
+                  <span style={{ fontSize: 12, color: "var(--plx-muted)" }}>Explore templates and designs</span>
+                </div>
+              </div>
+              <ArrowRight size={16} style={{ color: "var(--plx-muted)" }} />
+            </Link>
+          </Card>
+
           <Card padding="md">
             <Link
               href="/dashboard/marketplace/listings"

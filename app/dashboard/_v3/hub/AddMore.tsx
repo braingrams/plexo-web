@@ -4,36 +4,58 @@ import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useEffect, useState } from "react";
 import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowRight, BookOpen, Calendar, Check, Clock, GraduationCap, HeartHandshake, Mail, ShoppingBag } from "lucide-react";
+import { ArrowDown, ArrowRight, Check, Clock, HeartHandshake } from "lucide-react";
 import { Button, ButtonLink, Modal, useToast } from "../ui";
 import { addOnsFor, hubTabHref, type AddOnId, type HubFeatures } from "@/lib/dashboardV3/hubTabs";
 import { addMoreExample, type ExamplePage } from "@/lib/dashboardV3/addMoreExamples";
 import { errMsg, hubApi } from "./hubApi";
 
-function AddOnIcon({ id }: { id: AddOnId }) {
+/** A little picture of what each add-on gives you, drawn with tokens so it follows the theme. */
+function Art({ id }: { id: AddOnId }) {
   switch (id) {
     case "store":
-      return <ShoppingBag size={22} aria-hidden />;
+      return (
+        <span className="plx-art plx-art--store" aria-hidden>
+          {[0, 1, 2].map((n) => (
+            <span key={n} className="plx-art__prod"><i /><b /><u /></span>
+          ))}
+        </span>
+      );
     case "blog":
-      return <BookOpen size={22} aria-hidden />;
+      return (
+        <span className="plx-art plx-art--blog" aria-hidden>
+          <span className="plx-art__post"><i /><b /><u /><u /></span>
+          <span className="plx-art__post plx-art__post--2"><i /><b /><u /></span>
+        </span>
+      );
     case "course":
-      return <GraduationCap size={22} aria-hidden />;
+      return (
+        <span className="plx-art plx-art--course" aria-hidden>
+          <span className="plx-art__video"><span /></span>
+          <span className="plx-art__lessons"><b /><b /><b /></span>
+        </span>
+      );
     case "bookings":
-      return <Calendar size={22} aria-hidden />;
+      return (
+        <span className="plx-art plx-art--bookings" aria-hidden>
+          <span className="plx-art__cal">{Array.from({ length: 21 }, (_, n) => <i key={n} className={n === 9 ? "on" : n === 16 ? "dot" : ""} />)}</span>
+          <span className="plx-art__slot"><Clock size={12} />10:30</span>
+        </span>
+      );
     case "donations":
-      return <HeartHandshake size={22} aria-hidden />;
+      return (
+        <span className="plx-art plx-art--donations" aria-hidden style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <HeartHandshake size={32} style={{ color: "var(--plx-brand)" }} />
+        </span>
+      );
     default:
-      return <Mail size={22} aria-hidden />;
+      return (
+        <span className="plx-art plx-art--news" aria-hidden>
+          <span className="plx-art__form"><i /><b>Join</b></span>
+          <span className="plx-art__note"><u /><u /></span>
+        </span>
+      );
   }
-}
-
-/** Clean icon badge representation for add-ons, following the brand tokens. */
-function Art({ id }: { id: AddOnId }) {
-  return (
-    <div className="plx-aomodal__badge" aria-hidden>
-      <AddOnIcon id={id} />
-    </div>
-  );
 }
 
 const WHAT: Record<AddOnId, { title: string; lead: string; items: string[]; go: string }> = {
@@ -99,24 +121,15 @@ export function AddMoreCards({ siteId, siteName, features, pages = [] }: { siteI
       <div className="plx-aogrid">
         {cards.map((c) => (
           <button key={c.id} type="button" className={`plx-ao plx-ao--${c.id}`} onClick={() => { setError(null); setWhich(c.id); }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", gap: 12 }}>
-              <span className="plx-ao__badge" aria-hidden>
-                <AddOnIcon id={c.id} />
-              </span>
-              <span className="plx-ao__time">
-                <Clock size={12} aria-hidden /> 1 min setup
-              </span>
-            </div>
-            <div className="plx-ao__txt">
+            <span className="plx-ao__art"><Art id={c.id} /></span>
+            <span className="plx-ao__txt">
               <b>{c.title}</b>
               <span>{c.body}</span>
-            </div>
-            <div className="plx-ao__foot">
-              <span className="plx-ao__go" title={c.action}>
-                <span className="plx-ao__golabel">{c.action}</span>
-                <ArrowRight size={15} aria-hidden />
-              </span>
-            </div>
+            </span>
+            <span className="plx-ao__foot">
+              <span className="plx-ao__time"><Clock size={13} aria-hidden /> 1 min</span>
+              <span className="plx-ao__go" title={c.action}><span className="plx-ao__golabel">{c.action}</span><ArrowRight size={16} aria-hidden /></span>
+            </span>
           </button>
         ))}
       </div>

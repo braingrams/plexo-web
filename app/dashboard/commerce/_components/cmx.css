@@ -21,6 +21,7 @@
   --cmx-violet: var(--plx-violet);
   --cmx-card: var(--plx-surface);
   --cmx-card-border: var(--plx-border);
+  --cmx-border: var(--plx-border);
 }
 
 /* Shop frame */
