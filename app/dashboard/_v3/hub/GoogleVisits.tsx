@@ -5,7 +5,7 @@ import { rememberPlanGate } from "@/lib/plan/planGate";
 import "./insights.css";
 import { useCallback, useEffect, useState } from "react";
 import { BarChart3, Link2Off, Lock, RefreshCw } from "lucide-react";
-import { Button, ButtonLink, Card, CardHeader, Input, Notice, Skeleton } from "../ui";
+import { Button, ButtonLink, Card, CardHeader, Input, Notice, OptimisticLoader, Skeleton } from "../ui";
 import { CookieNoticeCard } from "./CookieNoticeCard";
 import type { Insight } from "@/lib/googleAnalytics/insights";
 import type { AnalyticsReport, Ranked, RangeDays, Totals } from "@/lib/googleAnalytics/types";
@@ -120,7 +120,11 @@ export function GoogleVisits({ siteId, live, result, embedded }: { siteId: strin
       {banner ? <Notice kind={banner.kind} title={banner.title}>{banner.body}</Notice> : null}
       <GateOrError error={error}><Notice kind="error" title="Something went wrong">{error}</Notice></GateOrError>
 
-      {loading && !data ? <Card><Skeleton style={{ height: 120 }} /></Card> : null}
+      {loading && !data ? (
+        <Card padding="lg" style={{ minHeight: 180, display: "grid", placeItems: "center" }}>
+          <OptimisticLoader steps={["Connecting to analytics…", "Retrieving traffic metrics…"]} subtitle="Loading visitor insights" />
+        </Card>
+      ) : null}
 
       {data?.state === "upgrade" ? (
         <Card>

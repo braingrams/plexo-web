@@ -242,7 +242,7 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
   }, [error]);
   const [template, setTemplate] = useState<CreatedTemplate | null>(null);
 
-  const [baseDomain, setBaseDomain] = useState("plexo.site");
+  const [baseDomain, setBaseDomain] = useState("plexopages.com");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
 

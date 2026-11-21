@@ -4,7 +4,7 @@ import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, Box, Check, ChevronDown, ExternalLink, ImagePlus, Info, Layers, LayoutGrid, Maximize2, Minus, MousePointerClick, RefreshCw, Square, Tag, TextCursorInput, Type } from "lucide-react";
 import { strataBrandBibleUrl } from "@/lib/strata/appUrl";
-import { Button, Card, CardHeader, Input, Modal, Skeleton, Textarea, useToast } from "../ui";
+import { Button, Card, CardHeader, Input, Modal, OptimisticLoader, Skeleton, Textarea, useToast } from "../ui";
 import { StrataBrandPicker, type StrataPickerClient } from "../brand/StrataBrandPicker";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import { brandHeadline, type BrandState } from "@/app/dashboard/templates/[id]/detail/SiteBrandPanel";
@@ -105,7 +105,14 @@ export function BrandSaved({ siteId, siteName, isRaw, client, preview, previewSt
   }
 
   if (available === false) return null;
-  if (!state) return error ? <p className="plx-field__error" role="alert">{error}</p> : <Card><Skeleton height={20} width="40%" style={{ marginBottom: 14 }} /><Skeleton height={48} /></Card>;
+  if (!state)
+    return error ? (
+      <p className="plx-field__error" role="alert">{error}</p>
+    ) : (
+      <Card padding="lg" style={{ minHeight: 200, display: "grid", placeItems: "center" }}>
+        <OptimisticLoader steps={["Loading your brand assets…", "Preparing colors, fonts, and styles…"]} subtitle="Loading brand style" />
+      </Card>
+    );
 
   const resolved = state.resolved ?? null;
   const canCreate = !!resolved?.colours.some((c) => c.role === "primary");
@@ -395,7 +402,11 @@ export function BrandTab({ siteId, siteName, brand, defaults = null, experience,
             <BrandDefinition key={brandState?.projectId ?? "own"} siteId={siteId} siteName={siteName} own={brand} defaults={defaults} sourceType={sourceType} resolved={brandState?.resolved ?? null} onDirty={onLookDirty} onSaved={() => afterSaved("look")} />
             <BrandWords siteId={siteId} siteName={siteName} preview={!!strataClient} previewVoice={strataPreviewVoice} onDirty={onWordsDirty} onSaved={() => afterSaved("words")} />
           </>
-        ) : !brandKnown ? <Card><Skeleton height={20} width="40%" style={{ marginBottom: 14 }} /><Skeleton height={160} /></Card> : null}
+        ) : !brandKnown ? (
+          <Card padding="lg" style={{ minHeight: 200, display: "grid", placeItems: "center" }}>
+            <OptimisticLoader steps={["Loading brand identity…", "Aligning design system…"]} subtitle="Loading brand identity" />
+          </Card>
+        ) : null}
         <Modal
           open={leaving}
           onClose={() => setLeaving(false)}
@@ -421,7 +432,13 @@ export function BrandTab({ siteId, siteName, brand, defaults = null, experience,
               {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
               <div><Button loading={busy} onClick={save}>Save</Button></div>
             </div>
-          ) : error ? <p className="plx-field__error" role="alert">{error}</p> : <div className="plx-form"><Skeleton height={48} /><Skeleton height={88} /></div>}
+          ) : error ? (
+            <p className="plx-field__error" role="alert">{error}</p>
+          ) : (
+            <div style={{ minHeight: 140, display: "grid", placeItems: "center" }}>
+              <OptimisticLoader steps={["Loading sharing metadata…", "Preparing social cards…"]} subtitle="Loading browser preview" />
+            </div>
+          )}
         </Card>
       </div>
       </div>

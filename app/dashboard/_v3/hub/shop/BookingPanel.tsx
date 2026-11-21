@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { CalendarClock, Plus, X } from "lucide-react";
-import { Button, Card, CardHeader, EmptyState, Input, Select, Skeleton } from "../../ui";
+import { Button, Card, CardHeader, EmptyState, Input, OptimisticLoader, Select, Skeleton } from "../../ui";
 import { DAY_NAMES, WEEKDAYS, WEEK_ORDER, friendlyTime, hoursProblem, weekRows } from "@/lib/commerce/bookingTimes";
 import { hubTabHref } from "@/lib/dashboardV3/hubTabs";
 import { useAvailability } from "@/app/dashboard/commerce/[templateId]/availability/useAvailability";
@@ -61,7 +61,9 @@ export function BookingPanel({ templateId, services }: { templateId: string; ser
       <Card padding="lg">
         <CardHeader title="Your week" description="The hours people can book. A day with no hours can't be booked." action={a.rules.length === 0 ? <Button size="sm" variant="secondary" loading={busy} onClick={weekdays}>Use Monday to Friday, 9 to 5</Button> : undefined} />
         {a.loading ? (
-          <div style={{ marginTop: 12 }}><Skeleton style={{ height: 120 }} /></div>
+          <div style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}>
+            <OptimisticLoader steps={["Loading availability…", "Setting up booking slots…"]} subtitle="Checking calendar hours" />
+          </div>
         ) : (
           <ul className="plx-week">
             {week.map((r) => (

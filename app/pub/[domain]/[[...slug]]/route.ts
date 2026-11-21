@@ -711,17 +711,20 @@ async function serveSite(
     }
 
     // Plexo Commerce runtime — layered gate, same shape as the blog-homepage check above:
-    // a site with Commerce off (the default) never gets this script, so it costs nothing.
+    // a site with Commerce off and no commerce or donation markers never gets this script, so it costs nothing.
     // Scoped to the SITE's root Template (published.templateId), not the current page —
     // Commerce is a per-site setting, same as CommerceSettings itself.
+    // Donations (data-plexo-donation) can be run independently of the storefront shop being enabled.
     const { data: commerceSettings } = await CommerceSettings.get({ templateId: published.templateId }).go();
-    if (commerceSettings?.enabled) {
+    const hasDonation = html.includes("data-plexo-donation");
+    const hasCommerceMarkers = html.includes("data-plexo-commerce");
+    if (commerceSettings?.enabled || commerceSettings?.donationsEnabled || hasDonation || hasCommerceMarkers) {
       html = injectCommerceScript(
         html,
         (await getStorefrontPath(published.templateId)) ?? `/${DEFAULT_STOREFRONT_SLUG}`,
         await getCheckoutPath(published.templateId),
         resolveCommerceTheme(commerceSettings, published.template.designJson),
-        commerceSettings.productUrlBase ?? null,
+        commerceSettings?.productUrlBase ?? null,
       );
     }
     if (html.includes(LMS_SIGNUP_MARKER_ATTR)) {

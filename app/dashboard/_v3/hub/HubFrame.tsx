@@ -19,6 +19,7 @@ const HELP: Record<HubTabId, string> = {
   products: "How to add a product",
   orders: "How to handle an order",
   shop: "How to set up payments and get paid",
+  donations: "How to accept donations and manage gifts",
   blog: "How to write a blog post",
   course: "How to add a lesson",
   brand: "How to change your colours and logo",
@@ -26,6 +27,7 @@ const HELP: Record<HubTabId, string> = {
   visits: "How to read your visits",
   health: "How to make your site faster",
   settings: "How to change your site's settings",
+  more: "More options and template monetization",
   advanced: "How to use the advanced settings",
 };
 

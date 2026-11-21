@@ -3,7 +3,7 @@
 import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import { Inbox } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, Modal, Skeleton, type BadgeTone } from "../ui";
+import { Badge, Button, Card, EmptyState, Input, Modal, OptimisticLoader, Skeleton, type BadgeTone } from "../ui";
 import { OrderMore, type OrderExtras } from "./OrderTools";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { TabBar } from "./HubFrame";
@@ -138,12 +138,8 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
       {orders && orders.length ? <p className="plx-count" aria-live="polite">{total} order{total === 1 ? "" : "s"}{q || filter ? (total === 1 ? " matches" : " match") : ""}</p> : null}
       {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}
       {orders === null && !error ? (
-        <Card padding="none" className="plx-listcard">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="plx-hrow">
-              <Skeleton style={{ height: 20, width: "60%" }} />
-            </div>
-          ))}
+        <Card padding="lg" style={{ minHeight: 200, display: "grid", placeItems: "center" }}>
+          <OptimisticLoader steps={["Loading your orders…", "Checking payment confirmations…"]} subtitle="Fetching your order history" />
         </Card>
       ) : orders && orders.length === 0 ? (
         q || filter ? <EmptyState title="No orders match" body="Try a different word, or show all your orders." illustration={<Inbox size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} /> : <EmptyState title="No orders yet" body="When someone buys from your shop, the order shows up here and we email you. Share your site to get your first one." illustration={<Inbox size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />

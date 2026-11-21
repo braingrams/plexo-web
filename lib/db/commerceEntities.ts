@@ -620,6 +620,10 @@ export const CommerceSettings = new Entity(
       // link to their own policy. Linked from checkout and order emails. See lib/commerce/terms.ts.
       termsText: { type: "string" },
       termsUrl: { type: "string" },
+      orderSuccessMessage: { type: "string" },
+      orderEmailMessage: { type: "string" },
+      orderEmailHeading: { type: "string" },
+      orderEmailSubject: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },
@@ -924,6 +928,9 @@ export const CommerceDonationCampaign = new Entity(
       raisedMinor: { type: "number", default: 0 },
       donationCount: { type: "number", default: 0 },
       thankYouMessage: { type: "string" },
+      emailSubject: { type: "string" },
+      emailHeading: { type: "string" },
+      emailBody: { type: "string" },
       buttonLabel: { type: "string" },
       active: { type: "boolean", default: true },
       /** Where it came from when created by a migration, e.g. "wp-payment-form:3453". */

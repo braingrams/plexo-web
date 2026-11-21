@@ -6,7 +6,7 @@ import "./insights.css";
 import "./health.css";
 import { Check, Code2, Gauge, Monitor, PartyPopper, Pencil, RefreshCw, Smartphone, Undo2, Wrench } from "lucide-react";
 import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
-import { BannerStack, Button, ButtonLink, Card, CardHeader, Modal, Notice, SegmentedControl, Skeleton } from "../ui";
+import { BannerStack, Button, ButtonLink, Card, CardHeader, Modal, Notice, OptimisticLoader, SegmentedControl, Skeleton } from "../ui";
 import { TabBar } from "./HubFrame";
 import { scoreLook } from "@/lib/siteHealth/explain";
 import type { MetricView } from "@/lib/siteHealth/explain";
@@ -425,7 +425,15 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
   const when = data?.last ? new Date(data.last.createdAt).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" }) : null;
   const sub = "How fast your site opens, and how easy it is for Google and AI assistants to understand.";
 
-  if (loading) return (<><TabBar title="Site health" sub={sub} /><Card><Skeleton style={{ height: 180 }} /></Card></>);
+  if (loading)
+    return (
+      <>
+        <TabBar title="Site health" sub={sub} />
+        <Card padding="lg" style={{ minHeight: 220, display: "grid", placeItems: "center" }}>
+          <OptimisticLoader steps={["Checking site health…", "Testing speed and responsiveness…", "Analyzing SEO and assistant readiness…"]} subtitle="Running health diagnostics" />
+        </Card>
+      </>
+    );
 
   if (!live || (data && !data.url)) {
     return (
@@ -675,7 +683,11 @@ Please analyze my page, make the necessary updates in one pass, and tell me what
           </>
         }
       >
-        {!preview?.loaded ? <Skeleton style={{ height: 80 }} /> : (
+        {!preview?.loaded ? (
+          <div style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}>
+            <OptimisticLoader steps={["Generating fix preview…", "Calculating improvements…"]} subtitle="Preparing fix recommendations" />
+          </div>
+        ) : (
           <div className="plx-hpreview">
             {preview.loaded.error ? <p className="plx-body">{preview.loaded.error}</p> : null}
             {preview.loaded.text !== undefined ? (
@@ -725,7 +737,11 @@ Please analyze my page, make the necessary updates in one pass, and tell me what
           </>
         }
       >
-        {everything === "loading" || !everything ? <Skeleton style={{ height: 120 }} /> : (
+        {everything === "loading" || !everything ? (
+          <div style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}>
+            <OptimisticLoader steps={["Analyzing all health checks…", "Preparing batch optimizations…"]} subtitle="Preparing optimizations" />
+          </div>
+        ) : (
           <div className="plx-hpreview">
             <ul>
               {everything.fixes.filter((f) => !f.error).map((f) => <li key={f.fix}>{f.notes.length ? f.notes.join(" ") : "Switched on."}</li>)}

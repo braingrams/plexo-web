@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Loader2, Sparkles } from "lucide-react";
+import { Check, Loader2, RefreshCw } from "lucide-react";
 
 export type OptimisticLoaderProps = {
   siteName?: string;
@@ -105,7 +105,7 @@ export function OptimisticLoader({
             zIndex: 1,
           }}
         >
-          <Sparkles size={26} className="plx-spin-slow" />
+          <RefreshCw size={24} className="plx-spin-slow" />
         </div>
       </div>
 

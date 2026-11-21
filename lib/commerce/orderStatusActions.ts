@@ -92,6 +92,9 @@ export async function sendOrderStatusEmail(
     orderUrl: `${storeUrl}/order-confirmation?order=${encodeURIComponent(order.orderNumber)}&email=${encodeURIComponent(order.customerEmail)}`,
     termsUrl: termsLink(settings, storeUrl)?.url ?? null,
     brand,
+    customMessage: event === "PAID" ? (settings?.orderEmailMessage ?? null) : null,
+    customHeading: event === "PAID" ? (settings?.orderEmailHeading ?? null) : null,
+    customSubject: event === "PAID" ? (settings?.orderEmailSubject ?? null) : null,
   });
 
   try {

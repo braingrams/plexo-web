@@ -221,7 +221,7 @@ function SeoSection({ appId, summary, settings, onSaved }: { appId: string; summ
     }
   };
 
-  const address = summary?.domains?.[0]?.domain ?? summary?.previewUrl?.replace(/^https:\/\//, "") ?? "yourapp.plexo.site";
+  const address = summary?.domains?.[0]?.domain ?? summary?.previewUrl?.replace(/^https:\/\//, "") ?? "yourapp.plexopages.com";
   const shownTitle = draft.title.trim() || summary?.name || "Your app";
   const shownDescription = draft.description.trim() || "Add a short description so people know what they'll find before they click.";
 

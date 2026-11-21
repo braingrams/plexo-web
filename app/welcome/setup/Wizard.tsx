@@ -349,7 +349,7 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
         <aside className="ob-split__preview" aria-label="Your site, live as you answer">
           <div className="ob-previewhead"><span>Your site, live as you answer</span></div>
           <div className="ob-browser">
-            <div className="ob-browser__bar"><span className="ob-browser__dot" /><span className="ob-browser__dot" /><span className="ob-browser__dot" /><span className="ob-browser__addr">{(name || "your-site").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "your-site"}.plexo.site</span></div>
+            <div className="ob-browser__bar"><span className="ob-browser__dot" /><span className="ob-browser__dot" /><span className="ob-browser__dot" /><span className="ob-browser__addr">{(name || "your-site").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "your-site"}.plexopages.com</span></div>
             <ScaledFrame html={designs.designs[0]?.html ?? null} title="Preview of your site" aspect="1 / 1" />
           </div>
         </aside>

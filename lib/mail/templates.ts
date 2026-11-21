@@ -359,9 +359,15 @@ export function buildOrderStatusEmail(input: {
   /** The shop's terms of sale / refund policy, linked at the bottom when the owner has set one. */
   termsUrl?: string | null;
   brand?: EmailBrand;
+  customMessage?: string | null;
+  customHeading?: string | null;
+  customSubject?: string | null;
 }): { subject: string; html: string } {
   const copy = ORDER_STATUS_COPY[input.event];
   const accent = input.brand?.color ?? EMAIL_COLORS.brand;
+  const heading = input.customHeading || copy.heading;
+  const message = input.customMessage || copy.message;
+  const subject = input.customSubject ? `${input.customSubject} — ${input.siteName}` : `${copy.subject} — ${input.siteName}`;
   const formatMinor = (minor: number) =>
     new Intl.NumberFormat(undefined, { style: "currency", currency: input.currency }).format((minor || 0) / 100);
 
@@ -380,10 +386,10 @@ export function buildOrderStatusEmail(input: {
     : "";
 
   const html = emailShell({
-    title: `${copy.subject} — ${input.siteName}`,
+    title: subject,
     bodyHtml: `
-      <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">${copy.heading}</h1>
-      <p style="margin:0 0 24px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${copy.message}</p>
+      <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">${heading}</h1>
+      <p style="margin:0 0 24px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${message}</p>
       <p style="margin:0 0 4px;font-size:13px;color:#5B5B58;text-align:left;">Order <strong>${input.orderNumber}</strong> from <strong>${input.siteName}</strong></p>
       <p style="margin:0 0 24px;font-size:20px;font-weight:700;color:#121212;text-align:left;">${input.amountFormatted}</p>
       ${itemsTable}
@@ -394,7 +400,7 @@ export function buildOrderStatusEmail(input: {
     brand: input.brand,
   });
 
-  return { subject: `${copy.subject} — ${input.siteName}`, html };
+  return { subject, html };
 }
 
 // ── Direct bank transfer (lib/commerce/bankTransfer.ts) — the customer pays the store's
@@ -699,7 +705,10 @@ export function buildDonationReceiptEmail(input: {
   campaignName: string | null;
   receiptNumber: string;
   dateIso: string;
-  thankYouMessage: string | null;
+  thankYouMessage?: string | null;
+  emailSubject?: string | null;
+  emailHeading?: string | null;
+  emailBody?: string | null;
   /** Monthly gifts only — the donor's private link to stop their gift. */
   manageUrl: string | null;
   brand?: EmailBrand;
@@ -707,9 +716,19 @@ export function buildDonationReceiptEmail(input: {
   const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const greeting = input.donorName ? `Dear ${esc(input.donorName.split(" ")[0])},` : "Thank you,";
   const date = new Date(input.dateIso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const message = input.thankYouMessage
-    ? esc(input.thankYouMessage)
-    : `Your generosity makes our work possible. Thank you for supporting ${esc(input.siteName)}.`;
+  const heading = input.emailHeading
+    ? esc(input.emailHeading)
+    : input.emailSubject
+      ? esc(input.emailSubject)
+      : `Thank you for your ${input.monthly ? "monthly " : ""}gift`;
+  const message = input.emailBody
+    ? esc(input.emailBody)
+    : input.thankYouMessage
+      ? esc(input.thankYouMessage)
+      : `Your generosity makes our work possible. Thank you for supporting ${esc(input.siteName)}.`;
+  const subject = input.emailSubject
+    ? `${input.emailSubject} — ${input.siteName}`
+    : `Thank you for your ${input.monthly ? "monthly " : ""}donation to ${input.siteName}`;
   const rows: [string, string][] = [
     ["Amount", `${input.amountFormatted}${input.monthly ? " / month" : ""}`],
     ...(input.campaignName ? ([["For", input.campaignName]] as [string, string][]) : []),
@@ -717,9 +736,9 @@ export function buildDonationReceiptEmail(input: {
     ["Receipt", input.receiptNumber],
   ];
   const html = emailShell({
-    title: `Thank you for your donation — ${input.siteName}`,
+    title: subject,
     bodyHtml: `
-      <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">Thank you for your ${input.monthly ? "monthly " : ""}gift</h1>
+      <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">${heading}</h1>
       <p style="margin:0 0 6px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${greeting}</p>
       <p style="margin:0 0 24px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${message}</p>
       <p style="margin:0 0 24px;font-size:30px;font-weight:800;color:#517A12;letter-spacing:-0.5px;text-align:left;">${esc(input.amountFormatted)}${input.monthly ? '<span style="font-size:15px;color:#5B5B58;font-weight:600"> / month</span>' : ""}</p>
@@ -729,7 +748,7 @@ export function buildDonationReceiptEmail(input: {
     `,
     brand: input.brand,
   });
-  return { subject: `Thank you for your ${input.monthly ? "monthly " : ""}donation to ${input.siteName}`, html };
+  return { subject, html };
 }
 
 /** To the site owner when their WordPress site has finished moving to Plexo (lib/wpMigration/notify.ts). */

@@ -675,10 +675,7 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) { .plx-pend[data-on="true"] { animation: none; border-right-color: currentColor; opacity: .6; } }
 
 /* A page that is still on its way: the frame stays, the content area shows what is coming. */
-.plx-ldg-classic { display: block; }
-[data-plexo-v3] .plx-ldg-classic { display: none; }
-.plx-ldg { display: none; }
-[data-plexo-v3] .plx-ldg { display: flex; flex-direction: column; gap: 24px; }
+.plx-ldg { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 55vh; }
 .plx-ldg__head { display: flex; flex-direction: column; gap: 10px; }
 .plx-ldg__row { display: flex; gap: 12px; flex-wrap: wrap; }
 .plx-ldg__tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--plx-border); padding-bottom: 12px; overflow: hidden; }

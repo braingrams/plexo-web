@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { Check } from "lucide-react";
-import { Button, Card, CardHeader, Input, Skeleton, Textarea, useToast } from "../ui";
+import { Button, Card, CardHeader, Input, OptimisticLoader, Skeleton, Textarea, useToast } from "../ui";
 import { SolGlyph } from "../sol/SolGlyph";
 import { SolWriteDrawer } from "../sol/SolWriteDrawer";
 import { errMsg, hubApi } from "./hubApi";
@@ -104,7 +104,12 @@ export function BrandWords({ siteId, siteName, preview, previewVoice, onSaved, o
     set({ tones: [...(draft.tones ?? []), id] });
   };
 
-  if (!loaded) return <Card><Skeleton height={20} width="40%" style={{ marginBottom: 14 }} /><Skeleton height={120} /></Card>;
+  if (!loaded)
+    return (
+      <Card padding="lg" style={{ minHeight: 200, display: "grid", placeItems: "center" }}>
+        <OptimisticLoader steps={["Loading your brand voice…", "Gathering your taglines and tones…"]} subtitle="Loading your brand words" />
+      </Card>
+    );
   const hint = !hasVoice(saved) && hasVoice(starter);
 
   return (

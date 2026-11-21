@@ -242,6 +242,26 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
     savedFlash: false,
   });
 
+  function handleInsertSnippet(snippet: string) {
+    if (viewRef.current) {
+      const view = viewRef.current;
+      const sel = view.state.selection.main;
+      view.dispatch({
+        changes: { from: sel.from, to: sel.to, insert: `\n${snippet}\n` },
+        selection: { anchor: sel.from + snippet.length + 2 },
+      });
+      view.focus();
+    } else if (activePath) {
+      setEdits((prev) => {
+        const current = prev[activePath] ?? "";
+        if (current.includes("</body>")) {
+          return { ...prev, [activePath]: current.replace("</body>", `  ${snippet}\n</body>`) };
+        }
+        return { ...prev, [activePath]: current + `\n${snippet}\n` };
+      });
+    }
+  }
+
   const [embedModalOpen, setEmbedModalOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewHtml, setPreviewHtml] = useState("");
@@ -1235,7 +1255,16 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
         </>
       )}
 
-      {embedModalOpen && <EmbedCodeModal onClose={() => setEmbedModalOpen(false)} siteId={siteId} pageId={templateId} canAddForMe={!anyDirty} onAdded={() => void loadFiles({ silent: true })} />}
+      {embedModalOpen && (
+        <EmbedCodeModal
+          onClose={() => setEmbedModalOpen(false)}
+          siteId={siteId}
+          pageId={templateId}
+          canAddForMe={!anyDirty}
+          onAdded={() => void loadFiles({ silent: true })}
+          onInsertSnippet={handleInsertSnippet}
+        />
+      )}
 
       <style jsx>{`
         /* Wraps at any width (the app menu takes room too), so nothing overlaps or breaks onto two lines. */

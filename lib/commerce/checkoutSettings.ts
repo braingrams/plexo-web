@@ -22,6 +22,10 @@ const TEXT_FIELDS = [
   "pickupInstructions",
   "termsText",
   "termsUrl",
+  "orderSuccessMessage",
+  "orderEmailSubject",
+  "orderEmailHeading",
+  "orderEmailMessage",
 ] as const;
 type TextField = (typeof TEXT_FIELDS)[number];
 const MAX_TEXT: Record<TextField, number> = {
@@ -33,6 +37,10 @@ const MAX_TEXT: Record<TextField, number> = {
   pickupInstructions: 500,
   termsText: 10000,
   termsUrl: 500,
+  orderSuccessMessage: 1000,
+  orderEmailSubject: 200,
+  orderEmailHeading: 200,
+  orderEmailMessage: 2000,
 };
 
 export function applyCheckoutSettingsInput(
@@ -106,5 +114,9 @@ export function checkoutSettingsView(settings: SettingsItem | null | undefined) 
     pickupInstructions: fulfillment.pickupInstructions,
     termsText: settings?.termsText ?? null,
     termsUrl: settings?.termsUrl ?? null,
+    orderSuccessMessage: settings?.orderSuccessMessage ?? null,
+    orderEmailSubject: settings?.orderEmailSubject ?? null,
+    orderEmailHeading: settings?.orderEmailHeading ?? null,
+    orderEmailMessage: settings?.orderEmailMessage ?? null,
   };
 }

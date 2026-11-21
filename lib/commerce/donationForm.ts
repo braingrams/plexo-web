@@ -15,22 +15,44 @@ export interface Draft {
   defaultFrequency: "ONCE" | "MONTHLY";
   goal: string;
   thankYouMessage: string;
+  emailSubject: string;
+  emailBody: string;
   buttonLabel: string;
 }
 
 export const newDraft = (): Draft => ({
-  id: null, name: "", description: "",
+  id: null,
+  name: "",
+  description: "",
   presets: [{ label: "", amount: "25" }, { label: "", amount: "50" }, { label: "", amount: "100" }, { label: "", amount: "250" }],
-  defaultPresetIndex: 2, allowCustomAmount: true, minAmount: "1", allowMonthly: true, defaultFrequency: "ONCE", goal: "", thankYouMessage: "", buttonLabel: "",
+  defaultPresetIndex: 2,
+  allowCustomAmount: true,
+  minAmount: "1",
+  allowMonthly: true,
+  defaultFrequency: "ONCE",
+  goal: "",
+  thankYouMessage: "",
+  emailSubject: "",
+  emailBody: "",
+  buttonLabel: "",
 });
 
 export function draftFrom(c: Campaign): Draft {
   return {
-    id: c.id, name: c.name, description: c.description ?? "",
+    id: c.id,
+    name: c.name,
+    description: c.description ?? "",
     presets: c.presetAmounts.map((p) => ({ label: p.label ?? "", amount: String(p.amountMinor / 100) })),
-    defaultPresetIndex: c.defaultPresetIndex, allowCustomAmount: c.allowCustomAmount, minAmount: String(c.minAmountMinor / 100),
-    allowMonthly: c.allowMonthly, defaultFrequency: c.defaultFrequency, goal: c.goalAmountMinor ? String(c.goalAmountMinor / 100) : "",
-    thankYouMessage: c.thankYouMessage ?? "", buttonLabel: c.buttonLabel ?? "",
+    defaultPresetIndex: c.defaultPresetIndex,
+    allowCustomAmount: c.allowCustomAmount,
+    minAmount: String(c.minAmountMinor / 100),
+    allowMonthly: c.allowMonthly,
+    defaultFrequency: c.defaultFrequency,
+    goal: c.goalAmountMinor ? String(c.goalAmountMinor / 100) : "",
+    thankYouMessage: c.thankYouMessage ?? "",
+    emailSubject: (c as { emailSubject?: string | null }).emailSubject ?? "",
+    emailBody: (c as { emailBody?: string | null }).emailBody ?? "",
+    buttonLabel: c.buttonLabel ?? "",
   };
 }
 
@@ -55,8 +77,10 @@ export function checkDraft(d: Draft): Record<string, unknown> | string {
     allowMonthly: d.allowMonthly,
     defaultFrequency: d.allowMonthly ? d.defaultFrequency : "ONCE",
     goalAmountMinor: d.goal.trim() ? Math.round(num(d.goal) * 100) : null,
-    thankYouMessage: d.thankYouMessage,
-    buttonLabel: d.buttonLabel,
+    thankYouMessage: d.thankYouMessage.trim(),
+    emailSubject: d.emailSubject.trim(),
+    emailBody: d.emailBody.trim(),
+    buttonLabel: d.buttonLabel.trim(),
   };
 }
 

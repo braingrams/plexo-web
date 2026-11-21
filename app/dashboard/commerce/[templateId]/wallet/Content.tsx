@@ -49,7 +49,7 @@ export async function WalletContent({ templateId, searchParams, hub, store }: { 
         commerceEnabled: paymentsActive,
         store: store ?? (settings?.enabled ?? false),
         balanceCents: wallet?.balanceCents ?? 0,
-        currency: wallet?.currency ?? "NGN",
+        currency: settings?.currency || wallet?.currency || "USD",
         pooled,
         ledger: ledger.map((e) => ({
           id: e.id,

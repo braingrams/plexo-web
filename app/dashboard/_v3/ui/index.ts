@@ -21,3 +21,4 @@ export { cx } from "./cx";
 export { Notice, NoticeStack, type NoticeKind, type NoticeAction as V3NoticeAction } from "./Notice";
 export { BannerStack, InBannerStack } from "./BannerStack";
 export { OptimisticLoader, type OptimisticLoaderProps } from "./OptimisticLoader";
+export { PreviewViewportFrame, type PreviewViewportFrameProps } from "./PreviewViewportFrame";

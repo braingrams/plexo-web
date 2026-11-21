@@ -4,7 +4,7 @@ import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Download, History, RefreshCw } from "lucide-react";
-import { Badge, Button, ButtonLink, Modal, Skeleton, useToast } from "../ui";
+import { Badge, Button, ButtonLink, Modal, OptimisticLoader, Skeleton, useToast } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { OUTCOME_LABEL, SCOPE_LABEL, movedSentence, type HistoryEntry, type RerunPreview, type RerunScope } from "@/lib/wpMigration/history";
 import { Panel } from "./bits";
@@ -58,7 +58,14 @@ export function MigrationHistory({ siteId, emptyHint }: { siteId?: string; empty
     }
   }
 
-  if (rows === null && !error) return <Panel><Skeleton height={20} width="40%" /></Panel>;
+  if (rows === null && !error)
+    return (
+      <Panel>
+        <div style={{ padding: "40px 24px", display: "grid", placeItems: "center" }}>
+          <OptimisticLoader steps={["Checking migration history…", "Gathering past import logs…"]} subtitle="Loading migration records" />
+        </div>
+      </Panel>
+    );
   return (
     <>
       {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}

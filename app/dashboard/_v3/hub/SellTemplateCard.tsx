@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, Sparkles, Store, BadgeDollarSign } from "lucide-react";
+import { ArrowRight, BadgeDollarSign, Store, Tag } from "lucide-react";
 import { ButtonLink } from "../ui";
 
 export type SellTemplateCardProps = {
@@ -10,22 +10,21 @@ export type SellTemplateCardProps = {
 };
 
 /**
- * Dedicated card on the site details hub:
- * Allows the user to sell their site design on the marketplace to earn money,
- * and discover/browse other marketplace templates.
+ * Proper card for selling a site design on the marketplace to earn money,
+ * and discovering/browsing other marketplace templates.
  */
 export function SellTemplateCard({ siteId, siteName }: SellTemplateCardProps) {
   const sellHref = `/dashboard/marketplace/sell?templateId=${encodeURIComponent(siteId)}`;
   const browseHref = `/dashboard/marketplace`;
 
   return (
-    <section aria-labelledby="sell-template-heading" className="plx-sell-card-wrap" style={{ marginTop: 8 }}>
+    <section aria-labelledby="sell-template-heading" className="plx-sell-card-wrap">
       <div
         style={{
           border: "1px solid var(--plx-border)",
           borderRadius: "var(--plx-radius-card-lg, 16px)",
           background: "var(--plx-surface)",
-          padding: "24px 28px",
+          padding: "28px 32px",
           display: "flex",
           flexDirection: "row",
           alignItems: "center",
@@ -37,12 +36,12 @@ export function SellTemplateCard({ siteId, siteName }: SellTemplateCardProps) {
           overflow: "hidden",
         }}
       >
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 18, maxWidth: 640 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 20, maxWidth: 660 }}>
           <div
             style={{
-              width: 48,
-              height: 48,
-              borderRadius: 14,
+              width: 52,
+              height: 52,
+              borderRadius: 16,
               background: "color-mix(in srgb, var(--plx-brand) 18%, transparent)",
               color: "var(--plx-deep, var(--plx-brand))",
               display: "grid",
@@ -51,14 +50,14 @@ export function SellTemplateCard({ siteId, siteName }: SellTemplateCardProps) {
             }}
             aria-hidden
           >
-            <BadgeDollarSign size={26} />
+            <BadgeDollarSign size={28} />
           </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <h2
                 id="sell-template-heading"
                 style={{
-                  fontSize: 18,
+                  fontSize: 20,
                   fontWeight: 800,
                   margin: 0,
                   letterSpacing: "-0.015em",
@@ -83,14 +82,14 @@ export function SellTemplateCard({ siteId, siteName }: SellTemplateCardProps) {
             </div>
             <p
               style={{
-                fontSize: 14,
+                fontSize: 15,
                 lineHeight: 1.5,
                 color: "var(--plx-muted)",
                 margin: 0,
               }}
             >
-              Turn &ldquo;{siteName}&rdquo; into a reusable template for creators and businesses. Earn money on every
-              sale, or explore new designs in the marketplace to expand your site.
+              Turn &ldquo;{siteName}&rdquo; into a reusable template for creators and businesses worldwide.
+              Earn money on every sale, or browse the marketplace for ready-made designs to inspire your next build.
             </p>
           </div>
         </div>
@@ -106,7 +105,7 @@ export function SellTemplateCard({ siteId, siteName }: SellTemplateCardProps) {
           <ButtonLink
             href={sellHref}
             variant="primary"
-            leftIcon={<Sparkles size={16} />}
+            leftIcon={<Tag size={16} />}
             rightIcon={<ArrowRight size={16} />}
           >
             Sell this template

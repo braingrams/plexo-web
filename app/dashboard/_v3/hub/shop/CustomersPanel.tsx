@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Users } from "lucide-react";
-import { Button, Card, EmptyState, Skeleton } from "../../ui";
+import { Button, Card, EmptyState, OptimisticLoader, Skeleton } from "../../ui";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { customerLine } from "@/lib/commerce/shopSettingsForm";
 
@@ -34,7 +34,12 @@ export function CustomersPanel({ templateId }: { templateId: string }) {
 
   const pages = Math.max(1, Math.ceil(total / PAGE));
   if (error) return <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div>;
-  if (rows === null) return <Card padding="none" className="plx-listcard">{[0, 1, 2].map((i) => <div key={i} className="plx-hrow"><Skeleton style={{ height: 20, width: "60%" }} /></div>)}</Card>;
+  if (rows === null)
+    return (
+      <Card padding="lg" style={{ minHeight: 200, display: "grid", placeItems: "center" }}>
+        <OptimisticLoader steps={["Loading customer list…", "Calculating purchase totals…"]} subtitle="Fetching your customer directory" />
+      </Card>
+    );
   if (rows.length === 0) return <EmptyState title="No customers yet" body="When someone pays you, they show up here with how much they've spent. Share your shop to get your first one." illustration={<Users size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />;
   return (
     <>

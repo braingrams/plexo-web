@@ -5,7 +5,7 @@
 import type { Experience } from "./nav";
 import type { SiteKindLabel } from "./sites";
 
-export type HubTabId = "app" | "pages" | "products" | "orders" | "shop" | "blog" | "course" | "brand" | "address" | "visits" | "health" | "settings" | "advanced";
+export type HubTabId = "app" | "pages" | "products" | "orders" | "shop" | "donations" | "blog" | "course" | "brand" | "address" | "visits" | "health" | "settings" | "more" | "advanced";
 
 export type HubFeatures = {
   store: boolean;
@@ -32,6 +32,7 @@ const TAB_LABELS: Record<HubTabId, string> = {
   products: "Products",
   orders: "Orders",
   shop: "Shop",
+  donations: "Donations",
   blog: "Blog",
   course: "Course",
   brand: "Brand",
@@ -39,6 +40,7 @@ const TAB_LABELS: Record<HubTabId, string> = {
   visits: "Visits",
   health: "Site health",
   settings: "Settings",
+  more: "More",
   advanced: "Advanced",
 };
 
@@ -53,17 +55,18 @@ export function hubTabs(features: HubFeatures, experience: Experience = "beginne
   if (features.deployed) {
     // Only what works for hosted code: its own App tab, a web address, visits for pros, and settings.
     const own: HubTabId[] = ["app", "address", "visits", "health"];
-    own.push("settings");
+    own.push("settings", "more");
     if (experience === "pro") own.push("advanced");
     return own.map((id) => ({ id, label: TAB_LABELS[id], tour: `hub-tab-${id}` }));
   }
   const ids: HubTabId[] = ["pages"];
   if (features.store) ids.push("products", "orders", "shop");
+  if (features.donations) ids.push("donations");
   if (features.blog) ids.push("blog");
   if (features.course) ids.push("course");
   ids.push("brand", "address");
   // Visits (with the Google Analytics connection) and Site health are for everyone: knowing how a site is doing is the point.
-  ids.push("visits", "health", "settings");
+  ids.push("visits", "health", "settings", "more");
   // Everything a pro used to find on the old per-site page, right here (lib/dashboardV3/hubAdvanced.ts).
   if (experience === "pro") ids.push("advanced");
   return ids.map((id) => ({ id, label: TAB_LABELS[id], tour: `hub-tab-${id}` }));
@@ -73,6 +76,7 @@ export function hubTabs(features: HubFeatures, experience: Experience = "beginne
 export function resolveHubTab(requested: unknown, features: HubFeatures, experience: Experience = "beginner"): HubTabId {
   const wanted = parseHubTab(requested);
   if (wanted === "shop" && !features.deployed && (features.store || features.donations || features.migrated)) return "shop";
+  if (wanted === "donations" && !features.deployed && (features.donations || features.store)) return "donations";
   const tabs = hubTabs(features, experience);
   return wanted && tabs.some((t) => t.id === wanted) ? wanted : tabs[0].id;
 }

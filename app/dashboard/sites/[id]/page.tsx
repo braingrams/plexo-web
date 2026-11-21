@@ -4,6 +4,7 @@ import { PagesTab } from "../../_v3/hub/PagesTab";
 import { ProductsTab } from "../../_v3/hub/ProductsTab";
 import { OrdersTab } from "../../_v3/hub/OrdersTab";
 import { ShopArea } from "../../_v3/hub/shop/ShopArea";
+import { DonationsContent } from "@/app/dashboard/commerce/[templateId]/donations/Content";
 import { AddressTab } from "../../_v3/hub/AddressTab";
 import { BlogTab } from "../../_v3/hub/BlogTab";
 import { CourseTab } from "../../_v3/hub/CourseTab";
@@ -12,7 +13,7 @@ import { VisitsTab } from "../../_v3/hub/VisitsTab";
 import { HealthTab } from "../../_v3/hub/HealthTab";
 import { SettingsTab } from "../../_v3/hub/SettingsTab";
 import { AddMoreCards } from "../../_v3/hub/AddMore";
-import { SellTemplateCard } from "../../_v3/hub/SellTemplateCard";
+import { MoreTab } from "../../_v3/hub/MoreTab";
 import { AdvancedArea } from "../../_v3/hub/advanced/AdvancedArea";
 import { hubTabs, resolveHubTab } from "@/lib/dashboardV3/hubTabs";
 import { advancedKind, advancedSections, resolveAdvancedSection } from "@/lib/dashboardV3/hubAdvanced";
@@ -46,6 +47,9 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
     case "shop":
       content = <ShopArea siteId={id} section={Array.isArray(query.section) ? query.section[0] : query.section} part={Array.isArray(query.part) ? query.part[0] : query.part} searchParams={query} />;
       break;
+    case "donations":
+      content = <DonationsContent templateId={id} hub />;
+      break;
     case "blog":
       content = <BlogTab siteId={id} experience={ctx.experience} />;
       break;
@@ -74,6 +78,11 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       );
       break;
     }
+    case "more": {
+      const pages = await loadHubPages(ctx.organizationId, id).catch(() => []);
+      content = <MoreTab site={site} features={site.features} pages={examplePages(pages)} experience={ctx.experience} />;
+      break;
+    }
     case "advanced": {
       // Pros only (hubTabs never offers it otherwise): the old per-site tools, shown here in place.
       const plan = await loadServerPlan(ctx.organizationId);
@@ -87,7 +96,6 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       content = (
         <>
           <PagesTab site={site} pages={pages} experience={ctx.experience} plan={ctx.plan} />
-          <SellTemplateCard siteId={id} siteName={site.name} />
           <AddMoreCards siteId={id} siteName={site.name} features={site.features} pages={examplePages(pages)} />
         </>
       );

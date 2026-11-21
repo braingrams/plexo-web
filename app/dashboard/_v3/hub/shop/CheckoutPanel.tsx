@@ -20,16 +20,27 @@ const SUGGESTIONS: { label: string; type: CheckoutFieldType; placeholder?: strin
 ];
 
 type Q = { key: string; id: string; label: string; type: CheckoutFieldType; required: boolean; placeholder: string; optionsText: string; limited: boolean; countries: string[] };
-type V = { questions: Q[]; delivery: boolean; pickup: boolean; location: string; instructions: string; terms: string; termsUrl: string };
+type V = { questions: Q[]; delivery: boolean; pickup: boolean; location: string; instructions: string; terms: string; termsUrl: string; orderSuccessMessage: string; orderEmailSubject: string; orderEmailMessage: string };
 
 let counter = 0;
 const draft = (f: Partial<CheckoutField> = {}): Q => ({ key: f.id || `new-${Date.now()}-${++counter}`, id: f.id ?? "", label: f.label ?? "", type: f.type ?? "text", required: f.required ?? false, placeholder: f.placeholder ?? "", optionsText: (f.options ?? []).join("\n"), limited: !!f.countries?.length, countries: f.countries ?? [] });
 
-export type CheckoutInitial = { fields: CheckoutField[]; deliveryEnabled: boolean; pickupEnabled: boolean; pickupLocation: string | null; pickupInstructions: string | null; termsText?: string | null; termsUrl?: string | null; shopName?: string; contactEmail?: string };
+export type CheckoutInitial = { fields: CheckoutField[]; deliveryEnabled: boolean; pickupEnabled: boolean; pickupLocation: string | null; pickupInstructions: string | null; termsText?: string | null; termsUrl?: string | null; orderSuccessMessage?: string | null; orderEmailSubject?: string | null; orderEmailMessage?: string | null; shopName?: string; contactEmail?: string };
 
 /** Shop settings, Checkout: how people receive things, and any extra questions you want answered before they pay. */
 export function CheckoutPanel({ templateId, initial }: { templateId: string; initial: CheckoutInitial }) {
-  const start: V = { questions: initial.fields.map((f) => draft(f)), delivery: initial.deliveryEnabled, pickup: initial.pickupEnabled, location: initial.pickupLocation ?? "", instructions: initial.pickupInstructions ?? "", terms: initial.termsText ?? "", termsUrl: initial.termsUrl ?? "" };
+  const start: V = {
+    questions: initial.fields.map((f) => draft(f)),
+    delivery: initial.deliveryEnabled,
+    pickup: initial.pickupEnabled,
+    location: initial.pickupLocation ?? "",
+    instructions: initial.pickupInstructions ?? "",
+    terms: initial.termsText ?? "",
+    termsUrl: initial.termsUrl ?? "",
+    orderSuccessMessage: initial.orderSuccessMessage ?? "",
+    orderEmailSubject: initial.orderEmailSubject ?? "",
+    orderEmailMessage: initial.orderEmailMessage ?? "",
+  };
   const form = useSettingsForm<V>(start, async (v) => {
     const bad = receiveProblem(v.delivery, v.pickup) ?? questionProblem(v.questions);
     if (bad) return { error: bad };
@@ -44,6 +55,9 @@ export function CheckoutPanel({ templateId, initial }: { templateId: string; ini
       pickupEnabled: v.pickup,
       pickupLocation: v.location,
       pickupInstructions: v.instructions,
+      orderSuccessMessage: v.orderSuccessMessage,
+      orderEmailSubject: v.orderEmailSubject,
+      orderEmailMessage: v.orderEmailMessage,
       checkoutFields: v.questions.map((q) => ({ id: q.id || undefined, label: q.label.trim(), type: q.type, required: q.required, placeholder: q.placeholder || undefined, options: q.type === "select" ? q.optionsText.split("\n").map((o) => o.trim()).filter(Boolean) : undefined, countries: q.limited ? q.countries : [] })),
     });
     if (res.error) return { error: res.error };
@@ -118,6 +132,32 @@ export function CheckoutPanel({ templateId, initial }: { templateId: string; ini
           <Link className="plx-btn plx-btn--ghost plx-btn--sm" href={`/dashboard/sol?new=1&draft=${encodeURIComponent(termsPromptForSol(initial.shopName ?? "my shop"))}`}><MessageCircle size={16} aria-hidden /> Ask SOL to write it</Link>
         </div>
         <Input label="Or link to your own page" optional help="If you already have terms on another page, paste its address. Customers go there instead." value={v.termsUrl} onChange={(e) => form.patch({ termsUrl: e.target.value })} placeholder="https://yoursite.com/terms" />
+      </Group>
+      <Group title="After purchase & receipt emails" help="Customize what customers see on the order confirmation page and in their receipt email.">
+        <Textarea
+          label="Message shown on page after purchase"
+          optional
+          help="Shown on the confirmation page after an order is placed."
+          placeholder="e.g. Your payment has been received successfully."
+          value={v.orderSuccessMessage}
+          onChange={(e) => form.patch({ orderSuccessMessage: e.target.value })}
+        />
+        <Input
+          label="Email receipt subject"
+          optional
+          help="Subject line of their order confirmation email (leave empty for default 'Order confirmed')."
+          placeholder="e.g. Thank you for your order"
+          value={v.orderEmailSubject}
+          onChange={(e) => form.patch({ orderEmailSubject: e.target.value })}
+        />
+        <Textarea
+          label="Email receipt message / body"
+          optional
+          help="Personal thank-you message included in their confirmation email."
+          placeholder="e.g. Thank you for shopping with us! We appreciate your business and are preparing your order."
+          value={v.orderEmailMessage}
+          onChange={(e) => form.patch({ orderEmailMessage: e.target.value })}
+        />
       </Group>
       <SaveBar form={form} />
     </div>

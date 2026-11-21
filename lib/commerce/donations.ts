@@ -102,6 +102,9 @@ export function normalizeCampaignInput(body: Record<string, unknown>, partial = 
     values.goalAmountMinor = goal ?? undefined;
   }
   if (body.thankYouMessage !== undefined) values.thankYouMessage = typeof body.thankYouMessage === "string" ? body.thankYouMessage.trim().slice(0, 1000) : undefined;
+  if (body.emailSubject !== undefined) values.emailSubject = typeof body.emailSubject === "string" ? body.emailSubject.trim().slice(0, 200) : undefined;
+  if (body.emailHeading !== undefined) values.emailHeading = typeof body.emailHeading === "string" ? body.emailHeading.trim().slice(0, 200) : undefined;
+  if (body.emailBody !== undefined) values.emailBody = typeof body.emailBody === "string" ? body.emailBody.trim().slice(0, 2000) : undefined;
   if (body.buttonLabel !== undefined) values.buttonLabel = typeof body.buttonLabel === "string" ? body.buttonLabel.trim().slice(0, 40) : undefined;
   if (body.active !== undefined) values.active = body.active !== false;
   return { values };
@@ -450,6 +453,9 @@ async function sendDonationReceipt(order: OrderItem, subscription: DonationSubsc
     receiptNumber: order.orderNumber,
     dateIso: order.createdAt ?? new Date().toISOString(),
     thankYouMessage: campaignRes.data?.thankYouMessage ?? null,
+    emailSubject: campaignRes.data?.emailSubject ?? null,
+    emailHeading: campaignRes.data?.emailHeading ?? null,
+    emailBody: campaignRes.data?.emailBody ?? null,
     manageUrl: subscription ? `${siteUrl}/donation/manage?token=${encodeURIComponent(subscription.manageToken)}` : null,
     brand,
   });
@@ -821,6 +827,9 @@ export async function listDonationsOverview(templateId: string, opts: { allGifts
         raisedMinor: c.raisedMinor ?? 0,
         donationCount: c.donationCount ?? 0,
         thankYouMessage: c.thankYouMessage ?? null,
+        emailSubject: (c as { emailSubject?: string | null }).emailSubject ?? null,
+        emailHeading: (c as { emailHeading?: string | null }).emailHeading ?? null,
+        emailBody: (c as { emailBody?: string | null }).emailBody ?? null,
         buttonLabel: c.buttonLabel ?? null,
         active: c.active ?? true,
         source: c.source ?? null,

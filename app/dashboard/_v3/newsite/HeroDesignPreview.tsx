@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Laptop, Smartphone, Sparkles, RefreshCw } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Laptop, Smartphone, Tablet, RefreshCw } from "lucide-react";
 import { SolGlyph } from "../sol/SolGlyph";
 import { Button } from "../ui";
+import { getStoredViewport, setStoredViewport, type ViewportMode } from "@/lib/dashboardV3/previewViewport";
 
 export type HeroDesignPreviewProps = {
   html: string | null;
@@ -28,8 +29,18 @@ export function HeroDesignPreview({
   onSeeAll,
   totalDesigns = 0,
 }: HeroDesignPreviewProps) {
-  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
-  const displayUrl = `${(siteName || "mysite").toLowerCase().replace(/[^a-z0-9]/g, "")}.plexo.site`;
+  const [device, setDevice] = useState<ViewportMode>("desktop");
+
+  useEffect(() => {
+    setDevice(getStoredViewport());
+  }, []);
+
+  function handleSetDevice(m: ViewportMode) {
+    setDevice(m);
+    setStoredViewport(m);
+  }
+
+  const displayUrl = `${(siteName || "mysite").toLowerCase().replace(/[^a-z0-9]/g, "")}.plexopages.com`;
 
   return (
     <div
@@ -84,7 +95,7 @@ export function HeroDesignPreview({
                   border: "1px solid color-mix(in srgb, var(--plx-brand) 30%, transparent)",
                 }}
               >
-                <Sparkles size={11} /> Personalized by SOL
+                <SolGlyph size={12} /> Personalized by SOL
               </span>
             )}
           </div>
@@ -131,7 +142,7 @@ export function HeroDesignPreview({
               type="button"
               role="radio"
               aria-checked={device === "desktop"}
-              onClick={() => setDevice("desktop")}
+              onClick={() => handleSetDevice("desktop")}
               title="Desktop view"
               style={{
                 display: "grid",
@@ -150,8 +161,28 @@ export function HeroDesignPreview({
             <button
               type="button"
               role="radio"
+              aria-checked={device === "tablet"}
+              onClick={() => handleSetDevice("tablet")}
+              title="Tablet view"
+              style={{
+                display: "grid",
+                placeItems: "center",
+                width: 30,
+                height: 26,
+                borderRadius: 6,
+                border: 0,
+                background: device === "tablet" ? "var(--plx-tint)" : "transparent",
+                color: device === "tablet" ? "var(--plx-deep)" : "var(--plx-muted)",
+                cursor: "pointer",
+              }}
+            >
+              <Tablet size={15} />
+            </button>
+            <button
+              type="button"
+              role="radio"
               aria-checked={device === "mobile"}
-              onClick={() => setDevice("mobile")}
+              onClick={() => handleSetDevice("mobile")}
               title="Mobile phone view"
               style={{
                 display: "grid",
@@ -235,6 +266,37 @@ export function HeroDesignPreview({
               display: "block",
             }}
           />
+        ) : device === "tablet" ? (
+          <div
+            style={{
+              width: "100%",
+              maxWidth: 768,
+              height: "100%",
+              minHeight: 560,
+              margin: "12px auto",
+              borderRadius: 20,
+              border: "8px solid var(--plx-border-strong)",
+              boxShadow: "var(--plx-shadow-card)",
+              overflow: "hidden",
+              background: "var(--plx-surface)",
+              display: "flex",
+              flexDirection: "column",
+            }}
+          >
+            <iframe
+              key="tablet-frame"
+              title={`${designName} tablet preview`}
+              srcDoc={html}
+              sandbox="allow-same-origin allow-scripts"
+              style={{
+                width: "100%",
+                height: "100%",
+                border: 0,
+                background: "var(--plx-surface)",
+                display: "block",
+              }}
+            />
+          </div>
         ) : (
           <div
             style={{

@@ -195,8 +195,19 @@ export function DonationsClient({ templateId, initial }: { templateId: string; i
               </label>
             )}
             <FieldLabel label="Fundraising goal (optional)" hint="Shows a progress bar on the form."><input style={{ ...inputStyle, width: 160 }} inputMode="decimal" value={draft.goal} onChange={(e) => setDraft({ ...draft, goal: e.target.value })} /></FieldLabel>
-            <FieldLabel label="Thank-you message (optional)" hint="Shown after donating and in the receipt email."><textarea style={{ ...inputStyle, minHeight: 70 }} value={draft.thankYouMessage} onChange={(e) => setDraft({ ...draft, thankYouMessage: e.target.value })} /></FieldLabel>
-            <FieldLabel label="Button text (optional)"><input style={{ ...inputStyle, width: 200 }} placeholder="Donate" value={draft.buttonLabel} onChange={(e) => setDraft({ ...draft, buttonLabel: e.target.value })} /></FieldLabel>
+            <div style={{ marginTop: 8, paddingTop: 12, borderTop: "1px solid var(--cmx-border, rgba(255,255,255,0.08))", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ fontSize: "0.86rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)" }}>After payment &amp; receipt emails</div>
+              <FieldLabel label="Message shown on page after payment (optional)" hint="Shown in the banner immediately after someone pays.">
+                <textarea style={{ ...inputStyle, minHeight: 60 }} placeholder="e.g. Your payment has been received successfully." value={draft.thankYouMessage} onChange={(e) => setDraft({ ...draft, thankYouMessage: e.target.value })} />
+              </FieldLabel>
+              <FieldLabel label="Email receipt subject (optional)" hint="The subject line of their receipt email.">
+                <input style={inputStyle} placeholder="e.g. Thank you for your payment" value={draft.emailSubject} onChange={(e) => setDraft({ ...draft, emailSubject: e.target.value })} />
+              </FieldLabel>
+              <FieldLabel label="Email receipt message / body (optional)" hint="The personal note or thank-you body inside their receipt email.">
+                <textarea style={{ ...inputStyle, minHeight: 70 }} placeholder="e.g. Hi! We've received your payment successfully. Thank you for choosing Charisol. We appreciate your business and look forward to serving you! 😊" value={draft.emailBody} onChange={(e) => setDraft({ ...draft, emailBody: e.target.value })} />
+              </FieldLabel>
+            </div>
+            <FieldLabel label="Button text (optional)"><input style={{ ...inputStyle, width: 200 }} placeholder="e.g. MAKE PAYMENT or Donate" value={draft.buttonLabel} onChange={(e) => setDraft({ ...draft, buttonLabel: e.target.value })} /></FieldLabel>
             {error && <GateOrError error={error}><p style={{ ...muted, color: "var(--cmx-danger, #f87171)" }}>{error}</p></GateOrError>}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button type="button" style={btn} onClick={() => setDraft(null)}>Cancel</button>

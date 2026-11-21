@@ -10,7 +10,25 @@ export async function CheckoutSettingsContent({ templateId, hub }: { templateId:
   if (hub) {
     const { data: site } = await Template.get({ id: templateId }).go();
     const f = resolveFulfillmentOptions(settings);
-    return <CheckoutPanel templateId={templateId} initial={{ fields: readCheckoutFields(settings?.checkoutFields), deliveryEnabled: f.deliveryEnabled, pickupEnabled: f.pickupEnabled, pickupLocation: f.pickupLocation, pickupInstructions: f.pickupInstructions, termsText: settings?.termsText ?? null, termsUrl: settings?.termsUrl ?? null, shopName: site?.name ?? "", contactEmail: settings?.notificationEmail ?? "" }} />;
+    return (
+      <CheckoutPanel
+        templateId={templateId}
+        initial={{
+          fields: readCheckoutFields(settings?.checkoutFields),
+          deliveryEnabled: f.deliveryEnabled,
+          pickupEnabled: f.pickupEnabled,
+          pickupLocation: f.pickupLocation,
+          pickupInstructions: f.pickupInstructions,
+          termsText: settings?.termsText ?? null,
+          termsUrl: settings?.termsUrl ?? null,
+          orderSuccessMessage: settings?.orderSuccessMessage ?? null,
+          orderEmailSubject: settings?.orderEmailSubject ?? null,
+          orderEmailMessage: settings?.orderEmailMessage ?? null,
+          shopName: site?.name ?? "",
+          contactEmail: settings?.notificationEmail ?? "",
+        }}
+      />
+    );
   }
   return <CheckoutSettingsClient templateId={templateId} initialFields={readCheckoutFields(settings?.checkoutFields)} />;
 }

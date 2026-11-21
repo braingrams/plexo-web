@@ -145,16 +145,20 @@ export function DonationsPanel({ templateId, initial }: { templateId: string; in
       <Modal
         open={!!draft}
         onClose={() => setDraft(null)}
-        width={600}
+        width={640}
         closeOnBackdrop={false}
         title={draft?.id ? "Change donation form" : "New donation form"}
         footer={<><Button variant="secondary" onClick={() => setDraft(null)}>Cancel</Button><Button loading={d.saving} onClick={() => void d.save()}>{draft?.id ? "Save" : "Make my form"}</Button></>}
       >
         {draft ? (
           <div className="plx-form">
-            <Input label="What is it called?" value={draft.name} placeholder="Support our work" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-            <Input label="A line about it" optional value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
-            <section className="plx-pt__sec" aria-label="Suggested amounts">
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <Input label="What is it called?" value={draft.name} placeholder="e.g. Payment Order or Support our mission" onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+              <Input label="A line about it" optional value={draft.description} placeholder="Short subtitle shown below the title" onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+              <Input label="Button words" optional value={draft.buttonLabel} placeholder="e.g. MAKE PAYMENT or Donate" onChange={(e) => setDraft({ ...draft, buttonLabel: e.target.value })} />
+            </div>
+
+            <section className="plx-pt__sec" aria-label="Suggested amounts" style={{ marginTop: 8 }}>
               <div><b>Suggested amounts ({data.currency})</b><span className="plx-small" style={{ display: "block" }}>People tap one to give. The round button marks the one that&apos;s chosen to start with. Names are optional, like &ldquo;Friend&rdquo;.</span></div>
               {draft.presets.map((p, i) => (
                 <div key={i} className="plx-don__preset">
@@ -166,13 +170,46 @@ export function DonationsPanel({ templateId, initial }: { templateId: string; in
               ))}
               {draft.presets.length < 8 ? <div><Button size="sm" variant="secondary" leftIcon={<Plus size={16} aria-hidden />} onClick={() => setDraft({ ...draft, presets: [...draft.presets, { label: "", amount: "" }] })}>Add an amount</Button></div> : null}
             </section>
-            <label className="plx-toggle"><span><b>Let people type their own amount</b></span><input type="checkbox" className="plx-switch" checked={draft.allowCustomAmount} onChange={(e) => setDraft({ ...draft, allowCustomAmount: e.target.checked })} /></label>
-            {draft.allowCustomAmount ? <Input label="Smallest gift you'll take" inputMode="decimal" value={draft.minAmount} onChange={(e) => setDraft({ ...draft, minAmount: e.target.value })} /> : null}
-            <label className="plx-toggle"><span><b>Offer monthly giving</b><span className="plx-small" style={{ display: "block" }}>People can choose to give every month.</span></span><input type="checkbox" className="plx-switch" checked={draft.allowMonthly} onChange={(e) => setDraft({ ...draft, allowMonthly: e.target.checked })} /></label>
-            {draft.allowMonthly ? <label className="plx-toggle"><span><b>Start on &ldquo;every month&rdquo;</b></span><input type="checkbox" className="plx-switch" checked={draft.defaultFrequency === "MONTHLY"} onChange={(e) => setDraft({ ...draft, defaultFrequency: e.target.checked ? "MONTHLY" : "ONCE" })} /></label> : null}
-            <Input label="Your goal" optional help="Shows a progress bar on your form." inputMode="decimal" value={draft.goal} onChange={(e) => setDraft({ ...draft, goal: e.target.value })} placeholder="500000" />
-            <Textarea label="Thank-you message" optional help="People see this after they give, and in their receipt email." value={draft.thankYouMessage} onChange={(e) => setDraft({ ...draft, thankYouMessage: e.target.value })} />
-            <Input label="Button words" optional value={draft.buttonLabel} placeholder="Donate" onChange={(e) => setDraft({ ...draft, buttonLabel: e.target.value })} />
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 8 }}>
+              <label className="plx-toggle"><span><b>Let people type their own amount</b></span><input type="checkbox" className="plx-switch" checked={draft.allowCustomAmount} onChange={(e) => setDraft({ ...draft, allowCustomAmount: e.target.checked })} /></label>
+              {draft.allowCustomAmount ? <Input label="Smallest gift you'll take" inputMode="decimal" value={draft.minAmount} onChange={(e) => setDraft({ ...draft, minAmount: e.target.value })} /> : null}
+              <label className="plx-toggle"><span><b>Offer monthly giving</b><span className="plx-small" style={{ display: "block" }}>People can choose to give every month.</span></span><input type="checkbox" className="plx-switch" checked={draft.allowMonthly} onChange={(e) => setDraft({ ...draft, allowMonthly: e.target.checked })} /></label>
+              {draft.allowMonthly ? <label className="plx-toggle"><span><b>Start on &ldquo;every month&rdquo;</b></span><input type="checkbox" className="plx-switch" checked={draft.defaultFrequency === "MONTHLY"} onChange={(e) => setDraft({ ...draft, defaultFrequency: e.target.checked ? "MONTHLY" : "ONCE" })} /></label> : null}
+              <Input label="Your goal" optional help="Shows a progress bar on your form." inputMode="decimal" value={draft.goal} onChange={(e) => setDraft({ ...draft, goal: e.target.value })} placeholder="500000" />
+            </div>
+
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--plx-border)", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <b>After payment &amp; receipt emails</b>
+                <span className="plx-small" style={{ display: "block" }}>Customize what people see right on the website and in the receipt email they receive.</span>
+              </div>
+              <Textarea
+                label="Message shown on page after payment"
+                optional
+                help="Shown in the confirmation banner immediately after someone pays."
+                placeholder="e.g. Your payment has been received successfully."
+                value={draft.thankYouMessage}
+                onChange={(e) => setDraft({ ...draft, thankYouMessage: e.target.value })}
+              />
+              <Input
+                label="Email receipt subject"
+                optional
+                help="The subject line of their receipt email."
+                placeholder="e.g. Thank you for your payment"
+                value={draft.emailSubject}
+                onChange={(e) => setDraft({ ...draft, emailSubject: e.target.value })}
+              />
+              <Textarea
+                label="Email receipt message / body"
+                optional
+                help="The personal note or thank-you body inside their receipt email."
+                placeholder="e.g. Hi! We've received your payment successfully. Thank you for choosing Charisol. We appreciate your business and look forward to serving you! 😊"
+                value={draft.emailBody}
+                onChange={(e) => setDraft({ ...draft, emailBody: e.target.value })}
+              />
+            </div>
+
             {d.error ? <p className="plx-field__error" role="alert">{d.error}</p> : null}
           </div>
         ) : null}
