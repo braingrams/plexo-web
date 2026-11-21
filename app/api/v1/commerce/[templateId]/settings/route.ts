@@ -16,6 +16,7 @@ import {
 import { isKnownCurrency, isPaystackCompatibleCurrency } from "@/lib/commerce/currency";
 import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
 import { ensureStorefrontLayout, getStorefrontSlug, renameStorefrontSlug } from "@/lib/commerce/storefrontLayout";
+import { ensureDonationsReady } from "@/lib/commerce/donations";
 import { deriveCommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 import { applyCheckoutSettingsInput, checkoutSettingsView, CheckoutSettingsError } from "@/lib/commerce/checkoutSettings";
 import { CommerceSettings, CommerceStripeAccessRequest, CommerceOrder } from "@/lib/db/commerceEntities";
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       themeButtonRadius: settings?.themeButtonRadius ?? null,
       autoDetectedTheme: autoTheme,
       enabled: settings?.enabled ?? false,
+      donationsEnabled: settings?.donationsEnabled ?? true,
       storefrontSlug,
       currency: settings?.currency ?? "NGN",
       paymentProvider: settings?.paymentProvider ?? "BYO_PAYSTACK",
@@ -110,6 +112,7 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
   const body = await request.json().catch(() => ({}));
   const {
     enabled,
+    donationsEnabled,
     currency,
     paymentProvider,
     paystackMode,
@@ -232,10 +235,11 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
   const toRemove: RemovableField[] = [];
 
   if (typeof enabled === "boolean") data.enabled = enabled;
+  if (typeof donationsEnabled === "boolean") data.donationsEnabled = donationsEnabled;
   if (typeof currency === "string") data.currency = currency.toUpperCase();
   if (paymentProvider !== undefined) data.paymentProvider = paymentProvider;
-  else if (enabled === true) {
-    // A store opened for the first time starts on a payment option its plan allows, so it
+  else if (enabled === true || donationsEnabled === true) {
+    // A store or donations opened for the first time starts on a payment option its plan allows, so it
     // works straight away (own keys need Pro; smaller plans start on Plexo's account).
     const { data: current } = await CommerceSettings.get({ templateId }).go();
     if (!current?.paymentProvider) data.paymentProvider = defaultPaymentProvider(commercePlan);
@@ -340,6 +344,9 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
   if (effectiveEnabled) {
     await ensureProductDetailLayout(templateId, organizationId, userId);
     await ensureStorefrontLayout(templateId, organizationId, userId);
+  }
+  if (data.donationsEnabled === true) {
+    await ensureDonationsReady(templateId, organizationId, userId);
   }
   if (typeof storefrontSlug === "string" && storefrontSlug.trim()) {
     if (!effectiveEnabled) {

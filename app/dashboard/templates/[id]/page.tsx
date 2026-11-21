@@ -22,6 +22,8 @@ import { canMoveToV2 } from "@/lib/v2/convertV1";
 import { canConvertToCode } from "@/lib/editorModes/convertToCode";
 import { designFormatOf, parseV2Design } from "@/lib/v2/design";
 import { designSystemDownloadUrl, resolveDesignSystem } from "@/lib/v2/designSystemStore";
+import { SYSTEM_SLUGS } from "@/lib/dashboardV3/hubTabs";
+import { upgradeSystemPageToV2 } from "@/lib/commerce/storefrontLayout";
 
 /** Up to this many characters of brand are handed to the editor with the page; beyond it the browser loads the brand itself. */
 const BRAND_INLINE_MAX_CHARS = 2_000_000;
@@ -133,8 +135,17 @@ export default async function TemplateEditorPage(props: {
     );
   }
 
-  const designFormat = designFormatOf(template);
+  let designFormat = designFormatOf(template);
   let initialV2Design = null;
+  if (designFormat !== "v2" && template.slug && SYSTEM_SLUGS.has(template.slug)) {
+    const upgraded = await upgradeSystemPageToV2(template, rootTemplateId);
+    if (upgraded.ok) {
+      designFormat = "v2";
+      template.designFormat = "v2";
+      template.designJson = upgraded.design;
+      if (upgraded.html) template.compiledHtml = upgraded.html;
+    }
+  }
   if (designFormat === "v2") {
     const parsed = parseV2Design(template.draftJson ?? template.designJson);
     if (!parsed.ok) {

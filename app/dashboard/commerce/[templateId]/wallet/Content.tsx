@@ -6,7 +6,7 @@ import { paginate, parsePageRequest } from "@/lib/pagination";
 import { WalletClient } from "./WalletClient";
 import { MoneyPanel } from "@/app/dashboard/_v3/hub/shop/MoneyPanel";
 
-export async function WalletContent({ templateId, searchParams, hub }: { templateId: string; searchParams?: Record<string, string | string[] | undefined>; /** Inside the site hub: show the new "Your money" screen. */ hub?: boolean }) {
+export async function WalletContent({ templateId, searchParams, hub, store }: { templateId: string; searchParams?: Record<string, string | string[] | undefined>; /** Inside the site hub: show the new "Your money" screen. */ hub?: boolean; store?: boolean }) {
 
   const { data: site } = await Template.get({ id: templateId }).go();
   if (!site) {
@@ -37,7 +37,8 @@ export async function WalletContent({ templateId, searchParams, hub }: { templat
   // payments after using them still needs to see and withdraw what it already earned.
   const isPlatformProvider = settings?.paymentProvider === "PLATFORM_PAYSTACK" || settings?.paymentProvider === "PLATFORM_STRIPE";
   const hasWalletHistory = Boolean(wallet) && ((wallet?.balanceCents ?? 0) > 0 || ledgerTotal > 0 || withdrawals.length > 0);
-  const showWallet = Boolean(settings?.enabled) && (isPlatformProvider || hasWalletHistory);
+  const paymentsActive = Boolean(settings?.enabled || settings?.donationsEnabled);
+  const showWallet = paymentsActive && (isPlatformProvider || hasWalletHistory);
 
   const Screen = hub ? MoneyPanel : WalletClient;
   return (
@@ -45,7 +46,8 @@ export async function WalletContent({ templateId, searchParams, hub }: { templat
       templateId={templateId}
       initial={{
         showWallet,
-        commerceEnabled: settings?.enabled ?? false,
+        commerceEnabled: paymentsActive,
+        store: store ?? (settings?.enabled ?? false),
         balanceCents: wallet?.balanceCents ?? 0,
         currency: wallet?.currency ?? "NGN",
         pooled,

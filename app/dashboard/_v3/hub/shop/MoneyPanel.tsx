@@ -14,13 +14,14 @@ export function MoneyPanel({ templateId: siteId, initial }: { templateId: string
   const state = moneyState(initial);
   const w = useWallet(siteId, initial);
   const pages = Math.max(1, Math.ceil(w.ledgerTotal / w.ledgerPaging.pageSize));
+  const isStore = initial.store ?? initial.commerceEnabled;
 
   if (state === "off") {
     return (
       <EmptyState
-        title="Turn on your shop to get paid"
-        body="Switch your shop on and choose how customers pay you. Their money shows up here."
-        action={<Link className="plx-btn plx-btn--primary" href={shopHref(siteId, "settings", "general")}>Open shop settings</Link>}
+        title={isStore ? "Turn on your shop to get paid" : "Turn on payments to get paid"}
+        body={isStore ? "Switch your shop on and choose how customers pay you. Their money shows up here." : "Turn on donations or your shop, and choose how you get paid. Money shows up here."}
+        action={<Link className="plx-btn plx-btn--primary" href={shopHref(siteId, "settings", isStore ? "general" : "payments")}>{isStore ? "Open shop settings" : "Open payment settings"}</Link>}
         illustration={<Wallet size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />}
       />
     );
@@ -28,8 +29,8 @@ export function MoneyPanel({ templateId: siteId, initial }: { templateId: string
   if (state === "own-keys") {
     return (
       <EmptyState
-        title="Your sales go straight to you"
-        body="You connected your own payment account, so customers pay you directly and there is nothing to take out here. Want us to hold the money and send it to your bank? Switch to Plexo payments."
+        title={isStore ? "Your sales go straight to you" : "Your payments go straight to you"}
+        body={isStore ? "You connected your own payment account, so customers pay you directly and there is nothing to take out here. Want us to hold the money and send it to your bank? Switch to Plexo payments." : "You connected your own payment account, so donors and customers pay you directly and there is nothing to take out here. Want us to hold the money and send it to your bank? Switch to Plexo payments."}
         action={<Link className="plx-btn plx-btn--primary" href={shopHref(siteId, "settings", "payments")}>Change how I get paid</Link>}
         illustration={<CreditCard size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />}
       />

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hubKindLabel, hubTabs, NO_FEATURES, resolveHubTab } from "@/lib/dashboardV3/hubTabs";
+import { addOnsFor, hubKindLabel, hubTabs, NO_FEATURES, resolveHubTab } from "@/lib/dashboardV3/hubTabs";
 
 const ids = (f = NO_FEATURES, e: "beginner" | "intermediate" | "pro" = "beginner") => hubTabs(f, e).map((t) => t.id);
 
@@ -33,5 +33,11 @@ describe("hub tabs per kind", () => {
     expect(resolveHubTab("shop", { ...NO_FEATURES, donations: true })).toBe("shop");
     expect(resolveHubTab("shop", { ...NO_FEATURES, migrated: true })).toBe("shop");
     expect(resolveHubTab("shop", { ...NO_FEATURES, deployed: "server", donations: true })).toBe("app");
+  });
+  it("shows donations add-on when donations are not yet turned on, and hides when enabled", () => {
+    const withoutDonations = addOnsFor(NO_FEATURES).map((a) => a.id);
+    expect(withoutDonations).toContain("donations");
+    const withDonations = addOnsFor({ ...NO_FEATURES, donations: true }).map((a) => a.id);
+    expect(withDonations).not.toContain("donations");
   });
 });

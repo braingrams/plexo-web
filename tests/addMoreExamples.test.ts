@@ -24,4 +24,9 @@ describe("add more examples", () => {
   it("adds no pages for a sign-up form", () => {
     expect(addMoreExample("newsletter", "Site", pages).adds).toEqual([]);
   });
+  it("says what donations add to the site", () => {
+    const e = addMoreExample("donations", "Ama's Cause", pages);
+    expect(e.adds).toEqual(["/order-confirmation"]);
+    expect(e.summary).toContain("bank transfer");
+  });
 });

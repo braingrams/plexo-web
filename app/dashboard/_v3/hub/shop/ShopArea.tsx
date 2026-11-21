@@ -36,7 +36,7 @@ export async function ShopArea({ siteId, section: requested, part: requestedPart
   let body: React.ReactNode;
   switch (section) {
     case "money":
-      body = <WalletContent templateId={siteId} searchParams={searchParams} hub />;
+      body = <WalletContent templateId={siteId} searchParams={searchParams} hub store={store} />;
       break;
     case "customers":
       body = <CustomersPanel templateId={siteId} />;

@@ -19,6 +19,7 @@ export type AddMoreExample = {
 const ADDS: Record<AddOnId, string[]> = {
   store: ["/store", "/store/checkout", "/order-confirmation", "/track-order"],
   bookings: ["/store", "/store/checkout", "/order-confirmation"],
+  donations: ["/order-confirmation"],
   blog: ["/blog"],
   course: [],
   newsletter: [],
@@ -42,6 +43,7 @@ export function addMoreExample(id: AddOnId, siteName: string, pages: ExamplePage
   let summary: string;
   if (id === "course") summary = `This stays on "${siteName}". Your home page becomes the sign-up page and your other pages stay as they are.`;
   else if (id === "newsletter") summary = `The sign-up form goes onto one of the pages you already have on "${siteName}". Nothing new is created.`;
+  else if (id === "donations") summary = `This is added to "${siteName}". Supporters can give by card or bank transfer, and bank donors see account details on a confirmation page.`;
   else {
     const addsText = adds.length ? `you'll also have ${adds.slice(0, 2).join(" and ")}${adds.length > 2 ? " and a few more" : ""}` : "your existing pages are used";
     summary = `This is added to "${siteName}", the same website, not a new one. After setup ${addsText}.`;

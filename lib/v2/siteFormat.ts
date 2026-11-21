@@ -13,10 +13,11 @@ import { sanitizeHtml } from "@/server/sanitizer";
  * `next/server` — SOL's standalone Lambda bundle reaches the commerce generators.
  */
 
-/** The site root's format and name. A missing root counts as a classic (v1) site. */
+/** The site root's format and name. Only an explicit classic V1 builder site stays on V1; everything else uses V2. */
 export async function siteInfo(rootTemplateId: string): Promise<{ format: DesignFormat; name: string }> {
   const { data } = await Template.get({ id: rootTemplateId }).go();
-  return { format: designFormatOf(data), name: data?.name?.trim() || "My site" };
+  const isClassicBuilder = data?.sourceType === "BUILDER" && data?.designFormat !== "v2";
+  return { format: isClassicBuilder ? "v1" : "v2", name: data?.name?.trim() || "My site" };
 }
 
 /**

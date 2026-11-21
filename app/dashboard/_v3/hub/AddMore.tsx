@@ -4,7 +4,7 @@ import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useEffect, useState } from "react";
 import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowRight, Check, Clock } from "lucide-react";
+import { ArrowDown, ArrowRight, Check, Clock, HeartHandshake } from "lucide-react";
 import { Button, ButtonLink, Modal, useToast } from "../ui";
 import { addOnsFor, hubTabHref, type AddOnId, type HubFeatures } from "@/lib/dashboardV3/hubTabs";
 import { addMoreExample, type ExamplePage } from "@/lib/dashboardV3/addMoreExamples";
@@ -42,6 +42,12 @@ function Art({ id }: { id: AddOnId }) {
           <span className="plx-art__slot"><Clock size={12} />10:30</span>
         </span>
       );
+    case "donations":
+      return (
+        <span className="plx-art plx-art--donations" aria-hidden style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <HeartHandshake size={32} style={{ color: "var(--plx-brand)" }} />
+        </span>
+      );
     default:
       return (
         <span className="plx-art plx-art--news" aria-hidden>
@@ -54,6 +60,7 @@ function Art({ id }: { id: AddOnId }) {
 
 const WHAT: Record<AddOnId, { title: string; lead: string; items: string[]; go: string }> = {
   store: { title: "Start selling", lead: "We'll set up everything a shop needs. You don't have to design anything.", items: ["A shop page that shows your products", "A basket and checkout", "A thank-you page and order tracking"], go: "Turn on my shop" },
+  donations: { title: "Accept donations", lead: "Take gifts from supporters, one-off or every month. We set up everything you need.", items: ["A donation form for your site", "One-off and monthly gifts by card or bank transfer", "Track every gift and donor in your hub"], go: "Turn on donations" },
   bookings: { title: "Take bookings", lead: "People pick a service and pay for it. We set up the shop part for you.", items: ["A shop page for your services", "Checkout and payment", "You add your first service next"], go: "Turn on bookings" },
   blog: { title: "Add a blog", lead: "A place for your news and stories, ready to fill.", items: ["A blog page on your site", "A page for each post", "You write your first post next"], go: "Add my blog" },
   course: { title: "Add a course", lead: "People sign up and learn from your lessons.", items: ["Your home page becomes the sign-up page (your other pages stay as they are)", "A first lesson to start from", "You add the rest next"], go: "Make it a course" },
@@ -81,6 +88,9 @@ export function AddMoreCards({ siteId, siteName, features, pages = [] }: { siteI
       if (which === "store" || which === "bookings") {
         await hubApi(`/api/v1/commerce/${siteId}/settings`, { method: "PUT", json: { enabled: true } }, "We couldn't turn your shop on. Please try again.");
         next = `${hubTabHref(siteId, "products")}${which === "bookings" ? "&new=service" : ""}`;
+      } else if (which === "donations") {
+        await hubApi(`/api/v1/commerce/${siteId}/settings`, { method: "PUT", json: { donationsEnabled: true } }, "We couldn't turn donations on. Please try again.");
+        next = `/dashboard/sites/${siteId}?tab=shop&section=donations`;
       } else if (which === "blog") {
         await hubApi(`/api/blog/${siteId}/site`, { method: "PATCH", json: { enabled: true } }, "We couldn't turn your blog on. Please try again.");
         next = hubTabHref(siteId, "blog");

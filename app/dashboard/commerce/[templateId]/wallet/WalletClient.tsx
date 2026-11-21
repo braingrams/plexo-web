@@ -28,6 +28,7 @@ type Withdrawal = {
 export type InitialWallet = {
   showWallet: boolean;
   commerceEnabled: boolean;
+  store?: boolean;
   balanceCents: number;
   currency: string;
   pooled: boolean;

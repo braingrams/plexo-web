@@ -93,11 +93,12 @@ export function hubKindLabel(f: HubFeatures): SiteKindLabel {
   return "Website";
 }
 
-export type AddOnId = "blog" | "course" | "bookings" | "newsletter" | "store";
+export type AddOnId = "blog" | "course" | "bookings" | "newsletter" | "store" | "donations";
 export type AddOn = { id: AddOnId; title: string; body: string; action: string };
 
 const ADD_ONS: AddOn[] = [
   { id: "store", title: "Sell products", body: "Take payments for things you make or do. We set up the shop, basket and checkout.", action: "Start selling" },
+  { id: "donations", title: "Accept donations", body: "Let people give once or every month. We set up donations and you can take gifts.", action: "Take donations" },
   { id: "blog", title: "A blog", body: "Share news and stories. We set up a place for your posts.", action: "Add a blog" },
   { id: "course", title: "A course", body: "Teach lessons to people who sign up.", action: "Add a course" },
   { id: "bookings", title: "Bookings", body: "Let people book a time with you and pay for it.", action: "Take bookings" },
@@ -109,6 +110,7 @@ export function addOnsFor(features: HubFeatures): AddOn[] {
   if (features.app) return [];
   return ADD_ONS.filter((a) => {
     if (a.id === "store" || a.id === "bookings") return !features.store;
+    if (a.id === "donations") return !features.donations;
     if (a.id === "blog") return !features.blog;
     if (a.id === "course") return !features.course;
     return true;
@@ -116,7 +118,7 @@ export function addOnsFor(features: HubFeatures): AddOn[] {
 }
 
 /** Pages Plexo sets up for a shop; the owner doesn't have to touch them. */
-const SYSTEM_SLUGS = new Set(["shop", "store", "checkout", "order-confirmation", "track-order", "product"]);
+export const SYSTEM_SLUGS = new Set(["shop", "store", "checkout", "order-confirmation", "track-order", "product"]);
 
 export type PageNoteInput = { slug: string | null; isRoot: boolean; isPublished: boolean; archivedByPlan: boolean; storeOn: boolean; ownCode: boolean };
 
