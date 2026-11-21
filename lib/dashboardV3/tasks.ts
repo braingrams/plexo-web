@@ -5,7 +5,7 @@
  */
 import type { SolBuildGoal } from "@/lib/ai/solBuildContext";
 
-export type TaskVariant = "store" | "business" | "blog" | "course" | "link" | "app";
+export type TaskVariant = "store" | "payments" | "business" | "blog" | "course" | "link" | "app";
 
 /** What the dashboard knows about one site, gathered by lib/dashboardV3/homeData.ts. */
 export type SiteFacts = {
@@ -71,12 +71,20 @@ const brand: TaskDef = { id: "brand", title: "Add your logo and colours", descri
 /** Choosing the web address and going online used to be two steps that said almost the same thing. They are one: pick the address, tap once, you're online. */
 const finish: TaskDef = { id: "finish", title: "Finish up", description: "Pick your web address and put your site online, in one tap. You can keep editing after.", kind: "finish", help: "Finishing up", done: (f) => f.hasAddress && f.published };
 
+const pay: TaskDef = { id: "pay", title: "Choose how you get paid", description: "Card payments or a bank transfer, whichever suits you.", kind: "pay", help: "Getting paid", done: (f) => f.paymentsReady };
+
 const VARIANTS: Record<TaskVariant, TaskDef[]> = {
   store: [
     design,
     brand,
     { id: "product", title: "Add your first product", description: "What are you selling, and for how much?", kind: "product", help: "Adding your first product", done: (f) => f.productCount > 0 },
-    { id: "pay", title: "Choose how you get paid", description: "Card payments or a bank transfer, whichever suits you.", kind: "pay", help: "Getting paid", done: (f) => f.paymentsReady },
+    pay,
+    finish,
+  ],
+  payments: [
+    design,
+    brand,
+    pay,
     finish,
   ],
   business: [
@@ -110,7 +118,13 @@ const VARIANTS: Record<TaskVariant, TaskDef[]> = {
 };
 
 /** Which list of steps a site gets: what the site is first (a store is a store), then what they said they wanted. */
-export function taskVariantFor(site: { kind?: string | null; sells?: boolean }, goal?: SolBuildGoal | null): TaskVariant {
+export function taskVariantFor(site: { kind?: string | null; sells?: boolean; hasDonations?: boolean; productCount?: number }, goal?: SolBuildGoal | null): TaskVariant {
+  if (site.productCount && site.productCount > 0) return "store";
+  if (site.hasDonations) return "payments";
+  if (site.kind === "WordPress migrated site") {
+    if (site.sells) return "payments";
+    return "business";
+  }
   if (site.sells || site.kind === "Online store") return "store";
   if (site.kind === "App with sign-in") return "app";
   if (site.kind === "Course") return "course";

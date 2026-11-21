@@ -562,6 +562,9 @@ export const CommerceSettings = new Entity(
       newsletterPopupEnabled: { type: "boolean", default: false },
       notificationEmail: { type: "string" },
       enabled: { type: "boolean", default: false },
+      // Independent from `enabled` (which controls the e-commerce store / products / cart):
+      // allows taking donations and payments without forcing a full store catalog on the site.
+      donationsEnabled: { type: "boolean", default: true },
       // Site-wide store currency (ISO 4217) — one per site, not per product. See
       // lib/commerce/currency.ts for the curated set of currencies this app actually
       // accepts and lib/paystack.ts for where this replaces a hardcoded "NGN" literal.

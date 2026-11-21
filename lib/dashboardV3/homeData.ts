@@ -7,7 +7,7 @@ import "server-only";
 import { senderOf, type ActivityKind } from "./seeAllLinks";
 import { Template } from "@/lib/db/contentEntities";
 import { BlogPost, LmsEnrollment, LmsPage } from "@/lib/db/contentEntities";
-import { CommerceOrder, CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
+import { CommerceOrder, CommerceProduct, CommerceSettings, CommerceDonationCampaign } from "@/lib/db/commerceEntities";
 import { FormSubmission, PageView } from "@/lib/db/opsEntities";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { bucketVisitsByDay } from "./visitsTrend";
@@ -34,23 +34,31 @@ export type SiteHomeData = { variant: TaskVariant; facts: SiteFacts; commerceEna
 /** The facts behind one site's guided steps. */
 export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile | undefined): Promise<SiteHomeData> {
   const id = site.id;
-  const [tpl, settings, products, posts, lessons, funnel] = await Promise.all([
+  const [tpl, settings, products, campaigns, posts, lessons, funnel] = await Promise.all([
     safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "liveBuildId", "sourceType", "brand"] })).data, null),
     safe("store settings", async () => (await CommerceSettings.get({ templateId: id }).go()).data, null),
     safe("products", async () => (await CommerceProduct.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
+    safe("campaigns", async () => (await CommerceDonationCampaign.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
     safe("posts", async () => (await BlogPost.query.primary({ templateId: id }).go({ limit: 1, attributes: ["slug"] })).data, []),
     safe("lessons", async () => (await LmsPage.query.primary({ templateId: id }).go({ pages: "all", attributes: ["id", "kind"] })).data, []),
     safe("course", async () => (await import("@/lib/db/contentEntities").then((m) => m.LmsFunnel.get({ templateId: id }).go())).data, null),
   ]);
   // This site's OWN brand only: its linked Strata project or its saved colours and logo, never the account's (resolveSiteBrand with no profile).
   const own = await resolveSiteBrand({ siteId: id }).catch(() => null).then((r) => (r ? { logoUrl: r.logoUrl, noLogo: r.noLogo, colors: r.colours.map((c) => c.value) } : readSiteBrand(tpl?.brand)));
-  const commerceEnabled = !!settings?.enabled;
-  const variant = taskVariantFor({ kind: site.kind, sells: commerceEnabled }, profile?.goal);
+  const hasProducts = products.length > 0;
+  const hasDonations = campaigns.length > 0;
+  const commerceEnabled = Boolean(settings?.enabled) && (hasProducts || !hasDonations);
+  const acceptsDonations = hasDonations || Boolean(settings?.donationsEnabled && !settings?.enabled);
+  const variant = taskVariantFor({ kind: site.kind, sells: commerceEnabled, hasDonations: acceptsDonations, productCount: products.length }, profile?.goal);
   const created = tpl?.createdAt ? Date.parse(tpl.createdAt) : NaN;
   const updated = tpl?.updatedAt ? Date.parse(tpl.updatedAt) : NaN;
   const lessonCount = lessons.filter((l) => l.kind !== "WELCOME").length;
   const edited = Number.isFinite(created) && Number.isFinite(updated) && updated - created > EDITED_AFTER_MS;
-  const cardsReady = !!settings?.paystackLivePublicKey && !!settings?.paystackLiveSecretKeyEncrypted;
+  const cardsReady =
+    settings?.paymentProvider === "PLATFORM_PAYSTACK" ||
+    settings?.paymentProvider === "PLATFORM_STRIPE" ||
+    (settings?.paymentProvider === "BYO_STRIPE" && !!settings?.stripeLivePublishableKey && !!settings?.stripeLiveSecretKeyEncrypted) ||
+    ((!settings?.paymentProvider || settings?.paymentProvider === "BYO_PAYSTACK") && !!settings?.paystackLivePublicKey && !!settings?.paystackLiveSecretKeyEncrypted);
   const bankReady = !!settings?.bankTransferEnabled && !!settings?.bankTransferAccountNumber;
   const ownDesign = tpl?.sourceType === "RAW_UPLOAD";
   const facts: SiteFacts = {
@@ -103,7 +111,7 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
   let activityEmpty = "Nothing yet. Share your link and the first visitors will show up here.";
   let activityKind: ActivityKind = "none";
 
-  if (variant === "store") {
+  if (variant === "store" || variant === "payments") {
     const [orders, settings] = await Promise.all([
       safe("orders", async () => (await CommerceOrder.query.primary({ templateId: id }).go({ pages: "all" })).data, []),
       safe("currency", async () => (await CommerceSettings.get({ templateId: id }).go()).data, null),

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { Template } from "@/lib/db/contentEntities";
+import { PublishedDomain, Template } from "@/lib/db/contentEntities";
 import { verifyDraftPreviewToken } from "@/lib/draftPreviewToken";
 
 /**
@@ -43,6 +43,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
   if (!page) return shell("Not found", `<h1 style="font-size:22px">We can't find that page</h1><p>It may have been deleted.</p>`, 404);
   const back = `/dashboard/sites/${root.id}`;
 
+  const { data: domains } = await PublishedDomain.query.primary({ templateId: root.id }).go({ limit: 1 });
+  const liveHost = domains[0]?.domain;
+  const baseHref = liveHost ? `https://${liveHost}/` : root.migratedFrom ? `${root.migratedFrom.replace(/\/+$/, "")}/` : null;
+
   if (page.sourceType === "REACT_PROJECT") {
     return shell("Preview", `<h1 style="font-size:22px">Apps are previewed while you build them</h1><p>Open your app and use the preview next to the chat. Put it online when you are ready for people to use it.</p><p><a href="${back}" target="_top" style="color:#517a12;font-weight:700">Back to my site</a></p>`);
   }
@@ -60,13 +64,14 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
     };
     if (!html.trim()) return new NextResponse("<!doctype html><meta charset=\"utf-8\"><body style=\"margin:0;background:transparent\">", { headers: csp });
     const bgStyle = "<style>html{background:#fff}</style>";
+    const baseTag = baseHref && !/<base\b/i.test(html) ? `<base href="${baseHref}">` : "";
     let thumbHtml = html;
     if (/<head[^>]*>/i.test(thumbHtml)) {
-      thumbHtml = thumbHtml.replace(/<head[^>]*>/i, (m) => `${m}${bgStyle}`);
+      thumbHtml = thumbHtml.replace(/<head[^>]*>/i, (m) => `${m}${baseTag}${bgStyle}`);
     } else if (/<html[^>]*>/i.test(thumbHtml)) {
-      thumbHtml = thumbHtml.replace(/<html[^>]*>/i, (m) => `${m}<head>${bgStyle}</head>`);
+      thumbHtml = thumbHtml.replace(/<html[^>]*>/i, (m) => `${m}<head>${baseTag}${bgStyle}</head>`);
     } else {
-      thumbHtml = `<!doctype html><meta charset="utf-8"><head>${bgStyle}</head><body>${thumbHtml}</body>`;
+      thumbHtml = `<!doctype html><meta charset="utf-8"><head>${baseTag}${bgStyle}</head><body>${thumbHtml}</body>`;
     }
     return new NextResponse(thumbHtml, { headers: csp });
   }
@@ -84,6 +89,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 
   const bar = `<div style="position:fixed;z-index:2147483647;left:0;right:0;bottom:0;display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;padding:10px 16px;background:#121212;color:#fff;font:600 14px system-ui,sans-serif"><span>Preview: only you can see this. It is not online yet.</span><a href="${back}" target="_top" style="color:#b8f34a">Back to my site</a></div>`;
   if (!shot) out = /<\/body>/i.test(out) ? out.replace(/<\/body>/i, `${bar}</body>`) : out + bar;
+
+  if (baseHref && (page.sourceType === "RAW_UPLOAD" || root.sourceType === "RAW_UPLOAD") && !/<base\b/i.test(out)) {
+    const baseTag = `<base href="${baseHref}">`;
+    out = /<head[^>]*>/i.test(out) ? out.replace(/<head[^>]*>/i, (m) => `${m}${baseTag}`) : baseTag + out;
+  }
 
   return new NextResponse(out, { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Content-Security-Policy": "sandbox allow-scripts allow-forms allow-popups allow-top-navigation-by-user-activation" } });
 }

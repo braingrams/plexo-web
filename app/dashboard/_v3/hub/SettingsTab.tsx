@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AppWindow, BookOpen, ChevronRight, CornerUpRight, Database, Download, GraduationCap, LayoutTemplate, MessageSquare, PanelTop, ShoppingBag, SlidersHorizontal, type LucideIcon } from "lucide-react";
+import { AppWindow, BookOpen, ChevronRight, CornerUpRight, Database, Download, GraduationCap, Landmark, LayoutTemplate, MessageSquare, PanelTop, ShoppingBag, SlidersHorizontal, type LucideIcon } from "lucide-react";
 import { Button, Card, Input, useToast } from "../ui";
 import { builderLabel } from "./HubFrame";
 import type { HubFrameSite } from "./HubFrame";
@@ -42,6 +42,7 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
   const nameChanged = name.trim() !== site.name && name.trim() !== "";
   const shopLinks: Row[] = [
     ...(features.store ? [{ href: shopHref(site.id, "settings"), icon: ShoppingBag, title: "Shop settings", desc: "Payments, delivery and checkout." }] : []),
+    ...(!features.store && features.donations ? [{ href: shopHref(site.id, "settings", "payments"), icon: Landmark, title: "Payment settings", desc: "Cards, Paystack, Stripe and bank transfers for donations." }] : []),
     ...(features.blog ? [{ href: `/dashboard/templates/${site.id}/blog/settings`, icon: BookOpen, title: "Blog settings", desc: "Comments, authors and how posts look." }] : []),
     ...(features.course ? [{ href: `/dashboard/funnels/${site.id}/settings`, icon: GraduationCap, title: "Course price and settings", desc: "What learners pay and how they join." }] : []),
   ];

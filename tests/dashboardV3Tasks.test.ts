@@ -69,6 +69,17 @@ describe("taskVariantFor", () => {
     expect(taskVariantFor({ kind: "Course" }, "store")).toBe("course");
     expect(taskVariantFor({ kind: "App with sign-in" }, null)).toBe("app");
   });
+  it("handles WordPress migrated sites taking payments without forcing a product step", () => {
+    expect(taskVariantFor({ kind: "WordPress migrated site", sells: true, productCount: 0 }, null)).toBe("payments");
+    expect(taskVariantFor({ kind: "WordPress migrated site", sells: true, productCount: 3 }, null)).toBe("store");
+    expect(taskVariantFor({ kind: "WordPress migrated site", sells: false }, null)).toBe("business");
+    expect(taskVariantFor({ kind: "Website", hasDonations: true, productCount: 0 }, null)).toBe("payments");
+    expect(taskVariantFor({ kind: "Website", hasDonations: true, productCount: 2 }, null)).toBe("store");
+
+    const p = computeTasks("payments", facts({ hasSite: true, hasLogo: true, hasColors: true, paymentsReady: true }));
+    expect(p.tasks.map((t) => t.id)).toEqual(["design", "brand", "pay", "finish"]);
+    expect(p.tasks.find((t) => t.id === "product")).toBeUndefined();
+  });
   it("falls back to the goal, then to a business site", () => {
     expect(taskVariantFor({ kind: "Website" }, "link-in-bio")).toBe("link");
     expect(taskVariantFor({ kind: "Website" }, "landing")).toBe("business");

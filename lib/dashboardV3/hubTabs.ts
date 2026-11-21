@@ -9,6 +9,7 @@ export type HubTabId = "app" | "pages" | "products" | "orders" | "shop" | "blog"
 
 export type HubFeatures = {
   store: boolean;
+  donations?: boolean;
   blog: boolean;
   course: boolean;
   /** A server app with sign-in (React project). */

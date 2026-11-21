@@ -28,6 +28,7 @@ import { imageStem, makePostListsLive, type KnownPost } from "./livePostLists";
 import { listingLayoutFromWpHtml, postLayoutFromWpHtml, shellLayout, wpPageRole } from "./blogLayout";
 import { convertWcPage, hasWcChrome, isWooCommerce, rewriteWcChrome, storePagesFromHtml, wcPageRole } from "./woocommerce";
 import { buildStorePresentation, finishProductImport, importProductBatch, planWooCommerce, type WcPlanState } from "./storeImport";
+import { cleanWpSiteName } from "./siteName";
 import { convertGiveForms } from "./givewp";
 import { notifyMigrationDone, notifyMigrationPaused } from "./notify";
 import { slimForStorage } from "./slimHtml";
@@ -442,7 +443,8 @@ async function runPlanning(job: JobItem, warnings: string[]): Promise<string> {
     indexing: { list: "posts", page: 1 },
   };
 
-  await Template.patch({ id: job.templateId }).set({ migratedFrom: origin, ...(install.siteName ? { name: install.siteName } : {}) }).go();
+  const cleanName = cleanWpSiteName(install.siteName, origin);
+  await Template.patch({ id: job.templateId }).set({ migratedFrom: origin, ...(cleanName ? { name: cleanName } : {}) }).go();
   await WpMigrationJob.patch({ templateId: job.templateId, id: job.id })
     .set({ install, nodes, counts, planState, plugins: inventory.plugins, phase: "PLANNING", warnings })
     .go();
@@ -841,12 +843,16 @@ async function runPagesStep(job: JobItem, errors: string[]): Promise<string> {
       }
       const role = wpPageRole(raw);
       html = await slimForStorage(html, pathOf(row.sourceUrl, path), inlineFileSaver(job));
+      const isRoot = row.templateId === job.templateId || path === "/";
+      const titleCandidate = row.title || sourceFacts.title;
+      // Never overwrite the site's brand name on the root template with generic homepage titles like "Home"
+      const shouldSetName = !isRoot && Boolean(titleCandidate);
       await Template.patch({ id: row.templateId })
         .set({
           compiledHtml: html,
           sourceType: "RAW_UPLOAD",
           urlTrailingSlash: path.endsWith("/") && path !== "/",
-          ...(row.title || sourceFacts.title ? { name: row.title || sourceFacts.title } : {}),
+          ...(shouldSetName ? { name: titleCandidate } : {}),
         })
         .go();
 
@@ -1202,6 +1208,15 @@ function linkKey(href: string): string {
 }
 
 async function runFinalizing(job: JobItem): Promise<string> {
+  const { data: pendingAssets } = await WpMigrationAsset.query
+    .primary({ jobId: job.id })
+    .where((attr, op) => op.eq(attr.status, "PENDING"))
+    .go({ pages: "all" });
+  if (pendingAssets.length > 0) {
+    // Never complete migration with pending assets; return to ASSETS to finish them
+    return "ASSETS";
+  }
+
   const plan = job.planState as PlanState;
   const nodes = { ...((job.nodes as Record<string, string>) ?? {}) };
   const pages = await allPages(job.id);

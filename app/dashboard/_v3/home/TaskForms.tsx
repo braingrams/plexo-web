@@ -67,11 +67,13 @@ export function ProductForm({ siteId, commerceEnabled, demo }: Common & { commer
   );
 }
 
-type PayChoice = "card" | "bank";
+type PayChoice = "platform_paystack" | "platform_stripe" | "custom" | "bank";
+type CustomProvider = "paystack" | "stripe";
 
-/** Get paid: cards (Paystack) or a bank transfer, saved with the existing store settings. */
+/** Get paid: Plexo Paystack, Plexo Stripe, your own Paystack/Stripe keys, or bank transfer. */
 export function PayForm({ siteId, demo }: Common) {
-  const [choice, setChoice] = useState<PayChoice>("card");
+  const [choice, setChoice] = useState<PayChoice>("platform_paystack");
+  const [customProvider, setCustomProvider] = useState<CustomProvider>("paystack");
   const [pub, setPub] = useState("");
   const [secret, setSecret] = useState("");
   const [bank, setBank] = useState("");
@@ -80,9 +82,17 @@ export function PayForm({ siteId, demo }: Common) {
   const { busy, error, setError, run } = useRun(demo);
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (choice === "card") {
-      if (!pub.trim() || !secret.trim()) return setError("Please paste both keys from your Paystack account.");
-      await run(() => callApi(`/api/v1/commerce/${siteId}/settings`, "PUT", { enabled: true, paymentProvider: "BYO_PAYSTACK", paystackMode: "LIVE", paystackLivePublicKey: pub.trim(), paystackLiveSecretKey: secret.trim() }), "Card payments are on.");
+    if (choice === "platform_paystack") {
+      await run(() => callApi(`/api/v1/commerce/${siteId}/settings`, "PUT", { enabled: true, paymentProvider: "PLATFORM_PAYSTACK" }), "Plexo Paystack is connected.");
+    } else if (choice === "platform_stripe") {
+      await run(() => callApi(`/api/v1/commerce/${siteId}/settings`, "PUT", { enabled: true, paymentProvider: "PLATFORM_STRIPE" }), "Plexo Stripe is connected.");
+    } else if (choice === "custom") {
+      if (!pub.trim() || !secret.trim()) return setError(`Please paste both keys from your ${customProvider === "paystack" ? "Paystack" : "Stripe"} account.`);
+      if (customProvider === "paystack") {
+        await run(() => callApi(`/api/v1/commerce/${siteId}/settings`, "PUT", { enabled: true, paymentProvider: "BYO_PAYSTACK", paystackMode: "LIVE", paystackLivePublicKey: pub.trim(), paystackLiveSecretKey: secret.trim() }), "Paystack card payments are on.");
+      } else {
+        await run(() => callApi(`/api/v1/commerce/${siteId}/settings`, "PUT", { enabled: true, paymentProvider: "BYO_STRIPE", stripeMode: "LIVE", stripeLivePublishableKey: pub.trim(), stripeLiveSecretKey: secret.trim() }), "Stripe card payments are on.");
+      }
     } else {
       if (!bank.trim() || !acctName.trim() || !acctNo.trim()) return setError("Please fill in your bank, the name on the account and the account number.");
       await run(() => callApi(`/api/v1/commerce/${siteId}/settings`, "PUT", { enabled: true, bankTransferEnabled: true, bankTransferBankName: bank.trim(), bankTransferAccountName: acctName.trim(), bankTransferAccountNumber: acctNo.trim() }), "Bank transfer is on.");
@@ -93,19 +103,50 @@ export function PayForm({ siteId, demo }: Common) {
       <SegmentedControl<PayChoice>
         label="How do you want to get paid?"
         value={choice}
-        onChange={(v) => (setChoice(v), setError(""))}
+        onChange={(v) => { setChoice(v); setError(""); }}
         options={[
-          { value: "card", label: "Cards (recommended)", icon: <CreditCard size={16} aria-hidden /> },
+          { value: "platform_paystack", label: "Plexo Paystack", icon: <CreditCard size={16} aria-hidden /> },
+          { value: "platform_stripe", label: "Plexo Stripe", icon: <CreditCard size={16} aria-hidden /> },
+          { value: "custom", label: "Your Paystack or Stripe", icon: <CreditCard size={16} aria-hidden /> },
           { value: "bank", label: "Bank transfer", icon: <Landmark size={16} aria-hidden /> },
         ]}
       />
-      {choice === "card" ? (
+      {choice === "platform_paystack" ? (
+        <p className="plx-small" style={{ margin: 0 }}>
+          Customers pay by card or bank transfer via Plexo&apos;s managed Paystack account. No keys to copy — proceeds settle directly into your Plexo balance, withdrawable to your bank any time.
+        </p>
+      ) : choice === "platform_stripe" ? (
+        <p className="plx-small" style={{ margin: 0 }}>
+          Accept international card payments worldwide via Plexo&apos;s managed Stripe account. No keys to copy — proceeds settle directly into your Plexo balance, withdrawable any time.
+        </p>
+      ) : choice === "custom" ? (
         <>
-          <p className="plx-small" style={{ margin: 0 }}>
-            Customers pay by card and the money goes to your Paystack account. Copy the two keys from <strong>Settings → API keys</strong> in Paystack.
-          </p>
-          <Input label="Public key" value={pub} onChange={(e) => setPub(e.target.value)} placeholder="Starts with pk_live" autoComplete="off" />
-          <Input label="Secret key" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Starts with sk_live" autoComplete="off" help="We keep this safe and never show it again." error={error} />
+          <SegmentedControl<CustomProvider>
+            label="Which provider do you use?"
+            value={customProvider}
+            onChange={(v) => { setCustomProvider(v); setError(""); }}
+            options={[
+              { value: "paystack", label: "Paystack" },
+              { value: "stripe", label: "Stripe" },
+            ]}
+          />
+          {customProvider === "paystack" ? (
+            <>
+              <p className="plx-small" style={{ margin: 0 }}>
+                Customers pay by card and the money goes to your Paystack account. Copy the two keys from <strong>Settings → API keys</strong> in Paystack.
+              </p>
+              <Input label="Public key" value={pub} onChange={(e) => setPub(e.target.value)} placeholder="Starts with pk_live" autoComplete="off" />
+              <Input label="Secret key" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Starts with sk_live" autoComplete="off" help="We keep this safe and never show it again." error={error} />
+            </>
+          ) : (
+            <>
+              <p className="plx-small" style={{ margin: 0 }}>
+                Customers pay by card and the money goes to your Stripe account. Copy the two keys from <strong>Developers → API keys</strong> in Stripe.
+              </p>
+              <Input label="Publishable key" value={pub} onChange={(e) => setPub(e.target.value)} placeholder="Starts with pk_live" autoComplete="off" />
+              <Input label="Secret key" type="password" value={secret} onChange={(e) => setSecret(e.target.value)} placeholder="Starts with sk_live" autoComplete="off" help="We keep this safe and never show it again." error={error} />
+            </>
+          )}
         </>
       ) : (
         <>

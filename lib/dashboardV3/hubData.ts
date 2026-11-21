@@ -5,7 +5,7 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { Template, PublishedDomain, BlogSite } from "@/lib/db/contentEntities";
 import { DeployedApp } from "@/lib/db/appEntities";
-import { CommerceSettings, CommerceProduct, CommerceCategory } from "@/lib/db/commerceEntities";
+import { CommerceSettings, CommerceProduct, CommerceCategory, CommerceDonationCampaign } from "@/lib/db/commerceEntities";
 import { PageView } from "@/lib/db/opsEntities";
 import { getPageTree, pathForPage } from "@/server/slugDynamo";
 import { effectivePlan } from "@/lib/plan/entitlement";
@@ -76,15 +76,21 @@ export { editHrefFor };
 export async function loadHubSite(organizationId: string, id: string): Promise<HubSite> {
   const { data: t } = await Template.get({ id }).go();
   if (!t || t.organizationId !== organizationId || t.parentId || t.kind !== "LANDING_PAGE") notFound();
-  const [{ data: commerce }, { data: blog }, { data: domains }, { data: deployed }] = await Promise.all([
+  const [{ data: commerce }, { data: blog }, { data: domains }, { data: deployed }, { data: products }, { data: campaigns }] = await Promise.all([
     CommerceSettings.get({ templateId: id }).go(),
     BlogSite.get({ templateId: id }).go(),
     PublishedDomain.query.primary({ templateId: id }).go({ pages: "all" }),
     DeployedApp.get({ templateId: id }).go(),
+    CommerceProduct.query.primary({ templateId: id }).go({ limit: 1 }),
+    CommerceDonationCampaign.query.primary({ templateId: id }).go({ limit: 1 }),
   ]);
   const sourceType = asSource(t.sourceType);
+  const hasProducts = products.length > 0;
+  const hasDonations = campaigns.length > 0;
+  const store = Boolean(commerce?.enabled) && (hasProducts || !hasDonations);
   const features: HubFeatures = {
-    store: !!commerce?.enabled,
+    store,
+    donations: hasDonations,
     blog: !!blog?.enabled,
     course: !!t.isLmsFunnel,
     app: sourceType === "REACT_PROJECT",
@@ -269,14 +275,19 @@ export async function loadHubSiteCards(organizationId: string, userId: string): 
   const week = new Date(Date.now() - 7 * 86400000).toISOString();
   return Promise.all(
     sites.map(async (s) => {
-      const [{ data: commerce }, { data: blog }, { data: t }, { data: deployed }, views] = await Promise.all([
+      const [{ data: commerce }, { data: blog }, { data: t }, { data: deployed }, { data: products }, { data: campaigns }, views] = await Promise.all([
         CommerceSettings.get({ templateId: s.id }).go(),
         BlogSite.get({ templateId: s.id }).go(),
         Template.get({ id: s.id }).go(),
         DeployedApp.get({ templateId: s.id }).go(),
+        CommerceProduct.query.primary({ templateId: s.id }).go({ limit: 1 }),
+        CommerceDonationCampaign.query.primary({ templateId: s.id }).go({ limit: 1 }),
         PageView.query.primary({ templateId: s.id }).between({ createdAt: week }, { createdAt: new Date().toISOString() }).go({ pages: "all" }).then((r) => r.data.length).catch(() => 0),
       ]);
-      const features: HubFeatures = { store: !!commerce?.enabled, blog: !!blog?.enabled, course: !!t?.isLmsFunnel, app: t?.sourceType === "REACT_PROJECT", ownCode: t?.sourceType === "RAW_UPLOAD", deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null, migrated: !!t?.migratedFrom };
+      const hasProducts = products.length > 0;
+      const hasDonations = campaigns.length > 0;
+      const store = Boolean(commerce?.enabled) && (hasProducts || !hasDonations);
+      const features: HubFeatures = { store, donations: hasDonations, blog: !!blog?.enabled, course: !!t?.isLmsFunnel, app: t?.sourceType === "REACT_PROJECT", ownCode: t?.sourceType === "RAW_UPLOAD", deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null, migrated: !!t?.migratedFrom };
       return { id: s.id, name: s.name, kind: hubKindLabel(features), status: s.status, address: s.address ?? null, visits7d: views, editHref: editHrefFor(s.id, t?.sourceType), app: isAppKind(hubKindLabel(features)) };
     }),
   );

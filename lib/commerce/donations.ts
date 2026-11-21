@@ -127,7 +127,7 @@ export function publicCampaignView(campaign: CampaignItem, settings: SettingsIte
     thankYouMessage: campaign.thankYouMessage ?? null,
     buttonLabel: campaign.buttonLabel ?? null,
     currency: settings?.currency ?? "NGN",
-    accepting: Boolean(settings?.enabled) && (campaign.active ?? true) && (gateway.gatewayReady || gateway.bankTransferReady),
+    accepting: (settings?.donationsEnabled ?? true) && (campaign.active ?? true) && (gateway.gatewayReady || gateway.bankTransferReady),
     bankTransferAvailable: gateway.bankTransferReady,
   };
 }
@@ -219,7 +219,7 @@ export async function startDonation(input: StartDonationInput): Promise<StartDon
     CommerceSettings.get({ templateId: input.templateId }).go(),
   ]);
   if (!campaign || !(campaign.active ?? true)) throw new DonationError("This donation form isn't accepting donations right now.", 404);
-  if (!settings?.enabled) throw new DonationError("This site isn't accepting donations yet — please check back soon.");
+  if (!settings || settings.donationsEnabled === false) throw new DonationError("This site isn't accepting donations yet — please check back soon.");
   const planBlock = await checkoutPlanBlock(settings);
   if (planBlock) throw new DonationError("This site isn't accepting donations right now — please check back soon.");
 
@@ -771,7 +771,7 @@ export async function ensureDonationsReady(templateId: string, organizationId: s
   const { data: anyOrder } = await CommerceOrder.query.primary({ templateId }).go({ limit: 1 });
   const currency = opts.currency && /^[A-Z]{3}$/.test(opts.currency) && anyOrder.length === 0 ? opts.currency : undefined;
   await CommerceSettings.patch({ templateId })
-    .set({ enabled: true, ...(currency ? { currency } : {}) })
+    .set({ donationsEnabled: true, ...(currency ? { currency } : {}) })
     .go();
 }
 
@@ -795,7 +795,7 @@ export async function listDonationsOverview(templateId: string, opts: { allGifts
   const gateway = resolveDonationGateway(settings);
   return {
     currency: settings?.currency ?? "NGN",
-    enabled: Boolean(settings?.enabled),
+    enabled: Boolean(settings?.donationsEnabled ?? true),
     paymentsReady: gateway.gatewayReady || gateway.bankTransferReady,
     monthlyReady: gateway.gatewayReady,
     totals: {

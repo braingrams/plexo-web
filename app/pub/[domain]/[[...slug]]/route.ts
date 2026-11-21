@@ -922,6 +922,16 @@ async function serveSite(
       break;
     }
   }
+  // Nested subpages of a raw-uploaded or migrated site share the assets stored under the site root template
+  if (!asset && cursor.id !== published.templateId) {
+    for (const path of candidatePaths) {
+      const { data } = await TemplateAsset.get({ templateId: published.templateId, path }).go();
+      if (data) {
+        asset = data;
+        break;
+      }
+    }
+  }
   if (!asset) {
     return notFoundResponse();
   }
@@ -941,13 +951,8 @@ async function serveSite(
     // the no-store fetch above — a stale-while-revalidate window keeps repeat requests fast
     // without risking a visitor's BROWSER cache hiding a real content change for an hour.
     "Cache-Control": "public, max-age=60, must-revalidate, stale-while-revalidate=300",
+    "Access-Control-Allow-Origin": "*",
   });
-  // Browsers only load web fonts cross-origin with CORS — without this, the dashboard's
-  // page previews (which load a site's files from its live domain) show icon fonts as
-  // empty boxes. Fonts are public files on a public site, so any origin may load them.
-  if (/^(font\/|application\/(font|x-font|vnd\.ms-fontobject))/i.test(asset.contentType) || /\.(woff2?|ttf|otf|eot)$/i.test(remainingSegments.join("/"))) {
-    headers.set("Access-Control-Allow-Origin", "*");
-  }
   // An HTML file that is served as a page of the site gets the same form + content support as any
   // page, so its contact form works and says thank you.
   if (/^text\/html/i.test(asset.contentType)) {
