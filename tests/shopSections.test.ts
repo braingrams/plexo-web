@@ -61,4 +61,13 @@ describe("Shop tab menu", () => {
     expect(currentShopNavKey("settings", "payments")).toBe("settings:payments");
     expect(currentShopNavKey("money", "general")).toBe("money");
   });
+  it("filters non-store tools for sites without a store (donations only)", () => {
+    const s = shopSections({ store: false });
+    expect(s.map((x) => x.id)).toEqual(["money", "donations", "settings"]);
+    const g = shopNavGroups(s, { store: false });
+    expect(g.map((x) => x.label)).toEqual(["Money", "Gifts", "Settings"]);
+    expect(g[0].items.map((i) => i.key)).toEqual(["money"]);
+    expect(g[1].items.map((i) => i.key)).toEqual(["donations"]);
+    expect(g[2].items.map((i) => i.key)).toEqual(["settings:payments"]);
+  });
 });

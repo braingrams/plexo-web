@@ -30,16 +30,19 @@ export type ShopNavItem = { key: string; label: string; help: string; section: S
 export type ShopNavGroup = { label: string; items: ShopNavItem[] };
 
 /** The one menu of the Shop tab, grouped: Money, Selling, Settings. Booking times only appear for a shop that sells services. */
-export function shopNavGroups(sections: ShopSection[]): ShopNavGroup[] {
+export function shopNavGroups(sections: ShopSection[], opts: { store?: boolean } = {}): ShopNavGroup[] {
   const has = (id: ShopSectionId) => sections.find((s) => s.id === id);
   const item = (id: ShopSectionId): ShopNavItem[] => {
     const s = has(id);
     return s ? [{ key: id, label: s.label, help: s.help, section: id }] : [];
   };
+  const parts = opts.store === false
+    ? SETTINGS_PARTS.filter((p) => p.id === "payments")
+    : SETTINGS_PARTS;
   return [
     { label: "Money", items: (["money", "customers", "discounts", "delivery"] as ShopSectionId[]).flatMap(item) },
-    { label: "Selling", items: (["bookings", "donations"] as ShopSectionId[]).flatMap(item) },
-    { label: "Settings", items: SETTINGS_PARTS.map((p) => ({ key: `settings:${p.id}`, label: p.label, help: p.help, section: "settings" as const, part: p.id })) },
+    { label: opts.store === false ? "Gifts" : "Selling", items: (["bookings", "donations"] as ShopSectionId[]).flatMap(item) },
+    { label: "Settings", items: parts.map((p) => ({ key: `settings:${p.id}`, label: p.label, help: p.help, section: "settings" as const, part: p.id })) },
   ].filter((g) => g.items.length > 0);
 }
 
@@ -56,8 +59,12 @@ export function parseSettingsPart(v: unknown): ShopSettingsPart {
 }
 
 /** Booking times only make sense for a shop that sells services; everyone else never sees them. */
-export function shopSections(opts: { sellsServices?: boolean } = {}): ShopSection[] {
-  return SHOP_SECTIONS.filter((s) => s.id !== "bookings" || opts.sellsServices !== false);
+export function shopSections(opts: { sellsServices?: boolean; store?: boolean } = {}): ShopSection[] {
+  return SHOP_SECTIONS.filter((s) => {
+    if (s.id === "bookings" && opts.sellsServices === false) return false;
+    if (opts.store === false && (s.id === "customers" || s.id === "discounts" || s.id === "delivery" || s.id === "bookings")) return false;
+    return true;
+  });
 }
 
 export function resolveShopSection(requested: unknown, sections: ShopSection[]): ShopSectionId {

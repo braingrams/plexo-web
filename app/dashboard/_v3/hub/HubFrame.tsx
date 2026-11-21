@@ -119,7 +119,7 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
       </header>
 
       <div data-tour="site-tabs"><ScrollRail className="plx-hub__tabs" activeKey={currentHref} label="Site tabs">
-        <TabLinks prefetch label="This site" current={currentHref} items={tabs.map((t) => ({ href: hubTabHref(site.id, t.id), label: t.label, tour: t.tour }))} />
+        <TabLinks prefetch label="This site" current={!tabs.some((t) => t.id === current) && current === "shop" ? hubTabHref(site.id, "settings") : currentHref} items={tabs.map((t) => ({ href: hubTabHref(site.id, t.id), label: t.label, tour: t.tour }))} />
       </ScrollRail></div>
 
       <div className="plx-hub__body">

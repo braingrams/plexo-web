@@ -27,4 +27,11 @@ describe("hub tabs per kind", () => {
     expect(hubKindLabel({ ...NO_FEATURES, deployed: "static" })).toBe("Uploaded app");
     expect(hubKindLabel({ ...NO_FEATURES, store: true })).toBe("Online store");
   });
+  it("resolves shop tab when store or donations or migrated is enabled, but not for plain websites without them", () => {
+    expect(resolveHubTab("shop", NO_FEATURES)).toBe("pages");
+    expect(resolveHubTab("shop", { ...NO_FEATURES, store: true })).toBe("shop");
+    expect(resolveHubTab("shop", { ...NO_FEATURES, donations: true })).toBe("shop");
+    expect(resolveHubTab("shop", { ...NO_FEATURES, migrated: true })).toBe("shop");
+    expect(resolveHubTab("shop", { ...NO_FEATURES, deployed: "server", donations: true })).toBe("app");
+  });
 });

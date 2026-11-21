@@ -21,7 +21,7 @@ export function useReportDirty(dirty: boolean) {
 }
 
 /** The Shop tab frame: ONE menu (left on wide screens, a single dropdown on phones) and the open section beside it. */
-export function ShopLayout({ siteId, groups, current, children }: { siteId: string; groups: ShopNavGroup[]; current: string; children: React.ReactNode }) {
+export function ShopLayout({ siteId, groups, current, label = "Shop", children }: { siteId: string; groups: ShopNavGroup[]; current: string; label?: string; children: React.ReactNode }) {
   const router = useRouter();
   const dirty = useRef(false);
   const ctx = useRef({ set: (d: boolean) => { dirty.current = d; } }).current;
@@ -42,7 +42,7 @@ export function ShopLayout({ siteId, groups, current, children }: { siteId: stri
   return (
     <DirtyContext.Provider value={ctx}>
       <div className="plx-shoplay" data-tour="shop-tools">
-        <nav className="plx-shopnav" aria-label="Shop">
+        <nav className="plx-shopnav" aria-label={label}>
           {groups.map((g) => (
             <div key={g.label} className="plx-shopnav__group">
               <p className="plx-shopnav__label">{g.label}</p>
@@ -56,7 +56,7 @@ export function ShopLayout({ siteId, groups, current, children }: { siteId: stri
           ))}
         </nav>
         <div className="plx-shopmenu">
-          <label className="plx-shopmenu__label" htmlFor="plx-shopmenu">Shop</label>
+          <label className="plx-shopmenu__label" htmlFor="plx-shopmenu">{label}</label>
           <select
             id="plx-shopmenu"
             className="plx-shopmenu__select"

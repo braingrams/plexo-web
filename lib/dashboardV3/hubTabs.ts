@@ -72,6 +72,7 @@ export function hubTabs(features: HubFeatures, experience: Experience = "beginne
 /** The tab to show for `?tab=`: the one asked for if this site has it, else Pages. */
 export function resolveHubTab(requested: unknown, features: HubFeatures, experience: Experience = "beginner"): HubTabId {
   const wanted = parseHubTab(requested);
+  if (wanted === "shop" && !features.deployed && (features.store || features.donations || features.migrated)) return "shop";
   const tabs = hubTabs(features, experience);
   return wanted && tabs.some((t) => t.id === wanted) ? wanted : tabs[0].id;
 }

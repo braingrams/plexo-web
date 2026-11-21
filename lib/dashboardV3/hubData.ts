@@ -86,7 +86,7 @@ export async function loadHubSite(organizationId: string, id: string): Promise<H
   ]);
   const sourceType = asSource(t.sourceType);
   const hasProducts = products.length > 0;
-  const hasDonations = campaigns.length > 0;
+  const hasDonations = campaigns.length > 0 || Boolean(commerce?.donationsEnabled && !commerce?.enabled);
   const store = Boolean(commerce?.enabled) && (hasProducts || !hasDonations);
   const features: HubFeatures = {
     store,
@@ -285,7 +285,7 @@ export async function loadHubSiteCards(organizationId: string, userId: string): 
         PageView.query.primary({ templateId: s.id }).between({ createdAt: week }, { createdAt: new Date().toISOString() }).go({ pages: "all" }).then((r) => r.data.length).catch(() => 0),
       ]);
       const hasProducts = products.length > 0;
-      const hasDonations = campaigns.length > 0;
+      const hasDonations = campaigns.length > 0 || Boolean(commerce?.donationsEnabled && !commerce?.enabled);
       const store = Boolean(commerce?.enabled) && (hasProducts || !hasDonations);
       const features: HubFeatures = { store, donations: hasDonations, blog: !!blog?.enabled, course: !!t?.isLmsFunnel, app: t?.sourceType === "REACT_PROJECT", ownCode: t?.sourceType === "RAW_UPLOAD", deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null, migrated: !!t?.migratedFrom };
       return { id: s.id, name: s.name, kind: hubKindLabel(features), status: s.status, address: s.address ?? null, visits7d: views, editHref: editHrefFor(s.id, t?.sourceType), app: isAppKind(hubKindLabel(features)) };

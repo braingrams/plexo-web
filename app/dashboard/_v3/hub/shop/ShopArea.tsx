@@ -22,13 +22,16 @@ export async function ShopArea({ siteId, section: requested, part: requestedPart
   // Booking times only appear once the shop sells a service (or when someone opens them on purpose).
   const [{ data: products }, { data: shop }] = await Promise.all([CommerceProduct.query.primary({ templateId: siteId }).go({ pages: "all", attributes: ["kind"] }), CommerceSettings.get({ templateId: siteId }).go()]);
   const currency = shop?.currency ?? "NGN";
+  const store = Boolean(shop?.enabled) && (products.length > 0 || !shop?.donationsEnabled);
   const sellsServices = products.some((p) => p.kind === "SERVICE") || requested === "bookings";
-  const sections = shopSections({ sellsServices });
+  const sections = shopSections({ sellsServices, store });
   const section: ShopSectionId = resolveShopSection(requested, sections);
   const part = parseSettingsPart(requestedPart);
-  const groups = shopNavGroups(sections);
+  const groups = shopNavGroups(sections, { store });
   const key = currentShopNavKey(section, part);
-  const info = groups.flatMap((g) => g.items).find((i) => i.key === key)!;
+  const allItems = groups.flatMap((g) => g.items);
+  const info = allItems.find((i) => i.key === key) ?? allItems[0];
+  const activeKey = info?.key ?? key;
 
   let body: React.ReactNode;
   switch (section) {
@@ -60,8 +63,8 @@ export async function ShopArea({ siteId, section: requested, part: requestedPart
 
   return (
     <>
-      <ShopLayout siteId={siteId} groups={groups} current={key}>
-        <TabBar title={info.label} sub={info.help} />
+      <ShopLayout siteId={siteId} groups={groups} current={activeKey} label={store ? "Shop" : "Payments"}>
+        <TabBar title={info?.label ?? "Payments"} sub={info?.help ?? ""} />
         <div data-tour="hub-shop">{body}</div>
       </ShopLayout>
     </>
