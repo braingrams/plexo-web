@@ -14,7 +14,7 @@ import { nextPlanUp, planLabel, toPlanId, PLAN } from "@/lib/plan/plans";
 export const NEW_SITE_PATH = "/dashboard/sites/new";
 export const DESIGNS_PATH = "/dashboard/marketplace";
 export const MOVE_PATH = "/dashboard/migrate/wordpress";
-export const UPLOAD_PATH = "/dashboard/new?classic=1";
+export const UPLOAD_PATH = "/dashboard/templates/upload";
 export const UPGRADE_PATH = "/dashboard/settings/subscription";
 
 const solHref = (prompt: string) => `/dashboard/sol?new=1&draft=${encodeURIComponent(prompt)}`;

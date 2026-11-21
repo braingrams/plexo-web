@@ -63,6 +63,14 @@ export function SiteSwitcher({ sites, currentSiteId, onSelect, onCreate }: SiteS
     if (id === current?.id) return;
     if (onSelect) return onSelect(id);
     document.cookie = `${CURRENT_SITE_COOKIE}=${encodeURIComponent(id)}; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax`;
+    if (typeof window !== "undefined") {
+      const pathname = window.location.pathname;
+      if (current?.id && pathname.includes(current.id)) {
+        const nextUrl = pathname.replace(current.id, id) + window.location.search;
+        router.push(nextUrl);
+        return;
+      }
+    }
     nav.refresh();
   };
 

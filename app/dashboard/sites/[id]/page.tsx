@@ -12,6 +12,7 @@ import { VisitsTab } from "../../_v3/hub/VisitsTab";
 import { HealthTab } from "../../_v3/hub/HealthTab";
 import { SettingsTab } from "../../_v3/hub/SettingsTab";
 import { AddMoreCards } from "../../_v3/hub/AddMore";
+import { SellTemplateCard } from "../../_v3/hub/SellTemplateCard";
 import { AdvancedArea } from "../../_v3/hub/advanced/AdvancedArea";
 import { hubTabs, resolveHubTab } from "@/lib/dashboardV3/hubTabs";
 import { advancedKind, advancedSections, resolveAdvancedSection } from "@/lib/dashboardV3/hubAdvanced";
@@ -86,6 +87,7 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       content = (
         <>
           <PagesTab site={site} pages={pages} experience={ctx.experience} plan={ctx.plan} />
+          <SellTemplateCard siteId={id} siteName={site.name} />
           <AddMoreCards siteId={id} siteName={site.name} features={site.features} pages={examplePages(pages)} />
         </>
       );
