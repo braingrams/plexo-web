@@ -97,7 +97,7 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
         <AsideCard title="What happens if…">
           <ul>
             <li><ShieldCheck size={16} aria-hidden /> <span><b>I give a site away?</b> Nothing moves until they accept, and you can cancel until then.</span></li>
-            <li><ShieldCheck size={16} aria-hidden /> <span><b>They say yes?</b> They own its pages, orders and web addresses. It leaves your account.</span></li>
+            <li><ShieldCheck size={16} aria-hidden /> <span><b>They accept?</b> They own its pages, orders and web addresses. It leaves your account.</span></li>
             <li><ShieldCheck size={16} aria-hidden /> <span><b>I bring a site in?</b> Your old site stays where it is until you switch your address over.</span></li>
           </ul>
         </AsideCard>
@@ -107,7 +107,7 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
       {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
 
       {incoming.length ? (
-        <Panel tone="tint" title="Someone wants to give you a site" description="Have a look, then say yes or no." data-tour="move-incoming">
+        <Panel tone="tint" title="Someone wants to give you a site" description="Have a look, then accept or decline." data-tour="move-incoming">
           {incoming.map((t) => (
             <div key={t.id} className="plx-actionrow">
               <div>

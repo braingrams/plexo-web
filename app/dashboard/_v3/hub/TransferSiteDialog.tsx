@@ -110,7 +110,7 @@ export function TransferSiteDialog({
       setPreview(null);
       setEmail("");
       show({
-        title: "Transfer invite sent",
+        title: "Invite sent",
         description: "Nothing moves until they accept. You stay in charge and can cancel until then.",
         tone: "success",
       });
@@ -128,9 +128,9 @@ export function TransferSiteDialog({
     setCancelling(true);
     setError(null);
     try {
-      await hubApi(`/api/templates/${site.id}/transfer`, { method: "DELETE" }, "We couldn't cancel that transfer. Please try again.");
+      await hubApi(`/api/templates/${site.id}/transfer`, { method: "DELETE" }, "We couldn't cancel that. Please try again.");
       setPending(null);
-      show({ title: "Transfer cancelled", tone: "info" });
+      show({ title: "Cancelled", tone: "info" });
     } catch (e) {
       setError(errMsg(e));
     } finally {
@@ -144,7 +144,7 @@ export function TransferSiteDialog({
     <Modal
       open={!!site}
       onClose={() => (checking || sending || cancelling ? undefined : onClose())}
-      title={pending ? "Pending site transfer" : `Transfer ${site.name}`}
+      title={pending ? "Waiting for them to accept" : `Give ${site.name} to someone`}
       description="They need a Plexo account, or they can make one. You stay in charge until they accept."
       footer={
         pending ? (
@@ -153,7 +153,7 @@ export function TransferSiteDialog({
               Close
             </Button>
             <Button variant="danger" loading={cancelling} onClick={cancelPending}>
-              Cancel transfer
+              Cancel offer
             </Button>
           </>
         ) : !preview ? (
@@ -209,7 +209,7 @@ export function TransferSiteDialog({
                 </span>
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <b style={{ color: "var(--plx-heading)", fontSize: 13 }}>Waiting for acceptance</b>
+                    <b style={{ color: "var(--plx-heading)", fontSize: 13 }}>Waiting for them to accept</b>
                     <Badge tone="warning">Waiting</Badge>
                   </div>
                   <span className="plx-small" style={{ color: "var(--plx-muted)" }}>
@@ -219,7 +219,7 @@ export function TransferSiteDialog({
               </div>
             </div>
             <p className="plx-small" style={{ margin: 0, color: "var(--plx-muted)", lineHeight: 1.5 }}>
-              The recipient was sent an invitation to accept ownership of <b>{site.name}</b>. You remain in control of this site until they accept. If you change your mind, cancel the transfer above.
+              We sent an invite to give them <b>{site.name}</b>. You stay in charge of this site until they accept. If you change your mind, cancel the offer above.
             </p>
           </div>
         ) : !preview ? (
@@ -249,7 +249,7 @@ export function TransferSiteDialog({
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, color: "var(--plx-heading)" }}>
               <ShieldCheck size={18} aria-hidden style={{ color: "var(--plx-deep)" }} />
-              <b style={{ fontSize: 14 }}>Before you send {site.name}</b>
+              <b style={{ fontSize: 14 }}>Before you give {site.name}</b>
             </div>
 
             {!preview.exists ? (

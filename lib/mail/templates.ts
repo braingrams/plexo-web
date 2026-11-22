@@ -167,11 +167,11 @@ export function buildSiteTransferEmail(input: {
   const productName = input.brand?.name ?? "Plexo";
   const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
-    title: `${input.senderName} wants to transfer "${input.siteName}" to you on ${productName}`,
+    title: `${input.senderName} wants to give you "${input.siteName}" on ${productName}`,
     bodyHtml: `
       <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">You've been offered a site</h1>
       <p style="margin:0 0 28px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">
-        <strong>${input.senderName}</strong> wants to transfer full ownership of <strong>${input.siteName}</strong> to your ${productName} account — every page, and any Commerce catalog/orders it has.
+        <strong>${input.senderName}</strong> wants to give you <strong>${input.siteName}</strong> on ${productName} — every page, and any Commerce catalog/orders it has.
       </p>
       ${input.warningCount > 0
         ? `<p style="margin:0 0 28px;text-align:left;">
@@ -180,10 +180,10 @@ export function buildSiteTransferEmail(input: {
              </span>
            </p>`
         : ""}
-      ${CTA_BUTTON(input.acceptUrl, "Review & Respond", accent)}
+      ${CTA_BUTTON(input.acceptUrl, "Review & accept", accent)}
       ${FALLBACK_LINK(input.acceptUrl, accent)}
     `,
-    footerHtml: `This offer expires in ${input.expiresInDays} days. If you weren't expecting this, you can safely ignore this email — nothing transfers unless you explicitly accept it.<br/>`,
+    footerHtml: `This offer expires in ${input.expiresInDays} days. If you weren't expecting this, you can safely ignore this email — nothing moves unless you explicitly accept it.<br/>`,
     brand: input.brand,
   });
 }

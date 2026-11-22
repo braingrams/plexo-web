@@ -61,8 +61,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     notifications.push({
       id: `transfer-in-${t.id}`,
       type: "TRANSFER_OFFERED",
-      title: "Site transfer offer",
-      message: `${fromEmail} sent you an offer to take ownership of "${siteName}".`,
+      title: "Someone wants to give you a site",
+      message: `${fromEmail} wants to give you "${siteName}".`,
       link: "/dashboard/settings/moving",
       actionLabel: "Review & accept",
       read: false,
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     notifications.push({
       id: `transfer-out-${t.id}`,
       type: "TRANSFER_ACCEPTED",
-      title: `Transfer sent: ${siteName}`,
+      title: `Site offered: ${siteName}`,
       message: `Sent to ${t.toEmail}. Waiting for them to accept.`,
       link: "/dashboard/settings/moving",
       actionLabel: "View status",

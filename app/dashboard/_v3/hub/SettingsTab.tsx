@@ -115,7 +115,7 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
           ) : null}
 
           <section id="set-transfer" className="plx-hs__sec" data-tour="hub-set-transfer">
-            <h3 className="plx-hs__h">Transfer</h3>
+            <h3 className="plx-hs__h">Give site to someone</h3>
             <Card padding="none">
               <div className="plx-hs__row">
                 <div className="plx-hs__lab">
@@ -123,7 +123,7 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
                   <span>They need a Plexo account, or they can make one. You stay in charge until they accept.</span>
                 </div>
                 <div className="plx-hs__ctl plx-hs__ctl--end">
-                  <Button variant="secondary" onClick={() => setTransferring(true)}>Transfer site</Button>
+                  <Button variant="secondary" onClick={() => setTransferring(true)}>Give site</Button>
                 </div>
               </div>
             </Card>

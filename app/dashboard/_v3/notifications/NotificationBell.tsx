@@ -498,7 +498,7 @@ export function NotificationBell() {
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         title="Notification & Sound Settings"
-        description="Choose how Plexo alerts you for orders, site transfers, comments and updates."
+        description="Choose how Plexo alerts you for orders, sites given to you, comments and updates."
         footer={
           <Button variant="primary" onClick={() => setSettingsOpen(false)}>
             Done
