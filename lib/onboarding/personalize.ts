@@ -422,7 +422,7 @@ ${input.html}`;
         apiKey,
         systemPrompt,
         userPrompt,
-        16000
+        6000
       );
       usage = res.usage;
     } finally {

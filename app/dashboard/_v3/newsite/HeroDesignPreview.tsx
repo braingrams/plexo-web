@@ -5,6 +5,7 @@ import { Laptop, Smartphone, Tablet, RefreshCw } from "lucide-react";
 import { SolGlyph } from "../sol/SolGlyph";
 import { Button } from "../ui";
 import { getStoredViewport, setStoredViewport, type ViewportMode } from "@/lib/dashboardV3/previewViewport";
+import { SolWorkingCanvas } from "./SolWorkingCanvas";
 
 export type HeroDesignPreviewProps = {
   html: string | null;
@@ -233,36 +234,18 @@ export function HeroDesignPreview({
 
           {/* Personalize with SOL */}
           {onPersonalize && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <Button
-                size="sm"
-                variant={personalized ? "secondary" : "primary"}
-                loading={isPersonalizing}
-                loadingLabel="Personalizing…"
-                leftIcon={<SolGlyph size={14} />}
-                onClick={onPersonalize}
-                title={`Deeply personalizes headlines, story, cards, and photos with SOL (${creditCost} AI credit)`}
-              >
-                {personalized ? `Re-personalize (${creditCost} credit)` : `Personalize with SOL (${creditCost} credit)`}
-              </Button>
-              {availableCredits !== undefined && availableCredits !== null && (
-                <span
-                  style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: "var(--plx-muted)",
-                    padding: "2px 8px",
-                    background: "var(--plx-surface)",
-                    borderRadius: 6,
-                    border: "1px solid var(--plx-border)",
-                    whiteSpace: "nowrap",
-                  }}
-                  title="Your available AI credits"
-                >
-                  {availableCredits} {availableCredits === 1 ? "credit" : "credits"}
-                </span>
-              )}
-            </div>
+            <Button
+              size="sm"
+              variant={personalized ? "secondary" : "primary"}
+              loading={isPersonalizing}
+              loadingLabel="Personalizing…"
+              leftIcon={<SolGlyph size={14} />}
+              onClick={onPersonalize}
+              disabled={isPersonalizing}
+              title="Deeply personalizes headlines, story, cards, and photos with SOL"
+            >
+              {personalized ? "Re-personalize with SOL" : "Personalize with SOL"}
+            </Button>
           )}
         </div>
       </div>
@@ -282,7 +265,9 @@ export function HeroDesignPreview({
           transition: "background 0.2s ease",
         }}
       >
-        {!html ? (
+        {isPersonalizing ? (
+          <SolWorkingCanvas siteName={siteName} />
+        ) : !html ? (
           <div
             style={{
               position: "absolute",

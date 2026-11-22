@@ -22,6 +22,7 @@ import { HeroDesignPreview } from "./HeroDesignPreview";
 import { BrandStepContent } from "./BrandStepContent";
 import type { PickerDesign } from "../designs/DesignPicker";
 import { CreditModal } from "../sol/CreditModal";
+import { SolPersonalizeModal } from "./SolPersonalizeModal";
 
 export type NewSiteContext = {
   plan: string;
@@ -71,6 +72,9 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const [isPersonalized, setIsPersonalized] = useState(false);
   const [personalizedHtml, setPersonalizedHtml] = useState<string | null>(null);
   const [availableCredits, setAvailableCredits] = useState<number | null>(null);
+  const [creditCost, setCreditCost] = useState(1);
+  const [paidBy, setPaidBy] = useState<"plexo" | "own-key">("plexo");
+  const [showPersonalizeModal, setShowPersonalizeModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
   const request = useRef(0);
   const toast = useToast();
@@ -81,6 +85,12 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
       .then((data) => {
         if (typeof data?.availableCredits === "number") {
           setAvailableCredits(data.availableCredits);
+        }
+        if (typeof data?.cost === "number") {
+          setCreditCost(data.cost);
+        }
+        if (data?.paidBy) {
+          setPaidBy(data.paidBy);
         }
       })
       .catch(() => {});
@@ -204,7 +214,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   /** Personalizes the currently displayed design with SOL based on name, about, and goal */
   const personalizeWithSol = async () => {
     if (!goal || isPersonalizing) return;
-    if (availableCredits !== null && availableCredits < 1) {
+    if (paidBy !== "own-key" && availableCredits !== null && availableCredits < creditCost) {
       setShowCreditModal(true);
       return;
     }
@@ -222,14 +232,22 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
           templateDescription: chosen?.description ?? undefined,
         }),
       });
-      const data = await res.json();
+      const text = await res.text();
+      let data: Record<string, unknown> | null = null;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // Response was not JSON (e.g. gateway timeout or HTML)
+      }
       if (res.status === 402 || data?.outOfCredits) {
         if (typeof data?.availableCredits === "number") setAvailableCredits(data.availableCredits);
         setShowCreditModal(true);
         return;
       }
-      if (!res.ok) throw new Error(data.error || "Personalization failed");
-      if (data.html) {
+      if (!res.ok || !data) {
+        throw new Error((data?.error as string) || "SOL encountered a temporary delay while personalizing. Please try again.");
+      }
+      if (typeof data.html === "string" && data.html) {
         setPersonalizedHtml(data.html);
         setIsPersonalized(true);
         if (typeof data.creditsRemaining === "number") {
@@ -237,7 +255,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         }
         toast.show({
           title: "Template personalized with SOL",
-          description: data.summary || `Headlines, copy, and images tailored to "${name.trim()}".`,
+          description: (data.summary as string) || `Headlines, copy, and images tailored to "${name.trim()}".`,
           tone: "success",
         });
       }
@@ -454,18 +472,35 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         designName={chosenDesign?.name ?? (loadingDesigns ? "Loading design…" : "Website Design")}
         designDescription={chosenDesign?.description}
         siteName={name.trim()}
-        onPersonalize={personalizeWithSol}
+        onPersonalize={() => setShowPersonalizeModal(true)}
         isPersonalizing={isPersonalizing}
         personalized={isPersonalized}
         onSeeAll={() => { setError(""); setScreen("all"); }}
         totalDesigns={total || designs.length}
         availableCredits={availableCredits}
-        creditCost={1}
+        creditCost={creditCost}
+      />
+
+      <SolPersonalizeModal
+        open={showPersonalizeModal}
+        onClose={() => setShowPersonalizeModal(false)}
+        brandName={name.trim() || "Your Brand"}
+        availableCredits={availableCredits}
+        creditCost={creditCost}
+        paidBy={paidBy}
+        onProceed={() => {
+          setShowPersonalizeModal(false);
+          void personalizeWithSol();
+        }}
+        onTopup={() => {
+          setShowPersonalizeModal(false);
+          setShowCreditModal(true);
+        }}
       />
 
       {showCreditModal && (
         <CreditModal
-          creditInfo={{ requiredCredits: 1, availableCredits: availableCredits ?? 0 }}
+          creditInfo={{ requiredCredits: creditCost, availableCredits: availableCredits ?? 0 }}
           returnTo={typeof window !== "undefined" ? window.location.href : "/dashboard"}
           onClose={() => {
             setShowCreditModal(false);
@@ -473,6 +508,8 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
               .then((r) => r.json())
               .then((d) => {
                 if (typeof d?.availableCredits === "number") setAvailableCredits(d.availableCredits);
+                if (typeof d?.cost === "number") setCreditCost(d.cost);
+                if (d?.paidBy) setPaidBy(d.paidBy);
               })
               .catch(() => {});
           }}

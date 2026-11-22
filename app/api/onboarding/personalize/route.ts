@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { sanitizeBuildProfile } from "@/lib/dashboardV3/profile";
 import { personalizeTemplate } from "@/lib/onboarding/personalize";
 
+export const maxDuration = 120;
+
 const PERSONALIZATION_CREDIT_COST = 1;
 
 /**
