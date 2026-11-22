@@ -328,16 +328,53 @@ export function EmailBrandingCard({
                 placeholder={siteName}
                 value={data.emailSenderName}
                 onChange={(e) => setData({ ...data, emailSenderName: e.target.value })}
-                help="Appears as the sender in customer inboxes (e.g. Charisol)."
+                help="Appears as the sender name in customer inboxes and receipt headers (e.g. Charisol)."
               />
-              <Input
-                label="Sender email address"
-                type="email"
-                placeholder="notifications@yourdomain.com"
-                value={data.emailSenderEmail}
-                onChange={(e) => setData({ ...data, emailSenderEmail: e.target.value })}
-                help="The email address associated with your sending brand."
-              />
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <label className="plx-field__label">Sending email address</label>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    height: 42,
+                    padding: "0 12px",
+                    borderRadius: "var(--plx-radius-sm, 8px)",
+                    background: "var(--plx-tint)",
+                    border: "1px solid var(--plx-border)",
+                    color: "var(--plx-heading)",
+                    fontSize: 14,
+                    boxSizing: "border-box",
+                  }}
+                >
+                  <Mail size={16} style={{ color: "var(--plx-muted)", flexShrink: 0 }} aria-hidden />
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {data.maildripConnected && data.maildripConnectedEmail
+                      ? data.maildripConnectedEmail
+                      : "notifications@plexopages.com"}
+                  </span>
+                  <span
+                    style={{
+                      marginLeft: "auto",
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "2px 6px",
+                      borderRadius: 999,
+                      background: "var(--plx-surface)",
+                      color: data.maildripConnected ? "var(--plx-deep)" : "var(--plx-muted)",
+                      border: "1px solid var(--plx-border)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {data.maildripConnected ? "MailDrip" : "Default"}
+                  </span>
+                </div>
+                <span className="plx-small" style={{ color: "var(--plx-muted)" }}>
+                  {data.maildripConnected
+                    ? "Powered by your connected MailDrip account's verified sending domain."
+                    : "Connect MailDrip below to send from your own domain."}
+                </span>
+              </div>
             </div>
 
             {/* Logo and Accent Color Row */}
