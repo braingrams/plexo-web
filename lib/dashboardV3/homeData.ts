@@ -35,7 +35,7 @@ export type SiteHomeData = { variant: TaskVariant; facts: SiteFacts; commerceEna
 export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile | undefined): Promise<SiteHomeData> {
   const id = site.id;
   const [tpl, settings, products, campaigns, posts, lessons, funnel] = await Promise.all([
-    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "liveBuildId", "sourceType", "brand"] })).data, null),
+    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "liveBuildId", "sourceType", "brand", "compiledHtml", "draftHtml"] })).data, null),
     safe("store settings", async () => (await CommerceSettings.get({ templateId: id }).go()).data, null),
     safe("products", async () => (await CommerceProduct.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
     safe("campaigns", async () => (await CommerceDonationCampaign.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
@@ -61,6 +61,10 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
     ((!settings?.paymentProvider || settings?.paymentProvider === "BYO_PAYSTACK") && !!settings?.paystackLivePublicKey && !!settings?.paystackLiveSecretKeyEncrypted);
   const bankReady = !!settings?.bankTransferEnabled && !!settings?.bankTransferAccountNumber;
   const ownDesign = tpl?.sourceType === "RAW_UPLOAD";
+  const personalizedWithSol = Boolean(
+    tpl?.compiledHtml?.includes('data-sol-personalized="true"') ||
+    tpl?.draftHtml?.includes('data-sol-personalized="true"')
+  );
   const facts: SiteFacts = {
     ...EMPTY_FACTS,
     hasSite: true,
@@ -79,6 +83,7 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
     ownDesign,
     published: isPublished(tpl) || (ownDesign && !!site.address),
     signInOn: edited,
+    personalizedWithSol,
   };
   return { variant, facts, commerceEnabled };
 }

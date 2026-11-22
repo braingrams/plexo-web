@@ -21,6 +21,7 @@ import { SeeAllDesigns } from "./SeeAllDesigns";
 import { HeroDesignPreview } from "./HeroDesignPreview";
 import { BrandStepContent } from "./BrandStepContent";
 import type { PickerDesign } from "../designs/DesignPicker";
+import { CreditModal } from "../sol/CreditModal";
 
 export type NewSiteContext = {
   plan: string;
@@ -69,8 +70,21 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const [isPersonalizing, setIsPersonalizing] = useState(false);
   const [isPersonalized, setIsPersonalized] = useState(false);
   const [personalizedHtml, setPersonalizedHtml] = useState<string | null>(null);
+  const [availableCredits, setAvailableCredits] = useState<number | null>(null);
+  const [showCreditModal, setShowCreditModal] = useState(false);
   const request = useRef(0);
   const toast = useToast();
+
+  useEffect(() => {
+    fetch("/api/onboarding/personalize")
+      .then((r) => r.json())
+      .then((data) => {
+        if (typeof data?.availableCredits === "number") {
+          setAvailableCredits(data.availableCredits);
+        }
+      })
+      .catch(() => {});
+  }, []);
   // "Your brand": the owner's choice of a Strata project (or "make one from my brand"), sent with the create request.
   const [brandPick, setBrandPick] = useState<PickerSelection>(NO_SELECTION);
   const [picked, setPicked] = useState<PickedBrand | null>(null);
@@ -190,6 +204,10 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   /** Personalizes the currently displayed design with SOL based on name, about, and goal */
   const personalizeWithSol = async () => {
     if (!goal || isPersonalizing) return;
+    if (availableCredits !== null && availableCredits < 1) {
+      setShowCreditModal(true);
+      return;
+    }
     setIsPersonalizing(true);
     const chosen = designs.find((d) => d.id === designId) ?? designs[0] ?? null;
     try {
@@ -205,13 +223,21 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         }),
       });
       const data = await res.json();
+      if (res.status === 402 || data?.outOfCredits) {
+        if (typeof data?.availableCredits === "number") setAvailableCredits(data.availableCredits);
+        setShowCreditModal(true);
+        return;
+      }
       if (!res.ok) throw new Error(data.error || "Personalization failed");
       if (data.html) {
         setPersonalizedHtml(data.html);
         setIsPersonalized(true);
+        if (typeof data.creditsRemaining === "number") {
+          setAvailableCredits(data.creditsRemaining);
+        }
         toast.show({
           title: "Template personalized with SOL",
-          description: data.summary || `Headlines and copy tailored to "${name.trim()}".`,
+          description: data.summary || `Headlines, copy, and images tailored to "${name.trim()}".`,
           tone: "success",
         });
       }
@@ -433,7 +459,25 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         personalized={isPersonalized}
         onSeeAll={() => { setError(""); setScreen("all"); }}
         totalDesigns={total || designs.length}
+        availableCredits={availableCredits}
+        creditCost={1}
       />
+
+      {showCreditModal && (
+        <CreditModal
+          creditInfo={{ requiredCredits: 1, availableCredits: availableCredits ?? 0 }}
+          returnTo={typeof window !== "undefined" ? window.location.href : "/dashboard"}
+          onClose={() => {
+            setShowCreditModal(false);
+            fetch("/api/onboarding/personalize")
+              .then((r) => r.json())
+              .then((d) => {
+                if (typeof d?.availableCredits === "number") setAvailableCredits(d.availableCredits);
+              })
+              .catch(() => {});
+          }}
+        />
+      )}
 
       {note ? (
         <Notice kind="info" title="Good to know" action={{ label: note.upgradeLabel, href: note.upgradeHref }}>{note.text}</Notice>

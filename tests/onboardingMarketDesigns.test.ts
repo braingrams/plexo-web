@@ -115,5 +115,102 @@ describe("personalizeTemplateHtml", () => {
 
     // 7. Must inject brand accent color
     expect(result.html).toContain("--brand:#7c3aed");
+
+    // 8. Must stamp data-sol-personalized for facts/checklist detection
+    expect(result.html).toContain('data-sol-personalized="true"');
+  });
+
+  it("prioritizes musician template over food template when user describes being an artist", () => {
+    const r = rankListings(
+      [
+        L({ id: "chef", name: "Chef Tomi: food creator link in bio", category: "Link in bio", description: "A bento-grid link hub for a food creator or home cook: mixed-size photo tiles li" }),
+        L({ id: "noor", name: "Noor Vale: musician link in bio", category: "Link in bio", description: "A full-bleed stage-photo link hub for a singer or band: smoked-glass link button" }),
+      ],
+      "link-in-bio",
+      {
+        about: "I want users to see what i do, as i am an artist so i want them to see my shows, performance and latest release music video and audio from spotify",
+        name: "Murano",
+      }
+    );
+    expect(r[0].id).toBe("noor");
+    expect(r[0].score).toBeGreaterThan(r[1].score);
+  });
+
+  it("deeply replaces images, bento tiles, and footers across the template", async () => {
+    const { personalizeTemplateHtml } = await import("@/lib/onboarding/personalize");
+
+    const templateHtml = `<!doctype html>
+<html>
+<head><title>Chef Tomi: food creator link in bio</title></head>
+<body>
+  <nav><span class="logo">Chef Tomi</span></nav>
+  <div class="hero">
+    <span class="badge">● COOKING VIDEOS EVERY SUNDAY</span>
+    <h1>Murano — Live Shows & Performances</h1>
+    <p class="lead">Original recipe and culinary blog description.</p>
+  </div>
+  <div class="bento-grid">
+    <div class="card">
+      <img src="https://images.unsplash.com/pasta.jpg" alt="Pasta" />
+      <h3>Watch: 20-minute tagliatelle with burst tomatoes</h3>
+    </div>
+    <div class="card">
+      <img src="https://images.unsplash.com/bread.jpg" alt="Bread" />
+      <h3>Focaccia for scaredy-cats</h3>
+    </div>
+    <div class="card stat">
+      <span>112 RECIPES</span>
+      <p>The Sunday Table: my first cookbook</p>
+    </div>
+  </div>
+  <section class="strip">
+    <h2>Dinner in 20, 40 or 90 minutes.</h2>
+    <div class="recipe-card">Fridge-raid fusilli</div>
+    <div class="recipe-card">Pizza dough you cannot ruin</div>
+    <div class="recipe-card">Jollof arancini</div>
+    <button>Cook this tonight</button>
+  </section>
+  <section class="form">
+    <h3>The Sunday Supper Letter</h3>
+    <p>One recipe, one story, every Sunday morning.</p>
+    <label>What should Tomi call you?</label>
+    <button>Send me Sunday's recipe</button>
+  </section>
+  <footer>
+    <p>© 2026 Murano Kitchen Ltd · Brand and sponsorship: partners@tomiskitchen.co · Pans, knives and oil are in the shop, and yes, I use all of them.</p>
+  </footer>
+</body>
+</html>`;
+
+    const result = personalizeTemplateHtml({
+      html: templateHtml,
+      name: "Murano",
+      about: "I want users to see what i do, as i am an artist so i want them to see my shows, performance and latest release music video and audio from spotify",
+      templateName: "Chef Tomi: food creator link in bio",
+    });
+
+    // Images must be replaced with domain stock photos (no pasta/bread)
+    expect(result.html).not.toContain("https://images.unsplash.com/pasta.jpg");
+    expect(result.html).not.toContain("https://images.unsplash.com/bread.jpg");
+    expect(result.html).toContain("https://images.unsplash.com/photo-");
+
+    // Bento cards must be transformed
+    expect(result.html).toContain("Watch: Official Music Video &amp; Studio Session");
+    expect(result.html).toContain("Stream on Spotify &amp; Apple Music");
+    expect(result.html).toContain("150K+ LISTENERS");
+
+    // Feature strip must be transformed
+    expect(result.html).toContain("Upcoming Live Tour Dates &amp; Shows");
+    expect(result.html).toContain("London — Roundhouse");
+    expect(result.html).toContain("Paris — Le Trianon");
+    expect(result.html).toContain("Berlin — Astra Kulturhaus");
+    expect(result.html).toContain("Get tickets");
+
+    // Form and footer must be transformed
+    expect(result.html).toContain("The VIP Backstage Pass");
+    expect(result.html).toContain("What should we call you?");
+    expect(result.html).toContain("Get Tour &amp; Ticket Alerts");
+    expect(result.html).toContain("booking@murano.com");
+    expect(result.html).toContain("Streaming live on Spotify, Apple Music, and YouTube.");
   });
 });

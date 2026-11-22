@@ -16,6 +16,8 @@ export type HeroDesignPreviewProps = {
   personalized?: boolean;
   onSeeAll?: () => void;
   totalDesigns?: number;
+  availableCredits?: number | null;
+  creditCost?: number;
 };
 
 export function HeroDesignPreview({
@@ -28,6 +30,8 @@ export function HeroDesignPreview({
   personalized,
   onSeeAll,
   totalDesigns = 0,
+  availableCredits,
+  creditCost = 1,
 }: HeroDesignPreviewProps) {
   const [device, setDevice] = useState<ViewportMode>("desktop");
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -229,16 +233,36 @@ export function HeroDesignPreview({
 
           {/* Personalize with SOL */}
           {onPersonalize && (
-            <Button
-              size="sm"
-              variant={personalized ? "secondary" : "primary"}
-              loading={isPersonalizing}
-              loadingLabel="Personalizing…"
-              leftIcon={<SolGlyph size={14} />}
-              onClick={onPersonalize}
-            >
-              {personalized ? "Re-personalize" : "Personalize with SOL"}
-            </Button>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <Button
+                size="sm"
+                variant={personalized ? "secondary" : "primary"}
+                loading={isPersonalizing}
+                loadingLabel="Personalizing…"
+                leftIcon={<SolGlyph size={14} />}
+                onClick={onPersonalize}
+                title={`Deeply personalizes headlines, story, cards, and photos with SOL (${creditCost} AI credit)`}
+              >
+                {personalized ? `Re-personalize (${creditCost} credit)` : `Personalize with SOL (${creditCost} credit)`}
+              </Button>
+              {availableCredits !== undefined && availableCredits !== null && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: "var(--plx-muted)",
+                    padding: "2px 8px",
+                    background: "var(--plx-surface)",
+                    borderRadius: 6,
+                    border: "1px solid var(--plx-border)",
+                    whiteSpace: "nowrap",
+                  }}
+                  title="Your available AI credits"
+                >
+                  {availableCredits} {availableCredits === 1 ? "credit" : "credits"}
+                </span>
+              )}
+            </div>
           )}
         </div>
       </div>

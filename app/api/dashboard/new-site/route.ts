@@ -34,14 +34,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (parsed.value.marketDesignId) {
       // A real marketplace design: the marketplace's own "use" path re-checks it is free or owned and enforces plan limits.
       made = await makeSiteFromMarketDesign(resolved, parsed.value.marketDesignId, parsed.value.name, brand);
-      if (parsed.value.personalizedHtml) {
-        const { Template } = await import("@/lib/db/contentEntities");
-        await Template.patch({ id: made.siteId }).set({ compiledHtml: parsed.value.personalizedHtml }).go().catch((e) => console.error("saving personalized html failed", e));
-      }
     } else {
       const args = createArgs(parsed.value, brand);
       if (!args) return NextResponse.json({ error: "Pick what your website is for first." }, { status: 400 });
       made = await makeSiteFromKit(resolved, args, brand);
+    }
+    if (parsed.value.personalizedHtml) {
+      const { Template } = await import("@/lib/db/contentEntities");
+      await Template.patch({ id: made.siteId })
+        .set({
+          compiledHtml: parsed.value.personalizedHtml,
+          draftHtml: parsed.value.personalizedHtml,
+        })
+        .go()
+        .catch((e) => console.error("saving personalized html failed", e));
     }
     // "Your brand" step: the owner's chosen Strata project (or "make one from my brand") is linked to the new site, so it follows that brand from the start.
     const brandChoice = parseBrandChoice((body as { brand?: unknown })?.brand);

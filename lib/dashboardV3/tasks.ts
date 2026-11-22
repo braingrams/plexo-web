@@ -32,6 +32,8 @@ export type SiteFacts = {
   signInOn: boolean;
   /** An uploaded page: it came with its own look, so there is no logo or colour step to do here. */
   ownDesign: boolean;
+  /** Personalized directly with SOL AI (words, cards, images tailored). */
+  personalizedWithSol: boolean;
 };
 
 /**
@@ -57,6 +59,7 @@ export const EMPTY_FACTS: SiteFacts = {
   published: false,
   signInOn: false,
   ownDesign: false,
+  personalizedWithSol: false,
 };
 
 export type TaskId = "design" | "brand" | "product" | "pay" | "words" | "contact" | "post" | "lesson" | "price" | "links" | "describe" | "signin" | "finish" | "live";
@@ -90,7 +93,7 @@ const VARIANTS: Record<TaskVariant, TaskDef[]> = {
   business: [
     design,
     brand,
-    { id: "words", title: "Check the words on your pages", description: "Make sure it says what you want, the way you'd say it.", kind: "link", help: "Editing the words on your site", done: (f) => f.edited },
+    { id: "words", title: "Check the words on your pages", description: "Make sure it says what you want, the way you'd say it.", kind: "link", help: "Editing the words on your site", done: (f) => f.edited || f.personalizedWithSol },
     { id: "contact", title: "Add your contact details", description: "Phone, email and where to find you.", kind: "link", help: "Adding contact details", done: (f) => f.edited },
     finish,
   ],
@@ -107,7 +110,7 @@ const VARIANTS: Record<TaskVariant, TaskDef[]> = {
   ],
   link: [
     design,
-    { id: "links", title: "Add your links", description: "Everything you want people to find in one place.", kind: "link", help: "Adding your links", done: (f) => f.edited },
+    { id: "links", title: "Add your links", description: "Everything you want people to find in one place.", kind: "link", help: "Adding your links", done: (f) => f.edited || f.personalizedWithSol },
     finish,
   ],
   app: [
@@ -144,7 +147,25 @@ export function computeTasks(variant: TaskVariant, facts: SiteFacts): TaskProgre
   const defs = VARIANTS[variant];
   const flags = defs.map((d) => d.done(facts));
   const firstOpen = flags.findIndex((d) => !d);
-  const tasks: TaskView[] = defs.map(({ done: _done, ...d }, i) => ({ ...d, state: flags[i] ? "done" : i === firstOpen ? "current" : "upcoming" }));
+  const tasks: TaskView[] = defs.map(({ done: _done, ...d }, i) => {
+    let title = d.title;
+    let description = d.description;
+    if (facts.personalizedWithSol) {
+      if (d.id === "words") {
+        title = "Personalized with SOL";
+        description = "SOL tailored your page words, story, and photos to your brand. Tap to review or tweak anything.";
+      } else if (d.id === "links") {
+        title = "Links personalized with SOL";
+        description = "SOL set up your initial profile and links. Tap to review or add more.";
+      }
+    }
+    return {
+      ...d,
+      title,
+      description,
+      state: flags[i] ? "done" : i === firstOpen ? "current" : "upcoming",
+    };
+  });
   const done = flags.filter(Boolean).length;
   return { variant, hasAddress: facts.hasAddress, tasks, done, total: defs.length, currentId: firstOpen === -1 ? null : defs[firstOpen].id, allDone: firstOpen === -1 };
 }
