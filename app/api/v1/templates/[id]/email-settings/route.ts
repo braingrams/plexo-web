@@ -5,6 +5,7 @@ import { Template } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
 import { getOrganizationOwnerEntitlementDynamo } from "@/server/orgDynamo";
 import { getTierFeatures } from "@/lib/subscription";
+import { planGateResponse } from "@/lib/plan/planGateResponse";
 
 /**
  * GET /api/v1/templates/:id/email-settings
@@ -67,9 +68,10 @@ export async function PUT(
   const { subscriptionPlan, onTrial } = await getOrganizationOwnerEntitlementDynamo(organizationId);
   const features = getTierFeatures(subscriptionPlan, { trial: onTrial });
   if (!features.whiteLabelEnabled) {
-    return NextResponse.json(
-      { error: "Per-site email branding and custom Maildrip sending is an Enterprise feature.", upgradeRequired: true },
-      { status: 403 },
+    return planGateResponse(
+      "PLAN_BRANDING",
+      "Per-site email branding and custom Maildrip sending is part of the Enterprise plan.",
+      "ENTERPRISE",
     );
   }
 

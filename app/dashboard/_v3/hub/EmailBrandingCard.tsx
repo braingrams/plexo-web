@@ -20,6 +20,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Button, Card, CardHeader, Input, Modal, OptimisticLoader, Textarea, useToast } from "../ui";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { friendlyConnectError } from "@/lib/commerce/mailingList";
 import { PALETTE } from "@/lib/onboarding/flow";
 
@@ -1087,7 +1088,13 @@ export function EmailBrandingCard({
           </div>
         </div>
 
-        {error && <p className="plx-field__error" role="alert" style={{ marginTop: 12 }}>{error}</p>}
+        {error ? (
+          <GateOrError error={error}>
+            <p className="plx-field__error" role="alert" style={{ marginTop: 12 }}>
+              {error}
+            </p>
+          </GateOrError>
+        ) : null}
       </Card>
 
       {/* Seamless MailDrip Connect Modal */}
