@@ -9,7 +9,7 @@ import { stripePlanMetadata } from "@/lib/billing/stripePlans";
 import { startPaystackPlanCheckout, startPaystackTopupCheckout } from "@/lib/billing/paystackBilling";
 import { PLAN_LABELS, type PaidPlanId, PLAN, RETIRED_PLAN } from "@/lib/plan/plans";
 import { storedPlan } from "@/lib/plan/entitlement";
-import { creditsForTopupAmount, formatMoney, maxTopupAmount, minTopupAmount, minorUnits, yearlyOffered, type BillingInterval } from "@/lib/billing/pricing";
+import { creditsForTopupAmount, formatMoney, maxTopupAmount, minTopupAmount, minorUnits, planPrice, yearlyOffered, type BillingInterval } from "@/lib/billing/pricing";
 import { getStripe } from "@/lib/stripe";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
@@ -149,7 +149,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         subscription_data: { metadata },
         return_url: returnUrl,
       });
-      return NextResponse.json({ provider: "STRIPE", clientSecret: checkoutSession.client_secret });
+      // The price this form shows, in its currency (Enterprise is a starting point, so it gets no value).
+      const shown = plan === PLAN.ENTERPRISE ? undefined : interval === "yearly" ? planPrice(region, plan, "yearly") ?? undefined : region.monthly[plan];
+      return NextResponse.json({
+        provider: "STRIPE",
+        clientSecret: checkoutSession.client_secret,
+        analytics: {
+          checkoutType: "subscription",
+          currency: region.currency,
+          ...(shown !== undefined ? { value: shown } : {}),
+          item: { item_id: `${plan.toLowerCase()}_${interval}`, item_name: PLAN_LABELS[plan], item_category: "subscription", item_variant: interval, ...(shown !== undefined ? { price: shown } : {}), quantity: 1 },
+        },
+      });
     }
 
     if (body.kind === "topup") {
@@ -221,7 +232,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         return_url: returnUrl,
         ...((body as { stayInPage?: unknown }).stayInPage === true ? { redirect_on_completion: "if_required" as const } : {}),
       });
-      return NextResponse.json({ provider: "STRIPE", clientSecret: checkoutSession.client_secret });
+      const packValue = amountMinor / minorUnits(region.currency);
+      return NextResponse.json({
+        provider: "STRIPE",
+        clientSecret: checkoutSession.client_secret,
+        analytics: {
+          checkoutType: "credits",
+          currency: region.currency,
+          value: packValue,
+          item: { item_id: `credits_${credits}`, item_name: `${credits.toLocaleString("en-US")} credits`, item_category: "credits", item_variant: "one_time", price: packValue, quantity: 1 },
+        },
+      });
     }
 
     if (body.kind === "funnel_addon_slot") {
@@ -258,7 +279,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           },
           return_url: returnUrl,
         });
-        return NextResponse.json({ provider: "STRIPE", clientSecret: checkoutSession.client_secret });
+        // The funnel slot's price comes from Stripe, so the event shows the same amount the form does.
+        const slotPrice = await stripe!.prices.retrieve(priceId);
+        const slotCurrency = (slotPrice.currency ?? "usd").toUpperCase();
+        const slotValue = slotPrice.unit_amount != null ? slotPrice.unit_amount / minorUnits(slotCurrency) : undefined;
+        return NextResponse.json({
+          provider: "STRIPE",
+          clientSecret: checkoutSession.client_secret,
+          analytics: {
+            checkoutType: "funnel_slot",
+            currency: slotCurrency,
+            ...(slotValue !== undefined ? { value: slotValue } : {}),
+            item: { item_id: "funnel_slot", item_name: "Funnel slot", item_category: "addon", item_variant: "monthly", ...(slotValue !== undefined ? { price: slotValue } : {}), quantity: 1 },
+          },
+        });
       } catch (err) {
         await LmsFunnelAddonSlot.patch({ organizationId: orgResolution.organizationId, id: slotId })
           .set({ status: "PAYMENT_FAILED", lastPaymentFailureReason: err instanceof Error ? err.message : "Could not start checkout." })
