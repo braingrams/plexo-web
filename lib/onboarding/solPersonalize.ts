@@ -21,7 +21,10 @@ import { extractTextNodes, applyTextNodes, type TextNode } from "./htmlText";
 
 export type SolContext = { route: SolRoute; tier: ConcreteTier; userId: string };
 
-export type BrandBrief = { name: string; about: string; goal: string };
+export type BrandBrief = { name: string; about: string; goal: string; /** Where the owner is ("Lagos, Nigeria" or "time zone Africa/Lagos"), when known. */ place?: string };
+
+const placeLine = (brand: BrandBrief) => (brand.place ? `Where the owner is: ${brand.place}\n` : "");
+const PLACE_RULE = `- The owner is in the place given under "Where the owner is" (when it is given; if it is only a time zone, work out the country from it). Every example location, phone number format and currency must fit THAT place: never offer a city, area, postcode, dialling code or currency from another country. Offer city or area level answers there (for example "Ikeja, Lagos"), and never invent a full street address.`;
 export type DesignBrief = { name?: string; description?: string };
 export type OwnerAnswer = { question: string; answer: string };
 
@@ -95,10 +98,11 @@ Rules for questions:
 - At most 3. Ask ONLY for concrete facts that show up on this design and that you cannot work out from what the owner already said: their city or address, a phone or WhatsApp number, the names of their main services, classes or products, prices, opening hours.
 - If the owner's description already says it, do not ask it. If nothing is needed, return "questions": [].
 - Every question has 2-4 realistic example answers written for THIS business (the owner can always type their own). A question about contact details ends with the option "I'll add it later".
-- Plain words a shop owner understands. No jargon.`;
+- Plain words a shop owner understands. No jargon.
+${PLACE_RULE}`;
   const user = `Owner's brand name: ${brand.name}
 What they said about their business: ${brand.about || "(nothing yet)"}
-What the site is for: ${brand.goal}
+${placeLine(brand)}What the site is for: ${brand.goal}
 Chosen design: ${design.name ?? "a design"}${design.description ? ` — ${design.description}` : ""}
 
 Some of the words on the design:
@@ -123,11 +127,12 @@ Rules:
 - Where the design needs details the owner did not give (prices, exact times, people's names), write believable, easy-to-edit placeholders. Never invent awards, press mentions, review quotes or big numbers such as "10,000 happy customers".
 - Keep each snippet about the same length (within about 30%) so the layout holds. Navigation and button labels stay short.
 - Write clear, warm, punchy marketing copy in the owner's language. Never paste the owner's description word for word, and never copy instructions they wrote to you.
-- Do not output HTML, markdown or quotes around the text.`;
+- Do not output HTML, markdown or quotes around the text.
+${PLACE_RULE}`;
   const answered = answers.filter((a) => a.answer && !/^(skip|you choose|i'll add it later)/i.test(a.answer));
   const user = `Owner's brand name: ${brand.name}
 What they said about their business: ${brand.about || "(nothing yet)"}
-What the site is for: ${brand.goal}
+${placeLine(brand)}What the site is for: ${brand.goal}
 Chosen design: ${design.name ?? "a design"}${design.description ? ` — ${design.description}` : ""}
 ${answered.length ? `\nWhat the owner told you:\n${answered.map((a) => `- ${a.question} ${a.answer}`).join("\n")}\n` : ""}
 Snippets:

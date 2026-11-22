@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeBuildProfile } from "@/lib/dashboardV3/profile";
+import { describePlace } from "@/lib/onboarding/place";
 import { PlainError, extractTextNodes, finishDesign, planPersonalization, writeCopy, MAX_NODES } from "@/lib/onboarding/solPersonalize";
 
 export const maxDuration = 120;
@@ -53,6 +54,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
  * Follows the SOL engine rules (lib/ai/solEngine.ts): which AI (Plexo's or the owner's own key),
  * which tier, and an affordability check before each AI stage.
  */
+/** Where the owner is: the network edge's city and country when it forwards them, else the browser's time zone and language. */
+function ownerPlace(request: NextRequest, fromBrowser: unknown): string | undefined {
+  const h = request.headers;
+  const b = fromBrowser && typeof fromBrowser === "object" ? (fromBrowser as { timeZone?: unknown; locale?: unknown }) : {};
+  return describePlace({
+    city: h.get("cloudfront-viewer-city") ?? h.get("x-vercel-ip-city") ?? undefined,
+    country: h.get("cloudfront-viewer-country-name") ?? h.get("x-vercel-ip-country") ?? undefined,
+    timeZone: typeof b.timeZone === "string" ? b.timeZone : undefined,
+    locale: typeof b.locale === "string" ? b.locale : undefined,
+  });
+}
+
 export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     const { resolveUser } = await import("@/lib/auth/resolveUser");
@@ -76,7 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (templateHtml.length > 2_000_000) return NextResponse.json({ error: "This design is too large to personalize. Pick another one." }, { status: 413 });
 
     const brandInfo = parsed.value.brand;
-    const brand = { name: text(brandInfo?.name, 120) ?? "Your Brand", about: text(brandInfo?.about, 500) ?? "", goal: parsed.value.goal || "business-site" };
+    const brand = { name: text(brandInfo?.name, 120) ?? "Your Brand", about: text(brandInfo?.about, 500) ?? "", goal: parsed.value.goal || "business-site", place: ownerPlace(request, body.place) };
     const { ensureCreditPeriod } = await import("@/lib/db/ledgerOperations");
     const balanceOf = () => ensureCreditPeriod(resolved.userId).catch(() => ({ available: 0, total: 0 }));
 

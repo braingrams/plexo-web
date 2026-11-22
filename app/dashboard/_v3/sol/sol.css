@@ -195,7 +195,11 @@
 .sol3-opt__desc { display: block; font-size: 14px; font-weight: 500; color: var(--plx-muted); margin-top: 2px; }
 .sol3-opt:disabled { opacity: 0.6; cursor: not-allowed; }
 .sol3-ask textarea { font: inherit; font-size: 16px; width: 100%; min-height: 88px; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--plx-focus); background: var(--plx-surface); color: var(--plx-text); resize: vertical; outline: none; }
-.sol3-ask__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+/* The answer buttons stay pinned to the bottom of the card while its choices scroll, so Next / Send is never out of reach. */
+.sol3-ask__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; position: sticky; bottom: 0; z-index: 2; margin: 0 -20px -18px; padding: 12px 20px 18px; background: var(--plx-surface); border-top: 1px solid var(--plx-border); border-radius: 0 0 20px 20px; }
+.sol3-ask textarea { scroll-margin-bottom: 110px; scroll-margin-top: 16px; }
+.sol3-scroll { scroll-padding-bottom: 110px; }
+@media (max-width: 600px) { .sol3-ask__foot { flex-wrap: nowrap; gap: 8px; padding: 10px 16px 12px; margin: 0 -20px -18px; } .sol3-ask__aside { flex: 1 1 auto; min-width: 0; } .sol3-ask__foot > .plx-btn { flex-shrink: 0; padding-inline: 14px; font-size: 14px; } .sol3-ask__aside .plx-btn { padding-inline: 8px; font-size: 14px; white-space: nowrap; } }
 .sol3-recap { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: 14px; background: var(--plx-elevated); max-width: 100%; }
 .sol3-recap button { font: inherit; display: flex; justify-content: space-between; gap: 12px; align-items: center; background: none; border: none; padding: 0; min-height: 28px; font-size: 14px; font-weight: 700; color: var(--plx-muted); cursor: pointer; }
 .sol3-recap__a { font-size: 14.5px; line-height: 1.5; }

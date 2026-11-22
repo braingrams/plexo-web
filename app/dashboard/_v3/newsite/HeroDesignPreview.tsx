@@ -95,7 +95,7 @@ export function HeroDesignPreview({
           minWidth: 0,
         }}
       >
-        <style>{`@media (max-width: 720px){.plx-hero-url{display:none !important}.plx-hero-bar-actions{width:100%;justify-content:space-between}}`}</style>
+        <style>{`.plx-hero-preview-container{--plx-studio-h:clamp(380px,calc(var(--plx-dvh,100dvh) - 330px),600px)}@media (max-width: 900px){.plx-hero-preview-container{--plx-studio-h:clamp(420px,calc(var(--plx-dvh,100dvh) - 456px),600px)}}@media (max-width: 720px){.plx-hero-url{display:none !important}.plx-hero-bar-actions{width:100%;justify-content:space-between}}`}</style>
         {/* Left: Window Dots & Template Name */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 1 }}>
           <div style={{ display: "flex", gap: 6 }} aria-hidden>
@@ -253,7 +253,7 @@ export function HeroDesignPreview({
         style={{
           position: "relative",
           width: "100%",
-          height: 600,
+          height: studio ? "var(--plx-studio-h)" : 600,
           background: device === "mobile" ? "var(--plx-sunken)" : "var(--plx-surface)",
           display: "flex",
           justifyContent: "center",

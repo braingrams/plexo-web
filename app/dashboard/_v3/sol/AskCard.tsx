@@ -20,6 +20,7 @@ function questionsOf(block: ToolUseBlock): AskUserQuestionSpec[] {
 export function AskCard({ block, onSubmit, busy }: { block: ToolUseBlock; onSubmit: (answers: AskUserAnswer[]) => void; busy?: boolean }) {
   const questions = useMemo(() => questionsOf(block), [block]);
   const ref = useRef<HTMLDivElement>(null);
+  const areaRef = useRef<HTMLTextAreaElement>(null);
   const [step, setStep] = useState(0);
   const [picked, setPicked] = useState<Array<Set<string>>>(() => questions.map(() => new Set<string>()));
   const [custom, setCustom] = useState<string[]>(() => questions.map(() => ""));
@@ -30,6 +31,15 @@ export function AskCard({ block, onSubmit, busy }: { block: ToolUseBlock; onSubm
     ref.current?.focus({ preventScroll: false });
     ref.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
   }, [step]);
+
+  // Opening "Something else" grows the card: bring the text box fully into view, clear of the pinned buttons.
+  const customShown = !!customOpen[step];
+  useEffect(() => {
+    if (!customShown) return;
+    // After the browser's own focus-scroll has settled, so this one has the last word.
+    const id = window.setTimeout(() => areaRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }), 120);
+    return () => window.clearTimeout(id);
+  }, [customShown, step]);
 
   if (questions.length === 0) return null;
   const q = questions[step];
@@ -136,7 +146,7 @@ export function AskCard({ block, onSubmit, busy }: { block: ToolUseBlock; onSubm
           </span>
         </button>
       </div>
-      {customOpen[step] ? <textarea autoFocus aria-label="Your own answer" placeholder="Type your answer…" value={custom[step]} onChange={(e) => put<string>(setCustom, e.target.value)} disabled={busy} /> : null}
+      {customOpen[step] ? <textarea ref={areaRef} autoFocus aria-label="Your own answer" placeholder="Type your answer…" value={custom[step]} onChange={(e) => put<string>(setCustom, e.target.value)} disabled={busy} /> : null}
       <div className="sol3-ask__foot">
         <span className="sol3-ask__aside">
           {step > 0 ? (

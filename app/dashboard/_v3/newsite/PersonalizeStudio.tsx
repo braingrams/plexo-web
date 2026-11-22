@@ -6,6 +6,7 @@ import { Button } from "../ui/Button";
 import { SolStudio } from "../sol/studio/SolStudio";
 import { StudioCreditsError, type StudioApi } from "../sol/studio/types";
 import { useStudioScript } from "../sol/studio/useStudioScript";
+import { browserPlace } from "@/lib/onboarding/place";
 import type { AskUserQuestionSpec } from "../../sol/_components/types";
 
 export type PersonalizeDesign = { id: string; name: string; description?: string; html: string };
@@ -35,7 +36,7 @@ async function callStage<T>(stage: "plan" | "write" | "finish", body: Record<str
 export function PersonalizeStudio({ profile, design, creditCost, onApplied, onClose }: { profile: { goal: string; brand: Record<string, unknown> & { name: string } }; design: PersonalizeDesign; creditCost: number; onApplied: (result: PersonalizeResult) => void; onClose: () => void }) {
   // Kept across "Try again" so a failed last step never makes SOL redo (or charge for) what already worked.
   const kept = useRef<{ plan?: Plan; replacements?: Record<string, string> }>({});
-  const base = { profile, templateHtml: design.html, templateName: design.name, templateDescription: design.description };
+  const base = { profile, place: browserPlace(), templateHtml: design.html, templateName: design.name, templateDescription: design.description };
 
   const script = async (api: StudioApi): Promise<PersonalizeResult> => {
     api.say(`I'll tailor **${design.name}** to **${profile.brand.name}**: your words, your name and your logo.`);
