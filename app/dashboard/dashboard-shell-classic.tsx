@@ -1,5 +1,6 @@
 "use client";
 
+import { trackEvent } from "@/lib/analytics";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -367,6 +368,7 @@ export function DashboardShellClassic({ children, userName, userEmail, organizat
     setIsSigningOut(true);
     try {
       await authClient.signOut();
+      trackEvent({ event: "user_logout", user_id: null, plan_name: null, plan_status: null });
     } catch (e) {
       console.error("Sign out error:", e);
     }

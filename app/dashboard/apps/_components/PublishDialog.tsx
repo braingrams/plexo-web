@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Copy, ExternalLink, Check } from "lucide-react";
 import { appsApi, pollBuild, ApiError, type AppSummary, type BuildReport } from "./api";
 import { C, Button, Notice, inputStyle } from "./ui";
-import { trackAppPublished } from "@/lib/analytics";
+import { trackAppPublished, trackEvent } from "@/lib/analytics";
 
 // Preview → live. A clean release build, then the live database gets new changes, server
 // functions deploy, and visitors switch over — with a failed database change leaving the
@@ -76,10 +76,21 @@ export function PublishDialog(props: { appId: string; summary: AppSummary | null
       if (final.ok) {
         void trackAppPublished(appId, buildId);
         props.onPublished(final);
+      } else {
+        // Short codes only, never the error message. The stage is where the report says it stopped.
+        const failure = final.migrations?.failed
+          ? { error_stage: "database", error_code: "migration_failed" }
+          : final.functions?.failed?.length
+            ? { error_stage: "server_functions", error_code: "function_deploy_failed" }
+            : final.errors.length
+              ? { error_stage: "build", error_code: "build_failed" }
+              : { error_stage: "go_live", error_code: "publish_failed" };
+        trackEvent({ event: "publish_error", project_id: appId, project_type: "app", ...failure });
       }
     } catch (err) {
       if ((err as Error)?.name === "AbortError") return;
       setError(err instanceof ApiError ? err.message : "Publishing couldn't start.");
+      trackEvent({ event: "publish_error", project_id: appId, project_type: "app", error_stage: "build", error_code: "start_failed" });
       setPhase("failed");
     }
   }
