@@ -106,7 +106,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const brand = await getOrgBrandDynamo(resolved.organizationId);
-  const transferSubject = `${senderUser?.name ?? "Someone"} wants to transfer "${site.name}" to you on Plexo`;
+  const transferSubject = `${senderUser?.name ?? "Someone"} wants to give "${site.name}" to you on Plexo`;
   try {
     await sendMaildripEmail({
       to: toEmail,

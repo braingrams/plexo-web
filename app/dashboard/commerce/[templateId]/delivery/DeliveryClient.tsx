@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { Toggle } from "@/app/dashboard/_components/Toggle";
@@ -423,7 +424,7 @@ export function DeliveryClient({
                 <Toggle checked={form.status === "ACTIVE"} onChange={(v) => setForm((p) => ({ ...p, status: v ? "ACTIVE" : "INACTIVE" }))} />
               </div>
 
-              {error && <p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)" }}>{error}</p>}
+              {error && <GateOrError error={error}><p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)" }}>{error}</p></GateOrError>}
 
               <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
                 <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "transparent", color: "var(--cmx-muted, rgba(240,242,255,0.65))", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>

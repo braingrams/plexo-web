@@ -1,5 +1,7 @@
 "use client";
 
+import { GateOrError } from "../_components/UpgradePrompt";
+import { rememberPlanGate } from "@/lib/plan/planGate";
 import { getTierFeatures } from "@/lib/subscription";
 import { planLabel, toPlanId } from "@/lib/plan/plans";
 import { FormEvent, useState } from "react";
@@ -357,6 +359,7 @@ function BrandingSection({ subscriptionPlan, initialHideBranding }: { subscripti
       });
       if (!response.ok) {
         const payload = await response.json().catch(() => ({}));
+        rememberPlanGate(payload);
         throw new Error(payload.error ?? "Unable to update this setting.");
       }
     } catch (err) {
@@ -429,7 +432,7 @@ function BrandingSection({ subscriptionPlan, initialHideBranding }: { subscripti
           {upgradeRedirecting ? "Redirecting to checkout…" : "Click the toggle to upgrade to Starter and hide the Plexo badge on your published pages."}
         </p>
       )}
-      {error && <p style={{ fontSize: "0.78rem", color: "#f87171", marginTop: "0.75rem" }}>{error}</p>}
+      {error && <div style={{ marginTop: "0.75rem" }}><GateOrError error={error}><p style={{ fontSize: "0.78rem", color: "#f87171", margin: 0 }}>{error}</p></GateOrError></div>}
     </Card>
   );
 }

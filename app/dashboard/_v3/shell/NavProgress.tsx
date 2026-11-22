@@ -9,6 +9,11 @@ export const NAV_START_EVENT = "plx:navstart";
 export function startNavProgress() {
   if (typeof window !== "undefined") window.dispatchEvent(new Event(NAV_START_EVENT));
 }
+/** The other half: something that is not a route change (a refresh, a switch) has finished, so the bar can complete. */
+export const NAV_END_EVENT = "plx:navend";
+export function endNavProgress() {
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(NAV_END_EVENT));
+}
 
 /** The longest the bar waits for a page before it gives up quietly (a slow page, a failed fetch). */
 const GIVE_UP_MS = 20000;
@@ -28,6 +33,11 @@ function Bar() {
   const set = (p: Phase) => {
     phaseRef.current = p;
     setPhase(p);
+    // The page behind the bar softens (after a short beat, so quick moves never flicker) until it has arrived.
+    if (typeof document !== "undefined") {
+      if (p === "running") document.documentElement.setAttribute("data-plx-nav", "running");
+      else document.documentElement.removeAttribute("data-plx-nav");
+    }
   };
   const clear = () => {
     clearInterval(timers.current.tick);
@@ -65,11 +75,14 @@ function Bar() {
       if (go) start();
     };
     const onStart = () => start();
+    const onEnd = () => finish();
     document.addEventListener("click", onClick);
     window.addEventListener(NAV_START_EVENT, onStart);
+    window.addEventListener(NAV_END_EVENT, onEnd);
     return () => {
       document.removeEventListener("click", onClick);
       window.removeEventListener(NAV_START_EVENT, onStart);
+      window.removeEventListener(NAV_END_EVENT, onEnd);
       clear();
     };
     // start/finish only use refs and setters

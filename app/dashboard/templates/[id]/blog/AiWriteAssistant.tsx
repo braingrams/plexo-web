@@ -1,7 +1,8 @@
 "use client";
 
-import { SolIcon, SolOutOfCredits } from "../../../_components/sol/SolTopUp";
 import { useState } from "react";
+import { SolGlyph } from "../../../_v3/sol/SolGlyph";
+import { SolWriteDrawer } from "../../../_v3/sol/SolWriteDrawer";
 
 export type AiBlogPostResult = {
   title: string;
@@ -14,230 +15,68 @@ export type AiBlogPostResult = {
   imagePrompt: string;
 };
 
-/**
- * A topic in, a REVIEWABLE draft out — generation never touches the editor's fields
- * directly. The generated post is shown as a preview first (title/excerpt/content/SEO/
- * categories/tags), and only applied via the explicit "Use this content" action, so a
- * result the user doesn't like can be regenerated or dismissed without ever having
- * clobbered what was already in the editor. Purely presentational: all the actual
- * generation/apply logic lives in BlogPostEditor, which already owns every field's state.
- */
-export function AiWriteAssistant({
-  onGenerate,
-  onInsert,
+/** SOL's blog-post drawer: the same panel from the blog list and from inside the editor. */
+export function BlogSolWriteDrawer({
+  open,
+  onClose,
+  onUse,
+  categories = [],
+  tags = [],
+  siteId,
 }: {
-  onGenerate: (topic: string) => Promise<AiBlogPostResult>;
-  onInsert: (result: AiBlogPostResult) => Promise<void>;
+  open: boolean;
+  onClose: () => void;
+  onUse: (result: AiBlogPostResult) => Promise<void>;
+  categories?: string[];
+  tags?: string[];
+  /** The site the post is for, so SOL writes in its brand voice. */
+  siteId?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [topic, setTopic] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [isInserting, setIsInserting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<AiBlogPostResult | null>(null);
-  const [outOfCredits, setOutOfCredits] = useState(false);
-
-  async function runGenerate() {
-    if (!topic.trim()) {
-      setError("Enter a topic first.");
-      return;
-    }
-    setIsGenerating(true);
-    setError(null);
-    setOutOfCredits(false);
-    try {
-      const result = await onGenerate(topic.trim());
-      setPreview(result);
-    } catch (err) {
-      if ((err as { outOfCredits?: boolean })?.outOfCredits) setOutOfCredits(true);
-      else setError(err instanceof Error ? err.message : "SOL couldn't finish that. Please try again.");
-    } finally {
-      setIsGenerating(false);
-    }
-  }
-
-  async function handleInsert() {
-    if (!preview) return;
-    setIsInserting(true);
-    setError(null);
-    try {
-      await onInsert(preview);
-      setOpen(false);
-      setTopic("");
-      setPreview(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't apply this content.");
-    } finally {
-      setIsInserting(false);
-    }
-  }
-
-  function handleDismiss() {
-    setPreview(null);
-    setError(null);
-  }
-
   return (
-    <div style={{ marginBottom: "1rem" }}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        style={{
-          display: "inline-flex", alignItems: "center", gap: "0.45rem",
-          padding: "0.5rem 0.9rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)",
-          background: "color-mix(in srgb, var(--brand) 10%, transparent)", color: "var(--ed-accent-text)", cursor: "pointer",
-          fontSize: "0.8rem", fontWeight: 700, fontFamily: "inherit",
-        }}
-      >
-        <SolIcon size={15} />
-        Write with SOL
-      </button>
-
-      {open && (
-        <div style={{
-          marginTop: "0.6rem", padding: "1rem", borderRadius: 12,
-          border: "1px solid var(--ed-w-080)", background: "var(--ed-w-020)",
-        }}>
-          {!preview && (
-            <>
-              <p style={{ fontSize: "0.78rem", color: "var(--ed-t-500)", marginBottom: "0.6rem" }}>
-                What should this post be about? SOL writes the title, the post, a short summary, search
-                details, categories and tags, and a featured image. Uses AI credits.
-              </p>
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <input
-                  autoFocus
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void runGenerate(); } }}
-                  placeholder="e.g. 5 ways to speed up your onboarding flow"
-                  disabled={isGenerating}
-                  style={{
-                    flex: 1, background: "var(--ed-w-040)", border: "1px solid var(--ed-w-100)",
-                    borderRadius: 9, color: "var(--ed-text)", padding: "0.55rem 0.75rem", fontSize: "0.85rem",
-                    outline: "none", fontFamily: "inherit",
-                  }}
-                />
-                <button
-                  type="button"
-                  onClick={() => void runGenerate()}
-                  disabled={isGenerating}
-                  style={{
-                    padding: "0.55rem 1.1rem", borderRadius: 9, border: "none",
-                    background: "var(--ed-cta)", color: "var(--ed-on-brand)",
-                    cursor: isGenerating ? "not-allowed" : "pointer", opacity: isGenerating ? 0.7 : 1,
-                    fontSize: "0.85rem", fontWeight: 700, fontFamily: "inherit", whiteSpace: "nowrap",
-                  }}
-                >
-                  {isGenerating ? "Writing…" : "Write it"}
-                </button>
-              </div>
-            </>
-          )}
-          {outOfCredits && (
-            <div style={{ marginTop: "0.6rem" }}>
-              <SolOutOfCredits onDismiss={() => setOutOfCredits(false)} onToppedUp={() => void runGenerate()} />
-            </div>
-          )}
-          {error && (
-            <p style={{ fontSize: "0.78rem", color: "var(--ed-danger)", marginTop: "0.6rem" }} role="alert">
-              {error}
-            </p>
-          )}
-
-          {preview && (
-            <div>
-              <p style={{ fontSize: "0.7rem", fontWeight: 700, color: "var(--ed-t-400)", textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: "0.5rem" }}>
-                Preview — topic: &quot;{topic}&quot;
-              </p>
-
-              <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--ed-text)", marginBottom: "0.3rem" }}>{preview.title}</h3>
-              <p style={{ fontSize: "0.8rem", color: "var(--ed-t-550)", marginBottom: "0.7rem", fontStyle: "italic" }}>{preview.excerpt}</p>
-
-              <div
-                style={{
-                  maxHeight: 260, overflowY: "auto", padding: "0.75rem 0.9rem", borderRadius: 8,
-                  background: "var(--ed-w-030)", border: "1px solid var(--ed-w-060)",
-                  fontSize: "0.82rem", lineHeight: 1.6, color: "var(--ed-t-850)", marginBottom: "0.7rem",
-                }}
-                className="ai-write-preview-content"
-                // eslint-disable-next-line react/no-danger
-                dangerouslySetInnerHTML={{ __html: preview.contentHtml }}
-              />
-              <style>{`
-                .ai-write-preview-content h2, .ai-write-preview-content h3 { color: var(--ed-text); font-weight: 800; line-height: 1.3; }
-                .ai-write-preview-content h2 { font-size: 1.25em; margin: 0.9em 0 0.4em; }
-                .ai-write-preview-content h3 { font-size: 1.08em; margin: 0.8em 0 0.35em; }
-                .ai-write-preview-content > *:first-child { margin-top: 0; }
-                .ai-write-preview-content > *:last-child { margin-bottom: 0; }
-                .ai-write-preview-content p { margin: 0 0 0.75em; }
-                .ai-write-preview-content ul, .ai-write-preview-content ol { margin: 0 0 0.75em; padding-left: 1.25em; }
-                .ai-write-preview-content li { margin-bottom: 0.3em; }
-                .ai-write-preview-content blockquote { margin: 0 0 0.75em; padding-left: 0.9em; border-left: 2px solid color-mix(in srgb, var(--brand) 40%, transparent); color: var(--ed-t-650); }
-              `}</style>
-
-              {(preview.categories.length > 0 || preview.tags.length > 0) && (
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem", marginBottom: "0.5rem" }}>
-                  {preview.categories.map((c) => (
-                    <span key={`cat-${c}`} style={{ padding: "0.15rem 0.55rem", borderRadius: 999, background: "color-mix(in srgb, var(--brand) 15%, transparent)", color: "var(--ed-accent-text)", fontSize: "0.7rem", fontWeight: 600 }}>
-                      {c}
-                    </span>
-                  ))}
-                  {preview.tags.map((t) => (
-                    <span key={`tag-${t}`} style={{ padding: "0.15rem 0.55rem", borderRadius: 999, background: "var(--ed-w-060)", color: "var(--ed-t-700)", fontSize: "0.7rem" }}>
-                      #{t}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              <p style={{ fontSize: "0.72rem", color: "var(--ed-t-350)", marginBottom: "0.9rem" }}>
-                Featured image (generated on insert): {preview.imagePrompt}
-              </p>
-
-              <div style={{ display: "flex", gap: "0.5rem" }}>
-                <button
-                  type="button"
-                  onClick={() => void handleInsert()}
-                  disabled={isInserting || isGenerating}
-                  style={{
-                    flex: 1, padding: "0.55rem 1rem", borderRadius: 9, border: "none",
-                    background: "var(--ed-cta)", color: "var(--ed-on-brand)",
-                    cursor: isInserting || isGenerating ? "not-allowed" : "pointer", opacity: isInserting || isGenerating ? 0.7 : 1,
-                    fontSize: "0.82rem", fontWeight: 700, fontFamily: "inherit",
-                  }}
-                >
-                  {isInserting ? "Applying…" : "Use this content"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void runGenerate()}
-                  disabled={isInserting || isGenerating}
-                  style={{
-                    padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--brand) 30%, transparent)",
-                    background: "color-mix(in srgb, var(--brand) 8%, transparent)", color: "var(--ed-accent-text)", cursor: isInserting || isGenerating ? "not-allowed" : "pointer",
-                    opacity: isInserting || isGenerating ? 0.7 : 1, fontSize: "0.82rem", fontWeight: 600, fontFamily: "inherit", whiteSpace: "nowrap",
-                  }}
-                >
-                  {isGenerating ? "Writing…" : "Regenerate"}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleDismiss}
-                  disabled={isInserting || isGenerating}
-                  style={{
-                    padding: "0.55rem 1rem", borderRadius: 9, border: "1px solid var(--ed-w-120)",
-                    background: "transparent", color: "var(--ed-t-700)", cursor: isInserting || isGenerating ? "not-allowed" : "pointer",
-                    fontSize: "0.82rem", fontWeight: 600, fontFamily: "inherit",
-                  }}
-                >
-                  Dismiss
-                </button>
-              </div>
-            </div>
-          )}
+    <SolWriteDrawer<AiBlogPostResult>
+      open={open}
+      onClose={onClose}
+      title="Write a post with SOL"
+      intro="SOL writes the title, the post, a short summary, search details, categories and tags. You can change every word afterwards."
+      placeholder="e.g. 5 ways to get more people to open your emails"
+      buildRequest={(prompt) => ({ mode: "generate_blog_post", templateKind: "LANDING_PAGE", prompt, ...(siteId ? { siteId } : {}), context: { existingCategories: categories, existingTags: tags } })}
+      parseResult={(raw) => raw as AiBlogPostResult}
+      useLabel="Use this post"
+      onUse={onUse}
+      renderResult={(r) => (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <h3 className="plx-h3" style={{ margin: 0 }}>{r.title}</h3>
+          {r.excerpt ? <p className="plx-small" style={{ fontStyle: "italic", margin: 0 }}>{r.excerpt}</p> : null}
+          <div
+            className="plx-card plx-solpost"
+            style={{ maxHeight: "40dvh", overflow: "auto", padding: 14, fontSize: 14, lineHeight: 1.6 }}
+            // The model's own post body, shown as it will read; never executed (sanitised on save by the editor).
+            dangerouslySetInnerHTML={{ __html: r.contentHtml.replace(/<script[\s\S]*?<\/script>/gi, "") }}
+          />
+          {r.categories.length || r.tags.length ? (
+            <p className="plx-small" style={{ margin: 0 }}>{[...r.categories, ...r.tags.map((t) => `#${t}`)].join("  ·  ")}</p>
+          ) : null}
+          <p className="plx-small" style={{ margin: 0 }}>A featured picture is made when you use the post.</p>
         </div>
       )}
-    </div>
+    />
+  );
+}
+
+/** The button that opens the drawer, for places that just need a button (the editor's top bar). */
+export function AiWriteAssistant({ onInsert, categories, tags }: { onInsert: (result: AiBlogPostResult) => Promise<void>; categories?: string[]; tags?: string[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        style={{ display: "inline-flex", alignItems: "center", gap: "0.45rem", padding: "0.5rem 0.9rem", borderRadius: 9, border: "1px solid var(--plx-border)", background: "var(--plx-tint)", color: "var(--plx-brand)", cursor: "pointer", fontSize: "0.8rem", fontWeight: 700, fontFamily: "inherit", marginBottom: "1rem" }}
+      >
+        <SolGlyph size={16} />
+        Write with SOL
+      </button>
+      <BlogSolWriteDrawer open={open} onClose={() => setOpen(false)} onUse={onInsert} categories={categories} tags={tags} />
+    </>
   );
 }

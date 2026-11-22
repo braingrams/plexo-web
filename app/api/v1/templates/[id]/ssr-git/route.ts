@@ -1,3 +1,4 @@
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest, { params }: Ctx): Promise<NextRe
     return NextResponse.json({ error: `No template found with id "${templateId}" for this account.` }, { status: 404 });
   }
   if (!getTierFeatures(resolved.subscriptionPlan).ssrEnabled) {
-    return NextResponse.json({ error: "Server apps are part of the Pro plan. Upgrade in Settings → Billing to use them." }, { status: 403 });
+    return NextResponse.json(planGateBody("PLAN_SERVER_APPS", "Server apps are part of the Pro plan. Upgrade to use them."), { status: 403 });
   }
   // The server build that is queued or running right now, if any. The dashboard attaches to it to show the log.
   const activeBuild = (await recentBuilds(templateId, 5)).find((b) => b.kind === "ssr" && !isFinished(b)) ?? null;

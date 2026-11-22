@@ -1,11 +1,14 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight, Check, ChevronDown, ExternalLink, Globe, Link2, MoreHorizontal, Search, Trash2 } from "lucide-react";
 import { Badge, Button, ButtonLink, Input, Modal, SegmentedControl, Select, useToast } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
 import type { AddressRow } from "@/lib/dashboardV3/domainsData";
+import { solStudioHref } from "@/lib/dashboardV3/solStudioLink";
 import { addressCounts, addressStatus, filterAddresses, filtersActive, groupBySite, NO_FILTERS, relinkDomainValue, STATUS_LABEL, switchPlan, type AddressFilters, type AddressStatus } from "@/lib/dashboardV3/domainsView";
 import { AsideCard, AsideStats, CopyBox, Notice, SettingsPageShell } from "./bits";
 
@@ -214,7 +217,7 @@ export function DomainsSection({ addresses: a0, sites, canUseOwn, mock = false }
               <li><div><b>Wait a little, then check.</b><p className="plx-small" style={{ margin: "4px 0 10px" }}>It can take a few minutes to a few hours. Your free address keeps working meanwhile.</p>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <Button size="sm" loading={busy === row.id} onClick={() => check(row)}>Check now</Button>
-                  <ButtonLink size="sm" variant="secondary" href={`/dashboard/sol?new=1&draft=${encodeURIComponent(`Help me connect my own domain ${row.domain} to my site "${row.siteName}". I'm not technical, please go step by step.`)}`}>We&apos;ll help you do it</ButtonLink>
+                  <ButtonLink size="sm" variant="secondary" href={solStudioHref(`Help me connect my own domain ${row.domain} to my site "${row.siteName}". I'm not technical, please go step by step.`, { siteId: row.siteId })}>We&apos;ll help you do it</ButtonLink>
                 </div></div></li>
             </ol>
           </div>
@@ -254,7 +257,7 @@ export function DomainsSection({ addresses: a0, sites, canUseOwn, mock = false }
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
 
       <div className="plx-getaddr" data-tour="domains-connect">
         <button type="button" className="plx-getaddr__card" onClick={() => { setDlgError(null); setDialog("connect"); }}>
@@ -320,7 +323,7 @@ export function DomainsSection({ addresses: a0, sites, canUseOwn, mock = false }
           <div className="plx-sform plx-sform--wide">
             <Select label="Which site is it for?" value={siteId} onChange={(e) => setSiteId(e.target.value)} options={sites.map((s) => ({ value: s.id, label: s.name }))} />
             <Input label="Your address" value={own} onChange={(e) => setOwn(e.target.value)} onKeyDown={(e) => e.key === "Enter" && own.trim() && canUseOwn && void connect()} placeholder="www.mybusiness.com" autoCapitalize="none" autoCorrect="off" help="Type it the way people would, like www.mybusiness.com." />
-            {!canUseOwn ? <Notice tone="warn">Your own address comes with the Starter plan. <a href="/dashboard/settings/plan" style={{ fontWeight: 700 }}>See plans</a></Notice> : null}
+            {!canUseOwn ? <UpgradePrompt tone="info" requiredPlan="STARTER" message="Your own address (like mybusiness.com) comes with the Starter plan." /> : null}
             {dlgError ? <Notice tone="bad">{dlgError}</Notice> : null}
           </div>
         )}

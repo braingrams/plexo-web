@@ -4,12 +4,15 @@ import { useEffect, useState } from "react";
 import { Trash2, Undo2 } from "lucide-react";
 
 import type { V2Meta } from "@/lib/v2/design";
+import { PageChrome } from "./PageChrome";
 
 // The editor's "Page settings" panel (in its left rail, no top-bar button): the page's name and address, how
 // it looks in search and when shared, an owner's own script, and the less common actions. The
 // classic editor kept these in several places; here they are one calm panel.
 
 type Props = {
+  /** The page being edited (for its header/footer switches). */
+  pageId?: string;
   name: string;
   /** null for the home page (it has no address of its own). */
   slug: string | null;
@@ -99,6 +102,8 @@ export function PageSettings(props: Props) {
               <input id="ps-icon" style={field} value={props.meta.favicon ?? ""} onChange={(e) => setMeta("favicon", e.target.value)} placeholder="https://…" />
             </div>
           </fieldset>)}
+
+          {!email && props.pageId && <PageChrome pageId={props.pageId} readOnly={readOnly} />}
 
           {!email && (<details>
             <summary style={{ cursor: "pointer", fontSize: "0.78rem", fontWeight: 600 }}>Your own script</summary>

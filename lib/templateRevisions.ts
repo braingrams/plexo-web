@@ -1,11 +1,21 @@
 import { randomUUID } from "node:crypto";
 
-import { TemplateRevision } from "@/lib/db/contentEntities";
+import { Template, TemplateRevision } from "@/lib/db/contentEntities";
 import { designFormatOf } from "@/lib/v2/design";
+import { staleRevisions } from "@/lib/revisionRetention";
 
 // Retention cap — a generous undo window ("instant rollbacks") without letting a
 // template's revision history grow unbounded in plexo-content.
 const MAX_REVISIONS_PER_TEMPLATE = 20;
+
+/**
+ * The revisions a page can still go back to ("Go back to the classic editor", "Go back to blocks"): history cleaning must never
+ * remove one, however many newer versions pile up on top of it.
+ */
+export async function protectedRevisionIds(templateId: string): Promise<Set<string>> {
+  const { data } = await Template.get({ id: templateId }).go();
+  return new Set([data?.classicBackupId, data?.blocksBackupId].filter((id): id is string => !!id));
+}
 
 /**
  * Snapshots a template's pre-overwrite designJson/compiledHtml/sdkVersion into a new
@@ -39,7 +49,7 @@ export async function snapshotTemplateRevision(template: {
   }).go();
 
   const { data: revisions } = await TemplateRevision.query.primary({ templateId: template.id }).go({ order: "desc" });
-  const stale = revisions.slice(MAX_REVISIONS_PER_TEMPLATE);
+  const stale = staleRevisions(revisions, MAX_REVISIONS_PER_TEMPLATE, await protectedRevisionIds(template.id));
   if (stale.length === 0) return;
   await Promise.all(
     stale.map((r) => TemplateRevision.remove({ templateId: r.templateId, createdAt: r.createdAt, id: r.id }).go()),

@@ -5,7 +5,9 @@ import "../editor-theme.css";
 import Link from "next/link";
 import { createContext, useContext, useEffect, useState, type CSSProperties, type ReactNode } from "react";
 
+import { useSearchParams } from "next/navigation";
 import { appBackHref, editorBackHref, editorColorsFromTokens, sitesListHref, type EditorColors } from "@/lib/dashboardV3/editorChrome";
+import { safeBackHref } from "@/lib/dashboardV3/wordsFlow";
 import { useV3ThemeOptional } from "../_v3/theme/ThemeContext";
 
 const Ctx = createContext<{ v3: boolean; beginner: boolean }>({ v3: false, beginner: false });
@@ -36,7 +38,10 @@ export function useEditorBeginner(): boolean {
 
 /** Where "back" goes from a site's editor. */
 export function useEditorBackHref(siteId: string): string {
-  return editorBackHref(useEditorV3(), siteId);
+  const v3 = useEditorV3();
+  // A guided flow (such as "Change the words") opens the editor with ?back=… so Back returns to where the person was.
+  const back = safeBackHref(useSearchParams()?.get("back"));
+  return (v3 && back) || editorBackHref(v3, siteId);
 }
 
 export function useSitesListHref(): string {

@@ -1,3 +1,4 @@
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveOrgContext } from "@/app/api/org/_context";
 import { requirePermission } from "@/server/requirePermissionDynamo";
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     await assertSeatAvailable(ctx.organizationId);
   } catch (err) {
     if (err instanceof SeatLimitError) {
-      return NextResponse.json({ error: err.message, code: err.code, upgradeUrl: "/dashboard/settings/subscription" }, { status: err.status });
+      return NextResponse.json(planGateBody("PLAN_SEAT_LIMIT_EXCEEDED", err.message, err.requiredPlan), { status: err.status });
     }
     throw err;
   }

@@ -2,10 +2,11 @@
 
 import { trackEvent } from "@/lib/analytics";
 import { SitePlanNotice } from "../../_components/SitePlanNotice";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useAppBackHref, useEditorV3 } from "../../_components/EditorTheme";
-import { ArrowLeft, ArrowUpRight, Check, ChevronDown, Code2, ExternalLink, MessageSquare, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
+import { ArrowLeft, ArrowUpRight, Check, ChevronDown, Code2, ExternalLink, AppWindow, MousePointerClick, RotateCw, Undo2, Eye, Wrench, X } from "lucide-react";
 import { SolChatView } from "../../sol/_components/SolChatView";
 import type { ConversationSummary, ModelTier, SolMessage } from "../../sol/_components/types";
 import { appsApi, pollBuild, ApiError, type AppSummary, type BuildReport, type BuildError } from "./api";
@@ -113,6 +114,15 @@ export function AppEditor(props: {
   const [build, setBuild] = useState<BuildReport | null>(null);
   const [building, setBuilding] = useState(false);
   const [publishOpen, setPublishOpen] = useState(false);
+  // The design editor's "Publish now" waits here until the publish window says the app is live (or is closed without publishing).
+  const publishWaiter = useRef<{ resolve: () => void; reject: (e: Error) => void } | null>(null);
+  const publishFromDesign = useCallback(
+    () => new Promise<void>((resolve, reject) => {
+      publishWaiter.current = { resolve, reject };
+      setPublishOpen(true);
+    }),
+    [],
+  );
   const [diff, setDiff] = useState<{ versionId: string; against: string; title: string } | null>(null);
   const [codeOpen, setCodeOpen] = useState<{ path: string; line?: number; nonce: number } | null>(null);
   const [turnChange, setTurnChange] = useState<{ from: string; to: string } | null>(null);
@@ -726,7 +736,7 @@ export function AppEditor(props: {
           </button>
           {chatOverlay && (
             <button type="button" aria-expanded={drawer.open} onClick={drawer.toggleDrawer} title="Open the chat with SOL" style={{ display: "inline-flex", alignItems: "center", gap: 7, padding: "0.45rem 0.8rem", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 600, whiteSpace: "nowrap", border: `1px solid ${drawer.open ? C.text : C.border}`, background: "transparent", color: C.text }}>
-              <MessageSquare size={14} /> Chat with SOL <ChatDot working={turnRunning} unread={drawer.unread} />
+              <SolGlyph size={14} /> Chat with SOL <ChatDot working={turnRunning} unread={drawer.unread} />
             </button>
           )}
         </nav>}
@@ -760,7 +770,7 @@ export function AppEditor(props: {
       <div className="ed-mobile" style={{ display: "none", padding: "0.4rem 0.6rem", gap: 6, borderBottom: `1px solid ${C.border}` }}>
         {(["chat", "app"] as const).map((v) => (
           <button key={v} type="button" onClick={() => setMobileView(v)} style={{ flex: 1, padding: "0.45rem", borderRadius: 9, border: `1px solid ${C.border}`, background: mobileView === v ? "var(--ed-w-100)" : "transparent", color: C.text, fontSize: "0.8rem", display: "inline-flex", gap: 6, justifyContent: "center", alignItems: "center" }}>
-            {v === "chat" ? <MessageSquare size={14} /> : <AppWindow size={14} />} {v === "chat" ? "Chat" : "App"}
+            {v === "chat" ? <SolGlyph size={14} /> : <AppWindow size={14} />} {v === "chat" ? "Chat" : "App"}
           </button>
         ))}
       </div>
@@ -827,6 +837,8 @@ export function AppEditor(props: {
                       fullScreen={designFocus}
                       onToggleFullScreen={toggleDesignFocus}
                       onAskSol={sendToSol}
+                      onPublish={publishable ? publishFromDesign : undefined}
+                      hasAddress={Boolean(summary.published)}
                       onOpenCode={(path) => {
                         setCodeOpen({ path, nonce: Date.now() });
                         setCodeMode(true);
@@ -909,8 +921,14 @@ export function AppEditor(props: {
         <PublishDialog
           appId={appId}
           summary={summary}
-          onClose={() => setPublishOpen(false)}
+          onClose={() => {
+            setPublishOpen(false);
+            publishWaiter.current?.reject(new Error("Publishing was closed before your app went live."));
+            publishWaiter.current = null;
+          }}
           onPublished={() => {
+            publishWaiter.current?.resolve();
+            publishWaiter.current = null;
             void refreshSummary();
             setRefreshKey((k) => k + 1);
           }}

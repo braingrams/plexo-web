@@ -36,9 +36,9 @@ export class AutoUpdateError extends Error {
   }
 }
 
-export const NEEDS_REVIEW_NOTE = "Strata has changes that need your review — open Branding in the Design tab.";
+export const NEEDS_REVIEW_NOTE = "Your brand has changes that need your review — open Branding in the Design tab.";
 export const RECONNECT_NOTE = "Automatic updates stopped — turn them back on.";
-const TRY_AGAIN_NOTE = "Couldn't check Strata just now. Plexo will try again shortly.";
+const TRY_AGAIN_NOTE = "Couldn't check your brand just now. Plexo will try again shortly.";
 const LOCK_STALE_MS = 10 * 60 * 1000;
 
 const now = () => new Date().toISOString();
@@ -47,7 +47,7 @@ const now = () => new Date().toISOString();
 
 function base(): string {
   const url = strataApiUrl();
-  if (!url) throw new AutoUpdateError("Strata isn't set up on this Plexo yet.", 503);
+  if (!url) throw new AutoUpdateError("Saving your brand isn't available on this Plexo yet.", 503);
   return url;
 }
 
@@ -59,7 +59,7 @@ async function strataFetch(path: string, token: string, init: { method?: string;
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
   } catch {
-    throw new StrataError("Couldn't reach Strata. Check your connection and try again.", "network");
+    throw new StrataError("Couldn't reach your brand. Check your connection and try again.", "network");
   }
 }
 
@@ -67,10 +67,10 @@ async function createIntegrationKey(userToken: string, projectId: string, name: 
   const res = await strataFetch(`/projects/${encodeURIComponent(projectId)}/integration-keys`, userToken, { method: "POST", body: { name, scope: "design-system:read" } });
   const body = (await res.json().catch(() => ({}))) as { data?: { keyId?: unknown; key?: unknown } };
   if (res.ok && typeof body.data?.keyId === "string" && typeof body.data?.key === "string") return { keyId: body.data.keyId, key: body.data.key };
-  if (res.status === 401) throw new AutoUpdateError("Your Strata sign-in has run out. Reconnect Strata, then turn this on again.", 401);
-  if (res.status === 403) throw new AutoUpdateError("You can see this Strata project but not change it, so Plexo can't set up automatic updates. Ask its owner for edit access.", 403);
-  if (res.status === 404) throw new AutoUpdateError("That Strata project wasn't found. It may have been deleted, or you may no longer have access.", 404);
-  throw new AutoUpdateError("Strata couldn't set up automatic updates right now. Please try again in a moment.", 502);
+  if (res.status === 401) throw new AutoUpdateError("Your brand sign-in has run out. Reconnect your brand, then turn this on again.", 401);
+  if (res.status === 403) throw new AutoUpdateError("You can see this brand but not change it, so Plexo can't set up automatic updates. Ask its owner for edit access.", 403);
+  if (res.status === 404) throw new AutoUpdateError("That brand wasn't found. It may have been deleted, or you may no longer have access.", 404);
+  throw new AutoUpdateError("We couldn't set up automatic updates right now. Please try again in a moment.", 502);
 }
 
 /** Best effort: a key that can't be revoked right now is reported, never thrown. */
@@ -116,9 +116,9 @@ export async function getAutoUpdateState(appId: string): Promise<AutoUpdateState
 export async function enableAutoUpdate(input: { appId: string; appName: string; userId: string }): Promise<AutoUpdateState> {
   const { designSystem } = await listDesigns(input.appId);
   const projectId = designSystem.strata?.projectId;
-  if (!projectId) throw new AutoUpdateError("Link this site to a Strata project in Branding first, then turn on automatic updates.", 409);
+  if (!projectId) throw new AutoUpdateError("Link this site to a brand in Branding first, then turn on automatic updates.", 409);
   const userToken = await loadStrataToken(input.userId);
-  if (!userToken) throw new AutoUpdateError("Connect Strata first (your sign-in may have run out), then turn this on again.", 401);
+  if (!userToken) throw new AutoUpdateError("Connect your brand first (your sign-in may have run out), then turn this on again.", 401);
 
   const previous = await getRow(input.appId);
   const { keyId, key } = await createIntegrationKey(userToken, projectId, `Plexo — ${input.appName}`.slice(0, 80));
@@ -273,7 +273,7 @@ export async function runStrataAutoUpdate(appId: string): Promise<RunResult> {
     const plan = planAutoUpdate({ local: designSystem, base: link.base, remote });
     const seen = remote.revision ?? revision;
 
-    if (plan.status === "up-to-date") return await done("up-to-date", { kind: "up-to-date", message: "Your site matches Strata.", revision: seen });
+    if (plan.status === "up-to-date") return await done("up-to-date", { kind: "up-to-date", message: "Your site matches your brand.", revision: seen });
     if (plan.status === "needs-review" || !plan.merged) return await done("needs-review", { kind: "needs-review", message: NEEDS_REVIEW_NOTE, revision: seen });
 
     const applied = await applyBrandToApp(appId, row.userId, { ...plan.merged, strata: { ...plan.merged.strata, projectId: row.strataProjectId, autoUpdate: true } });
@@ -303,7 +303,7 @@ export async function applyBrandToApp(appId: string, userId: string, designSyste
   let liveVersionId: string | null = null;
   if (template.liveBuildId) {
     const [{ versionId: headVersionId }, live] = await Promise.all([
-      ensureVersion(appId, { message: "Saved before updating the brand from Strata", source: "editor", authorId: actor.userId, authorName: actor.userName }),
+      ensureVersion(appId, { message: "Saved before updating your brand", source: "editor", authorId: actor.userId, authorName: actor.userName }),
       ProjectBuild.get({ id: template.liveBuildId }).go(),
     ]);
     liveVersionId = live.data?.versionId && live.data.versionId === headVersionId ? headVersionId : null;
@@ -311,10 +311,10 @@ export async function applyBrandToApp(appId: string, userId: string, designSyste
 
   const applied = await applyDesignSystem(appId, designSystem, userId);
 
-  const notes: string[] = [`Strata's latest brand was applied to ${applied.recompiled.length} page${applied.recompiled.length === 1 ? "" : "s"}.`];
+  const notes: string[] = [`Your latest brand was applied to ${applied.recompiled.length} page${applied.recompiled.length === 1 ? "" : "s"}.`];
   if (applied.skipped.length) notes.push(`${applied.skipped.join(", ")} ${applied.skipped.length === 1 ? "was" : "were"} edited in code, so ${applied.skipped.length === 1 ? "it was" : "they were"} left as they are.`);
   try {
-    await startPreview(appId, actor, { message: "Updated brand from Strata", source: "editor" });
+    await startPreview(appId, actor, { message: "Updated your brand", source: "editor" });
     if (template.liveBuildId && liveVersionId) {
       await startPublish(appId, actor);
       notes.push("Your live site is being updated.");

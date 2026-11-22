@@ -1,3 +1,4 @@
+import { planGateMessage, templateLimitGate } from "@/lib/plan/limitGates";
 import { randomUUID } from "node:crypto";
 import { compileTemplate } from "@/lib/compileTemplate";
 import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutCore";
@@ -23,6 +24,10 @@ import { LMS_MCP_TOOLS, LMS_TOOL_NAMES, handleLmsTool } from "./lmsTools";
 import { WP_MIGRATION_MCP_TOOLS, WP_MIGRATION_TOOL_NAMES, handleWpMigrationTool } from "./wpMigrationTools";
 import { DONATION_MCP_TOOLS, DONATION_TOOL_NAMES, handleDonationTool } from "./donationTools";
 import { FORM_MCP_TOOLS, FORM_TOOL_NAMES, handleFormTool } from "./formTools";
+import { SECTION_MCP_TOOLS, SECTION_TOOL_NAMES, handleSectionTool } from "./sectionTools";
+import { HEALTH_MCP_TOOLS, HEALTH_TOOL_NAMES, handleHealthTool } from "./healthTools";
+import { CONVERT_MCP_TOOLS, CONVERT_TOOL_NAMES, handleConvertTool } from "./convertTools";
+import { ANALYTICS_MCP_TOOLS, ANALYTICS_TOOL_NAMES, handleAnalyticsTool } from "./analyticsTools";
 import { CONTENT_MCP_TOOLS, CONTENT_TOOL_NAMES, handleContentTool } from "./contentTools";
 import { APP_MCP_TOOLS, APP_TOOL_NAMES, handleAppTool } from "./appTools";
 import { PAGE_MCP_TOOLS, PAGE_TOOL_NAMES, handlePageTool } from "./pageTools";
@@ -36,6 +41,7 @@ import { deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
 import { linkDomainToTemplate, SUBDOMAIN_REGEX, DOMAIN_REGEX, RESERVED_SUBDOMAINS } from "@/lib/sites/linkDomain";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
+import { countsAsSite } from "@/lib/plan/countsAsSite";
 
 // Split out of lib/mcp/mcpServer.ts so dispatchMcpTool (and everything it needs) has NO
 // `next/server` import anywhere in its own module or its import graph — mcpServer.ts itself
@@ -780,6 +786,10 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
   ...WP_MIGRATION_MCP_TOOLS,
   ...DONATION_MCP_TOOLS,
   ...FORM_MCP_TOOLS,
+  ...SECTION_MCP_TOOLS,
+  ...HEALTH_MCP_TOOLS,
+  ...ANALYTICS_MCP_TOOLS,
+  ...CONVERT_MCP_TOOLS,
   ...CONTENT_MCP_TOOLS,
   ...APP_MCP_TOOLS,
   ...PAGE_MCP_TOOLS,
@@ -884,9 +894,9 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       const features = getTierFeatures(resolved.subscriptionPlan);
       {
         const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-        const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
+        const rootCount = orgTemplates.filter((t) => countsAsSite(t)).length;
         if (rootCount >= features.maxLandingPages) {
-          throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
+          throw new Error(planGateMessage(templateLimitGate("LANDING_PAGE", features.maxLandingPages)));
         }
       }
 
@@ -962,9 +972,9 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       const features = getTierFeatures(resolved.subscriptionPlan);
       {
         const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-        const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "EMAIL").length;
+        const rootCount = orgTemplates.filter((t) => countsAsSite(t, "EMAIL")).length;
         if (rootCount >= features.maxEmailTemplates) {
-          throw new Error(`Template limit reached (${features.maxEmailTemplates} email templates). Upgrade plan to create more.`);
+          throw new Error(planGateMessage(templateLimitGate("EMAIL", features.maxEmailTemplates)));
         }
       }
 
@@ -1089,9 +1099,9 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       {
         // Root/home pages only — a page's sub-pages don't count against this limit.
         const { data: orgTemplates } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-        const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
+        const rootCount = orgTemplates.filter((t) => countsAsSite(t)).length;
         if (rootCount >= features.maxLandingPages) {
-          throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
+          throw new Error(planGateMessage(templateLimitGate("LANDING_PAGE", features.maxLandingPages)));
         }
       }
 
@@ -1163,9 +1173,9 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
 
       const features = getTierFeatures(resolved.subscriptionPlan);
       const { data: orgTemplatesRaw } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
-      const rootCount = orgTemplatesRaw.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
+      const rootCount = orgTemplatesRaw.filter((t) => countsAsSite(t)).length;
       if (rootCount >= features.maxLandingPages) {
-        throw new Error(`Template limit reached (${features.maxLandingPages} landing pages). Upgrade plan to create more.`);
+        throw new Error(planGateMessage(templateLimitGate("LANDING_PAGE", features.maxLandingPages)));
       }
 
       const name = typeof args.name === "string" && args.name.trim() ? args.name.trim() : "AI Landing Page";
@@ -1773,6 +1783,22 @@ export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: 
       }
       if (FORM_TOOL_NAMES.has(toolName)) {
         toolResult = await handleFormTool(toolName, args, resolved);
+        break;
+      }
+      if (SECTION_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleSectionTool(toolName, args, resolved);
+        break;
+      }
+      if (CONVERT_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleConvertTool(toolName, args, resolved);
+        break;
+      }
+      if (ANALYTICS_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleAnalyticsTool(toolName, args, resolved);
+        break;
+      }
+      if (HEALTH_TOOL_NAMES.has(toolName)) {
+        toolResult = await handleHealthTool(toolName, args, resolved);
         break;
       }
       if (CONTENT_TOOL_NAMES.has(toolName)) {

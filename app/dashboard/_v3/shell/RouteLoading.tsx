@@ -1,88 +1,75 @@
-import { PageSkeleton } from "../../_components/PageSkeleton";
-import { Skeleton } from "../ui/Skeleton";
+"use client";
+
+import { OptimisticLoader } from "../ui/OptimisticLoader";
 
 export type RouteLoadingShape = "settings" | "hub" | "list" | "cards";
 
-const Bar = ({ w, h = 14 }: { w: number | string; h?: number }) => <Skeleton width={w} height={h} />;
+const TITLES_BY_SHAPE: Record<RouteLoadingShape, string> = {
+  hub: "Constructing your site hub",
+  settings: "Setting up workspace controls",
+  list: "Curating your website portfolio",
+  cards: "Building your dashboard workspace",
+};
 
-function Tabs({ n, w = 92 }: { n: number; w?: number }) {
-  return (
-    <div className="plx-ldg__tabs">
-      {Array.from({ length: n }, (_, i) => <Skeleton key={i} width={w} height={32} radius={10} />)}
-    </div>
-  );
-}
+const SUBTITLES_BY_SHAPE: Record<RouteLoadingShape, string> = {
+  hub: "Bringing together your layout, live pages, and brand assets",
+  settings: "Loading domains, integrations, and workspace preferences",
+  list: "Checking live deployments, traffic, and site performance",
+  cards: "Orchestrating metrics, active tools, and recent work",
+};
 
-function Cards({ n, h = 120 }: { n: number; h?: number }) {
-  return (
-    <div className="plx-ldg__grid">
-      {Array.from({ length: n }, (_, i) => (
-        <div key={i} className="plx-ldg__card">
-          <Skeleton width={44} height={44} radius={12} />
-          <Bar w="60%" h={16} />
-          <Bar w="90%" />
-          {h > 100 ? <Bar w="40%" /> : null}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function Shape({ shape }: { shape: RouteLoadingShape }) {
-  if (shape === "settings")
-    return (
-      <>
-        <div className="plx-ldg__head"><Bar w={160} h={34} /></div>
-        <Tabs n={6} w={110} />
-        <div className="plx-ldg__list">
-          <div className="plx-ldg__card"><Bar w="30%" h={18} /><Bar w="70%" /><Skeleton height={44} radius={12} /></div>
-          <div className="plx-ldg__card"><Bar w="25%" h={18} /><Bar w="60%" /><Skeleton height={44} radius={12} /></div>
-        </div>
-      </>
-    );
-  if (shape === "hub")
-    return (
-      <>
-        <Bar w={90} />
-        <div className="plx-ldg__head"><Bar w="min(320px, 70%)" h={34} /><Bar w="min(240px, 50%)" /></div>
-        <Tabs n={6} />
-        <Cards n={6} />
-      </>
-    );
-  if (shape === "list")
-    return (
-      <>
-        <div className="plx-ldg__head"><Bar w={200} h={34} /><Bar w="min(320px, 70%)" /></div>
-        <div className="plx-ldg__list">
-          {Array.from({ length: 5 }, (_, i) => (
-            <div key={i} className="plx-ldg__card" style={{ flexDirection: "row", alignItems: "center" }}>
-              <Skeleton width={56} height={56} radius={12} />
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}><Bar w="40%" h={16} /><Bar w="25%" /></div>
-            </div>
-          ))}
-        </div>
-      </>
-    );
-  return (
-    <>
-      <div className="plx-ldg__head"><Bar w={200} h={34} /><Bar w="min(320px, 70%)" /></div>
-      <Cards n={6} />
-    </>
-  );
-}
+const STEPS_BY_SHAPE: Record<RouteLoadingShape, string[]> = {
+  hub: [
+    "Assembling site layout and navigation…",
+    "Loading content blocks, styles, and assets…",
+    "Checking live domain and performance…",
+    "Revealing your site workspace.",
+  ],
+  settings: [
+    "Retrieving domain verification and SSL status…",
+    "Connecting payment accounts and team preferences…",
+    "Polishing workspace controls…",
+    "Settings ready.",
+  ],
+  list: [
+    "Connecting to distributed site deployments…",
+    "Checking uptime, traffic, and visitor trends…",
+    "Organizing your website directory…",
+    "Portfolio ready.",
+  ],
+  cards: [
+    "Compiling site activity and recent updates…",
+    "Aligning workspace tools and shortcuts…",
+    "Launching dashboard…",
+    "Ready.",
+  ],
+};
 
 /**
- * What a dashboard page that is still loading shows in the content area: a skeleton shaped like the
- * destination, in the new look. People on the classic dashboard keep their existing skeleton (the
- * classes only apply inside the new dashboard).
+ * What a dashboard page shows while loading: an engaging optimistic loader with clear
+ * dynamic steps rather than dead grey skeleton blocks.
  */
 export function RouteLoading({ shape }: { shape: RouteLoadingShape }) {
+  const title = TITLES_BY_SHAPE[shape] ?? TITLES_BY_SHAPE.hub;
+  const steps = STEPS_BY_SHAPE[shape] ?? STEPS_BY_SHAPE.hub;
+  const subtitle = SUBTITLES_BY_SHAPE[shape] ?? "Loading your workspace";
+
   return (
-    <>
-      <div className="plx-ldg-classic"><PageSkeleton /></div>
-      <div className="plx-ldg plx-page" aria-busy="true" role="status" aria-label="Loading">
-        <Shape shape={shape} />
-      </div>
-    </>
+    <div
+      className="plx-ldg plx-page"
+      role="status"
+      aria-live="polite"
+      aria-label="Loading"
+      style={{
+        minHeight: "55vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "100%",
+        padding: "48px 24px",
+      }}
+    >
+      <OptimisticLoader title={title} steps={steps} subtitle={subtitle} />
+    </div>
   );
 }

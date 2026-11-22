@@ -1,14 +1,14 @@
 "use client";
+import { SolOutOfCredits } from "../../../_components/sol/SolTopUp";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { PLAN } from "@/lib/plan/plans";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { aiErrorMessage } from "@/lib/ai/requestErrors";
 import { useRouter } from "next/navigation";
 import { BlogRichTextEditor } from "./BlogRichTextEditor";
 import { AiWriteAssistant, type AiBlogPostResult } from "./AiWriteAssistant";
 import { computeSeoChecklist } from "./seoChecklist";
 import { SEO_TOOLS_STORAGE_KEY, seoToolsEnabledFrom } from "./seoPreference";
-import { PageContainer } from "../../../_components/PageContainer";
 import { CustomSelect } from "../../../../_components/CustomSelect";
 import { UpgradeModal } from "../../../_components/UpgradeModal";
 import { formatPublishedQuotaLabel } from "@/lib/blog/publishQuotaLabel";
@@ -41,7 +41,7 @@ export type InitialPost = {
 const FIELD_LABEL: React.CSSProperties = {
   fontSize: "0.75rem",
   fontWeight: 700,
-  color: "var(--ed-t-500)",
+  color: "var(--plx-muted)",
   textTransform: "uppercase",
   letterSpacing: "0.04em",
   display: "block",
@@ -51,18 +51,18 @@ const FIELD_INPUT: React.CSSProperties = {
   width: "100%",
   padding: "0.55rem 0.7rem",
   borderRadius: 8,
-  border: "1px solid var(--ed-w-120)",
-  background: "var(--ed-w-030)",
-  color: "var(--ed-text)",
+  border: "1px solid var(--plx-border)",
+  background: "var(--plx-surface)",
+  color: "var(--plx-text)",
   fontSize: "0.85rem",
   fontFamily: "inherit",
 };
 const PANEL: React.CSSProperties = {
-  border: "1px solid var(--ed-w-080)",
-  borderRadius: 12,
+  border: "1px solid var(--plx-border)",
+  borderRadius: 14,
   padding: "1rem",
   marginBottom: "1rem",
-  background: "var(--ed-w-020)",
+  background: "var(--plx-surface)",
 };
 
 function slugifyClient(input: string): string {
@@ -113,8 +113,8 @@ function SeoToggleRow({ on, onChange }: { on: boolean; onChange: (on: boolean) =
       }}
     >
       <div>
-        <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--ed-t-850)" }}>SEO Tools</p>
-        <p style={{ margin: "0.2rem 0 0", fontSize: "0.7rem", color: "var(--ed-t-450)" }}>
+        <p style={{ margin: 0, fontSize: "0.8rem", color: "var(--plx-text)" }}>SEO Tools</p>
+        <p style={{ margin: "0.2rem 0 0", fontSize: "0.7rem", color: "var(--plx-muted)" }}>
           Show or hide SEO enhancement tools for this blog post
         </p>
       </div>
@@ -133,7 +133,7 @@ function SeoToggleRow({ on, onChange }: { on: boolean; onChange: (on: boolean) =
           border: "none",
           borderRadius: 999,
           cursor: "pointer",
-          background: on ? "var(--brand-deeper)" : "var(--ed-t-200)",
+          background: on ? "var(--plx-brand)" : "var(--plx-border)",
           transition: "background 150ms",
         }}
       >
@@ -294,6 +294,7 @@ export function BlogPostEditor({
     nonce: number;
   } | null>(null);
   const [aiImageError, setAiImageError] = useState<string | null>(null);
+  const [imageOutOfCredits, setImageOutOfCredits] = useState(false);
 
   const markDirty = useCallback(() => setDirty(true), []);
 
@@ -526,36 +527,6 @@ export function BlogPostEditor({
     }
   }
 
-  /** Pure generation — returns the drafted post for the caller to preview. Never touches
-   * editor state, so a result the user doesn't like can be regenerated or dismissed
-   * without ever having clobbered what was already in the editor (see AiWriteAssistant). */
-  async function handleAiGenerate(topic: string): Promise<AiBlogPostResult> {
-    const res = await fetch("/api/v1/ai/generate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": "workspace-internal",
-      },
-      body: JSON.stringify({
-        mode: "generate_blog_post",
-        templateKind: "LANDING_PAGE",
-        prompt: topic,
-        context: {
-          existingCategories: allCategories.map((c) => c.name),
-          existingTags: allTags.map((t) => t.name),
-        },
-      }),
-    });
-    if (!res.ok) {
-      const body = await res.json().catch(() => ({}) as { error?: string });
-      // The assistant shows SOL's top-up card for this one.
-      if (res.status === 402) throw Object.assign(new Error("You're out of AI credits."), { outOfCredits: true });
-      throw new Error(aiErrorMessage(res.status, body, "SOL couldn't write that post. Please try again."));
-    }
-    const { result } = (await res.json()) as { result: AiBlogPostResult };
-    return result;
-  }
-
   /** Applies a previously-generated (and now user-approved) draft to the editor's fields,
    * then kicks off the featured image generation. */
   async function handleAiInsert(result: AiBlogPostResult): Promise<void> {
@@ -620,6 +591,7 @@ export function BlogPostEditor({
         const body = await imageRes
           .json()
           .catch(() => ({}) as { error?: string });
+        if (imageRes.status === 402) setImageOutOfCredits(true);
         setAiImageError(
           imageRes.status === 402
             ? "Not enough credits for the featured image — you can upload one manually."
@@ -664,12 +636,15 @@ export function BlogPostEditor({
     : `/blog/${slug || "…"}`;
 
   return (
-    <PageContainer className="blog-editor-grid" style={{ paddingTop: 0 }}>
+    <div data-plexo-v3 className="plx-page blog-editor-grid" style={{ paddingTop: 0, width: "100%", maxWidth: "100%", boxSizing: "border-box" }}>
       <div>
-        <AiWriteAssistant
-          onGenerate={handleAiGenerate}
-          onInsert={handleAiInsert}
-        />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <AiWriteAssistant
+            onInsert={handleAiInsert}
+            categories={allCategories.map((c) => c.name)}
+            tags={allTags.map((t) => t.name)}
+          />
+        </div>
         <textarea
           value={title}
           onChange={(e) => {
@@ -682,7 +657,7 @@ export function BlogPostEditor({
             width: "100%",
             fontSize: "1.75rem",
             fontWeight: 800,
-            color: "var(--ed-text)",
+            color: "var(--plx-text)",
             background: "transparent",
             border: "none",
             outline: "none",
@@ -694,11 +669,11 @@ export function BlogPostEditor({
         <div
           style={{
             fontSize: "0.8rem",
-            color: "var(--ed-t-450)",
+            color: "var(--plx-muted)",
             marginBottom: "1.25rem",
           }}
         >
-          Permalink: <span style={{ color: "var(--ed-accent-text)" }}>{permalink}</span>{" "}
+          Permalink: <span style={{ color: "var(--plx-brand)" }}>{permalink}</span>{" "}
           {editingSlug ? (
             <input
               autoFocus
@@ -723,7 +698,7 @@ export function BlogPostEditor({
               style={{
                 background: "none",
                 border: "none",
-                color: "var(--ed-accent-text)",
+                color: "var(--plx-brand)",
                 cursor: "pointer",
                 fontSize: "0.8rem",
                 textDecoration: "underline",
@@ -782,7 +757,7 @@ export function BlogPostEditor({
             <p
               style={{
                 fontSize: "0.7rem",
-                color: "var(--ed-t-350)",
+                color: "var(--plx-muted)",
                 marginTop: "0.2rem",
               }}
             >
@@ -804,7 +779,7 @@ export function BlogPostEditor({
             <p
               style={{
                 fontSize: "0.7rem",
-                color: "var(--ed-t-350)",
+                color: "var(--plx-muted)",
                 marginTop: "0.2rem",
               }}
             >
@@ -837,7 +812,7 @@ export function BlogPostEditor({
               gap: "0.5rem",
               marginTop: "0.75rem",
               fontSize: "0.8rem",
-              color: "var(--ed-t-700)",
+              color: "var(--plx-text)",
             }}
           >
             <input
@@ -877,13 +852,13 @@ export function BlogPostEditor({
                   gap: "0.5rem",
                   fontSize: "0.8rem",
                   marginBottom: "0.5rem",
-                  color: item.level === "good" ? "var(--ed-success)" : "var(--ed-amber)",
+                  color: item.level === "good" ? "var(--plx-success)" : "var(--plx-warning)",
                 }}
               >
                 <span style={{ display: "inline-flex" }}>
                   {item.level === "good" ? <IconCheck /> : <IconWarning />}
                 </span>
-                <span style={{ color: "var(--ed-t-750)" }}>
+                <span style={{ color: "var(--plx-text)" }}>
                   {item.label}
                 </span>
               </li>
@@ -925,20 +900,20 @@ export function BlogPostEditor({
             />
           )}
           {error && (
-            <p
+<GateOrError error={error}><p
               style={{
-                color: "var(--ed-danger)",
+                color: "var(--plx-danger)",
                 fontSize: "0.8rem",
                 marginBottom: "0.5rem",
               }}
             >
               {error}
-            </p>
-          )}
+            </p></GateOrError>
+)}
           <p
             style={{
               fontSize: "0.72rem",
-              color: quotaReached ? "var(--ed-amber)" : "var(--ed-t-400)",
+              color: quotaReached ? "var(--plx-warning)" : "var(--plx-muted)",
               marginBottom: "0.5rem",
             }}
           >
@@ -963,8 +938,8 @@ export function BlogPostEditor({
               cursor: saving ? "default" : "pointer",
               fontSize: "0.85rem",
               fontWeight: 700,
-              background: "var(--brand)",
-              color: "var(--ed-on-brand)",
+              background: "var(--plx-brand)",
+              color: "var(--plx-on-brand)",
               marginBottom: "0.5rem",
               opacity: quotaReached ? 0.6 : 1,
             }}
@@ -989,8 +964,8 @@ export function BlogPostEditor({
               fontSize: "0.8rem",
               fontWeight: 600,
               background: "transparent",
-              color: "var(--ed-t-600)",
-              border: "1px solid var(--ed-w-120)",
+              color: "var(--plx-text)",
+              border: "1px solid var(--plx-border)",
             }}
           >
             Save as Draft
@@ -1005,7 +980,7 @@ export function BlogPostEditor({
                 textAlign: "center",
                 marginTop: "0.6rem",
                 fontSize: "0.78rem",
-                color: "var(--ed-accent-text)",
+                color: "var(--plx-brand)",
               }}
             >
               Preview
@@ -1016,7 +991,7 @@ export function BlogPostEditor({
               style={{
                 textAlign: "center",
                 fontSize: "0.7rem",
-                color: "var(--ed-t-300)",
+                color: "var(--plx-muted)",
                 marginTop: "0.5rem",
               }}
             >
@@ -1027,6 +1002,7 @@ export function BlogPostEditor({
 
         <div style={PANEL}>
           <label style={FIELD_LABEL}>Featured Image</label>
+          {imageOutOfCredits && <SolOutOfCredits onDismiss={() => setImageOutOfCredits(false)} />}
           {aiImageError && (
             <p
               style={{
@@ -1035,7 +1011,7 @@ export function BlogPostEditor({
                 justifyContent: "space-between",
                 gap: "0.5rem",
                 fontSize: "0.75rem",
-                color: "var(--ed-amber)",
+                color: "var(--plx-warning)",
                 marginBottom: "0.5rem",
               }}
               role="alert"
@@ -1067,7 +1043,7 @@ export function BlogPostEditor({
                 gap: "0.5rem",
                 height: 100,
                 borderRadius: 8,
-                border: "1px dashed var(--ed-w-200)",
+                border: "1px dashed var(--plx-border)",
               }}
             >
               <div
@@ -1075,13 +1051,13 @@ export function BlogPostEditor({
                   width: 22,
                   height: 22,
                   borderRadius: "50%",
-                  border: "3px solid var(--ed-w-150)",
-                  borderTopColor: "var(--brand)",
+                  border: "3px solid var(--plx-border)",
+                  borderTopColor: "var(--plx-brand)",
                   animation: "blog-editor-spin 0.7s linear infinite",
                 }}
               />
               <span
-                style={{ fontSize: "0.75rem", color: "var(--ed-t-500)" }}
+                style={{ fontSize: "0.75rem", color: "var(--plx-muted)" }}
               >
                 {featuredImageStatus === "uploading"
                   ? "Uploading…"
@@ -1108,7 +1084,7 @@ export function BlogPostEditor({
                 <p
                   style={{
                     fontSize: "0.72rem",
-                    color: "var(--ed-danger)",
+                    color: "var(--plx-danger)",
                     marginBottom: "0.4rem",
                   }}
                 >
@@ -1123,7 +1099,7 @@ export function BlogPostEditor({
                 }}
                 style={{
                   fontSize: "0.75rem",
-                  color: "var(--ed-danger)",
+                  color: "var(--plx-danger)",
                   background: "none",
                   border: "none",
                   cursor: "pointer",
@@ -1157,9 +1133,9 @@ export function BlogPostEditor({
                   style={{
                     padding: "0 0.9rem",
                     borderRadius: 8,
-                    border: "1px solid var(--brand)",
-                    background: "var(--brand-subtle)",
-                    color: "var(--ed-accent-text)",
+                    border: "1px solid var(--plx-brand)",
+                    background: "var(--plx-tint)",
+                    color: "var(--plx-brand)",
                     fontSize: "0.8rem",
                     fontWeight: 600,
                     cursor: "pointer",
@@ -1172,7 +1148,7 @@ export function BlogPostEditor({
                 <p
                   style={{
                     fontSize: "0.72rem",
-                    color: "var(--ed-danger)",
+                    color: "var(--plx-danger)",
                     marginTop: "0.35rem",
                   }}
                 >
@@ -1188,7 +1164,7 @@ export function BlogPostEditor({
                 }}
                 style={{
                   fontSize: "0.75rem",
-                  color: "var(--ed-t-400)",
+                  color: "var(--plx-muted)",
                   background: "none",
                   border: "none",
                   cursor: "pointer",
@@ -1207,10 +1183,10 @@ export function BlogPostEditor({
                   justifyContent: "center",
                   height: 100,
                   borderRadius: 8,
-                  border: "1px dashed var(--ed-w-200)",
+                  border: "1px dashed var(--plx-border)",
                   cursor: "pointer",
                   fontSize: "0.8rem",
-                  color: "var(--ed-t-500)",
+                  color: "var(--plx-muted)",
                 }}
               >
                 Click to upload
@@ -1232,7 +1208,7 @@ export function BlogPostEditor({
                   width: "100%",
                   textAlign: "center",
                   fontSize: "0.75rem",
-                  color: "var(--ed-accent-text)",
+                  color: "var(--plx-brand)",
                   background: "none",
                   border: "none",
                   cursor: "pointer",
@@ -1255,7 +1231,7 @@ export function BlogPostEditor({
                 alignItems: "center",
                 gap: "0.5rem",
                 fontSize: "0.82rem",
-                color: "var(--ed-t-800)",
+                color: "var(--plx-text)",
                 marginBottom: "0.35rem",
               }}
             >
@@ -1309,8 +1285,8 @@ export function BlogPostEditor({
                   gap: "0.3rem",
                   padding: "0.2rem 0.55rem",
                   borderRadius: 999,
-                  background: "var(--brand-subtle)",
-                  color: "var(--ed-accent-text)",
+                  background: "var(--plx-tint)",
+                  color: "var(--plx-brand)",
                   fontSize: "0.75rem",
                 }}
               >
@@ -1396,6 +1372,6 @@ export function BlogPostEditor({
             : `/dashboard/templates/${templateId}/blog/new`
         }
       />
-    </PageContainer>
+    </div>
   );
 }

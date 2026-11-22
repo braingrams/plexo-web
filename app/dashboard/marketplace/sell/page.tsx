@@ -12,7 +12,9 @@ import { feeSplit } from "@/lib/dashboardV3/designs";
 import { DesignsFrame } from "../../_v3/designs/DesignsFrame";
 import { SellDesignForm } from "../../_v3/designs/SellDesignForm";
 
-export default async function SellTemplatePage() {
+export default async function SellTemplatePage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
+  const query = searchParams ? await searchParams : {};
+  const requestedTemplateId = Array.isArray(query.templateId) ? query.templateId[0] : query.templateId;
   const session = await auth();
   if (!session?.user) {
     redirect("/auth/login?redirectTo=/dashboard/marketplace/sell");
@@ -53,6 +55,7 @@ export default async function SellTemplatePage() {
           autoPublish={autoPublish}
           fee={split.fee}
           keep={split.keep}
+          initialTemplateId={requestedTemplateId}
         />
       </DesignsFrame>
     );

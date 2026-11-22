@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Camera, Check, KeyRound, LayoutDashboard, LifeBuoy, PlayCircle, RotateCcw } from "lucide-react";
@@ -11,6 +12,7 @@ import type { Experience } from "@/lib/dashboardV3/nav";
 import { AsideCard, Notice, Panel, SaveBar, SettingRow, SettingsPageShell } from "./bits";
 import { isDirty } from "@/lib/dashboardV3/settingsSaveBar";
 import { switchLabel, useVersionSwitch } from "../../_versions/VersionUi";
+import { CountrySelect } from "@/app/_components/country/CountrySelect";
 
 const FEELS: { id: Experience; title: string; body: string }[] = [
   { id: "beginner", title: "Guided", body: "Fewer buttons. Plexo walks you through each step in plain words." },
@@ -18,7 +20,7 @@ const FEELS: { id: Experience; title: string; body: string }[] = [
   { id: "pro", title: "Everything", body: "All the tools in one place, and a tighter layout. For people who build a lot." },
 ];
 
-export function ProfileSection({ name: initialName, email, phone, image: initialImage, experience: initialExperience, mock = false }: { name: string; email: string; phone?: string | null; image?: string | null; experience: Experience; mock?: boolean }) {
+export function ProfileSection({ name: initialName, email, phone, image: initialImage, experience: initialExperience, country = null, countryGuess = null, mock = false }: { name: string; email: string; phone?: string | null; image?: string | null; experience: Experience; country?: string | null; countryGuess?: string | null; mock?: boolean }) {
   const router = useRouter();
   const { show } = useToast();
   const tour = useOptionalTour();
@@ -27,8 +29,27 @@ export function ProfileSection({ name: initialName, email, phone, image: initial
   const [saved, setSaved] = useState(initialName);
   const [image, setImage] = useState(initialImage ?? null);
   const [experience, setExperience] = useState(initialExperience);
+  const [selectedCountry, setSelectedCountry] = useState<string | null>(country ?? countryGuess ?? null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function handleCountryChange(code: string) {
+    setSelectedCountry(code);
+    try {
+      const res = await fetch("/api/profile/country", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ country: code }),
+      });
+      if (res.ok) {
+        show({ title: "Country saved", tone: "success" });
+        window.dispatchEvent(new Event("plexo:country-saved"));
+        router.refresh();
+      }
+    } catch {
+      // Keep optimistic value
+    }
+  }
 
   const patch = (json: Record<string, unknown>) => (mock ? Promise.resolve({}) : hubApi("/api/profile", { method: "PATCH", json }, "We couldn't save that. Please try again."));
 
@@ -125,7 +146,7 @@ export function ProfileSection({ name: initialName, email, phone, image: initial
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
 
       <Panel title="Your profile" description="This is how you appear to the people you work with.">
         <div className="plx-sform">
@@ -141,6 +162,10 @@ export function ProfileSection({ name: initialName, email, phone, image: initial
           </div>
           <Input label="Your name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" help="What your team and customers see." error={!name.trim() && dirty ? "Please type the name you'd like us to use." : undefined} onKeyDown={(e) => e.key === "Enter" && dirty && name.trim() && void saveName()} />
           <Input label="Your email" value={email} readOnly help="This is what you sign in with." />
+          <div className="plx-field">
+            <label className="plx-field__label" htmlFor="profile-country">Country</label>
+            <CountrySelect id="profile-country" value={selectedCountry} onChange={handleCountryChange} />
+          </div>
           {phone ? <Input label="Your phone number" value={phone} readOnly help="Saved when you connected WhatsApp." /> : null}
         </div>
       </Panel>

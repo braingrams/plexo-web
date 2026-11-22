@@ -48,9 +48,39 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const { data: existing } = await CommerceSettings.get({ templateId }).go();
     if (existing) {
-      await CommerceSettings.patch({ templateId }).set({ maildripApiKeyEncrypted: encryptMaildripKey(keyResult.apiKey) }).go();
+      await CommerceSettings.patch({ templateId }).set({
+        maildripApiKeyEncrypted: encryptMaildripKey(keyResult.apiKey),
+        maildripConnectedEmail: email,
+      }).go();
     } else {
-      await CommerceSettings.create({ id: randomUUID(), templateId, organizationId, maildripApiKeyEncrypted: encryptMaildripKey(keyResult.apiKey) }).go();
+      await CommerceSettings.create({
+        id: randomUUID(),
+        templateId,
+        organizationId,
+        maildripApiKeyEncrypted: encryptMaildripKey(keyResult.apiKey),
+        maildripConnectedEmail: email,
+      }).go();
+    }
+    return NextResponse.json({ status: "connected" });
+  }
+
+  if (action === "direct_key") {
+    const apiKey = typeof body.apiKey === "string" ? body.apiKey.trim() : "";
+    if (!apiKey) return NextResponse.json({ error: "apiKey is required." }, { status: 400 });
+    const { data: existing } = await CommerceSettings.get({ templateId }).go();
+    if (existing) {
+      await CommerceSettings.patch({ templateId }).set({
+        maildripApiKeyEncrypted: encryptMaildripKey(apiKey),
+        maildripConnectedEmail: email,
+      }).go();
+    } else {
+      await CommerceSettings.create({
+        id: randomUUID(),
+        templateId,
+        organizationId,
+        maildripApiKeyEncrypted: encryptMaildripKey(apiKey),
+        maildripConnectedEmail: email,
+      }).go();
     }
     return NextResponse.json({ status: "connected" });
   }
@@ -109,7 +139,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
   const { data: existing } = await CommerceSettings.get({ templateId }).go();
   if (existing) {
-    await CommerceSettings.patch({ templateId }).remove(["maildripApiKeyEncrypted", "maildripPaidGroupId", "maildripNewsletterGroupId"]).go();
+    await CommerceSettings.patch({ templateId }).remove(["maildripApiKeyEncrypted", "maildripConnectedEmail", "maildripPaidGroupId", "maildripNewsletterGroupId"]).go();
   }
   return NextResponse.json({ ok: true });
 }

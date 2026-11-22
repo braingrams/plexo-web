@@ -6,6 +6,7 @@ import { Plus, Trash2, Code2, MessageSquare, ExternalLink } from "lucide-react";
 import type { V2EditorRef } from "@charisol/plexo-sdk/v2";
 import type { DesignSystem, PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 import { appsApi, ApiError, type DesignSave, type DesignSummary } from "./api";
+import { useAutosavePreference } from "@/lib/editor/useAutosavePreference";
 import { createStrataAdapter } from "./strataAdapter";
 import { C, Button, Notice } from "./ui";
 import { BLANK_TEMPLATE, defaultPageName, defaultRoute, freeRoute, pageFromTemplate, slugForName, templates } from "@/lib/projects/designTemplates";
@@ -51,6 +52,10 @@ export function DesignPane(props: {
   onAskSol: (text: string) => void;
   onOpenCode: (path: string) => void;
   onPreview: (route: string) => void;
+  /** Puts the app live from the editor's "Publish now": resolves once it is live, rejects if the owner closes the window or it fails. */
+  onPublish?: () => Promise<void>;
+  /** Whether the app already has its web address (only changes the wording of "Publish now"). */
+  hasAddress?: boolean;
 }) {
   const { appId, onSaved } = props;
   const v3 = useEditorV3();
@@ -95,6 +100,7 @@ export function DesignPane(props: {
   const loadedRef = useRef(false);
   loadedRef.current = !!loaded;
   const strata = useMemo(() => createStrataAdapter({ appId }), [appId]);
+  const autosavePreference = useAutosavePreference();
 
   // The editor only runs in the browser; load it on first open.
   useEffect(() => {
@@ -529,6 +535,14 @@ export function DesignPane(props: {
             theme={editorTheme}
             strata={strataOn ? strata : undefined}
             onSave={() => save()}
+            // "Save as draft": the design is kept (the live app only changes when it is published); there is nothing to close here.
+            onSaveDraft={() => save()}
+            // "Publish now": the app's own publish window (it asks for the web address itself the first time).
+            onPublish={props.onPublish}
+            hasAddress={props.hasAddress}
+            autosavePreference={autosavePreference}
+            // The app's chat is SOL: it already works across every page, so the link just starts that conversation.
+            onAskSolManyPages={() => props.onAskSol("I'd like to change several of my pages at once. Ask me which pages and what to change.")}
             saveState={saveState === "saving" || saveState === "error" || saveState === "saved" ? saveState : dirty ? "dirty" : "idle"}
             // Pages belong to this app: it keeps the list and opens one design per page, so the editor shows ours.
             pageSource={{

@@ -13,5 +13,5 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const { data: user } = await User.get({ id: session.user.id }).go();
   const region = billingRegionFor(await loadPriceBook(), user, request.headers);
   const packs = topupPacksFor(region).map((p) => ({ pack: p.pack, credits: p.credits, price: p.price, currency: p.currency }));
-  return NextResponse.json({ packs, provider: region.provider, currency: region.currency }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ packs, provider: region.provider, currency: region.currency, topupPer1000: region.topupPer1000Credits }, { headers: { "Cache-Control": "no-store" } });
 }

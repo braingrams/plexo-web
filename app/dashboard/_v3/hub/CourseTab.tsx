@@ -1,8 +1,9 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import { Settings2, Users } from "lucide-react";
-import { ButtonLink, Skeleton } from "../ui";
+import { ButtonLink, Card, OptimisticLoader, Skeleton } from "../ui";
 import { LessonsManager } from "../learners/LessonsManager";
 import { TabBar } from "./HubFrame";
 import { errMsg, hubApi } from "./hubApi";
@@ -35,8 +36,12 @@ export function CourseTab({ siteId, experience = "beginner" }: { siteId: string;
           </span>
         }
       />
-      {error ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div> : null}
-      {lessons === null && !error ? <Skeleton style={{ height: 200, borderRadius: 20 }} /> : null}
+      {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}
+      {lessons === null && !error ? (
+        <Card padding="lg" style={{ minHeight: 200, display: "grid", placeItems: "center" }}>
+          <OptimisticLoader steps={["Loading your course lessons…", "Organizing curriculum and modules…"]} subtitle="Fetching course outline" />
+        </Card>
+      ) : null}
       {lessons ? <LessonsManager courseId={siteId} initial={lessons} experience={experience} /> : null}
     </>
   );

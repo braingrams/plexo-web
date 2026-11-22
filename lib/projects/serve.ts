@@ -6,6 +6,7 @@ import { ProjectBuild } from "@/lib/db/projectEntities";
 import { resolveHideBranding } from "@/lib/subscription";
 import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
+import { applyAnalyticsTag } from "@/lib/googleAnalytics/serveTag";
 import { buildSitePrefix, getObject } from "./blobStore";
 import { ANALYTICS_BEACON_JS, previewRuntimeJs } from "./previewRuntime";
 import { latestSuccessfulBuild, recordLatestBuild } from "./builds";
@@ -134,7 +135,7 @@ export async function serveProject(request: Request, ctx: ServeContext): Promise
           },
         });
       }
-      return htmlResponse(file.body.toString("utf8"), url, ctx);
+      return htmlResponse(file.body.toString("utf8"), url, ctx, request.headers);
     }
     // A missing script, stylesheet or image is a real 404 — answering it with index.html
     // turns a clear "file not found" into a confusing "unexpected token <" in the browser.
@@ -145,7 +146,7 @@ export async function serveProject(request: Request, ctx: ServeContext): Promise
 
   const index = await readBuildFile(`${prefix}/index.html`);
   if (!index) return statusPage("Something went wrong", "This app's build is missing its index.html. Rebuilding it usually fixes this.", 500);
-  return htmlResponse(index.body.toString("utf8"), url, ctx);
+  return htmlResponse(index.body.toString("utf8"), url, ctx, request.headers);
 }
 
 // Free serves an app's first screen only. The server already redirects any other address
@@ -186,7 +187,7 @@ async function commerceEnabled(templateId: string): Promise<boolean> {
   return enabled;
 }
 
-async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promise<NextResponse> {
+async function htmlResponse(source: string, url: URL, ctx: ServeContext, headers: Headers): Promise<NextResponse> {
   let html = source;
   const seo = await appSeo(ctx.template.id);
   html = injectSeoTags(html, {
@@ -224,6 +225,9 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext): Promis
     html = injectFavicon(html, ctx.organization.logo);
   }
   html = injectAppSeo(html, seo, `https://${ctx.host}${url.pathname}`);
+  if (!ctx.isPreview) {
+    html = await applyAnalyticsTag(html, ctx.template.id, headers);
+  }
   return new NextResponse(html, {
     headers: {
       "Content-Type": "text/html; charset=utf-8",

@@ -5,7 +5,7 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { User } from "@/lib/db/coreEntities";
 import { Template, PublishedDomain, BlogSite } from "@/lib/db/contentEntities";
 import { DeployedApp } from "@/lib/db/appEntities";
-import { CommerceSettings, CommerceProduct, CommerceCategory } from "@/lib/db/commerceEntities";
+import { CommerceSettings, CommerceProduct, CommerceCategory, CommerceDonationCampaign } from "@/lib/db/commerceEntities";
 import { PageView } from "@/lib/db/opsEntities";
 import { getPageTree, pathForPage } from "@/server/slugDynamo";
 import { effectivePlan } from "@/lib/plan/entitlement";
@@ -15,6 +15,7 @@ import type { Experience } from "./nav";
 import { hubKindLabel, pagePath, type HubFeatures } from "./hubTabs";
 import type { SiteKindLabel } from "./sites";
 import { readSiteBrand, type SiteBrand } from "./brandLook";
+import { countryName } from "@/lib/countries";
 
 export type HubContext = { userId: string; organizationId: string; experience: Experience; plan: PlanId; brand: Record<string, unknown> | null };
 
@@ -75,20 +76,27 @@ export { editHrefFor };
 export async function loadHubSite(organizationId: string, id: string): Promise<HubSite> {
   const { data: t } = await Template.get({ id }).go();
   if (!t || t.organizationId !== organizationId || t.parentId || t.kind !== "LANDING_PAGE") notFound();
-  const [{ data: commerce }, { data: blog }, { data: domains }, { data: deployed }] = await Promise.all([
+  const [{ data: commerce }, { data: blog }, { data: domains }, { data: deployed }, { data: products }, { data: campaigns }] = await Promise.all([
     CommerceSettings.get({ templateId: id }).go(),
     BlogSite.get({ templateId: id }).go(),
     PublishedDomain.query.primary({ templateId: id }).go({ pages: "all" }),
     DeployedApp.get({ templateId: id }).go(),
+    CommerceProduct.query.primary({ templateId: id }).go({ limit: 1 }),
+    CommerceDonationCampaign.query.primary({ templateId: id }).go({ limit: 1 }),
   ]);
   const sourceType = asSource(t.sourceType);
+  const hasProducts = products.length > 0;
+  const hasDonations = campaigns.length > 0 || Boolean(commerce?.donationsEnabled && !commerce?.enabled);
+  const store = Boolean(commerce?.enabled) && (hasProducts || !hasDonations);
   const features: HubFeatures = {
-    store: !!commerce?.enabled,
+    store,
+    donations: hasDonations,
     blog: !!blog?.enabled,
     course: !!t.isLmsFunnel,
     app: sourceType === "REACT_PROJECT",
     ownCode: sourceType === "RAW_UPLOAD",
     deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null,
+    migrated: !!t.migratedFrom,
   };
   const live = domains.filter((d) => d.active !== false);
   const best = live.find((d) => d.type === "CUSTOM") ?? live[0];
@@ -145,7 +153,46 @@ export async function loadHubProducts(siteId: string): Promise<HubProduct[]> {
     }));
 }
 
-export type HubVisits = { total: number; days: { label: string; views: number }[] };
+export type HubRanked = { name: string; value: number };
+
+export type HubVisitRow = {
+  id: string;
+  createdAt: string;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  deviceType: string | null;
+  browser: string | null;
+  os: string | null;
+  domain: string | null;
+};
+
+export type HubVisits = {
+  total: number;
+  days: { label: string; views: number }[];
+  devices?: HubRanked[];
+  countries?: HubRanked[];
+  browsers?: HubRanked[];
+  os?: HubRanked[];
+  recent?: HubVisitRow[];
+};
+
+function formatDevice(deviceType: string | null | undefined): string {
+  if (!deviceType) return "Desktop";
+  const s = deviceType.toLowerCase();
+  if (s === "mobile") return "Mobile";
+  if (s === "tablet") return "Tablet";
+  return "Desktop";
+}
+
+function formatCountry(codeOrName: string | null | undefined): string {
+  if (!codeOrName) return "Unknown";
+  if (codeOrName.length === 2) {
+    const named = countryName(codeOrName);
+    if (named && named !== "Unknown") return named;
+  }
+  return codeOrName;
+}
 
 /** Page views over the last `days` days, per day (same source as the old Insights page). */
 export async function loadHubVisits(siteId: string, days = 14): Promise<HubVisits> {
@@ -162,13 +209,60 @@ export async function loadHubVisits(siteId: string, days = 14): Promise<HubVisit
     buckets.set(key, 0);
     order.push(key);
   }
+
+  const deviceCounts = new Map<string, number>();
+  const countryCounts = new Map<string, number>();
+  const browserCounts = new Map<string, number>();
+  const osCounts = new Map<string, number>();
+
   for (const v of data) {
     const key = new Date(v.createdAt).toISOString().slice(0, 10);
     if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + 1);
+
+    const dev = formatDevice(v.deviceType);
+    deviceCounts.set(dev, (deviceCounts.get(dev) ?? 0) + 1);
+
+    const cty = formatCountry(v.country);
+    if (cty !== "Unknown" || countryCounts.size === 0) {
+      countryCounts.set(cty, (countryCounts.get(cty) ?? 0) + 1);
+    }
+
+    const brw = v.browser || "Other";
+    browserCounts.set(brw, (browserCounts.get(brw) ?? 0) + 1);
+
+    const ops = v.os || "Other";
+    osCounts.set(ops, (osCounts.get(ops) ?? 0) + 1);
   }
+
+  const toRanked = (map: Map<string, number>): HubRanked[] =>
+    [...map.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 8)
+      .map(([name, value]) => ({ name, value }));
+
+  const recent: HubVisitRow[] = [...data]
+    .sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""))
+    .slice(0, 50)
+    .map((v) => ({
+      id: v.id,
+      createdAt: v.createdAt,
+      country: v.country ? formatCountry(v.country) : null,
+      region: v.region ?? null,
+      city: v.city ?? null,
+      deviceType: v.deviceType ? formatDevice(v.deviceType) : null,
+      browser: v.browser ?? null,
+      os: v.os ?? null,
+      domain: v.domain ?? null,
+    }));
+
   return {
     total: data.length,
     days: order.map((key) => ({ label: new Date(key).toLocaleDateString("en", { month: "short", day: "numeric" }), views: buckets.get(key) ?? 0 })),
+    devices: toRanked(deviceCounts),
+    countries: toRanked(countryCounts),
+    browsers: toRanked(browserCounts),
+    os: toRanked(osCounts),
+    recent,
   };
 }
 
@@ -181,14 +275,19 @@ export async function loadHubSiteCards(organizationId: string, userId: string): 
   const week = new Date(Date.now() - 7 * 86400000).toISOString();
   return Promise.all(
     sites.map(async (s) => {
-      const [{ data: commerce }, { data: blog }, { data: t }, { data: deployed }, views] = await Promise.all([
+      const [{ data: commerce }, { data: blog }, { data: t }, { data: deployed }, { data: products }, { data: campaigns }, views] = await Promise.all([
         CommerceSettings.get({ templateId: s.id }).go(),
         BlogSite.get({ templateId: s.id }).go(),
         Template.get({ id: s.id }).go(),
         DeployedApp.get({ templateId: s.id }).go(),
+        CommerceProduct.query.primary({ templateId: s.id }).go({ limit: 1 }),
+        CommerceDonationCampaign.query.primary({ templateId: s.id }).go({ limit: 1 }),
         PageView.query.primary({ templateId: s.id }).between({ createdAt: week }, { createdAt: new Date().toISOString() }).go({ pages: "all" }).then((r) => r.data.length).catch(() => 0),
       ]);
-      const features: HubFeatures = { store: !!commerce?.enabled, blog: !!blog?.enabled, course: !!t?.isLmsFunnel, app: t?.sourceType === "REACT_PROJECT", ownCode: t?.sourceType === "RAW_UPLOAD", deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null };
+      const hasProducts = products.length > 0;
+      const hasDonations = campaigns.length > 0 || Boolean(commerce?.donationsEnabled && !commerce?.enabled);
+      const store = Boolean(commerce?.enabled) && (hasProducts || !hasDonations);
+      const features: HubFeatures = { store, donations: hasDonations, blog: !!blog?.enabled, course: !!t?.isLmsFunnel, app: t?.sourceType === "REACT_PROJECT", ownCode: t?.sourceType === "RAW_UPLOAD", deployed: deployed ? (deployed.type === "SSR" ? "server" : "static") : null, migrated: !!t?.migratedFrom };
       return { id: s.id, name: s.name, kind: hubKindLabel(features), status: s.status, address: s.address ?? null, visits7d: views, editHref: editHrefFor(s.id, t?.sourceType), app: isAppKind(hubKindLabel(features)) };
     }),
   );

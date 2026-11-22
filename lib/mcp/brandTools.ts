@@ -5,6 +5,8 @@ import { brandForClient, tokensForClient, type TokenRequest } from "@/lib/brand/
 import { buildComponentRow, ComponentInputError, usageHint } from "@/lib/brand/brandComponents";
 import { sendComponentsToStrata, sendTokensToStrata } from "@/lib/brand/extrasWriteThrough";
 import { resolveSiteBrand, siteIdOfPage } from "@/lib/brand/resolveSiteBrand";
+import { saveSiteVoice, VoiceError } from "@/lib/brand/voiceStore";
+import { TONES } from "@/lib/brand/brandVoice";
 import { BrandError, createStrataProjectFromSiteBrand, getSiteBrandState, linkedDesignSystem, linkSiteBrand, listOwnerStrataProjects } from "@/lib/brand/siteBrand";
 
 type ResolvedUser = NonNullable<Awaited<ReturnType<typeof resolveUser>>>;
@@ -100,6 +102,36 @@ export const BRAND_MCP_TOOLS = [
     },
   },
   {
+    name: "get_brand_voice",
+    title: "Get a Site's Tagline and Brand Voice",
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    description:
+      "Reads the WORDS of a site's brand: its tagline, a short \"about us\" line, and how it sounds (tones, formality, who it speaks to, words they like and words they avoid). Strata's project has no tagline or voice fields, so Plexo keeps these on the site (and copies them into the linked Strata project when there is one). " +
+      "Call it before you write ANY copy for the site (page text, emails, blog posts, product descriptions, ads) and write in that voice without being asked; use the tagline as is where a tagline belongs (header, footer, hero, meta description). If nothing is set, offer once to set it with set_brand_voice, writing the proposal yourself from what the owner told you.",
+    inputSchema: { type: "object", properties: { siteId: siteIdProp } },
+  },
+  {
+    name: "set_brand_voice",
+    title: "Set a Site's Tagline and Brand Voice",
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true },
+    description:
+      "Saves the words of a site's brand so SOL and every AI helper write in them from now on, and the site's footer and search description can start from them. Pass only what should change: a field you pass replaces the old one (\"\" or [] clears it), a field you leave out stays. " +
+      "Write them yourself from what the owner said (don't ask them to fill a form): tagline (max 8 words, specific, no buzzwords), aboutLine (one or two plain sentences), tones (up to 4 of: " + TONES.map((t) => t.id).join(", ") + "), formality (casual, balanced, formal), audience (a short phrase), wordsLike and wordsAvoid (short lists). Only change them when the owner asked or agreed to your proposal. Never invent facts (years in business, awards, prices).",
+    inputSchema: {
+      type: "object",
+      properties: {
+        siteId: siteIdProp,
+        tagline: { type: "string", description: "A short line that goes with the name, max 90 characters." },
+        aboutLine: { type: "string", description: "One or two sentences about the business, max 240 characters." },
+        tones: { type: "array", items: { type: "string", enum: TONES.map((t) => t.id) }, maxItems: 4, description: "How it sounds." },
+        formality: { type: "string", enum: ["casual", "balanced", "formal", ""], description: "How formal." },
+        audience: { type: "string", description: "Who it speaks to, max 160 characters." },
+        wordsLike: { type: "array", items: { type: "string" }, description: "Words and phrases to use where they fit." },
+        wordsAvoid: { type: "array", items: { type: "string" }, description: "Words and phrases never to use." },
+      },
+    },
+  },
+  {
     name: "get_brand_tokens",
     title: "Get a Site's Brand Tokens",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -118,7 +150,8 @@ export const BRAND_MCP_TOOLS = [
       properties: {
         siteId: siteIdProp,
         colours: { type: "object", description: "Role -> hex, e.g. {\"primary\":\"#E4572E\",\"background\":\"#FFF8F0\"}. Roles: primary, secondary, accent, text, background, surface." },
-        fonts: { type: "object", description: "{\"heading\":\"Playfair Display\",\"body\":\"Inter\"}" },
+        fonts: { type: "object", description: "{\"heading\":\"Playfair Display\",\"body\":\"Inter\"}. Any Google Fonts family works (about 1,800 of them), or a font the owner uploaded. Pair a classic heading font with a clean body font, e.g. Playfair Display with Source Sans 3." },
+        fontWeights: { type: "object", description: "How heavy each font is, 100 to 900: {\"heading\":700,\"body\":400}. Only weights the font really has are loaded." },
         radius: { type: "number", description: "Corner roundness in px (0 to 64)." },
         spacing: { type: "object", description: "Step -> px, e.g. {\"4\": 16, \"6\": 24}." },
       },
@@ -156,11 +189,13 @@ function readTokenRequest(args: any): TokenRequest {
   if (colours) req.colours = Object.fromEntries(Object.entries(colours).filter(([, v]) => typeof v === "string")) as TokenRequest["colours"];
   const fonts = obj(args?.fonts);
   if (fonts) req.fonts = Object.fromEntries(Object.entries(fonts).filter(([k, v]) => (k === "heading" || k === "body") && typeof v === "string"));
+  const weights = obj(args?.fontWeights);
+  if (weights) req.fontWeights = Object.fromEntries(Object.entries(weights).filter(([k, v]) => (k === "heading" || k === "body") && (typeof v === "number" || typeof v === "string")));
   if (typeof args?.radius === "number" || typeof args?.radius === "string") req.radius = args.radius;
   const spacing = obj(args?.spacing);
   if (spacing) req.spacing = Object.fromEntries(Object.entries(spacing).filter(([, v]) => typeof v === "number" || typeof v === "string")) as TokenRequest["spacing"];
-  const nothing = !Object.keys(req.colours ?? {}).length && !Object.keys(req.fonts ?? {}).length && req.radius === undefined && !Object.keys(req.spacing ?? {}).length;
-  if (nothing) throw new BrandError("Say what to change: colours (like primary), fonts (heading, body), radius or spacing.", 400);
+  const nothing = !Object.keys(req.colours ?? {}).length && !Object.keys(req.fonts ?? {}).length && !Object.keys(req.fontWeights ?? {}).length && req.radius === undefined && !Object.keys(req.spacing ?? {}).length;
+  if (nothing) throw new BrandError("Say what to change: colours (like primary), fonts (heading, body), fontWeights, radius or spacing.", 400);
   return req;
 }
 
@@ -245,6 +280,34 @@ export async function handleBrandTool(toolName: string, args: any, resolved: Res
           component: info ? { ...info, howToUse: usageHint(info) } : { name: row.name, className },
           next: `Use it as an element with class "${className}". Tell the owner in one plain line that it is saved to their brand${sent.state === "waiting" ? " and will reach Strata shortly" : " and in Strata"}.`,
         };
+      }
+      case "get_brand_voice": {
+        await limited(resolved, "brand:read", 120);
+        const siteId = await pickSiteId(resolved, args?.siteId);
+        const brand = await resolveSiteBrand({ siteId, organizationId: resolved.organizationId, userId: resolved.userId });
+        if (!brand) throw new BrandError("That site wasn't found in this account.", 404);
+        return {
+          success: true,
+          siteId,
+          tagline: brand.tagline ?? null,
+          words: brand.words ?? null,
+          summary: brand.voice ?? null,
+          next: brand.words ? "Write all copy for this site in this voice, without being asked, and use the tagline as is. Change it only with set_brand_voice and only when the owner asked." : "No tagline or voice is set. Offer once to set them: propose a tagline and voice from what the owner told you and save it with set_brand_voice once they agree.",
+        };
+      }
+      case "set_brand_voice": {
+        const siteId = await pickSiteId(resolved, args?.siteId);
+        await limited(resolved, "site-voice", 30);
+        const { siteId: _ignored, ...patch } = (args ?? {}) as Record<string, unknown>;
+        void _ignored;
+        if (!Object.keys(patch).length) throw new BrandError("Say what to change: tagline, aboutLine, tones, formality, audience, wordsLike or wordsAvoid.", 400);
+        try {
+          const saved = await saveSiteVoice({ siteId, userId: resolved.userId, organizationId: resolved.organizationId, patch });
+          return { success: true, state: saved.state, message: saved.message, words: saved.voice, next: "Tell the owner in one plain line that their words are saved and everything will be written in that voice." };
+        } catch (err) {
+          if (err instanceof VoiceError) throw new BrandError(err.message, err.status);
+          throw err;
+        }
       }
       case "get_brand_tokens": {
         await limited(resolved, "brand:read", 120);

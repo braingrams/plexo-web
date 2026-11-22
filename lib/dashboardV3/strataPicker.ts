@@ -2,7 +2,7 @@
  * The "Your brand" picker's logic (app/dashboard/_v3/brand/StrataBrandPicker.tsx), pure: which state the picker is in, what the
  * owner's choice means, the words it uses. Tested in tests/strataBrandPicker.test.ts.
  *
- * Plain words only: owners see "brand", "colours", "fonts", "logo" and "Strata", never tokens, ids or tool names.
+ * Plain words only: owners see "brand", "colours", "fonts" and "logo", never tokens, ids or tool names. The tool behind it is named only in the help panel (lib/dashboardV3/brandDefinition.ts).
  */
 import { parseBrandChoice, type BrandChoice } from "@/lib/brand/brandModel";
 
@@ -50,24 +50,24 @@ export function toggleSelection(current: PickerSelection, next: PickerSelection)
 
 export const PICKER_COPY = {
   title: "Your brand",
-  lead: "If you keep your colours, fonts and logo in Strata, use them here. Your website will look like your brand from the start and follow it when you change it.",
-  connectTitle: "Connect Strata",
-  connectText: "Sign in with your Charisol account to see your brands. This is optional: everything works without it.",
+  lead: "If you already have a saved brand, use it here. Your website will look like your brand from the start and follow it when you change it.",
+  connectTitle: "Find my saved brands",
+  connectText: "Sign in with your Charisol account to see the brands you have saved. This is optional: everything works without it.",
   /** For a website that already exists: its brand has to live in Strata, so this is the one step left, not an option. */
-  connectSiteText: "Sign in with your Charisol account once. Plexo then saves your brand in Strata for you, and keeps it up to date.",
-  connectButton: "Connect Strata",
+  connectSiteText: "Sign in with your Charisol account once. Plexo then saves your brand for you, and keeps it up to date.",
+  connectButton: "Sign in to continue",
   notConnectedNote: "You'll sign in with your Charisol account in a small window.",
-  emptyTitle: "You don't have a brand in Strata yet",
-  emptyText: "You can make one from the colours and logo you're using here. It's saved in Strata and stays in step with your website.",
-  createTitle: "Create a Strata brand from mine",
-  createText: "Plexo makes a Strata project from your colours, fonts and logo, so your brand lives in one place from now on.",
-  createNeedsColours: "Choose your colours first, then Plexo can create your brand in Strata.",
+  emptyTitle: "You have no saved brands yet",
+  emptyText: "You can make one from the colours and logo you're using here. It's saved safely and stays in step with your website.",
+  createTitle: "Create a brand from mine",
+  createText: "Plexo saves your colours, fonts and logo as a new brand, so it lives in one place from now on.",
+  createNeedsColours: "Choose your colours first, then Plexo can save your brand.",
   skip: "Skip for now",
-  skipNote: "Your website will use the colours and logo you choose here. You can connect Strata any time from its Brand page.",
+  skipNote: "Your website will use the colours and logo you choose here. You can set up your brand any time from its Your brand page.",
   syncTitle: "Keep my website up to date",
-  syncOn: "When you publish a change in Strata, your website follows within a couple of minutes.",
+  syncOn: "When you change your brand, your website follows within a couple of minutes.",
   syncOff: "Your website keeps its current look until you turn this back on.",
-  viewOnly: "View only: you need edit access in Strata",
+  viewOnly: "View only: you need edit access to use this brand",
   deferred: "Your website will use this brand as soon as it's made.",
   retry: "Try again",
 } as const;
@@ -91,7 +91,7 @@ export function switchWarning(input: { siteName: string; toName: string; created
     lines: [
       `${input.siteName} will use the colours, fonts and logo from ${input.created ? "the new brand" : `"${to}"`}. If the website is online, you will see the change there within a couple of minutes.`,
       "Your words, pictures and pages stay exactly as they are.",
-      input.autoSync ? "From now on, the website follows this brand when you publish a change in Strata." : "The website will not follow later changes in Strata until you turn \"Keep my website up to date\" back on.",
+      input.autoSync ? "From now on, the website follows this brand when you change it." : "The website will not follow later changes to this brand until you turn \"Keep my website up to date\" back on.",
       "You can switch back any time.",
     ],
     confirm: input.created ? "Yes, make it" : "Yes, switch my brand",
@@ -101,7 +101,7 @@ export function switchWarning(input: { siteName: string; toName: string; created
 /** One plain sentence for after a brand was linked or created, e.g. for a toast or the panel's confirmation. */
 export function confirmationText(input: { projectName?: string | null; created?: boolean; autoSync: boolean; notes?: string[] }): string {
   const name = input.projectName?.trim();
-  const head = input.created ? `Your brand is now in Strata${name ? ` as "${name}"` : ""} and on your website.` : `Your ${name ? `"${name}" ` : ""}brand is on your website.`;
-  const sync = input.autoSync ? " It stays in step when you publish in Strata." : "";
+  const head = input.created ? `Your brand is saved${name ? ` as "${name}"` : ""} and on your website.` : `Your ${name ? `"${name}" ` : ""}brand is on your website.`;
+  const sync = input.autoSync ? " It stays in step when you change it." : "";
   return `${head}${sync}${input.notes?.length ? ` ${input.notes[0]}` : ""}`;
 }

@@ -10,6 +10,8 @@ import {
   designSystemFromBrief,
   detectIndustry,
   detectStyle,
+  getPageRecipe,
+  PAGE_RECIPES,
   recipesFor,
   siteNavLinks,
   type PageRecipe,
@@ -40,33 +42,68 @@ export function briefFromProfile(p: SolBuildProfile): SiteBrief & { name: string
   };
 }
 
-function score(r: PageRecipe, industry: SiteIndustry, style: SiteStyle, goal: string | undefined): number {
+function score(r: PageRecipe, industry: SiteIndustry, style: SiteStyle, goal: string | undefined, aboutText: string): number {
   let s = 0;
-  if (industry !== "general") s += r.industries.includes(industry) ? 4 : r.industries.includes("general") ? 1 : 0;
-  else s += r.industries.includes("general") ? 2 : 0;
+  const text = aboutText.toLowerCase();
+
+  // Industry fit: specific industry recipes get priority
+  if (industry !== "general") {
+    if (r.industries.includes(industry)) s += 6;
+    else if (r.industries.includes("general")) s += 2;
+  } else {
+    s += r.industries.includes("general") ? 3 : 0;
+  }
+
+  // Visual style fit
   if (r.styles.includes(style)) s += 3;
-  if (goal === "store" && r.id === "home-shop") s += 3;
-  if (goal === "course" && r.id === "landing-course") s += 4;
-  if (goal === "link-in-bio" && r.id === "landing-waitlist") s += 2;
-  if (goal === "blog" && (r.id === "home-editorial" || r.id === "home-classic")) s += 1;
+
+  // Semantic intent from owner's words & goal
+  if (/\b(show|shows|perform|performance|performances|music|artist|singer|dance|creator|video|gallery|portfolio|entertain)\b/i.test(text)) {
+    if (r.id === "home-editorial" || r.id === "home-bold") s += 8;
+    if (r.id === "landing-waitlist") s -= 5;
+  }
+  if (/\b(food|restaurant|chef|cook|cooking|bake|bakery|cafe|kitchen|menu)\b/i.test(text)) {
+    if (r.id === "home-hospitality" || r.id === "home-local") s += 8;
+  }
+  if (goal === "store") {
+    if (r.id === "home-shop") s += 12;
+  } else if (/\b(shop|store|sell|product|merch|clothing|boutique|order|buy)\b/i.test(text)) {
+    if (r.id === "home-shop" || r.id === "landing-sales") s += 7;
+  }
+  if (/\b(course|class|learn|lesson|coach|coaching|train|academy|book|guide)\b/i.test(text) || goal === "course") {
+    if (r.id === "landing-course") s += 7;
+  }
+  if (/\b(software|app|saas|api|tech|platform|startup)\b/i.test(text)) {
+    if (r.id === "home-product" || r.id === "home-bold") s += 6;
+  }
+  if (/\b(charity|nonprofit|cause|donate|donation|give|community|church)\b/i.test(text)) {
+    if (r.id === "home-cause") s += 8;
+  }
+  if (/\b(waitlist|coming soon|launching soon|pre-launch)\b/i.test(text)) {
+    if (r.id === "landing-waitlist") s += 8;
+  }
+
   return s;
 }
 
-/** Every design for the goal, best fit first (ties keep the kit's own order so the result is stable). */
+/** Every design from the kit, ranked so the best fit for their brand and description is first. */
 export function rankDesigns(p: SolBuildProfile): PageRecipe[] {
   const brief = briefFromProfile(p);
   const industry = detectIndustry(brief);
   const style = detectStyle({ tone: brief.tone, industry: brief.industry, about: brief.about, name: brief.name });
-  const list = recipesFor(pageTypeForGoal(p.goal));
-  return list
-    .map((r, i) => ({ r, i, s: score(r, industry, style, p.goal) }))
+  const aboutText = `${brief.name} ${brief.about ?? ""} ${p.goal ?? ""}`;
+  const targetType = pageTypeForGoal(p.goal);
+  const candidates = PAGE_RECIPES.filter((r) => r.pageType === targetType);
+
+  return candidates
+    .map((r, i) => ({ r, i, s: score(r, industry, style, p.goal, aboutText) }))
     .sort((a, b) => b.s - a.s || a.i - b.i)
     .map((x) => x.r);
 }
 
 export const toChoice = (r: PageRecipe): DesignChoice => ({ id: r.id, name: r.name, description: r.description });
 
-/** The three designs chosen for this owner, and the rest for "See all designs". */
+/** Top designs chosen for this owner, and the full ranked catalog for "Change design" and "See all designs". */
 export function pickDesigns(p: SolBuildProfile, count = 3): { top: DesignChoice[]; others: DesignChoice[] } {
   const ranked = rankDesigns(p).map(toChoice);
   return { top: ranked.slice(0, count), others: ranked.slice(count) };
@@ -74,7 +111,7 @@ export function pickDesigns(p: SolBuildProfile, count = 3): { top: DesignChoice[
 
 /** One design as a complete page in the owner's brand (their name, logo, colours, fonts and words). */
 export function renderDesign(p: SolBuildProfile, recipeId: string): RenderedDesign | null {
-  const recipe = recipesFor(pageTypeForGoal(p.goal)).find((r) => r.id === recipeId);
+  const recipe = getPageRecipe(recipeId) ?? PAGE_RECIPES.find((r) => r.id === recipeId) ?? recipesFor(pageTypeForGoal(p.goal)).find((r) => r.id === recipeId);
   if (!recipe) return null;
   const brief = briefFromProfile(p);
   const { designSystem } = designSystemFromBrief(brief);

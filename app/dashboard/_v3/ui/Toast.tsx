@@ -64,8 +64,12 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
+const noopToast = {
+  show: (_t: ToastInput) => {},
+  dismiss: (_id: number) => {},
+};
+
 export function useToast() {
   const ctx = useContext(ToastContext);
-  if (!ctx) throw new Error("useToast must be used inside the v3 dashboard (ToastProvider is mounted by V3Root).");
-  return ctx;
+  return ctx ?? noopToast;
 }

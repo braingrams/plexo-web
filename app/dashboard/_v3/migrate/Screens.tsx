@@ -231,7 +231,7 @@ export function ReviewScreen(props: {
               ) : null}
               {props.error ? <Note tone="bad">{props.error}</Note> : null}
               <Button size="lg" fullWidth disabled={!ready} loading={props.starting} loadingLabel="Starting" onClick={props.onStart} rightIcon={<ArrowRight size={18} />}>Start moving my site</Button>
-              <Button variant="ghost" fullWidth onClick={props.onBack} leftIcon={<ArrowLeft size={16} />}>Use a different address</Button>
+              <Button variant="secondary" fullWidth onClick={props.onBack} leftIcon={<ArrowLeft size={16} />}>Use a different address</Button>
             </div>
           </Card>
         </div>
@@ -332,7 +332,7 @@ export function SitePreview({ url, srcDoc, shown }: { url: string | null; srcDoc
     <div className="plx-prev">
       <div className="plx-prev__bar">
         <SegmentedControl<"desktop" | "phone"> label="Preview size" value={device} onChange={setDevice} options={[{ value: "desktop", label: "Computer", icon: <Monitor size={16} aria-hidden /> }, { value: "phone", label: "Phone", icon: <Smartphone size={16} aria-hidden /> }]} />
-        {url ? <ButtonLink size="sm" variant="ghost" href={url} target="_blank" rel="noreferrer" rightIcon={<ExternalLink size={16} />}>Open in a new tab</ButtonLink> : null}
+        {url ? <ButtonLink size="sm" variant="secondary" href={url} target="_blank" rel="noreferrer" rightIcon={<ExternalLink size={16} />}>Open in a new tab</ButtonLink> : null}
       </div>
       <div className="plx-prev__stage">
         <div className="plx-prev__frame" data-device={device}>
@@ -447,7 +447,7 @@ export function GoLiveScreen({ host, onBack, templateId, forceDone, children }: 
             <CardHeader title="Want us to help?" description="Ask SOL and it will walk you through it, or do the checking for you." />
             <div className="plx-mvrow">
               <ButtonLink variant="secondary" leftIcon={<LifeBuoy size={18} />} href={solHref(`Help me put ${host} on my new Plexo site. Where do I make the change and what do I type?`)}>We'll help you</ButtonLink>
-              <Button variant="ghost" onClick={onBack} leftIcon={<ArrowLeft size={16} />}>Back to my new site</Button>
+              <Button variant="secondary" onClick={onBack} leftIcon={<ArrowLeft size={16} />}>Back to my new site</Button>
             </div>
           </Card>
         </div>

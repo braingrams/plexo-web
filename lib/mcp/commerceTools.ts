@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { commerceEnableError, commercePlanForOrg, countStoreProducts, defaultPaymentProvider, paymentProviderError, productLimitError } from "@/lib/plan/commerceGate";
+import { commercePlanForOrg, commerceSettingsGate, countStoreProducts, defaultPaymentProvider, productLimitGate } from "@/lib/plan/commerceGate";
+import { planGateMessage } from "@/lib/plan/limitGates";
 import { catalogFieldsFromInput } from "@/lib/commerce/variants";
 import type { resolveUser } from "@/lib/auth/resolveUser";
 import { slugify } from "@/server/slugDynamo";
@@ -288,6 +289,8 @@ export const COMMERCE_MCP_TOOLS = [
         pickupEnabled: { type: "boolean", description: "The built-in free \"Store pickup\" option at checkout. Default true." },
         pickupLocation: { type: "string", description: "The store's pickup address, shown to customers at checkout and on their order. Empty string clears it." },
         pickupInstructions: { type: "string", description: "Optional pickup hours/notes. Empty string clears it." },
+        termsText: { type: "string", description: "The shop's terms of sale and refund policy, in plain words (up to 10,000 characters). Customers get a link to it at checkout and in order emails. Empty string clears it." },
+        termsUrl: { type: "string", description: "Optional link (https://) to the owner's own terms page. If set, customers are sent there instead of to the hosted copy of termsText. Empty string clears it." },
         checkoutFields: {
           type: "array",
           description: "REPLACES the site's whole list of extra checkout questions (send [] to remove all). Keep an existing question's id to preserve it; omit id for a new one.",
@@ -631,8 +634,8 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         { kind, priceMinor },
       );
 
-      const limitError = productLimitError(await commercePlanForOrg(resolved.organizationId), await countStoreProducts(siteId));
-      if (limitError) throw new Error(limitError);
+      const limitGate = productLimitGate(await commercePlanForOrg(resolved.organizationId), await countStoreProducts(siteId));
+      if (limitGate) throw new Error(planGateMessage(limitGate));
 
       const slug = await ensureUniqueProductSlug(siteId, name);
       const categoryId = (await resolveCategoryId(siteId, resolved.organizationId, args.category)) ?? undefined;
@@ -821,8 +824,8 @@ export async function handleCommerceTool(toolName: string, args: any, resolved: 
         throw new Error("paymentProvider must be BYO_PAYSTACK, PLATFORM_PAYSTACK, PLATFORM_STRIPE, or BYO_STRIPE.");
       }
       const commercePlan = await commercePlanForOrg(resolved.organizationId);
-      const planError = (args.enabled === true ? commerceEnableError(commercePlan) : null) ?? paymentProviderError(commercePlan, paymentProvider);
-      if (planError) throw new Error(planError);
+      const planGate = commerceSettingsGate(commercePlan, { enabled: args.enabled === true ? true : undefined, paymentProvider });
+      if (planGate) throw new Error(planGateMessage(planGate));
       if (paymentProvider === "PLATFORM_STRIPE") {
         const { data: requests } = await CommerceStripeAccessRequest.query.primary({ organizationId: resolved.organizationId }).go({ pages: "all" });
         if (!requests.some((r) => r.status === "APPROVED")) throw new Error("Platform Stripe isn't approved for this organization yet — call request_commerce_stripe_access first.");

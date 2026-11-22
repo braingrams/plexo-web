@@ -189,6 +189,6 @@ export function howToChange(c: PageCandidate): string {
   if (c.kind === "blog-listing" || c.kind === "blog-post-layout") return `Change it with blog_layout_edit (templateId ${c.siteId}, kind "${c.kind === "blog-listing" ? "listing" : "post"}"); it takes effect at once.`;
   if (c.designFormat === "raw-html") return "It's hand-written HTML: change it with update_raw_landing_page (whole page), or rebuild it in the visual editor with page_create_from_template.";
   if (c.designFormat === "classic") return "It's a classic-editor page: change it with update_template.";
-  if (c.kind === "site-header" || c.kind === "site-footer") return "It's shared by every page: change it with page_edit (this templateId) then page_publish; every page picks it up.";
+  if (c.kind === "site-header" || c.kind === "site-footer") return "It's the site's shared header/footer, used on every page: change it with site_layout_edit (siteId, kind \"header\" or \"footer\", commands); it is live at once. A page can hide it with page_chrome_set.";
   return "Change it with page_edit (this templateId), then page_publish to put it live.";
 }

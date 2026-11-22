@@ -1,13 +1,14 @@
 "use client";
 
-import { ArrowRight, BookOpen, Compass, LayoutTemplate } from "lucide-react";
+import { SolGlyph } from "../sol/SolGlyph";
+import { ArrowRight, Compass, LayoutTemplate } from "lucide-react";
 import { Button, ButtonLink, Card } from "../ui";
 import { useOptionalTour } from "../tour/TourProvider";
 
 const IDEAS = [
   { icon: LayoutTemplate, title: "See what a site can look like", body: "Browse ready-made designs for shops, blogs, courses and more.", href: "/dashboard/marketplace", cta: "Browse designs" },
   { icon: Compass, title: "Take a quick tour", body: "A one-minute look at where everything lives.", href: "", cta: "Show me around" },
-  { icon: BookOpen, title: "Ask SOL anything", body: "Not sure where to start? Tell SOL your idea in plain words.", href: "/dashboard/sol", cta: "Ask SOL" },
+  { icon: SolGlyph, title: "Ask SOL anything", body: "Not sure where to start? Tell SOL your idea in plain words.", href: "/dashboard/sol", cta: "Ask SOL" },
 ];
 
 /** For someone who chose "Continue later": a friendly way back in, plus three easy things to try. */

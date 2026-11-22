@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useEffect, useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { Pagination } from "../../../_components/Pagination";
@@ -45,9 +46,10 @@ export function CustomersClient({ templateId }: { templateId: string }) {
       </p>
 
       {error ? (
+<GateOrError error={error}>
         <div style={{ padding: "2rem", textAlign: "center", borderRadius: 14, border: "1px solid color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 25%, transparent)", background: "color-mix(in srgb, var(--cmx-danger, rgb(239,68,68)) 6%, transparent)", color: "var(--cmx-danger, #f87171)", fontSize: "0.85rem" }}>
           {error}
-        </div>
+        </div></GateOrError>
       ) : loading ? (
         <p style={{ color: "var(--cmx-muted, rgba(240,242,255,0.4))", fontSize: "0.85rem" }}>Loading…</p>
       ) : customers.length === 0 ? (

@@ -1,3 +1,4 @@
+import { PlanLimitError, planLimitText } from "@/lib/plan/publishGuard";
 import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 import { ProjectBuild, type ProjectBuildError } from "@/lib/db/projectEntities";
@@ -314,7 +315,7 @@ async function ensureDomain(templateId: string, name: string, userId: string, or
     }
   }
   if (active.length) return active;
-  throw lastError ?? new Error("Couldn't give the app an address.");
+  throw lastError instanceof PlanLimitError ? new Error(planLimitText(lastError, "")) : (lastError ?? new Error("Couldn't give the app an address."));
 }
 
 // ------------------------------------------------------------------ report

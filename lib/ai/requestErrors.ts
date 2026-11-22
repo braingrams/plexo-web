@@ -12,3 +12,8 @@ export function aiErrorMessage(status: number, body: { error?: unknown } | null 
   if (status === 402) return "You're out of AI credits — top up, or add your own API key in Settings.";
   return fallback;
 }
+
+/** True when an AI reply is the "you're out of credits" explanation (from the server or from aiErrorMessage). */
+export function isOutOfCreditsReply(reply: string): boolean {
+  return /enough AI credits|out of AI credits|used all your AI credits/i.test(reply);
+}

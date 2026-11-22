@@ -4,6 +4,7 @@ const db = vi.hoisted(() => ({ root: null as any, children: [] as any[], user: n
 vi.mock("@/lib/auth/resolveUser", () => ({ resolveUser: vi.fn(async () => db.user) }));
 vi.mock("@/lib/db/contentEntities", () => ({
   Template: { get: () => ({ go: async () => ({ data: db.root }) }), query: { byParent: () => ({ go: async () => ({ data: db.children }) }) } },
+  PublishedDomain: { query: { primary: () => ({ go: async () => ({ data: [] }) }) } },
 }));
 
 import { DRAFT_PREVIEW_TTL_SECONDS, mintDraftPreviewToken, signedDraftPreviewUrl, verifyDraftPreviewToken } from "@/lib/draftPreviewToken";

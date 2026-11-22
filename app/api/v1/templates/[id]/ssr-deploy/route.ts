@@ -1,3 +1,4 @@
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
@@ -53,7 +54,7 @@ export async function POST(
   }
   const plan = getTierFeatures(resolved.subscriptionPlan);
   if (!plan.ssrEnabled) {
-    return NextResponse.json({ error: "Server apps are part of the Pro plan. Upgrade in Settings → Billing to use them." }, { status: 403 });
+    return NextResponse.json(planGateBody("PLAN_SERVER_APPS", "Server apps are part of the Pro plan. Upgrade to use them."), { status: 403 });
   }
 
   const source = await readSource(request, templateId, resolved.organizationId);

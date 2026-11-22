@@ -5,7 +5,7 @@
  */
 import type { SolBuildGoal } from "@/lib/ai/solBuildContext";
 
-export type TaskVariant = "store" | "business" | "blog" | "course" | "link" | "app";
+export type TaskVariant = "store" | "payments" | "business" | "blog" | "course" | "link" | "app";
 
 /** What the dashboard knows about one site, gathered by lib/dashboardV3/homeData.ts. */
 export type SiteFacts = {
@@ -32,6 +32,8 @@ export type SiteFacts = {
   signInOn: boolean;
   /** An uploaded page: it came with its own look, so there is no logo or colour step to do here. */
   ownDesign: boolean;
+  /** Personalized directly with SOL AI (words, cards, images tailored). */
+  personalizedWithSol: boolean;
 };
 
 /**
@@ -57,55 +59,59 @@ export const EMPTY_FACTS: SiteFacts = {
   published: false,
   signInOn: false,
   ownDesign: false,
+  personalizedWithSol: false,
 };
 
-export type TaskId = "design" | "brand" | "product" | "pay" | "words" | "contact" | "post" | "lesson" | "price" | "links" | "describe" | "signin" | "address" | "live";
+export type TaskId = "design" | "brand" | "product" | "pay" | "words" | "contact" | "post" | "lesson" | "price" | "links" | "describe" | "signin" | "finish" | "live";
 
 /** How a task is finished on the page: an inline form, or a link to the place it's done. */
-export type TaskKind = "auto" | "product" | "pay" | "address" | "live" | "link";
+export type TaskKind = "auto" | "product" | "pay" | "finish" | "link";
 
 export type TaskDef = { id: TaskId; title: string; description: string; kind: TaskKind; help: string; done: (f: SiteFacts) => boolean };
 
 const design: TaskDef = { id: "design", title: "Pick a design", description: "You chose one that fits you. You can change it any time.", kind: "auto", help: "Choosing a design", done: (f) => f.hasSite };
 const brand: TaskDef = { id: "brand", title: "Add your logo and colours", description: "So your site looks like you.", kind: "link", help: "Adding your logo and colours", done: (f) => (f.hasColors && (f.hasLogo || f.logoSkipped)) || f.ownDesign || (f.hasAddress && f.published) };
-const address: TaskDef = { id: "address", title: "Choose your web address", description: "The link people type or tap to find you.", kind: "address", help: "Choosing your web address", done: (f) => f.hasAddress };
-const live: TaskDef = { id: "live", title: "Put your site online", description: "One tap and anyone can visit. You can keep editing after.", kind: "live", help: "Putting your site online", done: (f) => f.hasAddress && f.published };
+/** Choosing the web address and going online used to be two steps that said almost the same thing. They are one: pick the address, tap once, you're online. */
+const finish: TaskDef = { id: "finish", title: "Finish up", description: "Pick your web address and put your site online, in one tap. You can keep editing after.", kind: "finish", help: "Finishing up", done: (f) => f.hasAddress && f.published };
+
+const pay: TaskDef = { id: "pay", title: "Choose how you get paid", description: "Card payments or a bank transfer, whichever suits you.", kind: "pay", help: "Getting paid", done: (f) => f.paymentsReady };
 
 const VARIANTS: Record<TaskVariant, TaskDef[]> = {
   store: [
     design,
     brand,
     { id: "product", title: "Add your first product", description: "What are you selling, and for how much?", kind: "product", help: "Adding your first product", done: (f) => f.productCount > 0 },
-    { id: "pay", title: "Choose how you get paid", description: "Card payments or a bank transfer, whichever suits you.", kind: "pay", help: "Getting paid", done: (f) => f.paymentsReady },
-    address,
-    live,
+    pay,
+    finish,
+  ],
+  payments: [
+    design,
+    brand,
+    pay,
+    finish,
   ],
   business: [
     design,
     brand,
-    { id: "words", title: "Check the words on your pages", description: "Make sure it says what you want, the way you'd say it.", kind: "link", help: "Editing the words on your site", done: (f) => f.edited },
+    { id: "words", title: "Check the words on your pages", description: "Make sure it says what you want, the way you'd say it.", kind: "link", help: "Editing the words on your site", done: (f) => f.edited || f.personalizedWithSol },
     { id: "contact", title: "Add your contact details", description: "Phone, email and where to find you.", kind: "link", help: "Adding contact details", done: (f) => f.edited },
-    address,
-    live,
+    finish,
   ],
   blog: [
     design,
     { id: "post", title: "Write your first post", description: "A few lines is enough to start. SOL can help you draft it.", kind: "link", help: "Writing your first post", done: (f) => f.postCount > 0 },
-    address,
-    live,
+    finish,
   ],
   course: [
     design,
     { id: "lesson", title: "Add your first lesson", description: "A video, some words, or both.", kind: "link", help: "Adding your first lesson", done: (f) => f.lessonCount > 0 },
     { id: "price", title: "Set a price, or make it free", description: "You decide what people pay to join.", kind: "link", help: "Setting your course price", done: (f) => f.priceSet },
-    address,
-    live,
+    finish,
   ],
   link: [
     design,
-    { id: "links", title: "Add your links", description: "Everything you want people to find in one place.", kind: "link", help: "Adding your links", done: (f) => f.edited },
-    address,
-    live,
+    { id: "links", title: "Add your links", description: "Everything you want people to find in one place.", kind: "link", help: "Adding your links", done: (f) => f.edited || f.personalizedWithSol },
+    finish,
   ],
   app: [
     { id: "describe", title: "Describe your app", description: "Tell SOL what it should do, in your own words.", kind: "link", help: "Describing your app", done: (f) => f.hasSite },
@@ -115,7 +121,13 @@ const VARIANTS: Record<TaskVariant, TaskDef[]> = {
 };
 
 /** Which list of steps a site gets: what the site is first (a store is a store), then what they said they wanted. */
-export function taskVariantFor(site: { kind?: string | null; sells?: boolean }, goal?: SolBuildGoal | null): TaskVariant {
+export function taskVariantFor(site: { kind?: string | null; sells?: boolean; hasDonations?: boolean; productCount?: number }, goal?: SolBuildGoal | null): TaskVariant {
+  if (site.productCount && site.productCount > 0) return "store";
+  if (site.hasDonations) return "payments";
+  if (site.kind === "WordPress migrated site") {
+    if (site.sells) return "payments";
+    return "business";
+  }
   if (site.sells || site.kind === "Online store") return "store";
   if (site.kind === "App with sign-in") return "app";
   if (site.kind === "Course") return "course";
@@ -129,15 +141,33 @@ export function taskVariantFor(site: { kind?: string | null; sells?: boolean }, 
 }
 
 export type TaskView = { id: TaskId; title: string; description: string; kind: TaskKind; help: string; state: "done" | "current" | "upcoming" };
-export type TaskProgress = { variant: TaskVariant; tasks: TaskView[]; done: number; total: number; currentId: TaskId | null; allDone: boolean };
+export type TaskProgress = { variant: TaskVariant; /** The site already has its web address (so "Finish up" only needs the last tap). */ hasAddress: boolean; tasks: TaskView[]; done: number; total: number; currentId: TaskId | null; allDone: boolean };
 
 export function computeTasks(variant: TaskVariant, facts: SiteFacts): TaskProgress {
   const defs = VARIANTS[variant];
   const flags = defs.map((d) => d.done(facts));
   const firstOpen = flags.findIndex((d) => !d);
-  const tasks: TaskView[] = defs.map(({ done: _done, ...d }, i) => ({ ...d, state: flags[i] ? "done" : i === firstOpen ? "current" : "upcoming" }));
+  const tasks: TaskView[] = defs.map(({ done: _done, ...d }, i) => {
+    let title = d.title;
+    let description = d.description;
+    if (facts.personalizedWithSol) {
+      if (d.id === "words") {
+        title = "Personalized with SOL";
+        description = "SOL tailored your page words, story, and photos to your brand. Tap to review or tweak anything.";
+      } else if (d.id === "links") {
+        title = "Links personalized with SOL";
+        description = "SOL set up your initial profile and links. Tap to review or add more.";
+      }
+    }
+    return {
+      ...d,
+      title,
+      description,
+      state: flags[i] ? "done" : i === firstOpen ? "current" : "upcoming",
+    };
+  });
   const done = flags.filter(Boolean).length;
-  return { variant, tasks, done, total: defs.length, currentId: firstOpen === -1 ? null : defs[firstOpen].id, allDone: firstOpen === -1 };
+  return { variant, hasAddress: facts.hasAddress, tasks, done, total: defs.length, currentId: firstOpen === -1 ? null : defs[firstOpen].id, allDone: firstOpen === -1 };
 }
 
 const SLUG_STOP = /[^a-z0-9]+/g;

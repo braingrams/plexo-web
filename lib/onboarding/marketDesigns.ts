@@ -35,31 +35,137 @@ export function goalWords(goal: SolBuildGoal | string | undefined): string[] {
   return GOAL_WORDS[g] ?? GOAL_WORDS["business-site"];
 }
 
-const STOP = new Set(["the", "and", "for", "with", "that", "this", "from", "your", "you", "our", "are", "sell", "make", "have", "i", "a", "an", "of", "in", "to", "my"]);
+const STOP = new Set([
+  "the", "and", "for", "with", "that", "this", "from", "your", "you", "our", "are",
+  "sell", "make", "have", "i", "a", "an", "of", "in", "to", "my",
+  "want", "wants", "like", "users", "what", "them", "they", "need", "needs",
+  "look", "looks", "good", "best", "some", "also", "just", "into", "onto",
+  "help", "about", "their", "site", "website", "would", "could", "should"
+]);
 
 /** Meaningful words from what the owner told us about their business (name excluded: it matches nothing useful). */
 export function ownerWords(h: OwnerHints): string[] {
   const text = `${h.industry ?? ""} ${h.about ?? ""}`.toLowerCase();
-  return Array.from(new Set(text.split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !STOP.has(w)))).slice(0, 12);
+  return Array.from(new Set(text.split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !STOP.has(w)))).slice(0, 16);
 }
+
+/** Domain ontology clusters for deep semantic matching and cross-domain penalty */
+export const DOMAIN_CLUSTERS: Record<string, { keywords: string[]; penaltyKeywords: string[] }> = {
+  music: {
+    keywords: [
+      "music", "musician", "artist", "singer", "band", "song", "album", "tour",
+      "shows", "show", "performance", "performances", "concert", "gig", "spotify",
+      "soundcloud", "audio", "track", "stage", "live", "dj", "producer", "vocalist",
+      "festival", "listen", "listener", "listeners"
+    ],
+    penaltyKeywords: [
+      "recipe", "recipes", "cookbook", "culinary", "kitchen", "focaccia", "fusilli", "pasta"
+    ],
+  },
+  food: {
+    keywords: [
+      "food", "chef", "cook", "cooking", "recipe", "recipes", "kitchen", "restaurant",
+      "supper", "bistro", "dining", "bakery", "cafe", "dish", "dishes", "meal", "meals", "baking", "culinary"
+    ],
+    penaltyKeywords: [
+      "album", "spotify", "concert", "gig", "track", "vocalist"
+    ],
+  },
+  wellness: {
+    keywords: [
+      "wellness", "clinic", "health", "doctor", "dental", "therapy", "counselling",
+      "care", "yoga", "fitness", "gym", "trainer", "mental", "hospital", "patient", "medical"
+    ],
+    penaltyKeywords: [
+      "recipe", "recipes", "concert", "album"
+    ],
+  },
+  creative: {
+    keywords: [
+      "illustrator", "illustration", "drawing", "painting", "photographer",
+      "photography", "filmmaker", "director", "designer", "design", "gallery",
+      "portfolio", "architect", "architecture"
+    ],
+    penaltyKeywords: [
+      "recipe", "recipes", "cookbook"
+    ],
+  },
+  tech: {
+    keywords: [
+      "software", "tech", "saas", "app", "developer", "platform", "ai", "coding",
+      "bootcamp", "terminal", "api", "code"
+    ],
+    penaltyKeywords: [
+      "recipe", "recipes", "cookbook", "dish"
+    ],
+  },
+  store: {
+    keywords: [
+      "store", "shop", "ecommerce", "product", "products", "apparel", "clothing",
+      "candles", "furniture", "skincare", "merch", "retail", "boutique"
+    ],
+    penaltyKeywords: [],
+  },
+  education: {
+    keywords: [
+      "course", "courses", "coach", "coaching", "academy", "mastermind", "training",
+      "cohort", "education", "lesson", "lessons", "school"
+    ],
+    penaltyKeywords: [],
+  },
+};
 
 /** Higher is a better fit. Category counts most (it is what the seller chose), then name, then description. */
 export function fitScore(l: MarketListing, goal: SolBuildGoal | string | undefined, hints: OwnerHints = {}): number {
   const cat = (l.category ?? "").toLowerCase();
   const name = l.name.toLowerCase();
   const desc = (l.description ?? "").toLowerCase();
+  const listingText = `${cat} ${name} ${desc}`;
+  const ownerText = `${hints.industry ?? ""} ${hints.about ?? ""}`.toLowerCase();
+
   let s = 0;
+
+  // 1. Goal words matching (capped at 8 so generic "link in bio creator" terms don't overpower domain fit)
+  let goalScore = 0;
   for (const w of goalWords(goal)) {
+    if (cat.includes(w)) goalScore += 4;
+    if (name.includes(w)) goalScore += 3;
+    if (desc.includes(w)) goalScore += 1;
+  }
+  s += Math.min(goalScore, 8);
+
+  // 2. Direct owner words matching
+  for (const w of ownerWords(hints)) {
     if (cat.includes(w)) s += 4;
     if (name.includes(w)) s += 3;
-    if (desc.includes(w)) s += 1;
+    if (desc.includes(w)) s += 2;
   }
-  for (const w of ownerWords(hints)) {
-    if (cat.includes(w)) s += 3;
-    if (name.includes(w)) s += 2;
-    if (desc.includes(w)) s += 1;
+
+  // 3. Deep semantic domain affinity & cross-domain mismatch detection
+  for (const [domain, cluster] of Object.entries(DOMAIN_CLUSTERS)) {
+    const ownerMatchesDomain = cluster.keywords.some((k) => ownerText.includes(k));
+    const listingMatchesDomain = cluster.keywords.some((k) => listingText.includes(k));
+
+    if (ownerMatchesDomain && listingMatchesDomain) {
+      // Direct strong domain affinity boost (e.g. music artist -> musician template)
+      s += 30;
+      // Extra affinity if category or name matches
+      if (cluster.keywords.some((k) => cat.includes(k) || name.includes(k))) {
+        s += 16;
+      }
+      // Extra affinity when multiple domain keywords match between owner and listing
+      const sharedMatches = cluster.keywords.filter((k) => ownerText.includes(k) && listingText.includes(k)).length;
+      s += sharedMatches * 10;
+    } else if (ownerMatchesDomain && !listingMatchesDomain) {
+      // Listing belongs to a conflicting/mismatched domain with penalty keywords
+      const hasPenalty = cluster.penaltyKeywords.some((pk) => listingText.includes(pk));
+      if (hasPenalty) {
+        s -= 30; // Heavy penalty: food/recipe template when owner is an artist/musician
+      }
+    }
   }
-  return s;
+
+  return Math.max(0, s);
 }
 
 /** A listing counts as "best fit" once it clearly matches the goal. */

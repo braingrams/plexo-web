@@ -4,6 +4,8 @@
  * "Add your logo and colours" step counts as done. SPEC "Look": a logo is optional; with none, one is made from the name.
  */
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
+import { readSiteVoice, type BrandVoice } from "@/lib/brand/brandVoice";
+import { sanitizeCustomFonts, type CustomFont } from "@/lib/fonts/customFonts";
 
 type Brand = NonNullable<SolBuildProfile["brand"]>;
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
@@ -48,7 +50,7 @@ export function sanitizeBrandLook(input: unknown): Result<BrandLook> {
 }
 
 /** A site's own brand, as stored on the site (Template.brand). Each site has its own. */
-export type SiteBrand = { logoUrl?: string; colors?: string[]; /** "I don't have a logo": one is made from the name. */ noLogo?: boolean };
+export type SiteBrand = { logoUrl?: string; colors?: string[]; /** "I don't have a logo": one is made from the name. */ noLogo?: boolean; /** The brand's words: tagline, short description and voice (lib/brand/brandVoice.ts). */ voice?: BrandVoice; /** Fonts the owner uploaded (lib/fonts/customFonts.ts). */ customFonts?: CustomFont[] };
 
 /** Reads a stored site brand defensively (a schemaless field). Undefined when there's nothing usable. */
 export function readSiteBrand(stored: unknown): SiteBrand | undefined {
@@ -61,12 +63,22 @@ export function readSiteBrand(stored: unknown): SiteBrand | undefined {
     if (colors.length) out.colors = colors;
   }
   if (r.noLogo === true && !out.logoUrl) out.noLogo = true;
+  const voice = readSiteVoice(r.voice);
+  if (voice) out.voice = voice;
+  const customFonts = sanitizeCustomFonts(r.customFonts);
+  if (customFonts.length) out.customFonts = customFonts;
   return Object.keys(out).length ? out : undefined;
 }
 
 /** What gets stored on the site for a look. */
-export function siteBrandFromLook(look: BrandLook): SiteBrand {
-  return { colors: look.colors, ...(look.logoUrl ? { logoUrl: look.logoUrl } : look.logoSkipped ? { noLogo: true } : {}) };
+export function siteBrandFromLook(look: BrandLook, previous?: SiteBrand): SiteBrand {
+  // Saving a new look must never wipe the brand's words or uploaded fonts, which live on the same record.
+  return {
+    ...(previous?.voice ? { voice: previous.voice } : {}),
+    ...(previous?.customFonts ? { customFonts: previous.customFonts } : {}),
+    colors: look.colors,
+    ...(look.logoUrl ? { logoUrl: look.logoUrl } : look.logoSkipped ? { noLogo: true } : {}),
+  };
 }
 
 /** The brand a site starts with when it's made from onboarding: the owner's answers, copied onto the site. */

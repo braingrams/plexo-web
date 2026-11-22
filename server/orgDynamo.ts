@@ -1,3 +1,5 @@
+import { planThatRaises } from "@/lib/plan/planNeeded";
+import type { PaidPlanId } from "@/lib/plan/plans";
 import { planFromOwner, workspaceOwner, type WorkspacePlan } from "@/lib/plan/workspacePlan";
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
@@ -266,7 +268,7 @@ export async function seatUsage(organizationId: string): Promise<SeatUsage> {
 export class SeatLimitError extends Error {
   readonly status = 403;
   readonly code = "PLAN_SEAT_LIMIT_EXCEEDED";
-  constructor(message: string) {
+  constructor(message: string, readonly requiredPlan?: PaidPlanId) {
     super(message);
     this.name = "SeatLimitError";
   }
@@ -283,7 +285,7 @@ export async function assertSeatAvailable(organizationId: string, opts: { forPen
   const usage = await seatUsage(organizationId);
   // Accepting an invite turns its own pending seat into a member — it doesn't take a new one.
   const needed = opts.forPendingInvite ? usage.members + 1 : usage.used + 1;
-  if (needed > usage.seats) throw new SeatLimitError(seatLimitMessage(usage));
+  if (needed > usage.seats) throw new SeatLimitError(seatLimitMessage(usage), planThatRaises((f) => f.teamSeats, usage.seats));
 }
 
 export async function createInvitation(

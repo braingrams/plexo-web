@@ -15,11 +15,15 @@ import { resolveActiveApiKeyForUser } from "@/lib/ai/resolveUserAiKey";
 
 import { TemplateEditorDynamic } from "./template-editor-dynamic";
 import { RawFileEditor } from "./raw-file-editor";
+import { parseEditMode } from "@/lib/dashboardV3/pagesList";
 import { EmailHtmlEditor } from "./email-html-editor";
 import { migratedPreviewBase } from "@/lib/wpMigration/previewBase";
 import { canMoveToV2 } from "@/lib/v2/convertV1";
+import { canConvertToCode } from "@/lib/editorModes/convertToCode";
 import { designFormatOf, parseV2Design } from "@/lib/v2/design";
 import { designSystemDownloadUrl, resolveDesignSystem } from "@/lib/v2/designSystemStore";
+import { SYSTEM_SLUGS } from "@/lib/dashboardV3/hubTabs";
+import { upgradeSystemPageToV2 } from "@/lib/commerce/storefrontLayout";
 
 /** Up to this many characters of brand are handed to the editor with the page; beyond it the browser loads the brand itself. */
 const BRAND_INLINE_MAX_CHARS = 2_000_000;
@@ -50,8 +54,19 @@ const BLANK_TEMPLATE_SHELL: TemplateJSON = {
 
 export default async function TemplateEditorPage(props: {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await props.params;
+  const search = await props.searchParams;
+  const initialMode = parseEditMode(search?.mode) ?? undefined;
+  // Site health's "Open the editor" links: the exact spot to land on (see lib/siteHealth/editorLinks.ts).
+  const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
+  const lineParam = Number(one(search?.line));
+  const initialLine = Number.isInteger(lineParam) && lineParam > 0 && lineParam < 1_000_000 ? lineParam : undefined;
+  const fieldParam = one(search?.field);
+  const initialField = fieldParam && /^(text|img|background)-\d{1,5}$/.test(fieldParam) ? fieldParam : undefined;
+  const focusParam = one(search?.focus);
+  const focusNodeId = focusParam && focusParam.length <= 120 && !/[\s"'<>]/.test(focusParam) ? focusParam : undefined;
   const session = await auth();
 
   if (!session?.user) {
@@ -112,12 +127,25 @@ export default async function TemplateEditorPage(props: {
         aiProvider={activeApiKey?.aiProvider ?? "openai"}
         aiTier={basicLock ? "BASIC" : activeApiKey?.aiTier ?? tierFeatures.sdkAiTier}
         previewBaseHref={await migratedPreviewBase(template)}
+        initialMode={initialMode}
+        cameFromBlocks={!!template.blocksBackupId}
+        initialLine={initialLine}
+        initialField={initialField}
       />
     );
   }
 
-  const designFormat = designFormatOf(template);
+  let designFormat = designFormatOf(template);
   let initialV2Design = null;
+  if (designFormat !== "v2" && template.slug && SYSTEM_SLUGS.has(template.slug)) {
+    const upgraded = await upgradeSystemPageToV2(template, rootTemplateId);
+    if (upgraded.ok) {
+      designFormat = "v2";
+      template.designFormat = "v2";
+      template.designJson = upgraded.design;
+      if (upgraded.html) template.compiledHtml = upgraded.html;
+    }
+  }
   if (designFormat === "v2") {
     const parsed = parseV2Design(template.draftJson ?? template.designJson);
     if (!parsed.ok) {
@@ -185,9 +213,13 @@ export default async function TemplateEditorPage(props: {
       rootTemplateId={rootTemplateId}
       designFormat={designFormat}
       initialV2Design={initialV2Design}
+      initialAutosave={typeof user?.editorAutosave === "boolean" ? user.editorAutosave : undefined}
       canTryNewEditor={canMoveToV2(template)}
       canGoBackToClassic={designFormat === "v2" && !!template.classicBackupId}
       templateSlug={template.slug ?? null}
+      canConvertToCode={canConvertToCode(template).ok}
+      initialConvertTo={initialMode === "code" || initialMode === "text" ? initialMode : undefined}
+      focusNodeId={focusNodeId}
     />
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { PlanLock } from "@/app/dashboard/_components/PlanLock";
 import { useNewSite } from "../_components/NewSiteModal";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -188,7 +189,7 @@ export function PagesOverviewClient({ pages, canAddSites }: { pages: PublishedPa
         eyebrow="Content"
         title="Pages"
         subtitle="Every multi-page site you've built, published or not."
-        action={canAddSites ? <AddNewSiteButton /> : undefined}
+        action={<PlanLock requires="STARTER" locked={!canAddSites} message="Importing a whole website and building multi-page sites comes with the Starter plan and above."><AddNewSiteButton /></PlanLock>}
       />
 
       {pages.length === 0 ? (

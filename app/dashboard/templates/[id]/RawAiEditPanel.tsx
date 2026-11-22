@@ -13,6 +13,9 @@ type Props = {
   aiTier: "AUTO" | "BASIC" | "MEDIUM" | "HIGH";
   subscriptionPlan: string;
   onApply: (html: string) => void;
+  /** Shown as a side panel next to the page (any view) instead of filling the screen. */
+  docked?: boolean;
+  applyLabel?: string;
 };
 
 function IconArrowUp() {
@@ -49,7 +52,7 @@ function IconCheck() {
  * The empty-state layout intentionally echoes the claude.ai composer — a centered prompt
  * with a big rounded input surface and a circular send button — since this is a chat-style
  * "describe the change" action, not a form field on a settings page. */
-export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Props) {
+export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply, docked, applyLabel = "Use this change" }: Props) {
   const [prompt, setPrompt] = useState("");
   const [generating, setGenerating] = useState(false);
   // Streamed while the AI rewrites the page — how much it has written so far.
@@ -119,9 +122,9 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", overflowY: "auto" }}>
       {!result ? (
-        <div className="raw-ai-empty" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem 1.25rem", gap: "1.5rem" }}>
+        <div className="raw-ai-empty" style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: docked ? "flex-start" : "center", padding: docked ? "1.25rem 0.9rem" : "2rem 1.25rem", gap: docked ? "1rem" : "1.5rem" }}>
           <h2 style={{
-            fontFamily: "var(--font-heading), sans-serif", fontSize: "clamp(1.2rem, 5vw, 1.6rem)", fontWeight: 700,
+            fontFamily: "var(--font-heading), sans-serif", fontSize: docked ? "1.05rem" : "clamp(1.2rem, 5vw, 1.6rem)", fontWeight: 700,
             color: "var(--ed-text)", textAlign: "center", margin: 0,
             display: "flex", alignItems: "center", justifyContent: "center", gap: "0.55rem",
           }}>
@@ -218,7 +221,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
           <SolHandoff draft={prompt} />
         </div>
       ) : (
-        <div className="raw-ai-result" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "0.75rem", padding: "1.25rem", maxWidth: 900, margin: "0 auto", width: "100%" }}>
+        <div className="raw-ai-result" style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: "0.75rem", padding: docked ? "0.9rem" : "1.25rem", maxWidth: docked ? undefined : 900, margin: "0 auto", width: "100%" }}>
           <p style={{ fontSize: "0.8rem", color: "var(--ed-success)", margin: 0, display: "flex", alignItems: "center", gap: "0.35rem" }}><IconCheck /> {result.summary}</p>
           <iframe
             srcDoc={result.html}
@@ -236,7 +239,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
                 cursor: "pointer",
               }}
             >
-              Apply to index.html
+              {applyLabel}
             </button>
             <button
               type="button"
@@ -251,7 +254,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply }: Pr
             </button>
           </div>
           <p style={{ fontSize: "0.72rem", color: "var(--ed-t-350)", margin: 0 }}>
-            Applying switches you to the Code tab — click Save there to publish this change.
+            Nothing changes on your page until you choose to use it.
           </p>
         </div>
       )}

@@ -119,14 +119,14 @@ describe("nav by experience and goal", () => {
   });
 
   it("adds Orders when they sell and Learners for a course", () => {
-    expect(labels({ experience: "beginner", goal: "store" })).toEqual(["Home", "My site", "Orders", "Ask SOL", "Emails", "Settings"]);
+    expect(labels({ experience: "beginner", goal: "store" })).toEqual(["Home", "My site", "Orders", "Products", "Ask SOL", "Emails", "Settings"]);
     expect(labels({ experience: "beginner", goal: "course" })).toEqual(["Home", "My site", "Learners", "Ask SOL", "Emails", "Settings"]);
     expect(labels({ experience: "beginner", goal: "blog", sells: true })).toContain("Orders");
   });
 
   it("intermediate adds Domains; pro adds Developers", () => {
     expect(labels({ experience: "intermediate", goal: "business-site" })).toEqual(["Home", "Sites & apps", "Ask SOL", "Emails", "Domains", "Settings"]);
-    expect(labels({ experience: "pro", goal: "store" })).toEqual(["Home", "Sites & apps", "Orders", "Ask SOL", "Emails", "Domains", "Developers", "Settings"]);
+    expect(labels({ experience: "pro", goal: "store" })).toEqual(["Home", "Sites & apps", "Orders", "Products", "Ask SOL", "Emails", "Domains", "Developers", "Settings"]);
   });
 
   it("never offers more than five tab-bar places to a beginner", () => {

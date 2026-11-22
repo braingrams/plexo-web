@@ -167,11 +167,11 @@ export function buildSiteTransferEmail(input: {
   const productName = input.brand?.name ?? "Plexo";
   const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
-    title: `${input.senderName} wants to transfer "${input.siteName}" to you on ${productName}`,
+    title: `${input.senderName} wants to give you "${input.siteName}" on ${productName}`,
     bodyHtml: `
       <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">You've been offered a site</h1>
       <p style="margin:0 0 28px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">
-        <strong>${input.senderName}</strong> wants to transfer full ownership of <strong>${input.siteName}</strong> to your ${productName} account — every page, and any Commerce catalog/orders it has.
+        <strong>${input.senderName}</strong> wants to give you <strong>${input.siteName}</strong> on ${productName} — every page, and any Commerce catalog/orders it has.
       </p>
       ${input.warningCount > 0
         ? `<p style="margin:0 0 28px;text-align:left;">
@@ -180,10 +180,10 @@ export function buildSiteTransferEmail(input: {
              </span>
            </p>`
         : ""}
-      ${CTA_BUTTON(input.acceptUrl, "Review & Respond", accent)}
+      ${CTA_BUTTON(input.acceptUrl, "Review & accept", accent)}
       ${FALLBACK_LINK(input.acceptUrl, accent)}
     `,
-    footerHtml: `This offer expires in ${input.expiresInDays} days. If you weren't expecting this, you can safely ignore this email — nothing transfers unless you explicitly accept it.<br/>`,
+    footerHtml: `This offer expires in ${input.expiresInDays} days. If you weren't expecting this, you can safely ignore this email — nothing moves unless you explicitly accept it.<br/>`,
     brand: input.brand,
   });
 }
@@ -313,8 +313,12 @@ export function buildPaymentReceivedEmail(input: {
   customerEmail: string;
   orderNumber: string;
   orderUrl: string;
+  isDonation?: boolean;
   brand?: EmailBrand;
 }): string {
+  const isDonation = input.isDonation || input.orderNumber.startsWith("DON-");
+  const noun = isDonation ? "Payment" : "Order";
+  const cta = isDonation ? "View Payment" : "View Order";
   const productName = input.brand?.name ?? "Plexo";
   const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   return emailShell({
@@ -323,9 +327,9 @@ export function buildPaymentReceivedEmail(input: {
       <h1 style="margin:0 0 16px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">You've been paid</h1>
       <p style="margin:0 0 8px;font-size:32px;font-weight:800;color:#517A12;letter-spacing:-0.5px;text-align:left;">${input.amountFormatted}</p>
       <p style="margin:0 0 28px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">
-        Order <strong>${input.orderNumber}</strong> on <strong>${input.siteName}</strong>, paid by <strong>${input.customerEmail}</strong>.
+        ${noun} <strong>${input.orderNumber}</strong> on <strong>${input.siteName}</strong>, paid by <strong>${input.customerEmail}</strong>.
       </p>
-      ${CTA_BUTTON(input.orderUrl, "View Order", accent)}
+      ${CTA_BUTTON(input.orderUrl, cta, accent)}
       ${FALLBACK_LINK(input.orderUrl, accent)}
     `,
     brand: input.brand,
@@ -356,10 +360,18 @@ export function buildOrderStatusEmail(input: {
   items: { nameSnapshot: string; quantity: number; unitPriceMinor: number }[];
   currency: string;
   orderUrl: string;
+  /** The shop's terms of sale / refund policy, linked at the bottom when the owner has set one. */
+  termsUrl?: string | null;
   brand?: EmailBrand;
+  customMessage?: string | null;
+  customHeading?: string | null;
+  customSubject?: string | null;
 }): { subject: string; html: string } {
   const copy = ORDER_STATUS_COPY[input.event];
   const accent = input.brand?.color ?? EMAIL_COLORS.brand;
+  const heading = input.customHeading || copy.heading;
+  const message = input.customMessage || copy.message;
+  const subject = input.customSubject ? `${input.customSubject} — ${input.siteName}` : `${copy.subject} — ${input.siteName}`;
   const formatMinor = (minor: number) =>
     new Intl.NumberFormat(undefined, { style: "currency", currency: input.currency }).format((minor || 0) / 100);
 
@@ -378,20 +390,21 @@ export function buildOrderStatusEmail(input: {
     : "";
 
   const html = emailShell({
-    title: `${copy.subject} — ${input.siteName}`,
+    title: subject,
     bodyHtml: `
-      <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">${copy.heading}</h1>
-      <p style="margin:0 0 24px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${copy.message}</p>
+      <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">${heading}</h1>
+      <p style="margin:0 0 24px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${message}</p>
       <p style="margin:0 0 4px;font-size:13px;color:#5B5B58;text-align:left;">Order <strong>${input.orderNumber}</strong> from <strong>${input.siteName}</strong></p>
       <p style="margin:0 0 24px;font-size:20px;font-weight:700;color:#121212;text-align:left;">${input.amountFormatted}</p>
       ${itemsTable}
       ${CTA_BUTTON(input.orderUrl, "View Order", accent)}
       ${FALLBACK_LINK(input.orderUrl, accent)}
+      ${input.termsUrl ? `<p style="margin:20px 0 0;font-size:12.5px;color:#76766F;text-align:left;">Our <a href="${esc(input.termsUrl)}" style="color:${accent};">terms of sale and refund policy</a></p>` : ""}
     `,
     brand: input.brand,
   });
 
-  return { subject: `${copy.subject} — ${input.siteName}`, html };
+  return { subject, html };
 }
 
 // ── Direct bank transfer (lib/commerce/bankTransfer.ts) — the customer pays the store's
@@ -696,17 +709,31 @@ export function buildDonationReceiptEmail(input: {
   campaignName: string | null;
   receiptNumber: string;
   dateIso: string;
-  thankYouMessage: string | null;
+  thankYouMessage?: string | null;
+  emailSubject?: string | null;
+  emailHeading?: string | null;
+  emailBody?: string | null;
   /** Monthly gifts only — the donor's private link to stop their gift. */
   manageUrl: string | null;
   brand?: EmailBrand;
+  footerText?: string | null;
 }): { subject: string; html: string } {
   const accent = input.brand?.color ?? EMAIL_COLORS.brand;
   const greeting = input.donorName ? `Dear ${esc(input.donorName.split(" ")[0])},` : "Thank you,";
   const date = new Date(input.dateIso).toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  const message = input.thankYouMessage
-    ? esc(input.thankYouMessage)
-    : `Your generosity makes our work possible. Thank you for supporting ${esc(input.siteName)}.`;
+  const heading = input.emailHeading
+    ? esc(input.emailHeading)
+    : input.emailSubject
+      ? esc(input.emailSubject)
+      : `Thank you for your ${input.monthly ? "monthly " : ""}gift`;
+  const message = input.emailBody
+    ? esc(input.emailBody)
+    : input.thankYouMessage
+      ? esc(input.thankYouMessage)
+      : `Your generosity makes our work possible. Thank you for supporting ${esc(input.siteName)}.`;
+  const subject = input.emailSubject
+    ? `${input.emailSubject} — ${input.siteName}`
+    : `Thank you for your ${input.monthly ? "monthly " : ""}donation to ${input.siteName}`;
   const rows: [string, string][] = [
     ["Amount", `${input.amountFormatted}${input.monthly ? " / month" : ""}`],
     ...(input.campaignName ? ([["For", input.campaignName]] as [string, string][]) : []),
@@ -714,19 +741,20 @@ export function buildDonationReceiptEmail(input: {
     ["Receipt", input.receiptNumber],
   ];
   const html = emailShell({
-    title: `Thank you for your donation — ${input.siteName}`,
+    title: subject,
     bodyHtml: `
-      <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">Thank you for your ${input.monthly ? "monthly " : ""}gift</h1>
+      <h1 style="margin:0 0 12px;font-size:28px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.2;text-align:left;">${heading}</h1>
       <p style="margin:0 0 6px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${greeting}</p>
       <p style="margin:0 0 24px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${message}</p>
       <p style="margin:0 0 24px;font-size:30px;font-weight:800;color:#517A12;letter-spacing:-0.5px;text-align:left;">${esc(input.amountFormatted)}${input.monthly ? '<span style="font-size:15px;color:#5B5B58;font-weight:600"> / month</span>' : ""}</p>
       <table cellpadding="0" cellspacing="0" style="margin:0 0 24px;">${detailRows(rows)}</table>
-      <p style="margin:0 0 ${input.manageUrl ? "20px" : "0"};font-size:12.5px;color:#76766F;line-height:1.6;text-align:left;">Please keep this email as your donation receipt.</p>
+      <p style="margin:0 0 ${input.manageUrl ? "20px" : "0"};font-size:12.5px;color:#76766F;line-height:1.6;text-align:left;">Please keep this email as your payment receipt.</p>
       ${input.manageUrl ? `${CTA_BUTTON(input.manageUrl, "Manage your monthly gift", accent)}${FALLBACK_LINK(input.manageUrl, accent)}` : ""}
     `,
+    footerHtml: input.footerText ? `<p style="margin:0 0 10px;font-size:12px;line-height:1.6;color:#76766F;">${esc(input.footerText)}</p>` : undefined,
     brand: input.brand,
   });
-  return { subject: `Thank you for your ${input.monthly ? "monthly " : ""}donation to ${input.siteName}`, html };
+  return { subject, html };
 }
 
 /** To the site owner when their WordPress site has finished moving to Plexo (lib/wpMigration/notify.ts). */
@@ -1052,6 +1080,66 @@ export function buildRedesignAnnouncementEmail(input: { name?: string | null; se
       <p style="margin:0 0 8px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">It takes about a minute, and you can skip any step.</p>
       ${CTA_BUTTON(input.setupUrl, "Take 1 minute to personalise")}
       ${FALLBACK_LINK(input.setupUrl)}
+    `,
+  });
+  return { subject, preheader, html };
+}
+
+// ── Site health ─────────────────────────────────────────────────────────────────────────
+
+export type DigestEmailInput = {
+  siteName: string;
+  headline: string;
+  scores: { label: string; score: number; change: number | null }[];
+  fixes: { title: string; why: string; gain?: string; canFixForYou: boolean }[];
+  moreCount: number;
+  openUrl: string;
+  unsubscribeUrl: string;
+};
+
+/** The weekly "Your site health" email: how the site is doing, what changed, the three things worth fixing first, one button. */
+export function buildSiteHealthDigestEmail(input: DigestEmailInput): { subject: string; preheader: string; html: string } {
+  const name = esc(input.siteName);
+  const moved = input.scores.filter((s) => s.change != null && s.change !== 0);
+  const subject = `Your site health this week: ${input.siteName}`;
+  const preheader = input.fixes.length
+    ? `${input.fixes.length === 1 ? "One thing" : `${input.fixes.length} things`} worth fixing first, in plain words.`
+    : "Nothing needs fixing. Your site is in great shape.";
+  const tone = (n: number) => (n >= 90 ? "#2F7D32" : n >= 50 ? "#B26A00" : "#C0392B");
+  const change = (c: number | null) => (c == null ? "" : c === 0 ? "no change" : c > 0 ? `&#9650; up ${c}` : `&#9660; down ${Math.abs(c)}`);
+  const row = (s: DigestEmailInput["scores"][number]) => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid ${EMAIL_COLORS.border};font-size:15px;color:#3F3F3C;text-align:left;">${esc(s.label)}</td>
+      <td align="right" style="padding:10px 0;border-bottom:1px solid ${EMAIL_COLORS.border};font-size:15px;font-weight:800;color:${tone(s.score)};white-space:nowrap;">${s.score}<span style="font-weight:500;color:#5B5B58;font-size:12px;"> / 100 ${s.change != null ? `&middot; ${change(s.change)}` : ""}</span></td>
+    </tr>`;
+  const fix = (f: DigestEmailInput["fixes"][number], i: number) => `
+    <tr>
+      <td width="28" valign="top" style="padding:0 0 16px;font-size:15px;font-weight:800;color:#517A12;">${i + 1}</td>
+      <td valign="top" style="padding:0 0 16px;font-size:15px;line-height:1.55;color:#3F3F3C;text-align:left;"><strong style="color:#121212;">${esc(f.title)}</strong>${f.gain ? ` <span style="color:#5B5B58;">(${esc(f.gain)})</span>` : ""}<br/>${esc(f.why)}${f.canFixForYou ? `<br/><span style="color:#517A12;font-weight:700;">Plexo can fix this for you in one click.</span>` : ""}</td>
+    </tr>`;
+  const changeLine = moved.length
+    ? `Since last week: ${moved.map((s) => `${esc(s.label.toLowerCase())} went ${s.change! > 0 ? "up" : "down"} ${Math.abs(s.change!)}`).join(", ")}.`
+    : input.scores.some((s) => s.change != null)
+      ? "Nothing has moved since last week."
+      : "This is your first weekly check-in, so there is nothing to compare with yet.";
+  const html = emailShell({
+    title: esc(subject),
+    preheader,
+    unsubscribeUrl: input.unsubscribeUrl,
+    bodyHtml: `
+      <p style="margin:0 0 12px;font-size:13px;font-weight:800;letter-spacing:1.2px;text-transform:uppercase;color:#517A12;text-align:left;">Your site health</p>
+      <h1 style="margin:0 0 12px;font-size:26px;font-weight:800;color:#121212;letter-spacing:-0.6px;line-height:1.25;text-align:left;">${name}</h1>
+      <p style="margin:0 0 20px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">${esc(input.headline)}</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 12px;">${input.scores.map(row).join("")}</table>
+      <p style="margin:0 0 28px;font-size:14px;color:#5B5B58;line-height:1.6;text-align:left;">${changeLine}</p>
+      ${input.fixes.length
+        ? `<p style="margin:0 0 14px;font-size:16px;font-weight:800;color:#121212;text-align:left;">${input.fixes.length === 1 ? "The one thing to fix first" : `The ${input.fixes.length} things to fix first`}</p>
+      <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="margin:0 0 12px;">${input.fixes.map(fix).join("")}</table>
+      ${input.moreCount > 0 ? `<p style="margin:0 0 20px;font-size:14px;color:#5B5B58;text-align:left;">Plus ${input.moreCount} smaller ${input.moreCount === 1 ? "thing" : "things"} you can see in Site health.</p>` : ""}`
+        : `<p style="margin:0 0 24px;font-size:16px;color:#3F3F3C;line-height:1.65;text-align:left;">Nothing needs fixing right now. We keep checking every week.</p>`}
+      ${CTA_BUTTON(input.openUrl, input.fixes.length ? "See and fix it" : "Open Site health")}
+      ${FALLBACK_LINK(input.openUrl)}
+      <p style="margin:24px 0 0;font-size:12px;color:#5B5B58;line-height:1.6;text-align:left;">You get this email once a week because Site health checks ${name} for you. You can turn it off with the link below, or in the Site health tab.</p>
     `,
   });
   return { subject, preheader, html };

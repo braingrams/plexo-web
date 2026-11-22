@@ -8,9 +8,9 @@ import { designKindLabel } from "@/lib/dashboardV3/designs";
 export type SellOption = { id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; hasContent: boolean };
 
 /** Put one of your own pages or emails up for sale. Same request as before. */
-export function SellDesignForm({ options, autoPublish, fee, keep }: { options: SellOption[]; autoPublish: boolean; fee: string; keep: string }) {
+export function SellDesignForm({ options, autoPublish, fee, keep, initialTemplateId }: { options: SellOption[]; autoPublish: boolean; fee: string; keep: string; initialTemplateId?: string }) {
   const router = useRouter();
-  const firstUsable = options.find((o) => o.hasContent)?.id ?? "";
+  const firstUsable = (initialTemplateId && options.find((o) => o.id === initialTemplateId)?.id) ?? options.find((o) => o.hasContent)?.id ?? "";
   const [templateId, setTemplateId] = useState(firstUsable);
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("");

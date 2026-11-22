@@ -2,15 +2,17 @@
 
 import { InBannerStack } from "../ui/BannerStack";
 import { callIt, homeTitle } from "@/lib/dashboardV3/homeTitle";
-import { useState } from "react";
-import { ArrowRight, PartyPopper } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ArrowRight, LayoutGrid, PartyPopper } from "lucide-react";
+import { ALL_SITES_PATH } from "@/lib/dashboardV3/allSites";
 import type { HomeProps } from "./homeTypes";
 import { Button, ButtonLink, Card, HelpVideoLink } from "../ui";
 import { GuidedChecklist } from "./GuidedChecklist";
 import { ActivityCard, StatGrid, VisitsCard } from "./LiveDashboard";
 import { AllSites } from "./AllSites";
-import { AskSolCard, CopyLinkButton, OtherActionsCard, SitePreviewCard } from "./SideCards";
+import { AskSolCard, CopyLinkButton, OtherActionsCard, ShopActionsCard, SitePreviewCard } from "./SideCards";
 import { SkippedHome } from "./SkippedHome";
+import { AddMoreCards } from "../hub/AddMore";
 import { ProViewNudge } from "./ProViewNudge";
 
 function greeting(): string {
@@ -29,14 +31,21 @@ const SOL_IDEAS: Record<string, string> = {
 
 /** Home: picks the right view for what the person is doing. Stays mounted across refreshes so "You're live" can finish its moment. */
 export function HomeView(props: HomeProps) {
-  const { mode, site, all, brand, experience, firstName, baseDomain, newSiteHref, demo, tuneHref } = props;
+  const { mode, site, all, brand, experience, firstName, baseDomain, newSiteHref, demo, tuneHref, siteCount = 0 } = props;
+  // The colourful all-sites screen is for the simple view; pros already see everything together.
+  const allSitesCta = siteCount > 0 && experience !== "pro";
   const [celebrate, setCelebrate] = useState(false);
+  // Finishing happens at the bottom of the steps; bring the "Copy link" and "Go to my dashboard" buttons into view.
+  const celebrating = celebrate && !!site?.progress.allDone;
+  useEffect(() => {
+    if (celebrating) scrollHomeToTop();
+  }, [celebrating]);
 
   // "all" lists every site and deliberately carries no single `site`, so it must be decided BEFORE the "no site" check
   // (checking `!site` first showed "Set up your first site" to people with many sites).
   if (mode === "all") {
     return (
-      <Page tuneHref={tuneHref} eyebrow={`${greeting()}, ${firstName}`} title={experience === "pro" ? "Everything you're building" : "Your websites"}>
+      <Page allSitesCta={allSitesCta} tuneHref={tuneHref} eyebrow={`${greeting()}, ${firstName}`} title={experience === "pro" ? "Everything you're building" : "Your websites"}>
         <AllSites rows={all} dense={experience === "pro"} newSiteHref={newSiteHref} />
       </Page>
     );
@@ -51,12 +60,13 @@ export function HomeView(props: HomeProps) {
   }
 
   const { progress } = site;
+  const addMore = null;
   const showGuide = !progress.allDone || celebrate;
 
   if (showGuide) {
     const title = homeTitle({ name: site.site.name, kind: site.site.kind, allDone: progress.allDone });
     return (
-      <Page tuneHref={tuneHref} experience={experience} demo={demo} eyebrow={`${greeting()}, ${firstName}`} title={title}>
+      <Page allSitesCta={allSitesCta} tuneHref={tuneHref} experience={experience} demo={demo} eyebrow={`${greeting()}, ${firstName}`} title={title}>
         <div className="plx-page__grid">
           <section data-tour="home-main" style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
             {celebrate && progress.allDone ? (
@@ -92,9 +102,11 @@ export function HomeView(props: HomeProps) {
           </section>
           <aside style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <SitePreviewCard site={site.site} brand={brand} />
-            <AskSolCard prompt={SOL_IDEAS[progress.variant]} />
+            {progress.variant === "store" ? <ShopActionsCard siteId={site.site.id} /> : null}
+            <OtherActionsCard siteId={site.site.id} solPrompt={SOL_IDEAS[progress.variant]} newSiteHref={newSiteHref} />
           </aside>
         </div>
+        {addMore}
       </Page>
     );
   }
@@ -102,28 +114,37 @@ export function HomeView(props: HomeProps) {
   // Live: this site's dashboard. Stats across the top, then activity and visits on the left with a slim rail on the right.
   const stats = site.stats;
   return (
-    <Page tuneHref={tuneHref} experience={experience} demo={demo} eyebrow={`${greeting()}, ${firstName}`} title={site.site.name}>
+    <Page allSitesCta={allSitesCta} tuneHref={tuneHref} experience={experience} demo={demo} eyebrow={`${greeting()}, ${firstName}`} title={site.site.name}>
       {stats ? <StatGrid stats={stats.stats} /> : null}
       <div className="plx-home__body">
         <section data-tour="home-main" className="plx-home__main">
-          {stats ? <ActivityCard stats={stats} site={site.site} /> : null}
+          {stats ? <ActivityCard stats={stats} site={site.site} experience={experience} /> : null}
           {stats ? <VisitsCard days={stats.visitsByDay ?? new Array(7).fill(0)} /> : null}
         </section>
         <aside className="plx-home__rail">
           <SitePreviewCard site={site.site} brand={brand} />
-          <OtherActionsCard solPrompt={SOL_IDEAS[progress.variant]} newSiteHref={newSiteHref} />
+          {progress.variant === "store" ? <ShopActionsCard siteId={site.site.id} /> : null}
+          <OtherActionsCard siteId={site.site.id} solPrompt={SOL_IDEAS[progress.variant]} newSiteHref={newSiteHref} />
         </aside>
       </div>
+      {addMore}
     </Page>
   );
 }
 
-function Page({ eyebrow, title, tuneHref, experience, demo, children }: { eyebrow: string; title: string; tuneHref?: string; experience?: HomeProps["experience"]; demo?: boolean; children: React.ReactNode }) {
+function Page({ eyebrow, title, tuneHref, experience, demo, allSitesCta, children }: { eyebrow: string; title: string; allSitesCta?: boolean; tuneHref?: string; experience?: HomeProps["experience"]; demo?: boolean; children: React.ReactNode }) {
   return (
-    <div className="plx-page" data-tour-ready="">
-      <div>
-        <p className="plx-eyebrow">{eyebrow}</p>
-        <h1 className="plx-h1">{title}</h1>
+    <div className="plx-page" data-tour-ready="" data-home-top="">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <p className="plx-eyebrow">{eyebrow}</p>
+          <h1 className="plx-h1">{title}</h1>
+        </div>
+        {allSitesCta ? (
+          <ButtonLink href={ALL_SITES_PATH} variant="secondary" leftIcon={<LayoutGrid size={18} aria-hidden />} data-tour="home-all-sites">
+            All websites
+          </ButtonLink>
+        ) : null}
       </div>
       {/* These join the page's one banner stack (the plan notice, what's new…): one shows, the rest fold behind "more". */}
       <InBannerStack>
@@ -146,4 +167,13 @@ function CustomizeCard({ href }: { href: string }) {
       <ButtonLink href={href} rightIcon={<ArrowRight size={18} aria-hidden />}>Customize Plexo</ButtonLink>
     </Card>
   );
+}
+
+/** Scroll whatever holds the page (the window or the dashboard's own scroll area) back to the top of Home. */
+export function scrollHomeToTop() {
+  if (typeof document === "undefined") return;
+  const smooth = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  const top = document.querySelector("[data-home-top]");
+  if (top && typeof top.scrollIntoView === "function") top.scrollIntoView({ block: "start", behavior: smooth ? "smooth" : "auto" });
+  else window.scrollTo?.({ top: 0, behavior: smooth ? "smooth" : "auto" });
 }

@@ -189,6 +189,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   ];
 
   if (notificationTargets.length > 0) {
+    const bodyText = created.body || "";
+    const commentSnippet = bodyText.length > 120 ? `${bodyText.slice(0, 117)}…` : bodyText;
     await Promise.all(
       notificationTargets.map((t) =>
         Notification.create({
@@ -199,6 +201,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           actorId: resolved.userId,
           commentId: created.id,
           templateId: template.id,
+          title: t.type === "MENTION"
+            ? `${authorInfo.name} mentioned you on "${template.name}"`
+            : `${authorInfo.name} commented on "${template.name}"`,
+          message: commentSnippet,
+          link: `/dashboard/sites/${template.id}?tab=pages&comment=${created.id}`,
+          actionLabel: "View comment",
         }).go(),
       ),
     );

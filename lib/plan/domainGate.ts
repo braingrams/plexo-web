@@ -3,6 +3,8 @@
 // payment. Pure — callers count the account's live custom domains themselves.
 
 import { getTierFeatures } from "@/lib/subscription";
+import { planThatRaises } from "./planNeeded";
+import { isPaidPlanId, PLAN, toPlanId, type PaidPlanId } from "./plans";
 
 export type DomainActor = { subscriptionPlan: string; onTrial?: boolean };
 
@@ -27,4 +29,15 @@ export function customDomainError(actor: DomainActor, currentCustomCount: number
 
 export function countLiveCustomDomains(domains: { type?: string | null; planDisabledAt?: string | null }[]): number {
   return domains.filter((d) => d.type === "CUSTOM" && !d.planDisabledAt).length;
+}
+
+/** The plan that lifts customDomainError: Starter for a first domain, the paid version of the current plan on a trial, otherwise the one with more domains. */
+export function customDomainRequiredPlan(actor: DomainActor): PaidPlanId {
+  const base = getTierFeatures(actor.subscriptionPlan);
+  if (!base.customDomainEnabled) return PLAN.STARTER;
+  if (actor.onTrial) {
+    const current = toPlanId(actor.subscriptionPlan);
+    return isPaidPlanId(current) ? current : PLAN.STARTER;
+  }
+  return planThatRaises((f) => f.maxCustomDomains, base.maxCustomDomains);
 }

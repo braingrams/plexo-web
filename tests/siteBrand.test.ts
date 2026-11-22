@@ -209,14 +209,14 @@ describe("linking a site to a Strata brand", () => {
     seedSite("s1");
     remote.published = false;
     const s = await linkSiteBrand({ siteId: "s1", userId: "u1", organizationId: "org1", projectId: "p1" });
-    expect(s.lastResult).toMatch(/Press Publish there once/);
+    expect(s.lastResult).toMatch(/Publish it once so your website can follow it/);
     expect(s.awaitingPublish).toBe(true);
   });
 
   it("explains a missing Strata sign-in in plain words, and refuses another organisation's site", async () => {
     seedSite("s1");
     state.userToken = null;
-    await expect(linkSiteBrand({ siteId: "s1", userId: "u1", organizationId: "org1", projectId: "p1" })).rejects.toThrow(/Connect Strata first/);
+    await expect(linkSiteBrand({ siteId: "s1", userId: "u1", organizationId: "org1", projectId: "p1" })).rejects.toThrow(/Connect your brand first/);
     state.userToken = "user-session";
     await expect(linkSiteBrand({ siteId: "s1", userId: "u1", organizationId: "other", projectId: "p1" })).rejects.toThrow(/Site not found/);
   });

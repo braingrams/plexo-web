@@ -3,9 +3,11 @@ import { decryptPaystackKey } from "@/lib/crypto";
 import { refundPaystackTransaction } from "@/lib/paystack";
 import { resolvePaystackKeysForMode } from "@/lib/commerce/paystack";
 import { resolveMaildripApiKey, sendCommerceEmail } from "@/lib/mail/maildrip";
+import { resolveSiteEmailConfig } from "@/lib/mail/siteEmailSettings";
 import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { getOrgBrandDynamo } from "@/server/orgDynamo";
+import { termsLink } from "@/lib/commerce/terms";
 import { buildOrderStatusEmail, type OrderStatusEvent } from "@/lib/mail/templates";
 import { refundStripePayment } from "@/lib/commerce/stripeClient";
 import { isDonationOrder, resolveDonationGateway } from "@/lib/commerce/donations";
@@ -68,19 +70,20 @@ export async function sendOrderStatusEmail(
   const { data: settings } = await CommerceSettings.get({ templateId }).go();
   if (!settings?.[NOTIFY_SETTING_KEY[event]]) return;
 
-  const apiKey = resolveMaildripApiKey(settings);
-  if (!apiKey) return; // no MailDrip key configured anywhere — nothing to send through
-
-  const [{ data: order }, { data: items }, { data: site }, brand] = await Promise.all([
+  const [{ data: order }, { data: items }, { data: site }, emailConfig, storeUrl] = await Promise.all([
     CommerceOrder.get({ templateId, id: orderId }).go(),
     CommerceOrderItem.query.primary({ templateId, orderId }).go({ pages: "all" }),
     Template.get({ id: templateId }).go(),
-    getOrgBrandDynamo(organizationId),
+    resolveSiteEmailConfig(templateId, organizationId),
+    resolveSitePublicUrl(templateId),
   ]);
   if (!order) return;
 
-  const siteName = site?.name ?? "Your store";
-  const storeUrl = await resolveSitePublicUrl(templateId);
+  const apiKey = emailConfig.apiKey ?? resolveMaildripApiKey(settings);
+  if (!apiKey) return; // no MailDrip key configured anywhere — nothing to send through
+
+  const brand = emailConfig.brand;
+  const siteName = brand?.name || site?.name || "Your store";
   const { subject, html } = buildOrderStatusEmail({
     event,
     siteName,
@@ -89,11 +92,24 @@ export async function sendOrderStatusEmail(
     items: items.map((i) => ({ nameSnapshot: i.nameSnapshot, quantity: i.quantity ?? 1, unitPriceMinor: i.unitPriceMinor })),
     currency: order.currency ?? "NGN",
     orderUrl: `${storeUrl}/order-confirmation?order=${encodeURIComponent(order.orderNumber)}&email=${encodeURIComponent(order.customerEmail)}`,
+    termsUrl: termsLink(settings, storeUrl)?.url ?? null,
     brand,
+    customMessage: event === "PAID" ? (settings?.orderEmailMessage ?? null) : null,
+    customHeading: event === "PAID" ? (settings?.orderEmailHeading ?? null) : null,
+    customSubject: event === "PAID" ? (settings?.orderEmailSubject ?? null) : null,
   });
 
   try {
-    await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, context: "commerce_order_status", organizationId, templateId });
+    await sendCommerceEmail(apiKey, {
+      to: order.customerEmail,
+      subject,
+      html,
+      fromName: emailConfig.fromName,
+      fromEmail: emailConfig.fromEmail,
+      context: "commerce_order_status",
+      organizationId,
+      templateId,
+    });
   } catch (err) {
     // sendCommerceEmail already logs the failure via logEmailDelivery — this catch just
     // stops it from bubbling into a caller that just recorded a real, already-final

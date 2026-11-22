@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { commerceEnableError, commercePlanForOrg, defaultPaymentProvider, paymentProviderError } from "@/lib/plan/commerceGate";
+import { commercePlanForOrg, commerceSettingsGate, defaultPaymentProvider } from "@/lib/plan/commerceGate";
+import { limitGateResponse } from "@/lib/plan/planGateResponse";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveCommerceAdmin, maskSecret } from "@/lib/commerce/adminAuthDynamo";
 import {
@@ -15,6 +16,7 @@ import {
 import { isKnownCurrency, isPaystackCompatibleCurrency } from "@/lib/commerce/currency";
 import { ensureProductDetailLayout } from "@/lib/commerce/productDetailLayout";
 import { ensureStorefrontLayout, getStorefrontSlug, renameStorefrontSlug } from "@/lib/commerce/storefrontLayout";
+import { ensureDonationsReady } from "@/lib/commerce/donations";
 import { deriveCommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
 import { applyCheckoutSettingsInput, checkoutSettingsView, CheckoutSettingsError } from "@/lib/commerce/checkoutSettings";
 import { CommerceSettings, CommerceStripeAccessRequest, CommerceOrder } from "@/lib/db/commerceEntities";
@@ -39,6 +41,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
       themeButtonRadius: settings?.themeButtonRadius ?? null,
       autoDetectedTheme: autoTheme,
       enabled: settings?.enabled ?? false,
+      donationsEnabled: settings?.donationsEnabled ?? true,
       storefrontSlug,
       currency: settings?.currency ?? "NGN",
       paymentProvider: settings?.paymentProvider ?? "BYO_PAYSTACK",
@@ -109,6 +112,7 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
   const body = await request.json().catch(() => ({}));
   const {
     enabled,
+    donationsEnabled,
     currency,
     paymentProvider,
     paystackMode,
@@ -166,10 +170,8 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
   // The workspace's plan decides whether there's a store at all and whether it may use its
   // own payment keys (lib/plan/commerceGate.ts).
   const commercePlan = await commercePlanForOrg(organizationId);
-  const planError = (enabled === true ? commerceEnableError(commercePlan) : null) ?? paymentProviderError(commercePlan, paymentProvider);
-  if (planError) {
-    return NextResponse.json({ error: planError, code: "PLAN_COMMERCE_LIMIT", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
-  }
+  const planGate = commerceSettingsGate(commercePlan, { enabled, paymentProvider });
+  if (planGate) return limitGateResponse(planGate);
 
   // Platform Stripe is admin-gated — see CommerceStripeAccessRequest and the
   // request/approval flow in app/api/v1/commerce/stripe-access/route.ts + plexo-admin.
@@ -233,10 +235,11 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
   const toRemove: RemovableField[] = [];
 
   if (typeof enabled === "boolean") data.enabled = enabled;
+  if (typeof donationsEnabled === "boolean") data.donationsEnabled = donationsEnabled;
   if (typeof currency === "string") data.currency = currency.toUpperCase();
   if (paymentProvider !== undefined) data.paymentProvider = paymentProvider;
-  else if (enabled === true) {
-    // A store opened for the first time starts on a payment option its plan allows, so it
+  else if (enabled === true || donationsEnabled === true) {
+    // A store or donations opened for the first time starts on a payment option its plan allows, so it
     // works straight away (own keys need Pro; smaller plans start on Plexo's account).
     const { data: current } = await CommerceSettings.get({ templateId }).go();
     if (!current?.paymentProvider) data.paymentProvider = defaultPaymentProvider(commercePlan);
@@ -341,6 +344,9 @@ async function saveSettings(request: NextRequest, context: { params: Promise<{ t
   if (effectiveEnabled) {
     await ensureProductDetailLayout(templateId, organizationId, userId);
     await ensureStorefrontLayout(templateId, organizationId, userId);
+  }
+  if (data.donationsEnabled === true) {
+    await ensureDonationsReady(templateId, organizationId, userId);
   }
   if (typeof storefrontSlug === "string" && storefrontSlug.trim()) {
     if (!effectiveEnabled) {

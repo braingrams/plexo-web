@@ -63,7 +63,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const passwordHash = await hashPassword(password);
   const id = randomUUID();
   try {
-    await createUserWithEmailLock({ id, email, name, passwordHash, isConfirmed: false, pendingPlan, country, countrySetAt: new Date().toISOString() });
+    await createUserWithEmailLock({ id, email, name, passwordHash, isConfirmed: false, pendingPlan, country, countrySetAt: new Date().toISOString(), signupSource: "plexo" });
   } catch (err) {
     if (err instanceof EmailAlreadyInUseError) {
       // Lost the race the pre-check above couldn't catch (two concurrent submissions for

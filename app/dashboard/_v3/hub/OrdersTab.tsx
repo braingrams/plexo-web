@@ -1,8 +1,9 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useState } from "react";
 import { Inbox } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, Modal, Skeleton, type BadgeTone } from "../ui";
+import { Badge, Button, Card, EmptyState, Input, Modal, OptimisticLoader, Skeleton, type BadgeTone } from "../ui";
 import { OrderMore, type OrderExtras } from "./OrderTools";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { TabBar } from "./HubFrame";
@@ -50,7 +51,7 @@ const NEXT: { to: Order["fulfillmentStatus"]; label: string }[] = [
   { to: "COMPLETED", label: "Mark as done" },
 ];
 
-export function OrdersTab({ siteId, currency }: { siteId: string; currency: string }) {
+export function OrdersTab({ siteId, currency, hideHeader }: { siteId: string; currency: string; hideHeader?: boolean }) {
   const [filter, setFilter] = useState("");
   const [orders, setOrders] = useState<Order[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -123,23 +124,22 @@ export function OrdersTab({ siteId, currency }: { siteId: string; currency: stri
 
   return (
     <>
-      <TabBar title="Your orders" sub="Everything people have bought. Tap an order to see what to do next." />
-      <Input label="Search orders" hideLabel type="search" fieldClassName="plx-hsearch" placeholder="Search by name, email or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
-      <div className="plx-filters" role="group" aria-label="Show orders">
-        {FILTERS.map((f) => (
-          <button key={f.id} type="button" className="plx-hchip" role="radio" aria-checked={filter === f.id} onClick={() => { setPage(1); setFilter(f.id); }}>
-            {f.label}
-          </button>
-        ))}
-      </div>
-      {error ? <div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div> : null}
-      {orders === null && !error ? (
-        <Card padding="none" className="plx-listcard">
-          {[0, 1, 2].map((i) => (
-            <div key={i} className="plx-hrow">
-              <Skeleton style={{ height: 20, width: "60%" }} />
-            </div>
+      {!hideHeader ? <TabBar title="Your orders" sub="Everything people have bought. Tap an order to see what to do next." /> : null}
+      <div className="plx-toolbar" data-tour="hub-orders-tools">
+        <Input label="Search orders" hideLabel type="search" fieldClassName="plx-hsearch" placeholder="Search by name, email or order number" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="plx-filters" role="radiogroup" aria-label="Show orders">
+          {FILTERS.map((f) => (
+            <button key={f.id} type="button" className="plx-hchip" role="radio" aria-checked={filter === f.id} onClick={() => { setPage(1); setFilter(f.id); }}>
+              {f.label}
+            </button>
           ))}
+        </div>
+      </div>
+      {orders && orders.length ? <p className="plx-count" aria-live="polite">{total} order{total === 1 ? "" : "s"}{q || filter ? (total === 1 ? " matches" : " match") : ""}</p> : null}
+      {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}
+      {orders === null && !error ? (
+        <Card padding="lg" style={{ minHeight: 200, display: "grid", placeItems: "center" }}>
+          <OptimisticLoader steps={["Loading your orders…", "Checking payment confirmations…"]} subtitle="Fetching your order history" />
         </Card>
       ) : orders && orders.length === 0 ? (
         q || filter ? <EmptyState title="No orders match" body="Try a different word, or show all your orders." illustration={<Inbox size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} /> : <EmptyState title="No orders yet" body="When someone buys from your shop, the order shows up here and we email you. Share your site to get your first one." illustration={<Inbox size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />

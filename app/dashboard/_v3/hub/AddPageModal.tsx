@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { useRouter } from "next/navigation";
-import { Code2, Copy, FileText, LayoutTemplate, MessagesSquare, Upload } from "lucide-react";
+import { Code2, Copy, FileText, LayoutTemplate, Upload } from "lucide-react";
 import { listPageTemplates } from "@charisol/plexo-sdk/v2/compile";
 import { Button, ButtonLink, Input, Modal, Select, useToast } from "../ui";
 import { slugify } from "@/lib/dashboardV3/hubTabs";
@@ -85,7 +86,7 @@ export function AddPageModal({ open, onClose, siteName, rootId, pages, isApp, si
   }
 
   const footer = isApp ? (
-    <ButtonLink href={solDraft} leftIcon={<MessagesSquare size={18} aria-hidden />}>
+    <ButtonLink href={solDraft} leftIcon={<SolGlyph size={18} />}>
       Ask SOL to build this page
     </ButtonLink>
   ) : needsAup ? (
@@ -99,7 +100,7 @@ export function AddPageModal({ open, onClose, siteName, rootId, pages, isApp, si
     </>
   ) : (
     <>
-      <ButtonLink href={solDraft} variant="secondary" leftIcon={<MessagesSquare size={18} aria-hidden />}>
+      <ButtonLink href={solDraft} variant="secondary" leftIcon={<SolGlyph size={18} />}>
         Ask SOL to build this page
       </ButtonLink>
       <Button loading={busy} onClick={() => create()}>

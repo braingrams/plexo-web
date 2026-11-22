@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { uploadObject, StorageError } from "@/lib/storage";
 import { UploadedImage } from "@/lib/db/coreEntities";
 import { resolveUser } from "@/lib/auth/resolveUser";
+import { recordUploadedSize } from "@/lib/siteHealth/imageSize";
 
 // Matches app/api/blog/[templateId]/upload-image/route.ts's limits/allowlist — same kind
 // of user-facing image upload, no reason for a different ceiling here.
@@ -51,6 +52,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       throw err;
     }
 
+    // The picture's size is read from the file now and kept, so pages can reserve its space without ever fetching it again.
+    const size = await recordUploadedSize(blob.url, buffer);
+
     const id = crypto.randomUUID();
     await UploadedImage.create({
       id,
@@ -60,7 +64,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       url: blob.url,
     }).go();
 
-    return NextResponse.json({ id, name: file.name, url: blob.url });
+    return NextResponse.json({ id, name: file.name, url: blob.url, ...(size ? { width: size.width, height: size.height } : {}) });
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json({ error: "Upload failed" }, { status: 500 });

@@ -1,13 +1,15 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
+import { draftFrom, newDraft } from "@/lib/commerce/donationForm";
+import { useDonations } from "./useDonations";
 import Link from "next/link";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import type { DonationsOverview } from "@/lib/commerce/donations";
 import { paginate } from "@/lib/pagination";
 import { Pagination } from "../../../_components/Pagination";
 
-type Campaign = DonationsOverview["campaigns"][number];
 
 const card: React.CSSProperties = { background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 2%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 8%, transparent)", borderRadius: 14, padding: "1.2rem 1.4rem" };
 const inputStyle: React.CSSProperties = {
@@ -31,134 +33,15 @@ function FieldLabel({ label, hint, children }: { label: string; hint?: string; c
   );
 }
 
-interface Draft {
-  id: string | null;
-  name: string;
-  description: string;
-  presets: { label: string; amount: string }[];
-  defaultPresetIndex: number;
-  allowCustomAmount: boolean;
-  minAmount: string;
-  allowMonthly: boolean;
-  defaultFrequency: "ONCE" | "MONTHLY";
-  goal: string;
-  thankYouMessage: string;
-  buttonLabel: string;
-}
-
-const EMPTY_DRAFT: Draft = {
-  id: null, name: "", description: "",
-  presets: [{ label: "", amount: "25" }, { label: "", amount: "50" }, { label: "", amount: "100" }, { label: "", amount: "250" }],
-  defaultPresetIndex: 2, allowCustomAmount: true, minAmount: "1", allowMonthly: true, defaultFrequency: "ONCE", goal: "", thankYouMessage: "", buttonLabel: "",
-};
-
-function draftFrom(c: Campaign): Draft {
-  return {
-    id: c.id, name: c.name, description: c.description ?? "",
-    presets: c.presetAmounts.map((p) => ({ label: p.label ?? "", amount: String(p.amountMinor / 100) })),
-    defaultPresetIndex: c.defaultPresetIndex, allowCustomAmount: c.allowCustomAmount, minAmount: String(c.minAmountMinor / 100),
-    allowMonthly: c.allowMonthly, defaultFrequency: c.defaultFrequency, goal: c.goalAmountMinor ? String(c.goalAmountMinor / 100) : "",
-    thankYouMessage: c.thankYouMessage ?? "", buttonLabel: c.buttonLabel ?? "",
-  };
-}
-
 export function DonationsClient({ templateId, initial }: { templateId: string; initial: DonationsOverview }) {
-  const [data, setData] = useState(initial);
-  const [draft, setDraft] = useState<Draft | null>(null);
+  const d = useDonations(templateId, initial);
+  const { data, draft, setDraft, saving, error, setError, notice, copied, busy, save, toggleActive, adoptDonors, copyEmbed } = d;
   const [donorPaging, setDonorPaging] = useState({ page: 1, pageSize: 25 });
   const [giftPaging, setGiftPaging] = useState({ page: 1, pageSize: 25 });
   const donorsPage = paginate(data.monthlyDonors, donorPaging);
   const giftsPage = paginate(data.recentGifts, giftPaging);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
-  const apiBase = `/api/v1/commerce/${templateId}/donations`;
   const money = (minor: number) => formatMoney(minor, data.currency);
-
-  async function reload() {
-    const res = await fetch(apiBase);
-    if (res.ok) setData(await res.json());
-  }
-
-  async function save() {
-    if (!draft) return;
-    setError(null);
-    const presetAmounts = draft.presets
-      .filter((p) => p.amount.trim())
-      .map((p) => ({ amountMinor: Math.round(Number(p.amount) * 100), ...(p.label.trim() ? { label: p.label.trim() } : {}) }));
-    if (presetAmounts.some((p) => !Number.isFinite(p.amountMinor) || p.amountMinor <= 0)) {
-      setError("Each amount must be a number above zero.");
-      return;
-    }
-    setSaving(true);
-    try {
-      const res = await fetch(draft.id ? `${apiBase}/${draft.id}` : apiBase, {
-        method: draft.id ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: draft.name,
-          description: draft.description,
-          presetAmounts,
-          defaultPresetIndex: Math.min(draft.defaultPresetIndex, Math.max(0, presetAmounts.length - 1)),
-          allowCustomAmount: draft.allowCustomAmount,
-          minAmountMinor: Math.max(1, Math.round(Number(draft.minAmount || "1") * 100)),
-          allowMonthly: draft.allowMonthly,
-          defaultFrequency: draft.defaultFrequency,
-          goalAmountMinor: draft.goal.trim() ? Math.round(Number(draft.goal) * 100) : null,
-          thankYouMessage: draft.thankYouMessage,
-          buttonLabel: draft.buttonLabel,
-        }),
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Couldn't save the campaign.");
-      setDraft(null);
-      await reload();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Couldn't save the campaign.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function toggleActive(c: Campaign) {
-    setBusy(c.id);
-    await fetch(`${apiBase}/${c.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: !c.active }) });
-    await reload();
-    setBusy(null);
-  }
-
-  async function adoptDonors(c: Campaign) {
-    setBusy(`adopt-${c.id}`);
-    setNotice(null);
-    const res = await fetch(`${apiBase}/adopt-monthly-donors`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ campaignId: c.id }) });
-    const body = await res.json();
-    setNotice(
-      res.ok
-        ? body.adopted > 0
-          ? `${body.adopted} monthly donor${body.adopted > 1 ? "s" : ""} brought over — their gifts keep billing as before, and every charge now shows up here.`
-          : "No new monthly donors found on your connected payment account."
-        : body.error ?? "Couldn't check for monthly donors.",
-    );
-    await reload();
-    setBusy(null);
-  }
-
-  async function stopGift(id: string) {
-    if (!confirm("Stop this donor's monthly gift? They won't be charged again.")) return;
-    setBusy(id);
-    const res = await fetch(`${apiBase}/subscriptions/${id}`, { method: "DELETE" });
-    if (!res.ok) setNotice((await res.json()).error ?? "Couldn't stop the gift.");
-    await reload();
-    setBusy(null);
-  }
-
-  function copyEmbed(id: string) {
-    void navigator.clipboard.writeText(`<div data-plexo-donation="${id}"></div>`);
-    setCopied(id);
-    setTimeout(() => setCopied(null), 2000);
-  }
+  const stopGift = (id: string) => (confirm("Stop this donor's monthly gift? They won't be charged again.") ? d.stopGift(id) : undefined);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
@@ -167,7 +50,7 @@ export function DonationsClient({ templateId, initial }: { templateId: string; i
           <h1 style={{ fontSize: "1.25rem", fontWeight: 750, margin: 0, color: "var(--cmx-text, #f0f2ff)" }}>Donations</h1>
           <p style={muted}>One-time and monthly giving. Donors get a thank-you receipt, and monthly donors can stop their own gift from it.</p>
         </div>
-        <button type="button" style={btnPrimary} onClick={() => { setError(null); setDraft({ ...EMPTY_DRAFT, presets: EMPTY_DRAFT.presets.map((p) => ({ ...p })) }); }}>
+        <button type="button" style={btnPrimary} onClick={() => { setError(null); setDraft(newDraft()); }}>
           + New donation form
         </button>
       </div>
@@ -312,9 +195,20 @@ export function DonationsClient({ templateId, initial }: { templateId: string; i
               </label>
             )}
             <FieldLabel label="Fundraising goal (optional)" hint="Shows a progress bar on the form."><input style={{ ...inputStyle, width: 160 }} inputMode="decimal" value={draft.goal} onChange={(e) => setDraft({ ...draft, goal: e.target.value })} /></FieldLabel>
-            <FieldLabel label="Thank-you message (optional)" hint="Shown after donating and in the receipt email."><textarea style={{ ...inputStyle, minHeight: 70 }} value={draft.thankYouMessage} onChange={(e) => setDraft({ ...draft, thankYouMessage: e.target.value })} /></FieldLabel>
-            <FieldLabel label="Button text (optional)"><input style={{ ...inputStyle, width: 200 }} placeholder="Donate" value={draft.buttonLabel} onChange={(e) => setDraft({ ...draft, buttonLabel: e.target.value })} /></FieldLabel>
-            {error && <p style={{ ...muted, color: "var(--cmx-danger, #f87171)" }}>{error}</p>}
+            <div style={{ marginTop: 8, paddingTop: 12, borderTop: "1px solid var(--cmx-border, rgba(255,255,255,0.08))", display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ fontSize: "0.86rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)" }}>After payment &amp; receipt emails</div>
+              <FieldLabel label="Message shown on page after payment (optional)" hint="Shown in the banner immediately after someone pays.">
+                <textarea style={{ ...inputStyle, minHeight: 60 }} placeholder="e.g. Your payment has been received successfully." value={draft.thankYouMessage} onChange={(e) => setDraft({ ...draft, thankYouMessage: e.target.value })} />
+              </FieldLabel>
+              <FieldLabel label="Email receipt subject (optional)" hint="The subject line of their receipt email.">
+                <input style={inputStyle} placeholder="e.g. Thank you for your payment" value={draft.emailSubject} onChange={(e) => setDraft({ ...draft, emailSubject: e.target.value })} />
+              </FieldLabel>
+              <FieldLabel label="Email receipt message / body (optional)" hint="The personal note or thank-you body inside their receipt email.">
+                <textarea style={{ ...inputStyle, minHeight: 70 }} placeholder="e.g. Hi! We've received your payment successfully. Thank you for choosing Charisol. We appreciate your business and look forward to serving you! 😊" value={draft.emailBody} onChange={(e) => setDraft({ ...draft, emailBody: e.target.value })} />
+              </FieldLabel>
+            </div>
+            <FieldLabel label="Button text (optional)"><input style={{ ...inputStyle, width: 200 }} placeholder="e.g. MAKE PAYMENT or Donate" value={draft.buttonLabel} onChange={(e) => setDraft({ ...draft, buttonLabel: e.target.value })} /></FieldLabel>
+            {error && <GateOrError error={error}><p style={{ ...muted, color: "var(--cmx-danger, #f87171)" }}>{error}</p></GateOrError>}
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <button type="button" style={btn} onClick={() => setDraft(null)}>Cancel</button>
               <button type="button" style={btnPrimary} disabled={saving || !draft.name.trim()} onClick={() => void save()}>{saving ? "Saving…" : "Save"}</button>

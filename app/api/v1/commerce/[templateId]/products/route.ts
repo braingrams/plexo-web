@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { commercePlanForOrg, countStoreProducts, productLimitError } from "@/lib/plan/commerceGate";
+import { commercePlanForOrg, countStoreProducts, productLimitGate } from "@/lib/plan/commerceGate";
+import { limitGateResponse } from "@/lib/plan/planGateResponse";
 import { catalogFieldsFromInput, VariantInputError } from "@/lib/commerce/variants";
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
@@ -121,8 +122,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
     throw err;
   }
 
-  const productLimit = productLimitError(await commercePlanForOrg(organizationId), await countStoreProducts(templateId));
-  if (productLimit) return NextResponse.json({ error: productLimit, code: "PLAN_PRODUCT_LIMIT", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
+  const productLimit = productLimitGate(await commercePlanForOrg(organizationId), await countStoreProducts(templateId));
+  if (productLimit) return limitGateResponse(productLimit);
 
   const slug = await ensureUniqueProductSlug(templateId, name);
   const categoryId = await resolveCategoryId(templateId, organizationId, category);

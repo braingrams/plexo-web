@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LoaderCircle, Monitor, Smartphone, Tablet } from "lucide-react";
 import { Button, ButtonLink, Modal, SegmentedControl } from "../ui";
 
@@ -11,6 +11,29 @@ export function DesignPreview({ designId, onClose, onUse, useLabel = "Use this d
   const [state, setState] = useState<{ html: string; name: string; email: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [device, setDevice] = useState<Device>("desktop");
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [stageSize, setStageSize] = useState<{ width: number; height: number }>({ width: 0, height: 600 });
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const update = () => {
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        setStageSize({ width: Math.max(0, el.clientWidth - 24), height: Math.max(0, el.clientHeight - 24) });
+      }
+    };
+    update();
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        if (width > 0 && height > 0) {
+          setStageSize({ width, height });
+        }
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [designId]);
 
   useEffect(() => {
     if (!designId) return;
@@ -33,13 +56,26 @@ export function DesignPreview({ designId, onClose, onUse, useLabel = "Use this d
     };
   }, [designId]);
 
-  const widths: Record<Device, string> = { desktop: state?.email ? "720px" : "100%", tablet: "768px", phone: "375px" };
+  const targetWidth =
+    device === "desktop"
+      ? state?.email
+        ? 720
+        : 1280
+      : device === "tablet"
+        ? 768
+        : 375;
+
+  const availW = stageSize.width || targetWidth;
+  const availH = stageSize.height || 600;
+  const scale = availW < targetWidth ? availW / targetWidth : 1;
+  const visualWidth = Math.round(targetWidth * scale);
+  const frameHeight = scale > 0 ? Math.round(availH / scale) : availH;
 
   return (
     <Modal
       open={designId !== null}
       onClose={onClose}
-      width={1100}
+      width={1180}
       title={state ? state.name : "Loading the design"}
       footer={
         <>
@@ -63,7 +99,7 @@ export function DesignPreview({ designId, onClose, onUse, useLabel = "Use this d
             ]}
           />
         </div>
-        <div className="plx-dzprev__stage">
+        <div ref={stageRef} className="plx-dzprev__stage" style={{ display: "flex", justifyContent: "center", alignItems: "stretch" }}>
           {error ? (
             <div className="plx-dzprev__state" role="alert">
               <b>{error}</b>
@@ -74,7 +110,37 @@ export function DesignPreview({ designId, onClose, onUse, useLabel = "Use this d
               <span>Getting it ready…</span>
             </div>
           ) : (
-            <iframe title={`Preview of ${state.name}`} srcDoc={state.html} sandbox="" className="plx-dzprev__frame" style={{ width: widths[device] }} />
+            <div
+              style={{
+                position: "relative",
+                width: `${visualWidth}px`,
+                height: "100%",
+                borderRadius: 10,
+                overflow: "hidden",
+                background: "Canvas",
+                transition: "width 0.2s ease",
+              }}
+            >
+              <iframe
+                title={`Preview of ${state.name}`}
+                srcDoc={state.html}
+                sandbox=""
+                className="plx-dzprev__frame"
+                style={{
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  width: `${targetWidth}px`,
+                  height: `${frameHeight}px`,
+                  transform: scale < 1 ? `scale(${scale})` : undefined,
+                  transformOrigin: "top left",
+                  border: 0,
+                  borderRadius: 10,
+                  background: "Canvas",
+                  colorScheme: "light",
+                }}
+              />
+            </div>
           )}
         </div>
       </div>

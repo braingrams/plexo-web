@@ -1,23 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
+import { useState } from "react";
+import { DAY_NAMES, minutesToTimeInput, timeInputToMinutes } from "@/lib/commerce/bookingTimes";
+import { useAvailability } from "./useAvailability";
 
 type Service = { id: string; name: string; durationMinutes: number | null };
-type Rule = { id: string; dayOfWeek: number; startMinute: number; endMinute: number; timezone: string };
-type Exception = { id: string; date: string; closed: boolean };
 
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-
-function minutesToTimeInput(minutes: number): string {
-  const h = Math.floor(minutes / 60).toString().padStart(2, "0");
-  const m = (minutes % 60).toString().padStart(2, "0");
-  return `${h}:${m}`;
-}
-
-function timeInputToMinutes(value: string): number {
-  const [h, m] = value.split(":").map(Number);
-  return h * 60 + m;
-}
 
 const inputStyle: React.CSSProperties = {
   background: "color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 4%, transparent)", border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)",
@@ -27,80 +16,20 @@ const inputStyle: React.CSSProperties = {
 
 export function AvailabilityClient({ templateId, services }: { templateId: string; services: Service[] }) {
   const [productId, setProductId] = useState(services[0]?.id ?? "");
-  const [rules, setRules] = useState<Rule[]>([]);
-  const [exceptions, setExceptions] = useState<Exception[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+  const av = useAvailability(templateId, productId);
+  const { rules, exceptions, loading, error, deleteRule, deleteException } = av;
   const [newDay, setNewDay] = useState(1);
   const [newStart, setNewStart] = useState("09:00");
   const [newEnd, setNewEnd] = useState("17:00");
   const [newTimezone, setNewTimezone] = useState("Africa/Lagos");
   const [newExceptionDate, setNewExceptionDate] = useState("");
 
-  useEffect(() => {
-    if (!productId) return;
-    setLoading(true);
-    fetch(`/api/v1/commerce/${templateId}/availability?productId=${productId}`)
-      .then((res) => res.json())
-      .then((data) => {
-        setRules(data.rules ?? []);
-        setExceptions(data.exceptions ?? []);
-      })
-      .finally(() => setLoading(false));
-  }, [templateId, productId]);
-
   async function addRule() {
-    setError(null);
-    const startMinute = timeInputToMinutes(newStart);
-    const endMinute = timeInputToMinutes(newEnd);
-    if (startMinute >= endMinute) {
-      setError("End time must be after start time.");
-      return;
-    }
-    try {
-      const res = await fetch(`/api/v1/commerce/${templateId}/availability`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "rule", productId, dayOfWeek: newDay, startMinute, endMinute, timezone: newTimezone }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to add rule.");
-      setRules((prev) => [...prev, data.rule].sort((a, b) => a.dayOfWeek - b.dayOfWeek || a.startMinute - b.startMinute));
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to add rule.");
-    }
+    if (timeInputToMinutes(newStart) >= timeInputToMinutes(newEnd)) return av.setError("End time must be after start time.");
+    await av.addRule({ dayOfWeek: newDay, start: newStart, end: newEnd, timezone: newTimezone });
   }
-
-  async function deleteRule(id: string) {
-    await fetch(`/api/v1/commerce/${templateId}/availability/${id}?type=rule`, { method: "DELETE" });
-    setRules((prev) => prev.filter((r) => r.id !== id));
-  }
-
   async function addException() {
-    setError(null);
-    if (!newExceptionDate) {
-      setError("Pick a date to close.");
-      return;
-    }
-    try {
-      const res = await fetch(`/api/v1/commerce/${templateId}/availability`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: "exception", productId, date: newExceptionDate }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to close that date.");
-      setExceptions((prev) => [...prev, data.exception].sort((a, b) => a.date.localeCompare(b.date)));
-      setNewExceptionDate("");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to close that date.");
-    }
-  }
-
-  async function deleteException(id: string) {
-    await fetch(`/api/v1/commerce/${templateId}/availability/${id}?type=exception`, { method: "DELETE" });
-    setExceptions((prev) => prev.filter((e) => e.id !== id));
+    if (await av.addException(newExceptionDate)) setNewExceptionDate("");
   }
 
   if (services.length === 0) {
@@ -194,7 +123,7 @@ export function AvailabilityClient({ templateId, services }: { templateId: strin
         </>
       )}
 
-      {error && <p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)", marginTop: "1rem" }}>{error}</p>}
+      {error && <GateOrError error={error}><p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)", marginTop: "1rem" }}>{error}</p></GateOrError>}
     </div>
   );
 }

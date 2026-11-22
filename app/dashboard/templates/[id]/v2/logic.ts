@@ -1,3 +1,4 @@
+import { saveFailureMessage } from "@/lib/editor/saveGate";
 import type { DesignSystem, PageDefinition } from "@charisol/plexo-sdk/v2/compile";
 
 import { V2_FORMAT, type DesignSystemRef, type V2Design, type V2Meta } from "@/lib/v2/design";
@@ -39,14 +40,20 @@ export function buildV2SavePayload(input: {
 
 /** Saves the working copy; throws the server's plain-language message when it can't. */
 export async function postV2Draft(templateId: string, design: V2Design, fetchFn: typeof fetch = fetch): Promise<void> {
-  const res = await fetchFn(`/api/templates/update/${templateId}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ designJson: design }),
-  });
+  if (typeof navigator !== "undefined" && navigator.onLine === false) throw new Error(saveFailureMessage(null));
+  let res: Response;
+  try {
+    res = await fetchFn(`/api/templates/update/${templateId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ designJson: design }),
+    });
+  } catch {
+    throw new Error(saveFailureMessage(null));
+  }
   if (!res.ok) {
     const payload = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new Error(payload.error ?? "Couldn't save this page. Your changes are still here, so try again.");
+    throw new Error(saveFailureMessage(res.status, payload.error));
   }
 }
 

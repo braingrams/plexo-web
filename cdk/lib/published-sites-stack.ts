@@ -214,14 +214,30 @@ export class PublishedSitesStack extends cdk.Stack {
       // them to the origin when a policy names them; naming them here also varies the cache entry by the
       // viewer's place, which the 10s TTL keeps cheap. Without this every visit was "Unknown" after the move
       // off Vercel (which sent its own x-vercel-ip-* headers).
-      headerBehavior: cloudfront.CacheHeaderBehavior.allowList(
+      //
+      // Only the COUNTRY varies the cached page (the cookie notice depends on it). Region and city used to be here too, which
+      // split every page into one cached copy per city and made the cache almost useless. They are not needed any more:
+      // visits are counted by the page's own beacon (lib/pub/visitBeacon.ts → the __plexo/v behaviour below), which is never
+      // cached and gets the full location headers through visitBeaconOriginPolicy.
+      headerBehavior: cloudfront.CacheHeaderBehavior.allowList("x-forwarded-host", "cloudfront-viewer-country"),
+      enableAcceptEncodingGzip: true,
+      enableAcceptEncodingBrotli: true,
+    });
+
+    // The visit beacon (POST /__plexo/v on the site's own address): never cached, and it receives exactly what recording a
+    // visit needs — the tenant host the viewer-request function set, the browser name, and where the visitor is.
+    const visitBeaconOriginPolicy = new cloudfront.OriginRequestPolicy(this, "VisitBeaconOriginPolicy", {
+      originRequestPolicyName: `${this.stackName}-visit-beacon`,
+      comment: "Headers the visit beacon needs (/__plexo/v): tenant host, user agent, viewer location",
+      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
         "x-forwarded-host",
+        "user-agent",
         "cloudfront-viewer-country",
         "cloudfront-viewer-country-region",
         "cloudfront-viewer-city",
       ),
-      enableAcceptEncodingGzip: true,
-      enableAcceptEncodingBrotli: true,
+      cookieBehavior: cloudfront.OriginRequestCookieBehavior.none(),
+      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.none(),
     });
 
     // Built files of apps built on Plexo (lib/projects/serve.ts): every path under
@@ -381,6 +397,8 @@ export class PublishedSitesStack extends cdk.Stack {
           // to checkout, cart shows empty/stale until reload" — the reload just happened
           // to land after the cached entry expired. CACHING_DISABLED is CloudFront's own
           // managed zero-TTL policy — every request here always reaches ServerFn fresh.
+          // The page's visit counter: one small POST per opened page, never cached (lib/pub/visitBeacon.ts).
+          { pathPattern: "__plexo/v", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: visitBeaconOriginPolicy.originRequestPolicyId, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
           // A React app's own backend (/__plexo/api/* on its domain → app/api/runtime): per
           // visitor, never cached, every method.
           { pathPattern: "__plexo/api/*", targetOriginId: "ServerFn", viewerProtocolPolicy: "redirect-to-https", cachePolicyId: CACHING_DISABLED, originRequestPolicyId: ALL_VIEWER_EXCEPT_HOST, allowedMethods: ALLOW_ALL_METHODS, cachedMethods: CACHED_METHODS, functionAssociations: [{ eventType: "viewer-request", functionArn: forwardHostFn.attrFunctionArn }] },
@@ -582,6 +600,17 @@ export class PublishedSitesStack extends cdk.Stack {
     // it the route is a dry run. Every 3 hours: the safe window is days wide, the last safe moment is
     // hours before a charge. Idempotent; the Stripe/Paystack pre-renewal webhooks do the same per person.
     scheduledRoute("PriceMoves", "/api/internal/price-moves?apply=1", events.Schedule.rate(cdk.Duration.hours(3)));
+
+    // Site health's automatic re-checks (lib/siteHealth/recheck.ts). The first runs what is due: a site changed 15+ minutes ago
+    // (debounced) or queued for its weekly turn. Every 10 minutes keeps "a few minutes after you publish" true; each run is limited to
+    // ~40 seconds of work and by the cost limits in lib/siteHealth/service.ts. The second only QUEUES sites whose last check is over a
+    // week old (it scans live sites, so hourly is plenty); the first drains that queue. Both routes lock themselves, because
+    // EventBridge retries a call that takes longer than its 5 second timeout.
+    scheduledRoute("SiteHealthRecheck", "/api/internal/site-health/recheck", events.Schedule.rate(cdk.Duration.minutes(10)));
+    scheduledRoute("SiteHealthSweep", "/api/internal/site-health/sweep", events.Schedule.rate(cdk.Duration.hours(1)));
+    // The weekly "Your site health" email (lib/siteHealth/digest.ts). Daily at 08:00 UTC: each site is emailed at most once every 6 days and
+    // only when it has a check from the last 9 days, so a run only reaches the sites that are due. Locked against EventBridge retries.
+    scheduledRoute("SiteHealthDigest", "/api/internal/site-health/digest", events.Schedule.cron({ minute: "0", hour: "8" }));
 
     new cdk.CfnOutput(this, "ConnectionGroupRoutingEndpoint", { value: connectionGroup.attrRoutingEndpoint });
     new cdk.CfnOutput(this, "PrimaryDistributionId", { value: primaryDistribution.attrId, exportName: `${this.stackName}-PrimaryDistributionId` });

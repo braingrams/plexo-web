@@ -1,3 +1,4 @@
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { getTierFeatures } from "@/lib/subscription";
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const features = getTierFeatures(resolved.subscriptionPlan);
   if (!features.siteMigrationEnabled) {
-    return NextResponse.json({ error: "Importing a website isn't available on your plan." }, { status: 403 });
+    return NextResponse.json(planGateBody("PLAN_SITE_IMPORT", "Importing a website isn't available on your plan."), { status: 403 });
   }
 
   const body = await request.json().catch(() => null);

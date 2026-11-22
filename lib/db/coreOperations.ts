@@ -39,6 +39,8 @@ export async function createUserWithEmailLock(params: {
   pendingPlan?: PaidPlanId;
   country?: string;
   countrySetAt?: string;
+  /** Where the account was created — see User.signupSource. */
+  signupSource?: string;
 }): Promise<void> {
   // New accounts are written in today's plan terms (lib/plan/plans.ts planVersion).
   const createUser = User.create({ ...params, planVersion: 2 }).params();

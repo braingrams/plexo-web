@@ -1,5 +1,7 @@
 import { requireSiteLayoutAccess } from "@/lib/siteLayoutDynamo";
-import { SiteLayout, Template } from "@/lib/db/contentEntities";
+import { SiteLayout } from "@/lib/db/contentEntities";
+import { ensureBlankSiteLayout } from "@/lib/siteLayoutBlank";
+import { auth } from "@/server/authDynamo";
 import { SiteLayoutClient } from "./SiteLayoutClient";
 import { SiteToolBack } from "@/app/dashboard/_v3/page/SiteToolBack";
 
@@ -7,22 +9,15 @@ export default async function SiteLayoutPage({ params }: { params: Promise<{ id:
   const { id } = await params;
   const access = await requireSiteLayoutAccess(id, `/dashboard/templates/${id}/site-layout`);
 
+  // An older site gets its (blank) header and footer the first time this opens; nothing visitors see changes.
+  const session = await auth();
+  if (session?.user) await ensureBlankSiteLayout(access.templateId, session.user.id).catch(() => undefined);
   const { data: layout } = await SiteLayout.get({ templateId: access.templateId }).go();
-  const [header, footer] = await Promise.all([
-    layout?.headerTemplateId ? Template.get({ id: layout.headerTemplateId }).go() : null,
-    layout?.footerTemplateId ? Template.get({ id: layout.footerTemplateId }).go() : null,
-  ]);
 
   return (
     <>
-    <SiteToolBack siteId={access.templateId} tab="pages" />
-    <SiteLayoutClient
-      templateId={access.templateId}
-      siteName={access.templateName}
-      initialEnabled={layout?.enabled ?? false}
-      header={header?.data ? { templateId: header.data.id, updatedAt: header.data.updatedAt ?? new Date().toISOString() } : null}
-      footer={footer?.data ? { templateId: footer.data.id, updatedAt: footer.data.updatedAt ?? new Date().toISOString() } : null}
-    />
+      <SiteToolBack siteId={access.templateId} tab="pages" />
+      <SiteLayoutClient templateId={access.templateId} siteName={access.templateName} initialEnabled={layout?.enabled ?? false} />
     </>
   );
 }

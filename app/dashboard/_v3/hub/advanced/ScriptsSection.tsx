@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Code2, ShieldCheck } from "lucide-react";
-import { Button, Card, CardHeader, Skeleton } from "../../ui";
+import { Button, Card, CardHeader, OptimisticLoader, Skeleton } from "../../ui";
 import { EmbedCodeModal } from "@/app/dashboard/templates/[id]/EmbedCodeModal";
 import { ScriptAccessControl } from "@/app/dashboard/templates/[id]/ScriptAccessControl";
 import { Embed } from "./Embed";
@@ -24,7 +24,7 @@ export function ScriptsSection({ siteId, ownCode }: { siteId: string; ownCode: b
         <p className="plx-body">Pick a block, set it up, and copy the code. Pages made with the visual editor have these as buttons in the editor, so this is for your own code.</p>
       </Card>
       {!pages ? (
-        <Card><Skeleton height={64} /></Card>
+        <Card><div style={{ padding: "28px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Loading script settings" subtitle="Reading embed controls" steps={["Loading pages…", "Preparing script configuration…", "Ready."]} /></div></Card>
       ) : (
         <Card>
           <CardHeader title="Scripts in your preview" description="Pages you wrote yourself preview without scripts, for safety. Ask for full script preview and our team can allow it for a short time." />

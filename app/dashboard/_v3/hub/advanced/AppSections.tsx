@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, Rocket } from "lucide-react";
-import { Badge, Button, ButtonLink, Card, CardHeader, Notice, Skeleton } from "../../ui";
+import { Badge, Button, ButtonLink, Card, CardHeader, Notice, OptimisticLoader, Skeleton } from "../../ui";
 import { appsApi, pollBuild, type AppSummary } from "@/app/dashboard/apps/_components/api";
 import { CodePane } from "@/app/dashboard/apps/_components/CodePane";
 import { DatabasePane } from "@/app/dashboard/apps/_components/DatabasePane";
@@ -90,7 +90,7 @@ export function AppSection({ section, appId }: { section: AdvancedSectionId; app
         <div className="plx-adv__stack">
           <Card>
             <CardHeader title={summary?.published ? "Your app is online" : "Your app is not online yet"} description={summary ? (summary.published ? "Publish again whenever you want the latest changes to go live." : "Publishing puts your app on a web address anyone can open.") : undefined} action={<Button leftIcon={<Rocket size={18} aria-hidden />} onClick={() => setPublishOpen(true)} disabled={!summary}>{summary?.published ? "Publish an update" : "Publish"}</Button>} />
-            {!summary ? <Skeleton height={64} /> : (
+            {!summary ? <div style={{ padding: "28px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Loading deployment summary" subtitle="Retrieving live environment addresses" steps={["Connecting to deployment cluster…", "Checking build state…", "Ready."]} /></div> : (
               <div>
                 <div className="plx-adv__row"><div className="plx-adv__grow"><b>Live address</b><span>{summary.liveUrl ?? "None yet"}</span></div>{summary.liveUrl ? <ButtonLink href={summary.liveUrl} target="_blank" rel="noreferrer" variant="secondary" rightIcon={<ExternalLink size={16} aria-hidden />}>Open</ButtonLink> : null}</div>
                 <div className="plx-adv__row"><div className="plx-adv__grow"><b>Preview address</b><span>{summary.previewUrl ?? "Made when the app first builds"}</span></div>{summary.previewUrl ? <ButtonLink href={summary.previewUrl} target="_blank" rel="noreferrer" variant="secondary" rightIcon={<ExternalLink size={16} aria-hidden />}>Open</ButtonLink> : null}</div>

@@ -83,7 +83,7 @@ export async function finishStrataConnect(deps: {
     } else {
       const res = await deps.fetchFn("/api/v1/strata/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken, ...(deps.anotherAccount ? { anotherAccount: true } : {}) }) });
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      message = res.ok ? { type: STRATA_CONNECTED_MESSAGE } : { type: STRATA_FAILED_MESSAGE, message: body?.error ?? "Strata couldn't be connected. Please try again." };
+      message = res.ok ? { type: STRATA_CONNECTED_MESSAGE } : { type: STRATA_FAILED_MESSAGE, message: body?.error ?? "Your brand couldn't be connected. Please try again." };
     }
   } catch {
     message = { type: STRATA_FAILED_MESSAGE, message: "That sign-in link expired or was already used. Please try connecting again." };

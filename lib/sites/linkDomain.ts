@@ -4,7 +4,8 @@ import { Template, PublishedDomain } from "@/lib/db/contentEntities";
 import { getDomainLimit } from "@/lib/domainLimit";
 import { requestCustomDomainConnection } from "@/lib/cloudfrontDomains";
 import { getPagesDomain } from "@/server/pagesDomain";
-import { assertCanPutSiteLive } from "@/lib/plan/publishGuard";
+import { assertCanPutSiteLive, PlanLimitError } from "@/lib/plan/publishGuard";
+import { domainCountGate } from "@/lib/plan/limitGates";
 
 // Connecting a domain (a *.pages subdomain or a custom domain) to a site. Shared by the MCP
 // tools (lib/mcp/dispatchMcpTool.ts) and app publishing (lib/projects/pipeline.ts) — its
@@ -86,7 +87,8 @@ export async function linkDomainToTemplate(
   const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.filter((d) => !d.planDisabledAt).length, 0);
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
-    throw new Error(`Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`);
+    const gate = domainCountGate(domainLimit);
+    throw new PlanLimitError("PLAN_CUSTOM_DOMAIN_LIMIT", gate.message, { requiredPlan: gate.requiredPlan });
   }
   if (domainType === "CUSTOM") {
     const customError = customDomainError(resolved, countLiveCustomDomains(domainCountBatches.flatMap((b) => b.data).filter((d) => d.domain !== finalDomain)));

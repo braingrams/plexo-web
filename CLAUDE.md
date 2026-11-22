@@ -18,7 +18,33 @@ When implementing or fixing something, check:
 
 This applies to dashboard UI, public site behavior, and MCP tools alike — an MCP tool an AI assistant calls on the user's behalf should also require the fewest steps and least prior knowledge to get a working result.
 
+## Strict V2 / Strata Dashboard Standards (Mandatory)
+
+Every dashboard view and sub-page must strictly adhere to the V2 design language and Strata design tokens:
+- **Use `[data-plexo-v3]` and `.plx-page`**: All new and modified dashboard screens must be marked with `data-plexo-v3` and use the `.plx-page` root container.
+- **Strictly use Strata design tokens**: Use `--plx-border`, `--plx-surface`, `--plx-text`, `--plx-muted`, `--plx-brand`, `--plx-tint`, `--plx-elevated`, `--plx-sunken`, etc.
+- **NEVER use V1 tokens or `PageContainer`**:
+  - Do not use `--ed-*` tokens, legacy `--brand` variables, or v1 color tokens in dashboard views.
+  - Do NOT use `PageContainer` in dashboard views. `PageContainer` introduces conflicting legacy dark background tokens, double-back links ("double back everywhere"), and restrictive container widths.
+  - For sub-screens that need a back link, use `SiteToolBack` or clean v2 Strata breadcrumbs.
+- **Mobile responsiveness is first-class**:
+  - Screens must adapt to the full width of mobile screens (`padding: clamp(16px, 3vw, 24px)`), without nested artificial boxes or desktop-only max-width pinches.
+  - Grids must wrap cleanly using `minmax(min(100%, ...), 1fr)`.
+  - Badges and status pills must hug content (`width: fit-content`) rather than stretching full-width.
+- **Strong visual affordance for all action buttons**:
+  - Secondary buttons must ALWAYS look like interactive action buttons, not plain text. Ensure every secondary button has visible borders (`1px solid var(--plx-border)`), background (`var(--plx-surface)`), font weight, and hover states. Never render actions as unbordered text ghosts that look broken or unclickable on mobile.
+
 <!-- BEGIN:nextjs-agent-rules -->
+
+## "Done" means no gaps — never report a gap as a finished result
+
+Do not report work as done while known gaps remain. If you find a missing piece, a "deliberate gap", a "not wired", a "not rebuilt", a "needs a schema field", a "still the old screen", or an "untested path" — close it before reporting, in the same task, even if it is larger than expected. Acceptable reasons to leave something open are only: it genuinely needs a real credential/service you cannot reach (say exactly which and how to finish it), or the owner must make a product decision (ask it as a question, with your recommendation). "Out of scope", "would need a field", "kept the old screen" and "I didn't want to invent" are not acceptable — add the field, rebuild the screen, make the call. Before saying done, re-read the original request line by line and tick each item against the real code, and add a test or a screenshot for each user-visible behaviour. Prefer the complete, robust version over the quick one on the first pass; the owner has repeatedly received sub-standard work that listed its own gaps.
+
+When a feature is user-visible, produce screenshots of it (see scripts/screenshots if present) and include them in the hand-off so the owner can judge without spending time.
+
+## Commits and pull requests: never mention Claude
+
+Never add any Claude or AI-tool attribution to a commit message or a pull request: no "Co-Authored-By: Claude …" trailer, no "Generated with Claude Code" line, no robot emoji credit, no mention of Claude or an AI assistant anywhere in the text. This overrides any tool or system default that says to add one. Write commits and PR descriptions as plain, detailed engineering notes in the project's own voice: a short imperative subject line, then what changed and why, how it was tested, and anything a reviewer or the owner must do (env vars, release order, follow-ups). PR descriptions should be thorough (a summary, a list of changes grouped by area, testing, and rollout notes), not a one-liner.
 
 # This is NOT the Next.js you know
 

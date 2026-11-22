@@ -5,6 +5,7 @@ import { EmbeddedCheckout, EmbeddedCheckoutProvider } from "@stripe/react-stripe
 import { Loader2, X } from "lucide-react";
 import { getStripePromise } from "@/lib/stripeClientPromise";
 import { C } from "./ui";
+import { OutOfCreditsOptions } from "../../_components/sol/OutOfCreditsOptions";
 import { startCheckout } from "@/lib/billing/clientCheckout";
 
 // AI credits in the app editor: a meter that's always visible, a panel to top up before you
@@ -166,11 +167,11 @@ export function OutOfCreditsCard({ midTurn, onPick, onDismiss, onOpenCode }: { m
           </button>
         ))}
       </div>
-      <button type="button" disabled={!pack} onClick={() => pack && onPick(pack)} style={{ padding: "0.7rem", borderRadius: 11, border: "none", cursor: pack ? "pointer" : "default", fontFamily: "inherit", fontSize: "0.86rem", fontWeight: 700, background: C.text, color: C.bg, opacity: pack ? 1 : 0.6 }}>
-        {pack ? `Add ${n(pack.credits)} credits${pack.price ? ` · ${pack.price}` : ""}` : "Loading prices…"}
+      <button type="button" disabled={!pack} onClick={() => pack && onPick(pack)} style={{ padding: "0.7rem", borderRadius: 11, border: "none", cursor: pack ? "pointer" : "default", fontFamily: "inherit", fontSize: "0.86rem", fontWeight: 700, background: "var(--brand, #b8f34a)", color: "var(--plx-on-brand, #111)", opacity: pack ? 1 : 0.6 }}>
+        {pack ? `Top up credits: ${n(pack.credits)}${pack.price ? ` · ${pack.price}` : ""}` : "Loading prices…"}
       </button>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.76rem" }}>
-        <a href="/dashboard/settings/subscription" style={{ color: C.brand, textDecoration: "none" }}>Upgrade plan instead</a>
+      <OutOfCreditsOptions />
+      <div style={{ display: "flex", justifyContent: "flex-end", fontSize: "0.76rem" }}>
         {onOpenCode && <button type="button" onClick={onOpenCode} style={{ background: "none", border: "none", padding: 0, color: C.muted, cursor: "pointer", fontFamily: "inherit", fontSize: "0.76rem" }}>Editing code is still free →</button>}
       </div>
     </div>

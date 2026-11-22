@@ -19,10 +19,12 @@ export type ModalProps = {
   /** Which element gets focus first (default: the first field/button inside). */
   initialFocusRef?: React.RefObject<HTMLElement | null>;
   hideClose?: boolean;
+  /** "right": a panel that slides in from the right edge on desktop (still a bottom sheet on phones). */
+  side?: "center" | "right";
 };
 
 /** A dialog: dimmed backdrop, focus kept inside, Esc closes, focus returns where it was. A bottom sheet on phones. */
-export function Modal({ open, onClose, title, description, children, footer, width = 560, closeOnBackdrop = true, initialFocusRef, hideClose }: ModalProps) {
+export function Modal({ open, onClose, title, description, children, footer, width = 560, closeOnBackdrop = true, initialFocusRef, hideClose, side = "center" }: ModalProps) {
   const ref = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -59,7 +61,7 @@ export function Modal({ open, onClose, title, description, children, footer, wid
   return (
     <Portal>
       <div
-        className="plx-overlay"
+        className={side === "right" ? "plx-overlay plx-overlay--drawer" : "plx-overlay"}
         onMouseDown={(e) => {
           if (closeOnBackdrop && e.target === e.currentTarget) onClose();
         }}
@@ -71,7 +73,7 @@ export function Modal({ open, onClose, title, description, children, footer, wid
           aria-labelledby={titleId}
           aria-describedby={description ? descId : undefined}
           tabIndex={-1}
-          className="plx-dialog"
+          className={side === "right" ? "plx-dialog plx-dialog--drawer" : "plx-dialog"}
           style={{ ["--plx-dialog-w" as string]: `${width}px` }}
           onKeyDown={(e) => trapTab(e, ref.current)}
         >

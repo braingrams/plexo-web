@@ -49,6 +49,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     previousPlan: user?.planBeforeDowngrade ?? null,
     trialAvailable: !!user && canStartTrial(user),
     homeOnly,
+    /** True on any page that isn't the homepage: on Free, visitors can't open it. */
+    isSecondaryPage: !!page.parentId,
     isApp: page.sourceType === "REACT_PROJECT",
     site: site
       ? {

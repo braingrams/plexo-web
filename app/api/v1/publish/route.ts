@@ -1,3 +1,5 @@
+import { domainCountGate, templateLimitGate } from "@/lib/plan/limitGates";
+import { limitGateResponse } from "@/lib/plan/planGateResponse";
 import { randomUUID } from "node:crypto";
 import { customDomainError } from "@/lib/plan/domainGate";
 import { planLabel } from "@/lib/plan/plans";
@@ -154,7 +156,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           throw new PlanLimitError(
             "PLAN_SITE_LIMIT_EXCEEDED",
             `The ${planLabel(resolved.subscriptionPlan)} plan keeps ${features.maxPublishedSites === 1 ? "one site" : `${features.maxPublishedSites} sites`} live at a time, and ${features.maxPublishedSites === 1 ? `"${live[0].name}" is` : "they're all"} live now. Upgrade to publish more sites, or call again without a domain to save this page as a draft.`,
-            { liveSiteIds: live.map((s) => s.id), liveSiteNames: live.map((s) => s.name) },
+            { liveSiteIds: live.map((s) => s.id), liveSiteNames: live.map((s) => s.name), requiredPlan: "PRO" },
           );
         }
       }
@@ -173,11 +175,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       (t) => !t.parentId && t.kind === kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
     ).length;
     if (templateCount >= limit) {
-      const label = kind === "EMAIL" ? "email templates" : "landing pages";
-      return NextResponse.json(
-        { error: `Template limit reached (${limit} ${label}). Upgrade plan to create more.` },
-        { status: 403 }
-      );
+      return limitGateResponse(templateLimitGate(kind === "EMAIL" ? "EMAIL" : "LANDING_PAGE", limit));
     }
   }
 
@@ -260,9 +258,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const currentDomainCount = domainCountBatches.reduce((sum, b) => sum + b.data.filter((d) => !d.planDisabledAt).length, 0);
   const domainLimit = getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
   if (currentDomainCount >= domainLimit) {
-    return NextResponse.json({
-      error: `Published domain limit reached (${domainLimit}). Unlink an existing domain to publish a new one.`
-    }, { status: 403 });
+    return limitGateResponse(domainCountGate(domainLimit));
   }
 
   // Check if domain is already registered — THE hot-path lookup (byDomain GSI1).

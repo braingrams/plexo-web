@@ -6,7 +6,7 @@ const facts = (over: Partial<SiteFacts>): SiteFacts => ({ ...EMPTY_FACTS, ...ove
 describe("computeTasks", () => {
   it("a brand-new store has the design done and the logo step next", () => {
     const p = computeTasks("store", facts({ hasSite: true }));
-    expect(p.tasks.map((t) => t.state)).toEqual(["done", "current", "upcoming", "upcoming", "upcoming", "upcoming"]);
+    expect(p.tasks.map((t) => t.state)).toEqual(["done", "current", "upcoming", "upcoming", "upcoming"]);
     expect(p.currentId).toBe("brand");
     expect(p.done).toBe(1);
   });
@@ -23,22 +23,33 @@ describe("computeTasks", () => {
     expect(p.tasks.find((t) => t.id === "pay")?.state).toBe("done");
   });
 
-  it("going live needs an address and a first publish", () => {
+  it("choosing the address and going online are ONE step, not two that repeat each other", () => {
     const base = facts({ hasSite: true, hasLogo: true, hasColors: true, productCount: 1, paymentsReady: true });
-    expect(computeTasks("store", { ...base, hasAddress: true }).currentId).toBe("live");
+    const p = computeTasks("store", base);
+    expect(p.currentId).toBe("finish");
+    expect(p.hasAddress).toBe(false);
+    expect(p.tasks.filter((t) => /address|online/i.test(t.title))).toHaveLength(0);
+    expect(p.tasks.at(-1)).toMatchObject({ id: "finish", title: "Finish up", kind: "finish" });
+  });
+
+  it("finishing needs an address and a first publish", () => {
+    const base = facts({ hasSite: true, hasLogo: true, hasColors: true, productCount: 1, paymentsReady: true });
+    const half = computeTasks("store", { ...base, hasAddress: true });
+    expect(half.currentId).toBe("finish");
+    expect(half.hasAddress).toBe(true);
     const done = computeTasks("store", { ...base, hasAddress: true, published: true });
     expect(done.allDone).toBe(true);
     expect(done.currentId).toBeNull();
   });
 
   it("a published site with no address is not online yet", () => {
-    expect(computeTasks("blog", facts({ hasSite: true, postCount: 1, published: true })).currentId).toBe("address");
+    expect(computeTasks("blog", facts({ hasSite: true, postCount: 1, published: true })).currentId).toBe("finish");
   });
 
-  it("covers every variant with an address-and-live finish", () => {
+  it("covers every variant with one finishing step (an app has its own: it is put online from its App tab)", () => {
     for (const v of ["store", "business", "blog", "course", "link", "app"] as const) {
       const p = computeTasks(v, EMPTY_FACTS);
-      expect(p.tasks.at(-1)?.id).toBe("live");
+      expect(p.tasks.at(-1)?.id).toBe(v === "app" ? "live" : "finish");
       expect(p.total).toBe(p.tasks.length);
     }
   });
@@ -57,6 +68,17 @@ describe("taskVariantFor", () => {
     expect(taskVariantFor({ kind: "Website", sells: true }, null)).toBe("store");
     expect(taskVariantFor({ kind: "Course" }, "store")).toBe("course");
     expect(taskVariantFor({ kind: "App with sign-in" }, null)).toBe("app");
+  });
+  it("handles WordPress migrated sites taking payments without forcing a product step", () => {
+    expect(taskVariantFor({ kind: "WordPress migrated site", sells: true, productCount: 0 }, null)).toBe("payments");
+    expect(taskVariantFor({ kind: "WordPress migrated site", sells: true, productCount: 3 }, null)).toBe("store");
+    expect(taskVariantFor({ kind: "WordPress migrated site", sells: false }, null)).toBe("business");
+    expect(taskVariantFor({ kind: "Website", hasDonations: true, productCount: 0 }, null)).toBe("payments");
+    expect(taskVariantFor({ kind: "Website", hasDonations: true, productCount: 2 }, null)).toBe("store");
+
+    const p = computeTasks("payments", facts({ hasSite: true, hasLogo: true, hasColors: true, paymentsReady: true }));
+    expect(p.tasks.map((t) => t.id)).toEqual(["design", "brand", "pay", "finish"]);
+    expect(p.tasks.find((t) => t.id === "product")).toBeUndefined();
   });
   it("falls back to the goal, then to a business site", () => {
     expect(taskVariantFor({ kind: "Website" }, "link-in-bio")).toBe("link");

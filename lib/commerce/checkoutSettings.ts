@@ -20,6 +20,12 @@ const TEXT_FIELDS = [
   "bankTransferInstructions",
   "pickupLocation",
   "pickupInstructions",
+  "termsText",
+  "termsUrl",
+  "orderSuccessMessage",
+  "orderEmailSubject",
+  "orderEmailHeading",
+  "orderEmailMessage",
 ] as const;
 type TextField = (typeof TEXT_FIELDS)[number];
 const MAX_TEXT: Record<TextField, number> = {
@@ -29,6 +35,12 @@ const MAX_TEXT: Record<TextField, number> = {
   bankTransferInstructions: 500,
   pickupLocation: 300,
   pickupInstructions: 500,
+  termsText: 10000,
+  termsUrl: 500,
+  orderSuccessMessage: 1000,
+  orderEmailSubject: 200,
+  orderEmailHeading: 200,
+  orderEmailMessage: 2000,
 };
 
 export function applyCheckoutSettingsInput(
@@ -44,6 +56,7 @@ export function applyCheckoutSettingsInput(
     if (value !== null && typeof value !== "string") throw new CheckoutSettingsError(`${key} must be text.`);
     const trimmed = (value ?? "").trim();
     if (trimmed.length > MAX_TEXT[key]) throw new CheckoutSettingsError(`${key} is too long (max ${MAX_TEXT[key]} characters).`);
+    if (key === "termsUrl" && trimmed && !/^https?:\/\/[^\s/$.?#][^\s]*$/i.test(trimmed)) throw new CheckoutSettingsError("The link to your terms should start with https://, like https://yoursite.com/terms.");
     if (trimmed) data[key] = trimmed;
     else toRemove.push(key);
   }
@@ -99,5 +112,11 @@ export function checkoutSettingsView(settings: SettingsItem | null | undefined) 
     pickupEnabled: fulfillment.pickupEnabled,
     pickupLocation: fulfillment.pickupLocation,
     pickupInstructions: fulfillment.pickupInstructions,
+    termsText: settings?.termsText ?? null,
+    termsUrl: settings?.termsUrl ?? null,
+    orderSuccessMessage: settings?.orderSuccessMessage ?? null,
+    orderEmailSubject: settings?.orderEmailSubject ?? null,
+    orderEmailHeading: settings?.orderEmailHeading ?? null,
+    orderEmailMessage: settings?.orderEmailMessage ?? null,
   };
 }

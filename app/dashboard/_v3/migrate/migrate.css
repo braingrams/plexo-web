@@ -42,12 +42,23 @@
 .plx-opt p { margin: 0; font-size: 14px; color: var(--plx-muted); line-height: 1.5; }
 
 /* Stat cards */
-.plx-mvstats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr)); gap: 12px; }
-.plx-mvstat { display: flex; flex-direction: column; gap: 4px; padding: 16px; border-radius: var(--plx-radius-card); background: var(--plx-surface); border: 1px solid var(--plx-border); min-width: 0; }
+.plx-mvstats { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; }
+.plx-mvstat { grid-column: span 2; display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; border-radius: var(--plx-radius-card); background: var(--plx-surface); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-card); transition: border-color .15s ease; min-width: 0; }
+.plx-mvstat:hover { border-color: var(--plx-border-strong); }
 .plx-mvstat__icon { color: var(--plx-deep); margin-bottom: 4px; }
-.plx-mvstat__num { font-size: 30px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.plx-mvstat__label { font-size: 14px; color: var(--plx-muted); font-weight: 600; }
+.plx-mvstat__num { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.plx-mvstat__label { font-size: 14px; color: var(--plx-muted); font-weight: 600; line-height: 1.35; }
 .plx-mvstat[data-tone="warning"] .plx-mvstat__num { color: var(--plx-warning); }
+/* 5 cards: 3 on row 1 (span 2 each = 6), 2 on row 2 (span 3 each = 6) full width without weird gaps */
+.plx-mvstats > .plx-mvstat:nth-child(4):nth-last-child(2),
+.plx-mvstats > .plx-mvstat:nth-child(5):last-child {
+  grid-column: span 3;
+}
+@media (max-width: 640px) {
+  .plx-mvstats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .plx-mvstat { grid-column: span 1; padding: 14px 12px; }
+  .plx-mvstats > .plx-mvstat:last-child:nth-child(odd) { grid-column: span 2; }
+}
 
 /* Vertical stepper (progress) */
 .plx-vstep { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }

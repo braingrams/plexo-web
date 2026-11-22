@@ -5,6 +5,7 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { requireTemplateScope } from "@/server/requireTemplateScope";
 import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutDynamo";
 import { designFormatOf, isV2Design } from "@/lib/v2/design";
+import { escapeHtmlAttr } from "@/lib/pub/htmlInject";
 import { Template } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
 
@@ -37,7 +38,7 @@ type SiteMetaBody = {
 async function resolveRootTemplate(
   request: NextRequest,
   id: string,
-): Promise<{ error: NextResponse; template?: undefined } | { error?: undefined; template: { id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; organizationId: string; parentId?: string | null; designFormat?: string | null; designJson: unknown } }> {
+): Promise<{ error: NextResponse; template?: undefined } | { error?: undefined; template: { id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; organizationId: string; parentId?: string | null; designFormat?: string | null; designJson: unknown; sourceType?: "BUILDER" | "RAW_UPLOAD" | "REACT_PROJECT"; compiledHtml?: string } }> {
   const resolved = await resolveUser(request);
   if (!resolved) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
 async function resolveUpdatableRootTemplate(
   request: NextRequest,
   id: string,
-): Promise<{ error: NextResponse; template?: undefined } | { error?: undefined; template: { id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; organizationId: string; parentId?: string | null; designFormat?: string | null; designJson: unknown } }> {
+): Promise<{ error: NextResponse; template?: undefined } | { error?: undefined; template: { id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; organizationId: string; parentId?: string | null; designFormat?: string | null; designJson: unknown; sourceType?: "BUILDER" | "RAW_UPLOAD" | "REACT_PROJECT"; compiledHtml?: string } }> {
   const resolved = await resolveUser(request);
   if (!resolved) return { error: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
 
@@ -114,10 +115,58 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   if (body.ogImageUrl !== undefined) target.ogImageUrl = body.ogImageUrl.trim();
 
   let compiledHtml: string;
-  try {
-    compiledHtml = await compileTemplateWithSiteLayout(template, designJson);
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be rebuilt." }, { status: 400 });
+  if (template.sourceType === "RAW_UPLOAD") {
+    let out = template.compiledHtml || "";
+    const headMatch = out.match(/<head[^>]*>/i);
+    const insertIntoHead = (tag: string) => {
+      if (headMatch && headMatch.index !== undefined) {
+        const idx = headMatch.index + headMatch[0].length;
+        return out.slice(0, idx) + "\n  " + tag + out.slice(idx);
+      }
+      return tag + "\n" + out;
+    };
+    if (body.htmlTitle !== undefined) {
+      const val = escapeHtmlAttr(body.htmlTitle.trim().slice(0, 200));
+      if (/<title\b[^>]*>[\s\S]*?<\/title>/i.test(out)) {
+        out = out.replace(/<title\b[^>]*>[\s\S]*?<\/title>/i, `<title>${val}</title>`);
+      } else {
+        out = insertIntoHead(`<title>${val}</title>`);
+      }
+    }
+    if (body.metaDescription !== undefined) {
+      const val = escapeHtmlAttr(body.metaDescription.trim().slice(0, 300));
+      if (/<meta\b[^>]*name=["']description["'][^>]*>/i.test(out)) {
+        out = out.replace(/<meta\b[^>]*name=["']description["'][^>]*>/i, `<meta name="description" content="${val}">`);
+      } else {
+        out = insertIntoHead(`<meta name="description" content="${val}">`);
+      }
+      if (/<meta\b[^>]*property=["']og:description["'][^>]*>/i.test(out)) {
+        out = out.replace(/<meta\b[^>]*property=["']og:description["'][^>]*>/i, `<meta property="og:description" content="${val}">`);
+      }
+    }
+    if (body.favicon !== undefined) {
+      const val = escapeHtmlAttr(body.favicon.trim());
+      if (/<link\b[^>]*rel=["'](icon|shortcut icon)["'][^>]*>/i.test(out)) {
+        out = out.replace(/<link\b[^>]*rel=["'](icon|shortcut icon)["'][^>]*>/i, `<link rel="icon" href="${val}">`);
+      } else if (val) {
+        out = insertIntoHead(`<link rel="icon" href="${val}">`);
+      }
+    }
+    if (body.ogImageUrl !== undefined) {
+      const val = escapeHtmlAttr(body.ogImageUrl.trim());
+      if (/<meta\b[^>]*property=["']og:image["'][^>]*>/i.test(out)) {
+        out = out.replace(/<meta\b[^>]*property=["']og:image["'][^>]*>/i, `<meta property="og:image" content="${val}">`);
+      } else if (val) {
+        out = insertIntoHead(`<meta property="og:image" content="${val}">`);
+      }
+    }
+    compiledHtml = out;
+  } else {
+    try {
+      compiledHtml = await compileTemplateWithSiteLayout(template, designJson);
+    } catch (err) {
+      return NextResponse.json({ error: err instanceof Error ? err.message : "This page couldn't be rebuilt." }, { status: 400 });
+    }
   }
 
   await Template.patch({ id: template.id })

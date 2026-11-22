@@ -1,3 +1,5 @@
+import type { PaidPlanId } from "@/lib/plan/plans";
+import { templateLimitGate } from "@/lib/plan/limitGates";
 import { randomUUID } from "node:crypto";
 import { Template } from "@/lib/db/contentEntities";
 import { getTierFeatures } from "@/lib/subscription";
@@ -6,19 +8,25 @@ import { writeFiles, snapshotVersion, type FileWrite } from "./fileStore";
 import { createPreviewHost } from "./previewHost";
 import { chunk } from "./concurrency";
 import { PROJECT_LIMITS } from "./paths";
+import { countsAsSite } from "@/lib/plan/countsAsSite";
 
 export type ProjectOwner = { userId: string; organizationId: string; subscriptionPlan: string; userName?: string };
 
-export class ProjectLimitError extends Error {}
+export class ProjectLimitError extends Error {
+  constructor(message: string, readonly requiredPlan?: PaidPlanId) {
+    super(message);
+  }
+}
 
 /** Projects are sites — they share the plan's site limit with builder/raw sites, so an
  * owner never has to understand two separate quotas. */
 export async function assertCanCreateSite(owner: ProjectOwner): Promise<void> {
   const features = getTierFeatures(owner.subscriptionPlan);
   const { data: orgTemplates } = await Template.query.byOrg({ organizationId: owner.organizationId }).go({ pages: "all", attributes: ["id", "parentId", "kind"] });
-  const rootCount = orgTemplates.filter((t) => !t.parentId && t.kind === "LANDING_PAGE").length;
+  const rootCount = orgTemplates.filter((t) => countsAsSite(t)).length;
   if (rootCount >= features.maxLandingPages) {
-    throw new ProjectLimitError(`You've reached your plan's limit of ${features.maxLandingPages} sites. Delete one you no longer need, or upgrade to create more.`);
+    const gate = templateLimitGate("LANDING_PAGE", features.maxLandingPages);
+    throw new ProjectLimitError(gate.message, gate.requiredPlan);
   }
 }
 

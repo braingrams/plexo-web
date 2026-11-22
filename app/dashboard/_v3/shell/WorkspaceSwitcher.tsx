@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavAction } from "./useNavAction";
 import { Check, ChevronsUpDown, Settings } from "lucide-react";
 import { CURRENT_SITE_COOKIE } from "@/lib/dashboardV3/sites";
 import { Avatar } from "../ui/Avatar";
@@ -17,7 +17,7 @@ export const roleLabel = (role: string) => ROLE_LABELS[role] ?? role;
 
 /** Switching reuses the same call the old dashboard and /choose-org make, then reloads everything for that workspace. */
 function useSwitchWorkspace(currentId: string | null | undefined, onSwitch?: (id: string) => void) {
-  const router = useRouter();
+  const nav = useNavAction();
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const run = async (id: string, done: () => void) => {
@@ -34,8 +34,7 @@ function useSwitchWorkspace(currentId: string | null | undefined, onSwitch?: (id
       // The site they were last on belongs to the other workspace; let the new one choose its own.
       document.cookie = `${CURRENT_SITE_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
       done();
-      router.push("/dashboard");
-      router.refresh();
+      nav.pushFresh("/dashboard");
     } catch {
       toast.show({ tone: "danger", title: "We couldn't switch workspace", description: "Check your internet connection and try again." });
     } finally {

@@ -1,5 +1,7 @@
 "use client";
 
+import { GateOrError } from "../../../_components/UpgradePrompt";
+import { rememberPlanGate } from "@/lib/plan/planGate";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { VariantsEditor, draftsFromProduct, variantPayload, type OptionDraft, type VariantDraft } from "./VariantsEditor";
 import { formatMoney } from "@/lib/commerce/formatMoney";
@@ -387,7 +389,7 @@ export function ProductsClient({
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to save product.");
+      if (!res.ok) { rememberPlanGate(data); throw new Error(data.error ?? "Failed to save product."); }
 
       const saved = data.product;
       const summary: ProductSummary = {
@@ -1849,7 +1851,9 @@ export function ProductsClient({
               )}
 
               {error && (
-                <p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)" }}>{error}</p>
+                <GateOrError error={error}>
+                  <p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)" }}>{error}</p>
+                </GateOrError>
               )}
 
               <div

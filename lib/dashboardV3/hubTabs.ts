@@ -5,10 +5,11 @@
 import type { Experience } from "./nav";
 import type { SiteKindLabel } from "./sites";
 
-export type HubTabId = "app" | "pages" | "products" | "orders" | "blog" | "course" | "brand" | "address" | "visits" | "settings" | "advanced";
+export type HubTabId = "app" | "pages" | "products" | "orders" | "shop" | "donations" | "blog" | "course" | "brand" | "address" | "visits" | "health" | "settings" | "more" | "advanced";
 
 export type HubFeatures = {
   store: boolean;
+  donations?: boolean;
   blog: boolean;
   course: boolean;
   /** A server app with sign-in (React project). */
@@ -17,6 +18,8 @@ export type HubFeatures = {
   ownCode: boolean;
   /** An app Plexo hosts from the owner's own code: "server" runs on a server, "static" is plain files. Replaces Pages with an App tab. */
   deployed?: "server" | "static" | null;
+  /** Moved in from WordPress. */
+  migrated?: boolean;
 };
 
 export const NO_FEATURES: HubFeatures = { store: false, blog: false, course: false, app: false, ownCode: false, deployed: null };
@@ -28,12 +31,16 @@ const TAB_LABELS: Record<HubTabId, string> = {
   pages: "Pages",
   products: "Products",
   orders: "Orders",
+  shop: "Shop",
+  donations: "Donations",
   blog: "Blog",
   course: "Course",
   brand: "Brand",
   address: "Web address",
   visits: "Visits",
+  health: "Site health",
   settings: "Settings",
+  more: "More",
   advanced: "Advanced",
 };
 
@@ -43,23 +50,23 @@ export function parseHubTab(value: unknown): HubTabId | null {
   return typeof value === "string" && (HUB_TAB_IDS as string[]).includes(value) ? (value as HubTabId) : null;
 }
 
-/** Tabs only for what the site uses; beginners see Visits on Home instead, pros see everything (plus Advanced). */
+/** Tabs only for what the site uses; everyone gets Visits and Site health, pros also get Advanced. */
 export function hubTabs(features: HubFeatures, experience: Experience = "beginner"): HubTab[] {
   if (features.deployed) {
     // Only what works for hosted code: its own App tab, a web address, visits for pros, and settings.
-    const own: HubTabId[] = ["app", "address"];
-    if (experience !== "beginner") own.push("visits");
-    own.push("settings");
+    const own: HubTabId[] = ["app", "address", "visits", "health"];
+    own.push("settings", "more");
     if (experience === "pro") own.push("advanced");
     return own.map((id) => ({ id, label: TAB_LABELS[id], tour: `hub-tab-${id}` }));
   }
   const ids: HubTabId[] = ["pages"];
-  if (features.store) ids.push("products", "orders");
+  if (features.store) ids.push("products", "orders", "shop");
+  if (features.donations) ids.push("donations");
   if (features.blog) ids.push("blog");
   if (features.course) ids.push("course");
   ids.push("brand", "address");
-  if (experience !== "beginner") ids.push("visits");
-  ids.push("settings");
+  // Visits (with the Google Analytics connection) and Site health are for everyone: knowing how a site is doing is the point.
+  ids.push("visits", "health", "settings", "more");
   // Everything a pro used to find on the old per-site page, right here (lib/dashboardV3/hubAdvanced.ts).
   if (experience === "pro") ids.push("advanced");
   return ids.map((id) => ({ id, label: TAB_LABELS[id], tour: `hub-tab-${id}` }));
@@ -68,6 +75,8 @@ export function hubTabs(features: HubFeatures, experience: Experience = "beginne
 /** The tab to show for `?tab=`: the one asked for if this site has it, else Pages. */
 export function resolveHubTab(requested: unknown, features: HubFeatures, experience: Experience = "beginner"): HubTabId {
   const wanted = parseHubTab(requested);
+  if (wanted === "shop" && !features.deployed && (features.store || features.donations || features.migrated)) return "shop";
+  if (wanted === "donations" && !features.deployed && (features.donations || features.store)) return "donations";
   const tabs = hubTabs(features, experience);
   return wanted && tabs.some((t) => t.id === wanted) ? wanted : tabs[0].id;
 }
@@ -82,16 +91,18 @@ export function hubKindLabel(f: HubFeatures): SiteKindLabel {
   if (f.deployed === "static") return "Uploaded app";
   if (f.app) return "App with sign-in";
   if (f.course) return "Course";
+  if (f.migrated) return "WordPress migrated site";
   if (f.store) return "Online store";
   if (f.blog) return "Blog";
   return "Website";
 }
 
-export type AddOnId = "blog" | "course" | "bookings" | "newsletter" | "store";
+export type AddOnId = "blog" | "course" | "bookings" | "newsletter" | "store" | "donations";
 export type AddOn = { id: AddOnId; title: string; body: string; action: string };
 
 const ADD_ONS: AddOn[] = [
   { id: "store", title: "Sell products", body: "Take payments for things you make or do. We set up the shop, basket and checkout.", action: "Start selling" },
+  { id: "donations", title: "Accept donations", body: "Let people give once or every month. We set up donations and you can take gifts.", action: "Take donations" },
   { id: "blog", title: "A blog", body: "Share news and stories. We set up a place for your posts.", action: "Add a blog" },
   { id: "course", title: "A course", body: "Teach lessons to people who sign up.", action: "Add a course" },
   { id: "bookings", title: "Bookings", body: "Let people book a time with you and pay for it.", action: "Take bookings" },
@@ -103,6 +114,7 @@ export function addOnsFor(features: HubFeatures): AddOn[] {
   if (features.app) return [];
   return ADD_ONS.filter((a) => {
     if (a.id === "store" || a.id === "bookings") return !features.store;
+    if (a.id === "donations") return !features.donations;
     if (a.id === "blog") return !features.blog;
     if (a.id === "course") return !features.course;
     return true;
@@ -110,7 +122,7 @@ export function addOnsFor(features: HubFeatures): AddOn[] {
 }
 
 /** Pages Plexo sets up for a shop; the owner doesn't have to touch them. */
-const SYSTEM_SLUGS = new Set(["shop", "store", "checkout", "order-confirmation", "track-order", "product"]);
+export const SYSTEM_SLUGS = new Set(["shop", "store", "checkout", "order-confirmation", "track-order", "product"]);
 
 export type PageNoteInput = { slug: string | null; isRoot: boolean; isPublished: boolean; archivedByPlan: boolean; storeOn: boolean; ownCode: boolean };
 

@@ -551,8 +551,15 @@ export const CommerceSettings = new Entity(
         default: "BYO_PAYSTACK",
       },
       maildripApiKeyEncrypted: { type: "string" },
+      maildripConnectedEmail: { type: "string" },
       maildripPaidGroupId: { type: "string" },
       maildripNewsletterGroupId: { type: "string" },
+      emailBrandEnabled: { type: "boolean", default: false },
+      emailSenderName: { type: "string" },
+      emailSenderEmail: { type: "string" },
+      emailLogoUrl: { type: "string" },
+      emailBrandColor: { type: "string" },
+      emailFooterText: { type: "string" },
       // Shows a site-wide newsletter popup (public/newsletter-popup.js) on every published
       // page, independent of `enabled` (Commerce/payments) — a site doesn't need to sell
       // anything to want newsletter capture. Only takes effect once
@@ -562,6 +569,9 @@ export const CommerceSettings = new Entity(
       newsletterPopupEnabled: { type: "boolean", default: false },
       notificationEmail: { type: "string" },
       enabled: { type: "boolean", default: false },
+      // Independent from `enabled` (which controls the e-commerce store / products / cart):
+      // allows taking donations and payments without forcing a full store catalog on the site.
+      donationsEnabled: { type: "boolean", default: true },
       // Site-wide store currency (ISO 4217) — one per site, not per product. See
       // lib/commerce/currency.ts for the curated set of currencies this app actually
       // accepts and lib/paystack.ts for where this replaces a hardcoded "NGN" literal.
@@ -613,6 +623,14 @@ export const CommerceSettings = new Entity(
       pickupEnabled: { type: "boolean", default: true },
       pickupLocation: { type: "string" },
       pickupInstructions: { type: "string" },
+      // Terms of sale / refund policy: text the owner writes (shown on a hosted page) and/or a
+      // link to their own policy. Linked from checkout and order emails. See lib/commerce/terms.ts.
+      termsText: { type: "string" },
+      termsUrl: { type: "string" },
+      orderSuccessMessage: { type: "string" },
+      orderEmailMessage: { type: "string" },
+      orderEmailHeading: { type: "string" },
+      orderEmailSubject: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },
@@ -917,6 +935,9 @@ export const CommerceDonationCampaign = new Entity(
       raisedMinor: { type: "number", default: 0 },
       donationCount: { type: "number", default: 0 },
       thankYouMessage: { type: "string" },
+      emailSubject: { type: "string" },
+      emailHeading: { type: "string" },
+      emailBody: { type: "string" },
       buttonLabel: { type: "string" },
       active: { type: "boolean", default: true },
       /** Where it came from when created by a migration, e.g. "wp-payment-form:3453". */

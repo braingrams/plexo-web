@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { EntityItem } from "electrodb";
 import { Organization, PlatformSettings } from "@/lib/db/coreEntities";
-import { CommerceWallet, CommerceWalletLedgerEntry, CommerceOrder } from "@/lib/db/commerceEntities";
+import { CommerceWallet, CommerceWalletLedgerEntry, CommerceOrder, CommerceSettings } from "@/lib/db/commerceEntities";
 
 type OrderItem = EntityItem<typeof CommerceOrder>;
 
@@ -30,12 +30,16 @@ export async function resolveCommerceWallet(templateId: string, organizationId: 
   const { data: existing } = await CommerceWallet.get({ scopeId }).go();
   if (existing) return existing;
 
+  const { data: settings } = await CommerceSettings.get({ templateId }).go().catch(() => ({ data: null }));
+  const currency = settings?.currency || "USD";
+
   try {
     await CommerceWallet.create({
       id: randomUUID(),
       organizationId,
       templateId: pooled ? undefined : templateId,
       scopeId,
+      currency,
     }).go();
   } catch (err) {
     if (!isConditionalCheckFailure(err)) throw err; // lost the create race — another concurrent first sale beat us to it
@@ -58,6 +62,10 @@ export async function creditCommerceWallet(order: OrderItem): Promise<void> {
     resolveCommerceWallet(order.templateId, order.organizationId),
     PlatformSettings.get({}).go(),
   ]);
+
+  if (order.currency && wallet.currency !== order.currency) {
+    await CommerceWallet.patch({ scopeId: wallet.scopeId }).set({ currency: order.currency }).go().catch(() => {});
+  }
 
   const feeBps = platformSettings?.commercePlatformFeeBps ?? 0;
   const feeCents = Math.round((order.amountMinor * feeBps) / 10000);

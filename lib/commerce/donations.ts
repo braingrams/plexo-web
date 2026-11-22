@@ -21,6 +21,7 @@ import { formatMoney } from "@/lib/commerce/formatMoney";
 import { ensureOrderConfirmationPage } from "@/lib/commerce/storefrontLayout";
 import { resolveSitePublicUrl } from "@/lib/commerce/siteUrlDynamo";
 import { resolveMaildripApiKey, sendCommerceEmail } from "@/lib/mail/maildrip";
+import { resolveSiteEmailConfig } from "@/lib/mail/siteEmailSettings";
 import { buildDonationReceiptEmail } from "@/lib/mail/templates";
 import { getOrgBrandDynamo } from "@/server/orgDynamo";
 import { Template } from "@/lib/db/contentEntities";
@@ -102,6 +103,9 @@ export function normalizeCampaignInput(body: Record<string, unknown>, partial = 
     values.goalAmountMinor = goal ?? undefined;
   }
   if (body.thankYouMessage !== undefined) values.thankYouMessage = typeof body.thankYouMessage === "string" ? body.thankYouMessage.trim().slice(0, 1000) : undefined;
+  if (body.emailSubject !== undefined) values.emailSubject = typeof body.emailSubject === "string" ? body.emailSubject.trim().slice(0, 200) : undefined;
+  if (body.emailHeading !== undefined) values.emailHeading = typeof body.emailHeading === "string" ? body.emailHeading.trim().slice(0, 200) : undefined;
+  if (body.emailBody !== undefined) values.emailBody = typeof body.emailBody === "string" ? body.emailBody.trim().slice(0, 2000) : undefined;
   if (body.buttonLabel !== undefined) values.buttonLabel = typeof body.buttonLabel === "string" ? body.buttonLabel.trim().slice(0, 40) : undefined;
   if (body.active !== undefined) values.active = body.active !== false;
   return { values };
@@ -127,7 +131,7 @@ export function publicCampaignView(campaign: CampaignItem, settings: SettingsIte
     thankYouMessage: campaign.thankYouMessage ?? null,
     buttonLabel: campaign.buttonLabel ?? null,
     currency: settings?.currency ?? "NGN",
-    accepting: Boolean(settings?.enabled) && (campaign.active ?? true) && (gateway.gatewayReady || gateway.bankTransferReady),
+    accepting: (settings?.donationsEnabled ?? true) && (campaign.active ?? true) && (gateway.gatewayReady || gateway.bankTransferReady),
     bankTransferAvailable: gateway.bankTransferReady,
   };
 }
@@ -219,7 +223,7 @@ export async function startDonation(input: StartDonationInput): Promise<StartDon
     CommerceSettings.get({ templateId: input.templateId }).go(),
   ]);
   if (!campaign || !(campaign.active ?? true)) throw new DonationError("This donation form isn't accepting donations right now.", 404);
-  if (!settings?.enabled) throw new DonationError("This site isn't accepting donations yet — please check back soon.");
+  if (!settings || settings.donationsEnabled === false) throw new DonationError("This site isn't accepting donations yet — please check back soon.");
   const planBlock = await checkoutPlanBlock(settings);
   if (planBlock) throw new DonationError("This site isn't accepting donations right now — please check back soon.");
 
@@ -430,17 +434,18 @@ export async function handleDonationPaid(order: OrderItem, settings: SettingsIte
 }
 
 async function sendDonationReceipt(order: OrderItem, subscription: DonationSubscriptionItem | null): Promise<void> {
-  const { data: settings } = await CommerceSettings.get({ templateId: order.templateId }).go();
-  const apiKey = settings ? resolveMaildripApiKey(settings) : null;
+  const [emailConfig, { data: site }, siteUrl] = await Promise.all([
+    resolveSiteEmailConfig(order.templateId, order.organizationId),
+    Template.get({ id: order.templateId }).go(),
+    resolveSitePublicUrl(order.templateId),
+  ]);
+  const apiKey = emailConfig.apiKey;
   if (!apiKey) return;
   const meta = (order.metadata ?? {}) as { campaignId?: string; campaignName?: string };
-  const [{ data: site }, brand, siteUrl, campaignRes] = await Promise.all([
-    Template.get({ id: order.templateId }).go(),
-    getOrgBrandDynamo(order.organizationId),
-    resolveSitePublicUrl(order.templateId),
-    meta.campaignId ? CommerceDonationCampaign.get({ templateId: order.templateId, id: meta.campaignId }).go() : Promise.resolve({ data: null }),
-  ]);
-  const siteName = site?.name ?? "our organization";
+  const campaignRes = meta.campaignId
+    ? await CommerceDonationCampaign.get({ templateId: order.templateId, id: meta.campaignId }).go()
+    : { data: null };
+  const siteName = emailConfig.brand?.name || site?.name || "our organization";
   const { subject, html } = buildDonationReceiptEmail({
     siteName,
     donorName: order.customerName ?? null,
@@ -450,10 +455,37 @@ async function sendDonationReceipt(order: OrderItem, subscription: DonationSubsc
     receiptNumber: order.orderNumber,
     dateIso: order.createdAt ?? new Date().toISOString(),
     thankYouMessage: campaignRes.data?.thankYouMessage ?? null,
+    emailSubject: campaignRes.data?.emailSubject ?? null,
+    emailHeading: campaignRes.data?.emailHeading ?? null,
+    emailBody: campaignRes.data?.emailBody ?? null,
     manageUrl: subscription ? `${siteUrl}/donation/manage?token=${encodeURIComponent(subscription.manageToken)}` : null,
-    brand,
+    brand: emailConfig.brand,
+    footerText: emailConfig.footerText,
   });
-  await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, context: "commerce_donation_receipt", organizationId: order.organizationId, templateId: order.templateId });
+  await sendCommerceEmail(apiKey, {
+    to: order.customerEmail,
+    subject,
+    html,
+    fromName: emailConfig.fromName,
+    fromEmail: emailConfig.fromEmail,
+    context: "commerce_donation_receipt",
+    organizationId: order.organizationId,
+    templateId: order.templateId,
+  });
+}
+
+/** Resends the donation confirmation receipt to the donor. */
+export async function resendDonationReceipt(templateId: string, orderId: string): Promise<{ success: boolean; to: string }> {
+  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go();
+  if (!order) throw new Error("Order not found.");
+  const meta = (order.metadata ?? {}) as { campaignId?: string; subscriptionId?: string | null; renewal?: boolean };
+  let subscription: DonationSubscriptionItem | null = null;
+  if (meta.subscriptionId) {
+    const res = await CommerceDonationSubscription.get({ templateId, id: meta.subscriptionId }).go();
+    subscription = res.data ?? null;
+  }
+  await sendDonationReceipt(order, subscription);
+  return { success: true, to: order.customerEmail };
 }
 
 /**
@@ -771,7 +803,7 @@ export async function ensureDonationsReady(templateId: string, organizationId: s
   const { data: anyOrder } = await CommerceOrder.query.primary({ templateId }).go({ limit: 1 });
   const currency = opts.currency && /^[A-Z]{3}$/.test(opts.currency) && anyOrder.length === 0 ? opts.currency : undefined;
   await CommerceSettings.patch({ templateId })
-    .set({ enabled: true, ...(currency ? { currency } : {}) })
+    .set({ donationsEnabled: true, ...(currency ? { currency } : {}) })
     .go();
 }
 
@@ -795,7 +827,7 @@ export async function listDonationsOverview(templateId: string, opts: { allGifts
   const gateway = resolveDonationGateway(settings);
   return {
     currency: settings?.currency ?? "NGN",
-    enabled: Boolean(settings?.enabled),
+    enabled: Boolean(settings?.donationsEnabled ?? true),
     paymentsReady: gateway.gatewayReady || gateway.bankTransferReady,
     monthlyReady: gateway.gatewayReady,
     totals: {
@@ -821,6 +853,9 @@ export async function listDonationsOverview(templateId: string, opts: { allGifts
         raisedMinor: c.raisedMinor ?? 0,
         donationCount: c.donationCount ?? 0,
         thankYouMessage: c.thankYouMessage ?? null,
+        emailSubject: (c as { emailSubject?: string | null }).emailSubject ?? null,
+        emailHeading: (c as { emailHeading?: string | null }).emailHeading ?? null,
+        emailBody: (c as { emailBody?: string | null }).emailBody ?? null,
         buttonLabel: c.buttonLabel ?? null,
         active: c.active ?? true,
         source: c.source ?? null,

@@ -28,3 +28,7 @@
 .plx-sbp__done { display: flex; gap: 10px; align-items: flex-start; padding: 14px 16px; border-radius: 14px; background: var(--plx-success-subtle); color: var(--plx-text); font-size: 14px; line-height: 1.5; }
 .plx-sbp__err { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--plx-danger-subtle); color: var(--plx-text); font-size: 14px; line-height: 1.5; }
 @media (max-width: 560px) { .plx-sbp__opt { padding-right: 12px; } .plx-sbp__list { max-height: none; } }
+.plx-sbp__look { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--plx-radius-card); background: var(--plx-tint); }
+.plx-sbp__dots { display: inline-flex; gap: 6px; }
+.plx-sbp__dots i { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--plx-surface); box-shadow: 0 0 0 1px var(--plx-border); }
+.plx-sbp__fonts { font-size: 14px; font-weight: 600; color: var(--plx-muted); }

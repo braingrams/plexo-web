@@ -18,12 +18,14 @@ export type SeeAllDesignsProps = {
   busy?: boolean;
   mock?: boolean;
   onUse: (design: PickerDesign) => Promise<void> | void;
+  /** What the owner described (and what SOL understood from it), so the designs fit them. */
+  extra?: { about?: string; industry?: string; tone?: string };
 };
 
-export function SeeAllDesigns({ goal, name, brand, busy, mock, onUse }: SeeAllDesignsProps) {
+export function SeeAllDesigns({ goal, name, brand, extra, busy, mock, onUse }: SeeAllDesignsProps) {
   useEffect(() => {
     try { sessionStorage.setItem(PENDING_KEY, JSON.stringify({ goal, name })); } catch { /* the return still works with the defaults */ }
   }, [goal, name]);
-  const profile = profileFor(goal, name, brand);
+  const profile = profileFor(goal, name, brand, extra);
   return <DesignPicker goal={goal} profile={profile} mock={mock} busy={busy} returnTo={MARKET_RETURN_PATH} onUse={onUse} />;
 }

@@ -1,4 +1,6 @@
 import { createHash } from "node:crypto";
+import { brandFontCss } from "@/lib/fonts/brandFontCss";
+import { readSiteBrand } from "@/lib/dashboardV3/brandLook";
 import { brandStylesheet, createDefaultDesignSystem, type DesignSystem } from "@charisol/plexo-sdk/v2/compile";
 import { baseOf, componentFromStrata, createStrataClient, planAutoUpdate, StrataError, tokenFromStrata, type StrataProjectSummary, type StrataSnapshot } from "@charisol/plexo-sdk/v2/strata";
 import { SiteBrand, SiteBrandMapping, StrataProjectWebhook } from "@/lib/db/coreEntities";
@@ -62,13 +64,13 @@ export class BrandError extends Error {
   }
 }
 
-export const RECONNECT_NOTE = "Plexo lost access to this Strata project. Link it again to keep your brand up to date.";
-export const NEEDS_REVIEW_NOTE = "Strata has changes that need a look before they go live — open Branding in the editor.";
-const TRY_AGAIN_NOTE = "Couldn't reach Strata just now. Plexo will try again in a few minutes.";
-export const WAITING_FOR_PUBLISH_NOTE = "Your brand is saved in Strata. Press Publish there once to start keeping it in sync.";
+export const RECONNECT_NOTE = "Plexo lost access to this brand. Link it again to keep your brand up to date.";
+export const NEEDS_REVIEW_NOTE = "Your brand has changes that need a look before they go live — open Branding in the editor.";
+const TRY_AGAIN_NOTE = "Couldn't reach your brand just now. Plexo will try again in a few minutes.";
+export const WAITING_FOR_PUBLISH_NOTE = "Your brand is saved but not published yet. Publish it once so your website can follow it.";
 const NOT_PUBLISHED_NOTE = WAITING_FOR_PUBLISH_NOTE;
-const NEW_LOGO_NOTE = "Your new logo from Strata is on your site.";
-const NEW_LOGO_SAVED_NOTE = "Your new logo from Strata is saved and will be used on new pages.";
+const NEW_LOGO_NOTE = "Your new logo is on your site.";
+const NEW_LOGO_SAVED_NOTE = "Your new logo is saved and will be used on new pages.";
 const LOCK_STALE_MS = 10 * 60 * 1000;
 
 const now = () => new Date().toISOString();
@@ -79,7 +81,7 @@ type Row = NonNullable<Awaited<ReturnType<ReturnType<typeof SiteBrand.get>["go"]
 
 function base(): string {
   const url = strataApiUrl();
-  if (!url) throw new BrandError("Strata isn't set up on this Plexo yet.", 503);
+  if (!url) throw new BrandError("Saving your brand isn't available on this Plexo yet.", 503);
   return url;
 }
 
@@ -91,7 +93,7 @@ export async function strataFetch(path: string, token: string, init: { method?: 
       body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
     });
   } catch {
-    throw new StrataError("Couldn't reach Strata. Check your connection and try again.", "network");
+    throw new StrataError("Couldn't reach your brand. Check your connection and try again.", "network");
   }
 }
 
@@ -107,18 +109,23 @@ export async function pullPublished(token: string, projectId: string, opts: { al
   if (res.status === 404 || res.status === 400) {
     const body = (await res.clone().json().catch(() => ({}))) as { error?: { code?: string } };
     const notPublished = body.error?.code === "NOT_PUBLISHED";
-    // 400: a Strata from before ?source existed. NOT_PUBLISHED: nothing published yet (only a link may use the draft).
-    if (res.status === 400 || (notPublished && opts.allowDraft)) {
-      res = await strataFetch(`/projects/${pid(projectId)}/design-system`, token);
-      draft = notPublished;
+    // Check if the project itself exists in Strata by fetching its draft design system
+    const draftRes = await strataFetch(`/projects/${pid(projectId)}/design-system`, token);
+    if (draftRes.ok) {
+      if (opts.allowDraft || res.status === 400) {
+        res = draftRes;
+        draft = true;
+      } else {
+        throw new BrandError("This brand hasn't been published yet.", 409);
+      }
     } else if (notPublished) {
-      throw new BrandError("This Strata project hasn't been published yet.", 409);
+      throw new BrandError("This brand hasn't been published yet.", 409);
     }
   }
-  if (res.status === 401) throw new StrataError("Plexo's access to this Strata project has stopped.", "expired", 401);
-  if (res.status === 403) throw new StrataError("Plexo can't read this Strata project.", "forbidden", 403);
-  if (res.status === 404) throw new StrataError("That Strata project wasn't found. It may have been deleted, or you may no longer have access.", "not_found", 404);
-  if (!res.ok) throw new StrataError("Strata had a problem. Please try again in a moment.", "server", res.status);
+  if (res.status === 401) throw new StrataError("Plexo's access to this brand has stopped.", "expired", 401);
+  if (res.status === 403) throw new StrataError("Plexo can't read this brand.", "forbidden", 403);
+  if (res.status === 404) throw new StrataError("That brand wasn't found. It may have been deleted, or you may no longer have access.", "not_found", 404);
+  if (!res.ok) throw new StrataError("Something went wrong with your brand. Please try again in a moment.", "server", res.status);
   const body = (await res.json().catch(() => ({}))) as { data?: { revision?: string; variables?: unknown[]; components?: unknown[]; logo?: unknown } };
   const d = body.data ?? {};
   return {
@@ -153,10 +160,22 @@ export type PublishAttempt = "published" | "unchanged" | "unavailable" | "refuse
  */
 export async function publishStrataProject(userToken: string, projectId: string): Promise<PublishAttempt> {
   try {
-    const res = await strataFetch(`/projects/${pid(projectId)}/design-system/publish`, userToken, { method: "POST", body: {} });
+    let res = await strataFetch(`/projects/${pid(projectId)}/design-system/publish`, userToken, { method: "POST", body: {} });
+    if (res.status === 404) {
+      // Strata backend (charisol-design-system-be) publishes via /project/:queryId/publish
+      res = await strataFetch(`/project/${pid(projectId)}/publish`, userToken, { method: "POST", body: {} });
+    }
     if (res.ok) {
-      const body = (await res.json().catch(() => ({}))) as { data?: { unchanged?: unknown } };
+      const body = (await res.json().catch(() => ({}))) as { data?: { unchanged?: unknown }; status?: boolean };
       return body.data?.unchanged === true ? "unchanged" : "published";
+    }
+    if (res.status === 400) {
+      const body = (await res.json().catch(() => ({}))) as { message?: string; error?: { code?: string; message?: string } };
+      const msg = (body.error?.message ?? body.message ?? "").toLowerCase();
+      if (body.error?.code === "NO_DRAFT" || msg.includes("no draft changes")) {
+        return "unchanged";
+      }
+      return "refused";
     }
     if (res.status === 404 || res.status === 405 || res.status >= 500 || res.status === 429) return "unavailable";
     return "refused";
@@ -169,10 +188,10 @@ async function createIntegrationKey(userToken: string, projectId: string, name: 
   const res = await strataFetch(`/projects/${pid(projectId)}/integration-keys`, userToken, { method: "POST", body: { name, scope: "design-system:read" } });
   const body = (await res.json().catch(() => ({}))) as { data?: { keyId?: unknown; key?: unknown } };
   if (res.ok && typeof body.data?.keyId === "string" && typeof body.data?.key === "string") return { keyId: body.data.keyId, key: body.data.key };
-  if (res.status === 401) throw new BrandError("Your Strata sign-in has run out. Reconnect Strata, then link your brand again.", 401);
-  if (res.status === 403) throw new BrandError("You can see this Strata project but not change it, so Plexo can't link it. Ask its owner for edit access.", 403);
-  if (res.status === 404) throw new BrandError("That Strata project wasn't found. It may have been deleted, or you may no longer have access.", 404);
-  throw new BrandError("Strata couldn't link this brand right now. Please try again in a moment.", 502);
+  if (res.status === 401) throw new BrandError("Your brand sign-in has run out. Reconnect, then choose your brand again.", 401);
+  if (res.status === 403) throw new BrandError("You can see this brand but not change it, so Plexo can't link it. Ask its owner for edit access.", 403);
+  if (res.status === 404) throw new BrandError("That brand wasn't found. It may have been deleted, or you may no longer have access.", 404);
+  throw new BrandError("We couldn't link this brand right now. Please try again in a moment.", 502);
 }
 
 async function revokeIntegrationKey(userId: string, projectId: string, keyId: string): Promise<boolean> {
@@ -254,7 +273,10 @@ function decryptSafe(ciphertext: string): string | null {
 
 /** Writes the site's brand sheet from its design system. Returns the sheet's revision (what ?v= carries). */
 export async function writeBrandSheet(siteId: string, ds: DesignSystem): Promise<string> {
-  const body = brandStylesheet(ds);
+  // Fonts come from Plexo's own catalogue (every Google family, exact weights) and the owner's uploads, not the SDK's shorter list.
+  const { data: site } = await Template.get({ id: siteId }).go({ attributes: ["brand"] }).catch(() => ({ data: null }));
+  const fontCss = brandFontCss(ds.tokens, readSiteBrand(site?.brand)?.customFonts);
+  const body = `${fontCss}${fontCss ? "\n" : ""}${brandStylesheet({ ...ds, fonts: undefined }, { fonts: false })}`;
   const revision = createHash("sha256").update(body).digest("hex").slice(0, 12);
   const css = `/* Brand for this site, from Strata${ds.strata?.projectName ? ` (${ds.strata.projectName.replace(/\*\//g, "")})` : ""}. Revision ${revision}. Use the variables below in your own code, e.g. color: var(--color-text-primary); classes: .plx-brand-button. */\n${body}`;
   await brandStore().putSheet(siteId, css);
@@ -404,7 +426,7 @@ export async function linkSiteBrand(input: { siteId: string; userId: string; org
   const site = await loadSite(input.siteId);
   if (!site || site.organizationId !== input.organizationId || site.parentId) throw new BrandError("Site not found.", 404);
   const userToken = await loadStrataToken(input.userId);
-  if (!userToken) throw new BrandError("Connect Strata first (your sign-in may have run out), then link your brand.", 401);
+  if (!userToken) throw new BrandError("Connect your brand first (your sign-in may have run out), then link your brand.", 401);
 
   const previous = await getRow(site.id);
   const { keyId, key } = await createIntegrationKey(userToken, input.projectId, `Plexo — ${site.name}`.slice(0, 80));
@@ -447,7 +469,7 @@ export async function linkSiteBrand(input: { siteId: string; userId: string; org
     sheetUpdatedAt: now(),
     lastCheckedAt: now(),
     lastResultKind: "updated",
-    lastResult: remote.draft ? NOT_PUBLISHED_NOTE : "Your brand from Strata is on your site.",
+    lastResult: remote.draft ? NOT_PUBLISHED_NOTE : "Your brand is on your site.",
     lastSource: "owner",
     createdAt: previous?.createdAt ?? now(),
   }).go();
@@ -510,17 +532,17 @@ export async function listOwnerStrataProjects(userId: string): Promise<{ availab
 /**
  * "Create a Strata project from my brand": makes a NEW project in the owner's Strata from the site's current brand (its main
  * colour, second colour, fonts, logo), then links the site to it with Keep in sync on, so the brand lives in Strata from then on.
- * Refuses a site that already uses a Strata project (unlink it first) or has no colours yet.
+ * Moves a site that already follows a brand to the new copy. Refuses a site with no colours yet.
  */
 export async function createStrataProjectFromSiteBrand(input: { siteId: string; userId: string; organizationId: string; name?: string; autoSync?: boolean }): Promise<{ state: SiteBrandState; project: { id: string; name: string }; sent: string[]; notes: string[] }> {
   const site = await loadSite(input.siteId);
   if (!site || site.organizationId !== input.organizationId || site.parentId) throw new BrandError("Site not found.", 404);
   const userToken = await loadStrataToken(input.userId);
-  if (!userToken) throw new BrandError("Connect Strata first (your sign-in may have run out), then create your brand there.", 401);
+  if (!userToken) throw new BrandError("Connect your brand first (your sign-in may have run out), then save your brand.", 401);
   const brand = await resolveSiteBrand({ siteId: site.id, organizationId: site.organizationId, userId: input.userId });
-  if (brand?.linked) throw new BrandError(`This website already uses ${brand.project?.name ? `"${brand.project.name}"` : "a Strata brand"}. Stop using it first if you want to make a new one.`, 409);
+  // A site that already follows a brand may make a new one from it ("Create a brand from mine" under Switch brand): the link moves to the copy.
   const primary = brand?.colours.find((c) => c.role === "primary")?.value;
-  if (!brand || !primary) throw new BrandError("Add your colours first (Brand tab, Colours and logo), then Plexo can create your brand in Strata.", 409);
+  if (!brand || !primary) throw new BrandError("Add your colours first (on the Your brand page), then Plexo can save your brand.", 409);
 
   const name = (input.name ?? site.name ?? "").replace(/\s+/g, " ").trim().slice(0, 80) || "My brand";
   const client = createStrataClient({ baseUrl: base(), getToken: () => userToken });
@@ -542,7 +564,7 @@ export async function createStrataProjectFromSiteBrand(input: { siteId: string; 
       sent.push(...changed.sent);
     }
   } catch (err) {
-    notes.push("Your main colour is in Strata. Plexo couldn't send the rest (second colour and fonts) just now; add them in Strata.");
+    notes.push("Your main colour is saved. Plexo couldn't save the rest (second colour and fonts) just now; add them on the Your brand page.");
     console.warn(`[site-brand] ${site.id}: couldn't send the full brand to the new project`, err);
   }
   if (brand.logoUrl) {
@@ -557,7 +579,7 @@ export async function createStrataProjectFromSiteBrand(input: { siteId: string; 
         sent.push("logo");
       }
     } catch {
-      notes.push("Your logo wasn't sent to Strata; add it there when you like.");
+      notes.push("Your logo wasn't saved with your brand; add it on the Your brand page when you like.");
     }
   }
 
@@ -572,7 +594,7 @@ export async function createStrataProjectFromSiteBrand(input: { siteId: string; 
     .set({
       plexoCreated: true,
       awaitingPublish: !live,
-      lastResult: live ? "Your brand is now in Strata and on your site, and it stays in sync." : WAITING_FOR_PUBLISH_NOTE,
+      lastResult: live ? "Your brand is saved and on your site, and it stays in sync." : WAITING_FOR_PUBLISH_NOTE,
       lastResultKind: "updated",
     })
     .go()
@@ -614,13 +636,13 @@ export async function unlinkSiteBrand(input: { siteId: string; userId: string })
 export async function setSiteBrandOptions(input: { siteId: string; autoSync?: boolean; useOnSite?: boolean; brandInApp?: boolean }): Promise<SiteBrandState> {
   if (typeof input.brandInApp === "boolean") {
     const row = await getRow(input.siteId);
-    if (!row) throw new BrandError("Link a Strata brand to this site first.", 409);
+    if (!row) throw new BrandError("Link a brand to this site first.", 409);
     if (!(await isServerApp(input.siteId))) throw new BrandError("This only applies to apps that run their own code on Plexo's servers.", 409);
     await SiteBrand.patch({ siteId: input.siteId }).set({ injectServerApp: input.brandInApp }).go();
   }
   if (typeof input.autoSync === "boolean") {
     const row = await getRow(input.siteId);
-    if (!row) throw new BrandError("Link a Strata brand to this site first.", 409);
+    if (!row) throw new BrandError("Link a brand to this site first.", 409);
     await SiteBrand.patch({ siteId: input.siteId }).set({ autoSync: input.autoSync }).go();
   }
   if (typeof input.useOnSite === "boolean") {
@@ -803,7 +825,7 @@ export async function runSiteBrandUpdate(siteId: string, opts: { source: BrandSo
     if (plan.status === "up-to-date") {
       return logo.changed
         ? await done("updated", { kind: "updated", message: logo.note ?? NEW_LOGO_NOTE, strataRevision: remote.revision, patch })
-        : await done("up-to-date", { kind: "up-to-date", message: "Your site matches Strata.", strataRevision: remote.revision, patch });
+        : await done("up-to-date", { kind: "up-to-date", message: "Your site matches your brand.", strataRevision: remote.revision, patch });
     }
     // Outside an app nobody edits the site's brand in Plexo, so Strata simply wins; an app's own edits get a person's eye.
     let merged = plan.merged;
@@ -816,7 +838,7 @@ export async function runSiteBrandUpdate(siteId: string, opts: { source: BrandSo
     const structural = plan.plan.components.incoming.length + plan.plan.components.conflicts.length > 0 || (!plan.merged && remote.components.length !== local.components.length);
     await saveSiteDesignSystem(site, next, row.userId);
     const revision = await writeBrandSheet(siteId, next);
-    const notes = [`Updated from Strata${source === "webhook" ? " when it was published" : ""}.`];
+    const notes = [`Your brand was updated${source === "webhook" ? " when it was published" : ""}.`];
     if (logo.changed && logo.note) notes.push(logo.note);
     if (structural) notes.push(...(await rebuildPages(site, next, row.userId).catch((err) => {
       console.error(`[site-brand] ${siteId}: rebuild failed`, err);
@@ -858,6 +880,9 @@ export async function applyPublishedEvent(projectId: string, revision: string | 
       }
     }),
   );
+  // A brand published in Strata reached these people's sites: they have a brand, so Plexo's onboarding is done for them (idempotent).
+  const { completeOnboardingForStrataPush } = await import("@/lib/onboarding/strataPush");
+  for (const userId of new Set(rows.map((r) => r.userId).filter((u): u is string => !!u))) await completeOnboardingForStrataPush(userId);
   return counts;
 }
 

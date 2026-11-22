@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { RotateCcw, Trash2 } from "lucide-react";
-import { Badge, Button, Card, CardHeader, EmptyState, Skeleton, useToast } from "../../ui";
+import { Badge, Button, Card, CardHeader, EmptyState, OptimisticLoader, Skeleton, useToast } from "../../ui";
 import { errMsg, hubApi } from "../hubApi";
 import { PagePicker, usePages } from "./PagePicker";
 
@@ -68,7 +68,7 @@ export function VersionsSection({ siteId }: { siteId: string }) {
       <Card>
         <CardHeader title="Saved versions" description="A version is saved each time the page goes live." />
         {list === null ? (
-          <div className="plx-form"><Skeleton height={48} /><Skeleton height={48} /></div>
+          <div style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Loading version history" subtitle="Retrieving saved publishing revisions" steps={["Loading page revision history…", "Comparing deployment hashes…", "Ready."]} /></div>
         ) : error ? (
           <p className="plx-field__error" role="alert">{error}</p>
         ) : list.length === 0 ? (

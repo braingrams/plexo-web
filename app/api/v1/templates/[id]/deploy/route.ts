@@ -1,3 +1,4 @@
+import { planGateResponse } from "@/lib/plan/planGateResponse";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { Template } from "@/lib/db/contentEntities";
@@ -153,9 +154,7 @@ export async function PATCH(
   const hostingTier = requested as HostingTier;
   const allowedTiers = getTierFeatures(resolved.subscriptionPlan).deployedAppHostingTiers;
   if (!allowedTiers.includes(hostingTier)) {
-    return NextResponse.json({
-      error: `Your plan does not include the "${hostingTier}" hosting tier. Available on this plan: ${allowedTiers.join(", ")}. Upgrade to access faster hosting options.`,
-    }, { status: 403 });
+    return planGateResponse("PLAN_HOSTING_TIER", `Your plan doesn't include this kind of hosting. Upgrade to Pro for faster, always-on hosting for your app.`, "PRO");
   }
 
   const previousTier = deployedApp.hostingTier ?? "LAMBDA";

@@ -43,7 +43,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const [{ data: items }, { data: booking }, { data: settings }] = await Promise.all([
     CommerceOrderItem.query.primary({ templateId, orderId: order.id }).go({ pages: "all" }),
     CommerceBooking.get({ templateId, orderId: order.id }).go(),
-    awaitingTransfer ? CommerceSettings.get({ templateId }).go() : Promise.resolve({ data: null }),
+    CommerceSettings.get({ templateId }).go(),
   ]);
 
   return NextResponse.json({
@@ -55,6 +55,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
       deliveryMethodName: order.deliveryMethodNameSnapshot ?? null,
       pickupLocation: order.pickupLocationSnapshot ?? null,
       paymentMethod: order.paymentMethod ?? "ONLINE",
+      orderSuccessMessage: settings?.orderSuccessMessage ?? null,
       // Only while the transfer is still unconfirmed — so the confirmation page can keep
       // showing the customer exactly where to send the money (with the order number as
       // the reference) if they placed the order before actually transferring.

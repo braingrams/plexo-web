@@ -15,20 +15,34 @@ export async function sendMaildripEmail(input: {
   to: string;
   subject: string;
   html: string;
+  fromName?: string;
+  fromEmail?: string;
 }): Promise<void> {
   if (!maildripApiUrl || !maildripApiKey) {
     throw new Error("MAILDRIP_API_URL and MAILDRIP_API_KEY must be configured.");
   }
 
-  const payload = {
+  const payload: Record<string, unknown> = {
     to: input.to,
     subject: input.subject,
     html: input.html,
   };
+  if (input.fromName) {
+    payload.fromName = input.fromName;
+    payload.from_name = input.fromName;
+    payload.senderName = input.fromName;
+    payload.name = input.fromName;
+  }
+  if (input.fromEmail) {
+    payload.fromEmail = input.fromEmail;
+    payload.from_email = input.fromEmail;
+    payload.from = input.fromEmail;
+  }
 
   console.info("[maildrip] transactional payload", {
     to: payload.to,
     subject: payload.subject,
+    fromName: input.fromName,
   });
 
   const response = await fetch(maildripApiUrl, {
@@ -72,9 +86,35 @@ export function resolveMaildripApiKey(settings: { maildripApiKeyEncrypted?: stri
  * single hardcoded label covering sends that aren't really the same thing. */
 export async function sendCommerceEmail(
   apiKey: string,
-  input: { to: string; subject: string; html: string; context: EmailDeliveryContext; organizationId?: string; templateId?: string },
+  input: {
+    to: string;
+    subject: string;
+    html: string;
+    fromName?: string;
+    fromEmail?: string;
+    context: EmailDeliveryContext;
+    organizationId?: string;
+    templateId?: string;
+  },
 ): Promise<void> {
-  const { organizationId, templateId, context, ...body } = input;
+  const { organizationId, templateId, context, ...rest } = input;
+  const body: Record<string, unknown> = {
+    to: rest.to,
+    subject: rest.subject,
+    html: rest.html,
+  };
+  if (rest.fromName) {
+    body.fromName = rest.fromName;
+    body.from_name = rest.fromName;
+    body.senderName = rest.fromName;
+    body.name = rest.fromName;
+  }
+  if (rest.fromEmail) {
+    body.fromEmail = rest.fromEmail;
+    body.from_email = rest.fromEmail;
+    body.from = rest.fromEmail;
+  }
+
   try {
     const response = await fetch(maildripApiUrl, {
       method: "POST",

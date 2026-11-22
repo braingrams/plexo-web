@@ -42,7 +42,7 @@ describe("the real component calls to Strata (mocked)", () => {
   it("turns a validation answer from Strata into a plain refusal (no retry)", async () => {
     strata.status = 400;
     await expect(realExtrasDeps.pushComponents("tok", "proj-1", [row("banner")])).rejects.toThrow(StrataRefused);
-    await expect(realExtrasDeps.pushComponents("tok", "proj-1", [row("banner")])).rejects.toThrow(/Strata didn't accept the component "banner": bad property/);
+    await expect(realExtrasDeps.pushComponents("tok", "proj-1", [row("banner")])).rejects.toThrow(/Your brand didn't accept the component "banner": bad property/);
   });
   it("treats a server error as something to retry later", async () => {
     strata.status = 503;

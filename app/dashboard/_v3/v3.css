@@ -9,6 +9,18 @@
  * browser to 90%) without changing any proportions. Phones and tablets keep 100%, where text needs to be easy to tap and read.
  * --plx-dvh is the screen height in the dashboard's own (zoomed) units; use it instead of 100dvh.
  */
+/*
+ * The new dashboard has no purple: Plexo's brand is lime and deep green. The shared "violet" and "info" tokens
+ * (lib/brandTokens.ts) are re-pointed here, inside the new dashboard only, to the amber accent and the green
+ * success colours. The `html` prefix outranks the theme blocks that set the tokens on the same element.
+ */
+html [data-plexo-v3] {
+  --plx-violet: var(--plx-accent);
+  --plx-violet-subtle: var(--plx-warning-subtle);
+  --plx-info: var(--plx-success);
+  --plx-info-subtle: var(--plx-success-subtle);
+}
+
 [data-plexo-v3] { --plx-zoom: 1; --plx-dvh: calc(100dvh / var(--plx-zoom)); }
 @media (min-width: 1024px) and (pointer: fine) {
   [data-plexo-v3] { --plx-zoom: 0.9; zoom: var(--plx-zoom); }
@@ -77,8 +89,8 @@
 .plx-btn--primary { background: var(--plx-brand); color: var(--plx-on-brand); font-weight: 800; }
 .plx-btn--primary:hover:not([disabled]) { background: var(--plx-brand-hover); }
 .plx-btn--primary:active:not([disabled]) { background: var(--plx-brand-active); }
-.plx-btn--secondary { background: var(--plx-secondary-bg); color: var(--plx-secondary-text); border-color: var(--plx-secondary-border); }
-.plx-btn--secondary:hover:not([disabled]) { background: var(--plx-secondary-hover); }
+.plx-btn--secondary { background: var(--plx-secondary-bg); color: var(--plx-secondary-text); border-color: var(--plx-secondary-border); box-shadow: var(--plx-shadow-card); }
+.plx-btn--secondary:hover:not([disabled]) { background: var(--plx-secondary-hover); border-color: var(--plx-border-strong); }
 .plx-btn--ghost { background: transparent; color: var(--plx-text); }
 .plx-btn--ghost:hover:not([disabled]) { background: var(--plx-ghost-hover); }
 .plx-btn--strong { background: var(--plx-strong); color: var(--plx-on-strong); font-weight: 800; }
@@ -233,9 +245,13 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 @keyframes plx-fade { from { opacity: 0; } }
 @keyframes plx-pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
 @keyframes plx-rise { from { transform: translateY(100%); } }
+@keyframes plx-slide { from { transform: translateX(24px); opacity: 0; } }
+.plx-overlay--drawer { place-items: stretch end; padding: 0; }
+.plx-dialog--drawer { max-height: none; height: 100dvh; border-radius: 0; border-top: 0; border-bottom: 0; border-right: 0; animation: plx-slide .2s cubic-bezier(.2, .8, .2, 1); }
+.plx-dialog--drawer .plx-dialog__body { flex: 1; overflow: auto; }
 @media (max-width: 640px) {
   .plx-overlay { place-items: end stretch; padding: 0; }
-  .plx-dialog { max-width: none; max-height: 92dvh; border-radius: 22px 22px 0 0; border-bottom: none; animation: plx-rise .24s cubic-bezier(.2, .8, .2, 1); padding-bottom: env(safe-area-inset-bottom); }
+  .plx-dialog, .plx-dialog--drawer { max-width: none; height: auto; max-height: 92dvh; border-radius: 22px 22px 0 0; border-bottom: none; animation: plx-rise .24s cubic-bezier(.2, .8, .2, 1); padding-bottom: env(safe-area-inset-bottom); }
   .plx-dialog__grab { display: block; width: 40px; height: 5px; border-radius: 99px; background: var(--plx-border-strong); margin: 10px auto 0; }
   .plx-dialog__foot { flex-direction: column-reverse; }
   .plx-dialog__foot > .plx-btn { width: 100%; }
@@ -307,15 +323,31 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 .plx-tour-dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--plx-border-strong); transition: background .2s ease, width .2s ease; }
 .plx-tour-dots span[data-on="true"] { background: var(--plx-deep); width: 18px; border-radius: 99px; }
 .plx-tour-dots span[data-done="true"] { background: var(--plx-deep); opacity: .5; }
-@media (max-width: 640px) {
-  .plx-tour-card { left: 16px !important; right: 16px; width: auto; top: auto !important; bottom: calc(16px + env(safe-area-inset-bottom)); }
-}
+.plx-tour-card--sheet { left: 12px; right: 12px; width: auto; top: auto; bottom: calc(12px + env(safe-area-inset-bottom)); max-height: 46vh; overflow-y: auto; }
+.plx-tour-arrow { position: absolute; width: 16px; height: 16px; background: var(--plx-surface); border: 1px solid var(--plx-border); transform: rotate(45deg); margin: -8px 0 0 -8px; pointer-events: none; }
+.plx-tour-arrow[data-side="bottom"] { top: 0; border-right: 0; border-bottom: 0; }
+.plx-tour-arrow[data-side="top"] { top: 100%; border-left: 0; border-top: 0; }
+.plx-tour-arrow[data-side="right"] { left: 0; border-right: 0; border-top: 0; }
+.plx-tour-arrow[data-side="left"] { left: 100%; border-left: 0; border-bottom: 0; }
+.plx-tour-spot::after { content: ""; position: absolute; inset: -6px; border-radius: 18px; border: 2px solid var(--plx-brand); opacity: 0; animation: plx-tour-pulse 1.8s ease-out infinite; }
+@keyframes plx-tour-pulse { 0% { opacity: .7; transform: scale(1); } 100% { opacity: 0; transform: scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .plx-tour-spot::after { animation: none; } .plx-tour-spot, .plx-tour-card { transition: none; } }
 .plx-tour-offer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .plx-tour-choice { font: inherit; text-align: left; color: var(--plx-text); background: var(--plx-surface); border: 2px solid var(--plx-border); border-radius: 16px; padding: 18px; display: flex; flex-direction: column; gap: 8px; cursor: pointer; transition: border-color .15s ease, background .15s ease; min-height: 44px; }
 .plx-tour-choice:hover { border-color: var(--plx-deep); background: var(--plx-tint); }
 .plx-tour-choice__icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: var(--plx-tint); color: var(--plx-deep); }
 .plx-tour-choice__title { font-size: 16px; font-weight: 800; }
 .plx-tour-choice__desc { font-size: 14px; color: var(--plx-muted); line-height: 1.45; }
+.plx-tour-areas { margin-top: 18px; border-top: 1px solid var(--plx-border); padding-top: 14px; }
+.plx-tour-areas__h { margin: 0 0 8px; font-size: 14px; font-weight: 800; color: var(--plx-muted); }
+.plx-tour-areas ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.plx-tour-area { font: inherit; width: 100%; text-align: left; color: var(--plx-text); background: var(--plx-surface); border: 1px solid var(--plx-border); border-radius: 12px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; cursor: pointer; min-height: 44px; }
+.plx-tour-area:hover { border-color: var(--plx-deep); background: var(--plx-tint); }
+.plx-tour-area__txt { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.plx-tour-area__txt b { font-size: 15px; }
+.plx-tour-area__txt span { font-size: 13px; color: var(--plx-muted); line-height: 1.4; }
+.plx-tour-area__done { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 800; color: var(--plx-deep); }
+@media (max-width: 560px) { .plx-tour-areas ul { grid-template-columns: 1fr; } }
 @media (max-width: 480px) { .plx-tour-offer { grid-template-columns: 1fr; } }
 
 /* ── Shell ────────────────────────────────────────────── */
@@ -330,10 +362,68 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 .plx-nav__link:hover { color: var(--plx-text); background: var(--plx-ghost-hover); }
 .plx-nav__link[aria-current="page"] { background: var(--plx-tint); color: var(--plx-text); }
 .plx-nav__link[aria-current="page"] svg { color: var(--plx-deep); }
-.plx-sidebar__help { margin-top: auto; padding: 16px; border-radius: 16px; background: var(--plx-tint); display: flex; flex-direction: column; gap: 6px; }
-.plx-sidebar__help strong { font-size: 14px; font-weight: 800; }
-.plx-sidebar__help p { margin: 0; font-size: 13px; color: var(--plx-muted); line-height: 1.45; }
-.plx-sidebar__help .plx-btn { margin-top: 6px; align-self: flex-start; }
+.plx-sidebar__foot { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.plx-sidebar__foot-collapsed { margin-top: auto; display: flex; flex-direction: column; align-items: center; padding-top: 8px; }
+.plx-sidebar__shout {
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--plx-elevated);
+  border: 1px solid var(--plx-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.plx-sidebar__shout:hover {
+  border-color: var(--plx-border-strong);
+  box-shadow: var(--plx-shadow-card);
+}
+.plx-sidebar__shout-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.plx-sidebar__shout-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: var(--plx-tint);
+  color: var(--plx-deep);
+  flex-shrink: 0;
+}
+.plx-sidebar__shout strong,
+.plx-sidebar__shout-title {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--plx-text);
+  line-height: 1.25;
+}
+.plx-sidebar__shout p,
+.plx-sidebar__shout-desc {
+  margin: 0;
+  font-size: 12px;
+  color: var(--plx-muted);
+  line-height: 1.45;
+}
+.plx-sidebar__shout .plx-btn,
+.plx-sidebar__shout-btn {
+  margin-top: 4px;
+  align-self: flex-start;
+  font-size: 13px;
+  --plx-btn-h: 34px;
+  padding: 0 12px;
+}
+.plx-sidebar__testimonial-collapsed {
+  color: var(--plx-deep);
+}
+.plx-sidebar__help { padding: 14px 16px; border-radius: 16px; background: var(--plx-elevated); display: flex; flex-direction: column; gap: 6px; }
+.plx-sidebar__help strong { font-size: 13.5px; font-weight: 800; }
+.plx-sidebar__help p { margin: 0; font-size: 12.5px; color: var(--plx-muted); line-height: 1.45; }
+.plx-sidebar__help .plx-btn { margin-top: 4px; align-self: flex-start; }
 .plx-main-col { min-width: 0; display: flex; flex-direction: column; }
 .plx-topbar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 32px; background: color-mix(in srgb, var(--plx-bg) 88%, transparent); backdrop-filter: saturate(1.4) blur(10px); border-bottom: 1px solid var(--plx-border); }
 .plx-topbar__right { display: flex; align-items: center; gap: 10px; }
@@ -368,7 +458,8 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 .plx-action__sub { font-size: 13px; color: var(--plx-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .plx-action__go { color: var(--plx-muted); flex-shrink: 0; }
 
-.plx-trend { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; height: 180px; margin-top: 16px; align-items: end; }
+.plx-visits-card { display: flex; flex-direction: column; height: 100%; }
+.plx-trend { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 10px; min-height: 180px; flex: 1; height: 100%; margin-top: 16px; align-items: end; }
 .plx-trend__col { display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; min-width: 0; }
 .plx-trend__n { font-size: 12px; font-weight: 700; color: var(--plx-muted); }
 .plx-trend__plot { flex: 1; width: 100%; min-height: 0; display: flex; align-items: flex-end; justify-content: center; }
@@ -506,6 +597,7 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 .plx-sitepick__row[aria-selected="true"] { background: var(--plx-tint); }
 .plx-sitepick__text { display: flex; flex-direction: column; min-width: 0; flex: 1; gap: 1px; }
 .plx-sitepick__name { font-size: 15px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plx-sitepick__metatext { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .plx-sitepick__meta { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--plx-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plx-sitepick__dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; background: var(--plx-border-strong); }
 .plx-sitepick__dot--live { background: var(--plx-success); }
@@ -583,10 +675,7 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 @media (prefers-reduced-motion: reduce) { .plx-pend[data-on="true"] { animation: none; border-right-color: currentColor; opacity: .6; } }
 
 /* A page that is still on its way: the frame stays, the content area shows what is coming. */
-.plx-ldg-classic { display: block; }
-[data-plexo-v3] .plx-ldg-classic { display: none; }
-.plx-ldg { display: none; }
-[data-plexo-v3] .plx-ldg { display: flex; flex-direction: column; gap: 24px; }
+.plx-ldg { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; min-height: 55vh; }
 .plx-ldg__head { display: flex; flex-direction: column; gap: 10px; }
 .plx-ldg__row { display: flex; gap: 12px; flex-wrap: wrap; }
 .plx-ldg__tabs { display: flex; gap: 8px; border-bottom: 1px solid var(--plx-border); padding-bottom: 12px; overflow: hidden; }
@@ -639,3 +728,30 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 .plx-shell[data-collapsed] .plx-nav__label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .plx-content.plx-content--editor { padding: 0; display: flex; flex-direction: column; }
 @media (max-width: 1023px) { .plx-sidebar__fold { display: none; } }
+
+/* The visual page editor keeps the app's menu, folded to icons; opening it is one clear, big button. */
+.plx-shell[data-frame="editor"] .plx-tabbar { display: none; }
+.plx-shell[data-frame="editor"] .plx-sidebar__fold { width: 44px; height: 44px; border: 1px solid var(--plx-border); background: var(--plx-bg); color: var(--plx-text); }
+.plx-shell[data-frame="editor"] .plx-sidebar { z-index: 45; }
+.plx-shell[data-frame="editor"]:not([data-collapsed]) .plx-sidebar { box-shadow: var(--plx-shadow-overlay); }
+/* A button-link that was just tapped: its label dims and a spinner shows until the page arrives. */
+.plx-bpend { display: none; width: 16px; height: 16px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; pointer-events: none; }
+.plx-bpend[data-on="true"] { display: block; animation: plx-spin .7s linear infinite; }
+a.plx-btn { position: relative; }
+a.plx-btn > .plx-bpend { position: absolute; top: 50%; left: 50%; margin: -8px 0 0 -8px; }
+a.plx-btn:has(> .plx-bpend[data-on="true"]) { cursor: progress; }
+a.plx-btn:has(> .plx-bpend[data-on="true"]) > .plx-btn__label { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .plx-bpend[data-on="true"] { animation: none; border-right-color: currentColor; opacity: .6; } }
+
+/* While any move or switch is in flight the page behind the bar softens (after a short beat, so quick moves never flicker). */
+html[data-plx-nav="running"] { cursor: progress; }
+html[data-plx-nav="running"] [data-plexo-v3] main { opacity: .62; transition: opacity .2s ease .18s; }
+
+/* SOL's drafted post, shown as it will read (headings and paragraphs keep their weight and spacing). */
+.plx-solpost h2, .plx-solpost h3 { font-size: 16px; font-weight: 800; margin: 14px 0 4px; }
+.plx-solpost p { margin: 0 0 8px; }
+.plx-solpost ul, .plx-solpost ol { margin: 0 0 8px; padding-left: 20px; list-style: revert; }
+
+/* Older shared components (upgrade prompts, dialogs) use .btn-primary, which is the old purple outside the new dashboard. Inside it they take the brand colour. */
+[data-plexo-v3] .btn-primary { background: var(--plx-brand); color: var(--plx-on-brand); border-color: transparent; }
+[data-plexo-v3] .btn-primary:hover:not(:disabled) { background: var(--plx-brand-hover); }

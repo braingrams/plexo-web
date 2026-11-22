@@ -58,3 +58,22 @@ export async function checkSubdomain(
   await assertCanPutSiteLive(actor, appId ?? "new-app", "SUBDOMAIN");
   return slug;
 }
+
+/**
+ * Puts the Strata project that was just published onto the app's Brand page: the app's brand is the project it came from. Needs the
+ * person's Strata session, which Plexo opens quietly for people signed in with Charisol. Never throws and never fails the publish:
+ * if it can't be done now, the Brand page connects it by itself the next time it is opened.
+ */
+export async function linkPushedAppToBrand(input: { appId: string; strataProjectId: string; userId: string; organizationId: string }): Promise<boolean> {
+  try {
+    const { connectStrataInBackground } = await import("@/lib/strata/autoSetup");
+    const { linkSiteBrand, getSiteBrandState } = await import("@/lib/brand/siteBrand");
+    if ((await getSiteBrandState(input.appId)).linked) return true;
+    await connectStrataInBackground(input.userId);
+    await linkSiteBrand({ siteId: input.appId, userId: input.userId, organizationId: input.organizationId, projectId: input.strataProjectId, autoSync: true });
+    return true;
+  } catch (err) {
+    console.warn(`[strata-publish] ${input.appId}: brand not linked yet`, err instanceof Error ? err.message : err);
+    return false;
+  }
+}

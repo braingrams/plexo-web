@@ -10,7 +10,7 @@ import { ClarityScript, GtmHeadScript, GtmNoScript } from "./gtm";
 // Figtree is the site's typeface (headings and body); Geist Mono stays for code. globals.css
 // maps --font-figtree/--font-geist-mono onto the --font-heading/--font-body/--font-mono
 // contract, so nothing downstream needs to change names.
-const figtree = Figtree({ subsets: ["latin"], weight: ["400", "500", "600", "700", "800"], display: "swap", variable: "--font-figtree" });
+const figtree = Figtree({ subsets: ["latin"], display: "swap", variable: "--font-figtree" });
 
 export const viewport: Viewport = {
   width: "device-width",

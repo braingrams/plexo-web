@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { countLiveCustomDomains, customDomainError } from "@/lib/plan/domainGate";
-import { getTierFeatures } from "@/lib/subscription";
+import { getTierFeatures, isHomePageOnlyPlan } from "@/lib/subscription";
+import { PLAN, nextPlanUp, toPlanId } from "@/lib/plan/plans";
+import { planGateResponse } from "@/lib/plan/planGateResponse";
+import { takeOtherSitesOffline } from "@/lib/plan/lifecycle";
+import { findRootTemplateId } from "@/lib/siteLayoutDynamo";
 import { getPagesDomain } from "@/server/pagesDomain";
 import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { requestCustomDomainConnection, removeCloudFrontDomain, getRoutingEndpoint } from "@/lib/cloudfrontDomains";
@@ -171,6 +175,19 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // Check if domain is already registered — THE hot-path lookup (byDomain GSI1).
+  const { data: existingMatches } = await PublishedDomain.query.byDomain({ domain: finalDomain }).go();
+  const existingDomain = existingMatches[0] ?? null;
+
+  // The owner explicitly chose "publish and replace the live site" (Free keeps one site live):
+  // the other site goes offline first (nothing is deleted), then this one goes live below.
+  // Only when the address is actually available to them, so a typo never takes a site offline.
+  const addressAvailable = !existingDomain || existingDomain.organizationId === resolved.organizationId;
+  if (body.replaceLive === true && type === "SUBDOMAIN" && addressAvailable && isHomePageOnlyPlan(resolved.subscriptionPlan)) {
+    const rootId = await findRootTemplateId(template.id, template.parentId ?? null);
+    await takeOtherSitesOffline(resolved.userId, rootId);
+  }
+
   // Plan: Free can't use a custom domain, and keeps one site live at a time.
   try {
     await assertCanPutSiteLive(resolved, templateId, type);
@@ -178,10 +195,6 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (err instanceof PlanLimitError) return planLimitResponse(err);
     throw err;
   }
-
-  // Check if domain is already registered — THE hot-path lookup (byDomain GSI1).
-  const { data: existingMatches } = await PublishedDomain.query.byDomain({ domain: finalDomain }).go();
-  const existingDomain = existingMatches[0] ?? null;
 
   if (existingDomain) {
     // 1. If it's already linked to the exact same template and org, it is an idempotent success
@@ -231,9 +244,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     : getDomainLimit(resolved.subscriptionPlan, resolved.customDomainLimit);
 
   if (limit !== -1 && currentCount >= limit) {
-    return NextResponse.json({
-      error: `You have reached your limit of ${limit} published domains. Please delete an existing domain to publish a new one.`
-    }, { status: 403 });
+    return planGateResponse("PLAN_CUSTOM_DOMAIN_LIMIT", `You have reached your limit of ${limit} published domain${limit === 1 ? "" : "s"}. Upgrade for more, or remove an address you no longer use.`, nextPlanUp(toPlanId(resolved.subscriptionPlan)) ?? PLAN.ENTERPRISE);
   }
 
   let routingEndpoint: string | undefined;
@@ -243,7 +254,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if (type === "CUSTOM") {
     const customError = customDomainError(resolved, countLiveCustomDomains(domainCountBatches.flatMap((b) => b.data).filter((d) => d.domain !== finalDomain)));
     if (customError) {
-      return NextResponse.json({ error: customError, code: "PLAN_CUSTOM_DOMAIN_LIMIT", upgradeUrl: "/dashboard/settings/subscription" }, { status: 403 });
+      return planGateResponse("PLAN_CUSTOM_DOMAIN_LIMIT", customError, PLAN.STARTER);
     }
     try {
       const result = await requestCustomDomainConnection(finalDomain);

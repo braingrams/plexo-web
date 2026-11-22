@@ -1,5 +1,7 @@
 "use client";
 
+import { GateOrError } from "../../../_components/UpgradePrompt";
+import { rememberPlanGate } from "@/lib/plan/planGate";
 import { useState } from "react";
 
 type Result = {
@@ -30,7 +32,7 @@ export function SellProductModal({ siteId, product, onClose }: { siteId: string;
     try {
       const res = await fetch(`/api/v1/commerce/${siteId}/products/${product.id}/sell`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) setError(data.error || "We couldn't add it to your page. Please try again.");
+      if (!res.ok) { rememberPlanGate(data); setError(data.error || "We couldn't add it to your page. Please try again."); }
       else setResult(data);
     } catch {
       setError("We couldn't reach Plexo. Check your connection and try again.");
@@ -54,7 +56,7 @@ export function SellProductModal({ siteId, product, onClose }: { siteId: string;
             <p style={{ fontSize: "0.85rem", color: "var(--cmx-muted, rgba(240,242,255,0.65))", margin: 0, lineHeight: 1.6 }}>
               We'll set up your home page to sell it. If the page already has a payment button for this, that button will open the checkout; otherwise we'll add a buy card. Visitors pay right there, and every purchase shows up in your Orders.
             </p>
-            {error && <p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #fca5a5)", margin: 0, lineHeight: 1.5 }}>{error}</p>}
+            {error && <GateOrError error={error}><p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #fca5a5)", margin: 0, lineHeight: 1.5 }}>{error}</p></GateOrError>}
             <button type="button" onClick={() => void sell()} disabled={busy} style={{ padding: "0.7rem 1rem", borderRadius: 10, fontSize: "0.9rem", fontWeight: 700, border: "none", color: "var(--cmx-on-brand, #fff)", background: "linear-gradient(135deg,var(--brand),var(--cmx-brand-deep, var(--brand-deep)))", cursor: busy ? "default" : "pointer", opacity: busy ? 0.6 : 1 }}>
               {busy ? "Adding it…" : "Add to my home page"}
             </button>

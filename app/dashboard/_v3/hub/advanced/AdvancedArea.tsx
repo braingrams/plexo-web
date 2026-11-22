@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, Skeleton } from "../../ui";
+import { Card, OptimisticLoader, Skeleton } from "../../ui";
 import { advancedKind, type AdvancedSection, type AdvancedSectionId } from "@/lib/dashboardV3/hubAdvanced";
 import type { AdvancedData } from "@/lib/dashboardV3/hubAdvancedData";
 import type { HubFeatures } from "@/lib/dashboardV3/hubTabs";
@@ -52,9 +52,9 @@ function Body({ kind, section, site, data }: { kind: ReturnType<typeof advancedK
     case "code":
       return <CodeSection siteId={id} />;
     case "features":
-      return data.features ? <FeaturesSection siteId={id} features={site.features} data={data.features} /> : <Card><Skeleton height={120} /></Card>;
+      return data.features ? <FeaturesSection siteId={id} features={site.features} data={data.features} /> : <Card><div style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}><OptimisticLoader title="Loading features" subtitle="Reading site capabilities" steps={["Loading advanced feature switches…", "Checking permissions…", "Ready."]} /></div></Card>;
     case "layout":
-      return data.layout ? <Embed><SiteLayoutClient templateId={id} siteName={site.name} initialEnabled={data.layout.enabled} header={data.layout.header} footer={data.layout.footer} /></Embed> : null;
+      return data.layout ? <Embed><SiteLayoutClient templateId={id} siteName={site.name} initialEnabled={data.layout.enabled} /></Embed> : null;
     case "lists":
       return data.contentTypes ? <Embed><ContentTypesClient templateId={id} templateName={site.name} initialContentTypes={data.contentTypes} /></Embed> : null;
     case "forms":

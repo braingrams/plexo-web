@@ -1,3 +1,4 @@
+import { planGateBody } from "@/lib/plan/planGate";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import { isValidUuid } from "@/lib/slugUtils";
@@ -37,7 +38,7 @@ export async function resolveSiteImportSite(
   }
 
   if (!getTierFeatures(resolved.subscriptionPlan).siteMigrationEnabled) {
-    return { error: NextResponse.json({ error: "Importing a website isn't available on your plan." }, { status: 403 }) };
+    return { error: NextResponse.json(planGateBody("PLAN_SITE_IMPORT", "Importing a website isn't available on your plan."), { status: 403 }) };
   }
 
   return {

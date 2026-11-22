@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import Editor, { type OnMount } from "@monaco-editor/react";
 import {
   ChevronDown,
@@ -16,7 +17,6 @@ import {
   Link2,
   LoaderCircle,
   Lock,
-  MessageSquare,
   Play,
   Plus,
   RefreshCw,
@@ -324,7 +324,7 @@ export function DatabasePane(props: { appId: string; refreshKey?: number; onAskA
                     </div>
                     {onAskAi && (
                       <Button size="sm" onClick={() => onAskAi(`Fix this database security issue: ${f.message} Suggested fix: ${f.fix}`)}>
-                        <MessageSquare size={12} /> Ask SOL to fix
+                        <SolGlyph size={12} /> Ask SOL to fix
                       </Button>
                     )}
                     <button

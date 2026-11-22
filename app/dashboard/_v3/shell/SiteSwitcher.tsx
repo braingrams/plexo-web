@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Plus, Search } from "lucide-react";
+import { OPEN_SITE_SWITCHER_EVENT, SWITCHER_PANEL_STEP, TOUR_STEP_EVENT } from "@/lib/dashboardV3/siteSwitcherEvents";
 import { NEW_SITE_PATH } from "@/lib/dashboardV3/newSite";
 import { CURRENT_SITE_COOKIE, type SiteSummary } from "@/lib/dashboardV3/sites";
 import { switchGroups, type SwitchRow } from "@/lib/dashboardV3/siteSwitch";
 import { useOptionalNewSite } from "../../_components/NewSiteModal";
+import { useNavAction } from "./useNavAction";
 import { Avatar } from "../ui/Avatar";
 import { FloatingPanel } from "../ui/FloatingPanel";
 
@@ -27,10 +29,27 @@ export type SiteSwitcherProps = {
  */
 export function SiteSwitcher({ sites, currentSiteId, onSelect, onCreate }: SiteSwitcherProps) {
   const router = useRouter();
+  const nav = useNavAction();
   const newSite = useOptionalNewSite();
   const button = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const current = sites.find((s) => s.id === currentSiteId) ?? sites[0] ?? null;
+
+  // Home's "All my websites" opens this; the tour opens it for its "all your sites" step and closes it after.
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    const onStep = (e: Event) => {
+      const id = (e as CustomEvent<{ id: string | null }>).detail?.id ?? null;
+      if (id === SWITCHER_PANEL_STEP) setOpen(true);
+      else setOpen(false);
+    };
+    window.addEventListener(OPEN_SITE_SWITCHER_EVENT, onOpen);
+    window.addEventListener(TOUR_STEP_EVENT, onStep);
+    return () => {
+      window.removeEventListener(OPEN_SITE_SWITCHER_EVENT, onOpen);
+      window.removeEventListener(TOUR_STEP_EVENT, onStep);
+    };
+  }, []);
 
   const create = () => {
     setOpen(false);
@@ -44,7 +63,15 @@ export function SiteSwitcher({ sites, currentSiteId, onSelect, onCreate }: SiteS
     if (id === current?.id) return;
     if (onSelect) return onSelect(id);
     document.cookie = `${CURRENT_SITE_COOKIE}=${encodeURIComponent(id)}; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax`;
-    router.refresh();
+    if (typeof window !== "undefined") {
+      const pathname = window.location.pathname;
+      if (current?.id && pathname.includes(current.id)) {
+        const nextUrl = pathname.replace(current.id, id) + window.location.search;
+        router.push(nextUrl);
+        return;
+      }
+    }
+    nav.refresh();
   };
 
   if (!current) {
@@ -65,15 +92,15 @@ export function SiteSwitcher({ sites, currentSiteId, onSelect, onCreate }: SiteS
 
   return (
     <div className="plx-siteswitch" data-tour="site-switcher">
-      <button ref={button} type="button" className="plx-siteswitch__btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)} aria-label={`${current.name}. Switch site`}>
+      <button ref={button} type="button" className="plx-siteswitch__btn" aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen((o) => !o)} aria-busy={nav.pending || undefined} aria-label={`${current.name}. ${nav.pending ? "Switching site" : "Switch site"}`}>
         <Avatar name={current.name} size={34} square src={current.brand?.logoUrl} color={current.brand?.colors?.[0]} />
         <span className="plx-siteswitch__text">
           <span className="plx-siteswitch__name" title={current.name}>{current.name}</span>
-          <span className="plx-siteswitch__hint">Switch site</span>
+          <span className="plx-siteswitch__hint">{nav.pending ? "Switching…" : "My sites"}</span>
         </span>
-        <ChevronsUpDown size={18} aria-hidden style={{ color: "var(--plx-muted)", flexShrink: 0 }} />
+        {nav.pending ? <span className="plx-bpend" data-on="true" aria-hidden style={{ position: "static", display: "block", flexShrink: 0 }} /> : <ChevronsUpDown size={18} aria-hidden style={{ color: "var(--plx-muted)", flexShrink: 0 }} />}
       </button>
-      <FloatingPanel open={open} onClose={() => setOpen(false)} anchorRef={button} width={380} label="Switch site">
+      <FloatingPanel open={open} onClose={() => setOpen(false)} anchorRef={button} width={380} label="Switch site" tourId="site-switcher-panel">
         <SitePicker sites={sites} currentId={current.id} onPick={select} onCreate={create} onNavigate={() => setOpen(false)} />
       </FloatingPanel>
     </div>
@@ -90,7 +117,7 @@ function Row({ row, id, selected, active, onPick, onHover }: { row: SwitchRow; i
           <span className="plx-sitepick__name">{site.name}</span>
           <span className="plx-sitepick__meta">
             <span className={`plx-sitepick__dot plx-sitepick__dot--${site.status}`} role="img" aria-label={site.status === "live" ? "Online" : "Not online yet"} />
-            {site.kind} · {detail}
+            <span className="plx-sitepick__metatext">{site.kind} · {detail}</span>
           </span>
         </span>
         {selected ? <Check size={18} aria-hidden className="plx-sitepick__check" /> : null}
@@ -182,7 +209,7 @@ export function SitePicker({ sites, currentId, onPick, onCreate, onNavigate }: {
         <button type="button" className="plx-btn plx-btn--secondary plx-btn--sm" onClick={onCreate}>
           <span className="plx-btn__label"><Plus size={16} aria-hidden />Create another website</span>
         </button>
-        <Link href="/dashboard/sites" className="plx-btn plx-btn--ghost plx-btn--sm" onClick={onNavigate}>See all</Link>
+        <Link href="/dashboard/sites" className="plx-btn plx-btn--ghost plx-btn--sm" onClick={onNavigate}>Manage my sites</Link>
       </div>
     </div>
   );

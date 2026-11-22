@@ -1,11 +1,13 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { Check, Mail, Send, ShieldCheck, UserMinus, Users } from "lucide-react";
 import { Avatar, Badge, Button, ButtonLink, Input, Select, useToast } from "../ui";
 import { usageMeter } from "@/lib/dashboardV3/settingsUsage";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { AsideCard, Notice, Panel, SettingsPageShell, UsageMeter } from "./bits";
+import { GateOrError } from "../../_components/UpgradePrompt";
 
 export type TeamMember = { id: string; userId: string; role: string; scopedTemplateIds: string[]; name: string; email: string };
 export type TeamInvite = { id: string; email: string; role: string; scopedTemplateIds: string[]; createdAt: string };
@@ -65,7 +67,7 @@ export function TeamSection({ currentUserId, currentRole, organizationName, memb
         <>
           <AsideCard title="Seats" icon={Users}>
             <UsageMeter label="Teammates" meter={seats} unit={{ one: "teammate", many: "teammates" }} hint={seatLimit === 0 ? "Inviting people comes with the Starter plan." : seats.tone === "full" ? "All seats are used. Upgrade to add more people." : `${total} ${total === 1 ? "person" : "people"} in all, counting you.`} />
-            {seatLimit === 0 || seats.tone === "full" ? <ButtonLink href="/dashboard/settings/plan" variant="secondary">See plans</ButtonLink> : null}
+            {seatLimit === 0 || seats.tone === "full" ? <UpgradePrompt tone="info" requiredPlan={seatLimit === 0 ? "STARTER" : "PRO"} message={seatLimit === 0 ? "Inviting teammates comes with the Starter plan." : "All your seats are used. Upgrade to add more people."} /> : null}
           </AsideCard>
           <AsideCard title="What can each role do?" icon={ShieldCheck}>
             <ul>
@@ -77,7 +79,7 @@ export function TeamSection({ currentUserId, currentRole, organizationName, memb
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError>
 
       <Panel title="People" description={`${total} ${total === 1 ? "person" : "people"} can work on ${organizationName}.`} flush data-tour="team-seats">
         {members.map((p) => {

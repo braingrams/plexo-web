@@ -174,6 +174,15 @@ const APP_SECRET_KEYS = [
   // a stateless JWT, not a DB-backed session, so this secret alone is what lets a learner
   // stay signed in across visits.
   "LMS_SESSION_SECRET",
+  // Visitor numbers for site owners (lib/googleAnalytics, docs/google-analytics-and-site-health.md). The OAuth client
+  // is for "use my own Google account"; the service account + account list power Plexo-managed analytics (the default).
+  "GOOGLE_ANALYTICS_CLIENT_ID",
+  "GOOGLE_ANALYTICS_CLIENT_SECRET",
+  "GOOGLE_ANALYTICS_TOKEN_ENCRYPTION_SECRET",
+  "GOOGLE_ANALYTICS_MANAGED_SERVICE_ACCOUNT",
+  "GOOGLE_ANALYTICS_MANAGED_ACCOUNTS",
+  // Site health's PageSpeed Insights key.
+  "PAGESPEED_API_KEY",
 ] as const;
 
 // GetParameters caps at 10 names per call.

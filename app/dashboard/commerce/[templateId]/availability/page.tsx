@@ -1,14 +1,8 @@
-import { CommerceProduct } from "@/lib/db/commerceEntities";
-import { AvailabilityClient } from "./AvailabilityClient";
+import { redirectToShopIfV3 } from "@/lib/dashboardV3/hubRedirect";
+import { AvailabilityContent } from "./Content";
 
-export default async function CommerceAvailabilityPage({ params }: { params: Promise<{ templateId: string }> }) {
+export default async function CommerceAvailabilityPage({ params, searchParams }: { params: Promise<{ templateId: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const { templateId } = await params;
-
-  const { data: products } = await CommerceProduct.query.primary({ templateId }).go({ pages: "all" });
-  const services = products
-    .filter((p) => p.kind === "SERVICE")
-    .sort((a, b) => a.name.localeCompare(b.name))
-    .map((p) => ({ id: p.id, name: p.name, durationMinutes: p.durationMinutes ?? null }));
-
-  return <AvailabilityClient templateId={templateId} services={services} />;
+  await redirectToShopIfV3(templateId, "availability", (await searchParams)?.classic);
+  return <AvailabilityContent templateId={templateId} />;
 }

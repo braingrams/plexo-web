@@ -39,6 +39,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!args) return NextResponse.json({ error: "Pick what your website is for first." }, { status: 400 });
       made = await makeSiteFromKit(resolved, args, brand);
     }
+    if (parsed.value.personalizedHtml) {
+      const { Template } = await import("@/lib/db/contentEntities");
+      await Template.patch({ id: made.siteId })
+        .set({
+          compiledHtml: parsed.value.personalizedHtml,
+          draftHtml: parsed.value.personalizedHtml,
+        })
+        .go()
+        .catch((e) => console.error("saving personalized html failed", e));
+    }
     // "Your brand" step: the owner's chosen Strata project (or "make one from my brand") is linked to the new site, so it follows that brand from the start.
     const brandChoice = parseBrandChoice((body as { brand?: unknown })?.brand);
     const brandResult = brandChoice ? await applyNewSiteBrandChoice({ siteId: made.siteId, userId: resolved.userId, organizationId: resolved.organizationId, choice: brandChoice }) : undefined;

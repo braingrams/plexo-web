@@ -20,6 +20,9 @@ export type StartMigrationResult =
   | { ok: true; jobId: string; templateId: string; siteName: string }
   | { ok: false; status: number; error: string; requiresOwnershipAttestation?: boolean; requiresAupAcceptance?: boolean; notWordPress?: boolean; existing?: { id: string; templateId: string } };
 
+import { cleanWpSiteName } from "./siteName";
+export { cleanWpSiteName };
+
 export async function startWordPressMigration(
   access: MigrationAccess,
   input: { sourceUrl?: string; ownershipAttested?: boolean; acceptAup?: boolean; /** A one-folder migration is served at the domain root unless this is false. */ serveAtRoot?: boolean },
@@ -67,7 +70,7 @@ export async function startWordPressMigration(
   }
 
   // Always a brand-new Plexo site — a migration never overwrites one the owner already has.
-  const siteName = install.siteName || new URL(install.origin).host;
+  const siteName = cleanWpSiteName(install.siteName, install.origin);
   const templateId = randomUUID();
   await Template.create({
     id: templateId,

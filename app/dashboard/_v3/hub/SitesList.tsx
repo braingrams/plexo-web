@@ -4,16 +4,19 @@ import "./hub.css";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { NEW_SITE_PATH } from "@/lib/dashboardV3/newSite";
-import { ArrowRight, Plus, Eye } from "lucide-react";
+import { ArrowRight, Plus, Eye, Trash2, LayoutGrid } from "lucide-react";
 import { OpenSiteIconButton, PreviewIconButton } from "../home/SiteButtons";
+import { DeleteSiteDialog, type DeletableSite } from "./DeleteSiteDialog";
+import { ALL_SITES_PATH } from "@/lib/dashboardV3/allSites";
 import { useState } from "react";
-import { Badge, Button, Card, EmptyState, SegmentedControl, StatusPill } from "../ui";
+import { Badge, Button, ButtonLink, Card, EmptyState, SegmentedControl, StatusPill } from "../ui";
 import { SITE_FILTERS, filterSites, sitesListHref, type SiteFilter } from "@/lib/dashboardV3/siteFilter";
 import { useOptionalNewSite } from "../../_components/NewSiteModal";
 import type { HubSiteCard } from "@/lib/dashboardV3/hubData";
 
 export function SitesList({ sites, experience, onCreate, initialFilter = "all" }: { sites: HubSiteCard[]; experience: string; onCreate?: () => void; initialFilter?: SiteFilter }) {
   const [filter, setFilter] = useState<SiteFilter>(initialFilter);
+  const [deleting, setDeleting] = useState<DeletableSite | null>(null);
   const shown = filterSites(sites, filter);
   const pick = (f: SiteFilter) => {
     setFilter(f);
@@ -30,7 +33,12 @@ export function SitesList({ sites, experience, onCreate, initialFilter = "all" }
           <h1 className="plx-h1">{experience === "beginner" && sites.length < 2 ? "My website" : "My websites"}</h1>
           <p className="plx-hub__sub">Tap one to change it, see its visits, or add more to it.</p>
         </div>
-        {sites.length ? add : null}
+        {sites.length ? (
+          <div className="plx-hub__actions">
+            {sites.length > 1 ? <ButtonLink href={ALL_SITES_PATH} variant="secondary" leftIcon={<LayoutGrid size={18} aria-hidden />} data-tour="sites-all">Show all my sites at once</ButtonLink> : null}
+            {add}
+          </div>
+        ) : null}
       </div>
       {sites.length > 1 && sites.some((x) => x.app) ? (
         <SegmentedControl label="Show" options={SITE_FILTERS} value={filter} onChange={pick} />
@@ -64,12 +72,16 @@ export function SitesList({ sites, experience, onCreate, initialFilter = "all" }
                 <span className="plx-sitecard__icons">
                   <PreviewIconButton site={s} />
                   <OpenSiteIconButton site={s} />
+                  <Button variant="secondary" iconOnly className="plx-siteicon" title={`Delete ${s.name}`} aria-label={`Delete ${s.name}`} onClick={() => setDeleting(s)} style={{ color: "var(--plx-danger)" }}>
+                    <Trash2 size={18} aria-hidden />
+                  </Button>
                 </span>
               </div>
             </Card>
           ))}
         </div>
       )}
+      <DeleteSiteDialog site={deleting} onClose={() => setDeleting(null)} />
     </div>
   );
 }

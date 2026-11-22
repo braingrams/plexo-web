@@ -221,9 +221,9 @@ describe("publishing a project Plexo made", () => {
     remote.published = false;
     const r = await createStrataProjectFromSiteBrand(owner);
     expect(r.state).toMatchObject({ linked: true, awaitingPublish: true });
-    expect(r.notes).toContain("Your brand is saved in Strata. Press Publish there once to start keeping it in sync.");
+    expect(r.notes).toContain("Your brand is saved but not published yet. Publish it once so your website can follow it.");
     const s = await getSiteBrandState("s1");
-    expect(s.lastResult).toBe("Your brand is saved in Strata. Press Publish there once to start keeping it in sync.");
+    expect(s.lastResult).toBe("Your brand is saved but not published yet. Publish it once so your website can follow it.");
     expect(s.lastResultKind).toBe("updated");
     expect(state.brands.get("s1")).toMatchObject({ plexoCreated: true, awaitingPublish: true });
   });
@@ -244,7 +244,7 @@ describe("publishing a project Plexo made", () => {
     remote.publish = 404;
     let r = await runSiteBrandUpdate("s1", { source: "schedule" });
     expect(r.outcome).toBe("up-to-date");
-    expect(r.message).toMatch(/Press Publish there once/);
+    expect(r.message).toMatch(/Publish it once so your website can follow it/);
     expect(state.brands.get("s1")!.awaitingPublish).toBe(true);
     expect(x.order.filter((o) => o === "publish")).toHaveLength(1);
 

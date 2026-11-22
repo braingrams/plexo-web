@@ -3,7 +3,7 @@
 import "./strataPicker.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Link2, Plus } from "lucide-react";
-import { Button, Skeleton } from "../ui";
+import { Button, OptimisticLoader, Skeleton } from "../ui";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import { brandFromDesignSystem, type ResolvedBrand } from "@/lib/brand/brandModel";
 import {
@@ -75,6 +75,8 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
   const [done, setDone] = useState<string | null>(null);
   const [account, setAccount] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+  /** What the chosen brand looks like (colours and fonts), shown so the owner sees what they are picking. */
+  const [look, setLook] = useState<{ name: string; colors: string[]; heading?: string; body?: string } | null>(null);
   const alive = useRef(true);
   useEffect(() => () => { alive.current = false; }, []);
 
@@ -98,7 +100,7 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
       setAccount(st.user?.email ?? null);
       if (st.connected) setProjects(await client.listProjects());
     } catch (e) {
-      if (alive.current) setError(errMsg(e, "We couldn't load your brands from Strata. Please try again."));
+      if (alive.current) setError(errMsg(e, "We couldn't load your brands. Please try again."));
     } finally {
       if (alive.current) setLoading(false);
     }
@@ -118,7 +120,7 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
         if (props.mode === "site") props.onConnected?.();
       }
     } catch (e) {
-      setError(errMsg(e, "Strata wasn't connected. Please try again."));
+      setError(errMsg(e, "We couldn't sign you in. Please try again."));
     } finally {
       setBusy(null);
     }
@@ -137,8 +139,9 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
           const ds = await client.pull(value.id);
           const b = brandFromDesignSystem({ tokens: ds.tokens as never, name: p?.name });
           picked = { projectId: value.id, name: value.name, colors: b.colours.filter((c) => /^#[0-9a-f]{6}$/i.test(c.value)).map((c) => c.value).slice(0, 4), logoUrl: p?.logo ?? null };
-        } catch { picked = { projectId: value.id, name: value.name, colors: p?.color ? [p.color] : [], logoUrl: p?.logo ?? null }; }
-      }
+          setLook({ name: value.name, colors: picked.colors, heading: b.fonts.heading, body: b.fonts.body });
+        } catch { picked = { projectId: value.id, name: value.name, colors: p?.color ? [p.color] : [], logoUrl: p?.logo ?? null }; setLook({ name: value.name, colors: picked.colors }); }
+      } else setLook(null);
       props.onChange(value, picked);
     } else setLocal(value);
   };
@@ -200,8 +203,8 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
 
   if (stage === "loading") {
     return (
-      <div className={cls} role="status" aria-live="polite" aria-label="Loading your brands">
-        <div className="plx-sbp__skel"><Skeleton height={64} /><Skeleton height={64} /><Skeleton height={64} /></div>
+      <div className={cls} role="status" aria-live="polite" aria-label="Loading your brands" style={{ padding: "32px 16px", display: "grid", placeItems: "center" }}>
+        <OptimisticLoader title="Connecting to brand library" subtitle="Retrieving logos, colors, and typography" steps={["Connecting to brand workspace…", "Loading brand assets and palettes…", "Ready."]} />
       </div>
     );
   }
@@ -232,7 +235,7 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
   }
 
   const list = stage === "list" ? (
-    <div className="plx-sbp__list" role="radiogroup" aria-label="Your Strata brands">
+    <div className="plx-sbp__list" role="radiogroup" aria-label="Your saved brands">
       {sorted.map((p) => {
         const checked = selection.kind === "project" && selection.id === p.id;
         const editable = canLink(p);
@@ -244,7 +247,7 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
             </span>
             <span className="plx-sbp__text">
               <span className="plx-sbp__name">{p.name}</span>
-              <span className="plx-sbp__sub">{!editable ? PICKER_COPY.viewOnly : p.id === currentId ? "Your website uses this now" : p.description || (p.updatedAt ? `Edited ${new Date(p.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : "Colours, fonts and logo")}</span>
+              <span className="plx-sbp__sub">{!editable ? PICKER_COPY.viewOnly : p.id === currentId ? "Selected: your website uses this" : p.description || (p.updatedAt ? `Edited ${new Date(p.updatedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })}` : "Colours, fonts and logo")}</span>
             </span>
             <span className="plx-sbp__check" aria-hidden><Check size={16} /></span>
           </button>
@@ -260,8 +263,8 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
 
   const accountLine = account || connected ? (
     <p className="plx-sbp__note" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", margin: 0 }}>
-      <span>{account ? <>Showing the brands of <b>{account}</b>.</> : "Strata is connected."}</span>
-      <Button variant="ghost" size="sm" loading={busy === "connect"} onClick={() => void connect(true)}>Use a different Strata account</Button>
+      <span>{account ? <>Showing the brands of <b>{account}</b>.</> : "You are signed in."}</span>
+      <Button variant="ghost" size="sm" loading={busy === "connect"} onClick={() => void connect(true)}>Use a different account</Button>
     </p>
   ) : null;
 
@@ -294,12 +297,18 @@ export function StrataBrandPicker(props: DraftProps | SiteProps) {
           <div className="plx-sbp__foot">
             {props.onCancel ? <Button variant="ghost" onClick={props.onCancel}>Cancel</Button> : <span />}
             <Button loading={busy === "link" || busy === "create"} disabled={selection.kind !== "project" && selection.kind !== "create"} onClick={() => (needsSwitchConfirmation({ currentProjectId: currentId, selection }) ? setConfirming(true) : void apply())}>
-              {selection.kind === "create" ? "Create my brand in Strata" : currentId ? "Switch to this brand" : "Use this brand"}
+              {selection.kind === "create" ? "Save my brand" : currentId ? "Switch to this brand" : "Use this brand"}
             </Button>
           </div>
         </>
       ) : (
         <>
+          {selection.kind === "project" && look?.name === selection.name && (look.colors.length || look.heading || look.body) ? (
+            <div className="plx-sbp__look" aria-label={`Colours and fonts of ${look.name}`}>
+              <span className="plx-sbp__dots">{look.colors.map((c) => <i key={c} style={{ background: c }} title={c} />)}</span>
+              {look.heading || look.body ? <span className="plx-sbp__fonts">{[look.heading, look.body].filter((f, i, a): f is string => !!f && a.indexOf(f) === i).join(" + ")}</span> : null}
+            </div>
+          ) : null}
           {selection.kind === "project" || selection.kind === "create" ? <p className="plx-sbp__note">{PICKER_COPY.deferred}</p> : null}
           {skip}
         </>

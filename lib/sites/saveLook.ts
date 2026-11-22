@@ -21,7 +21,7 @@ export async function saveSiteLook(who: Who, siteId: string, input: unknown, rev
   const look = parsed.value;
   try {
     const hadLogo = !!readSiteBrand(site.brand)?.logoUrl;
-    const brand = siteBrandFromLook(look);
+    const brand = siteBrandFromLook(look, readSiteBrand(site.brand));
     await Template.patch({ id: siteId }).set({ brand }).go();
     const { data: user } = await User.get({ id: who.userId }).go({ attributes: ["name"] });
     let applied = { updated: 0, needsPublish: 0, skipped: 0, logoPlaced: false };

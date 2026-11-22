@@ -428,6 +428,15 @@ export class ComputeStack extends cdk.Stack {
         resources: ["*"],
       }),
     );
+    // Clearing a site's saved page copies when the owner publishes (lib/pub/edgeCache.ts). CreateInvalidation needs the
+    // distribution's ARN and the tenant variant the tenant's, neither known here ahead of time, so like the tenant calls
+    // above this is scoped by action (only the two invalidation calls), not by resource.
+    serverFn.addToRolePolicy(
+      new iam.PolicyStatement({
+        actions: ["cloudfront:CreateInvalidation", "cloudfront:CreateInvalidationForDistributionTenant"],
+        resources: ["*"],
+      }),
+    );
     // lib/acmCertificates.ts's own runtime ACM calls — requestCertificate (on adding a
     // custom domain), getCertificateStatus (the certificate-attachment cron route,
     // polling every 5 minutes), deleteCertificate (on disconnecting a domain). A real

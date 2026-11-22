@@ -1,12 +1,13 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { SettingsActionBar } from "../_components/SettingsActionBar";
 
 type MaildripGroup = { id: string; title: string; description: string | null; totalContacts: number };
 
-type InitialNotificationsSettings = {
+export type InitialNotificationsSettings = {
   maildripConnected: boolean;
   maildripPaidGroupId: string;
   maildripNewsletterGroupId: string;
@@ -158,7 +159,7 @@ function MaildripConnect({ templateId, onConnected }: { templateId: string; onCo
         >
           {resendState === "sent" ? "Code resent" : resendState === "sending" ? "Sending…" : "Didn't get it? Resend code"}
         </button>
-        {error && <p style={{ fontSize: "0.75rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p>}
+        {error && <GateOrError error={error}><p style={{ fontSize: "0.75rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p></GateOrError>}
       </div>
     );
   }
@@ -212,7 +213,7 @@ function MaildripConnect({ templateId, onConnected }: { templateId: string; onCo
       >
         {busy ? "Connecting…" : tab === "login" ? "Log in" : "Create account"}
       </button>
-      {error && <p style={{ fontSize: "0.75rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p>}
+      {error && <GateOrError error={error}><p style={{ fontSize: "0.75rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p></GateOrError>}
       <p style={{ fontSize: "0.7rem", color: "var(--cmx-muted, rgba(240,242,255,0.35))", margin: 0 }}>
         Your password goes straight to MailDrip's own login — it's never stored here.
       </p>
@@ -308,12 +309,12 @@ function GroupSelect({
           <option value="__create__" style={{ background: "var(--cmx-surface, #0d0f1a)" }}>+ Create new group…</option>
         </select>
       )}
-      {error && <p style={{ fontSize: "0.72rem", color: "var(--cmx-danger, #f87171)", margin: "0.3rem 0 0" }}>{error}</p>}
+      {error && <GateOrError error={error}><p style={{ fontSize: "0.72rem", color: "var(--cmx-danger, #f87171)", margin: "0.3rem 0 0" }}>{error}</p></GateOrError>}
     </FieldLabel>
   );
 }
 
-export function NotificationsSettingsClient({ templateId, initial }: { templateId: string; initial: InitialNotificationsSettings }) {
+export function NotificationsSettingsClient({ templateId, initial, hideOwnerEmail }: { templateId: string; initial: InitialNotificationsSettings; /** In the hub, the order-alert email lives under General. */ hideOwnerEmail?: boolean }) {
   const router = useRouter();
   const [connected, setConnected] = useState(initial.maildripConnected);
   const [showConnectFlow, setShowConnectFlow] = useState(false);
@@ -384,11 +385,11 @@ export function NotificationsSettingsClient({ templateId, initial }: { templateI
 
   return (
     <div>
-      <Section title="Order notifications" description="Who gets emailed when a new order comes in.">
+      {!hideOwnerEmail && <Section title="Order notifications" description="Who gets emailed when a new order comes in.">
         <FieldLabel label="Notification email">
           <input type="email" value={notificationEmail} onChange={(e) => setNotificationEmail(e.target.value)} placeholder="you@example.com" style={{ ...inputStyle, maxWidth: 420 }} />
         </FieldLabel>
-      </Section>
+      </Section>}
 
       <Section title="MailDrip" description="Tags paying customers and newsletter subscribers into real MailDrip groups, and sends receipts. You can also connect an account directly from a form block's Provider panel in the page editor.">
         {!connected ? (

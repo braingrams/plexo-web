@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowRight, MessageCircle } from "lucide-react";
+import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
+import { ArrowRight } from "lucide-react";
 import { taskLink } from "@/lib/dashboardV3/taskLinks";
 import type { TaskId, TaskProgress, TaskView } from "@/lib/dashboardV3/tasks";
 import type { SiteSummary } from "@/lib/dashboardV3/sites";
 import { ButtonLink, Checklist, HelpMedia, TaskCard } from "../ui";
-import { AddressForm, LiveForm, PayForm, ProductForm } from "./TaskForms";
+import { FinishForm, PayForm, ProductForm } from "./TaskForms";
 
 type Props = { site: SiteSummary; progress: TaskProgress; commerceEnabled: boolean; baseDomain: string; demo?: boolean; onLive: () => void };
 
@@ -22,10 +23,8 @@ export function GuidedChecklist({ site, progress, commerceEnabled, baseDomain, d
         return <ProductForm {...common} commerceEnabled={commerceEnabled} />;
       case "pay":
         return <PayForm {...common} />;
-      case "address":
-        return <AddressForm {...common} siteName={site.name} baseDomain={baseDomain} />;
-      case "live":
-        return <LiveForm {...common} onLive={onLive} />;
+      case "finish":
+        return <FinishForm {...common} siteName={site.name} baseDomain={baseDomain} hasAddress={progress.hasAddress} address={site.address} onLive={onLive} />;
       case "link": {
         const go = taskLink(t.id, site.id, site.name);
         if (!go) return null;
@@ -35,7 +34,7 @@ export function GuidedChecklist({ site, progress, commerceEnabled, baseDomain, d
               {go.label}
             </ButtonLink>
             {go.href !== go.solHref ? (
-              <ButtonLink href={go.solHref} variant="secondary" size="lg" leftIcon={<MessageCircle size={18} aria-hidden />}>
+              <ButtonLink href={go.solHref} variant="secondary" size="lg" leftIcon={<SolGlyph size={18} />}>
                 Ask SOL to do it
               </ButtonLink>
             ) : null}

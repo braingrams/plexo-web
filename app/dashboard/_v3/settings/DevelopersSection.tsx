@@ -1,5 +1,9 @@
 "use client";
 
+import { PlanLock } from "@/app/dashboard/_components/PlanLock";
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
+import { planThatRaises } from "@/lib/plan/planNeeded";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { Check, Code2, KeyRound, Trash2, Wrench } from "lucide-react";
 import { Badge, Button, ButtonLink, Textarea } from "../ui";
@@ -82,11 +86,12 @@ export function DevelopersSection({ keys: k0, maxKeys, canPublishViaApi, publish
   }
 
   const meter = usageMeter(keys.length, maxKeys);
+  const [keysFull, setKeysFull] = useState(false);
   return (
     <SettingsPageShell
       title="Developers"
       purpose="API keys, the SDK, and tools for putting Plexo inside your own apps."
-      action={<Button loading={busy === "create"} disabled={keys.length >= maxKeys} leftIcon={<KeyRound size={16} aria-hidden />} onClick={create}>New API key</Button>}
+      action={<Button loading={busy === "create"} leftIcon={<KeyRound size={16} aria-hidden />} onClick={() => (keys.length >= maxKeys ? setKeysFull(true) : create())}>New API key</Button>}
       aside={
         <>
           {/* Always here, even if the dashboard strip was closed or never switched on. */}
@@ -116,7 +121,8 @@ export function DevelopersSection({ keys: k0, maxKeys, canPublishViaApi, publish
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
+      {keysFull || keys.length >= maxKeys ? <UpgradePrompt tone="info" requiredPlan={planThatRaises((f) => f.maxApiKeys, maxKeys)} message={`Your plan holds ${maxKeys} API key${maxKeys === 1 ? "" : "s"} and they're all in use. Upgrade for more, or revoke one you no longer use.`} /> : null}
 
       <Panel title="API keys" description={`Authenticate requests to the Plexo API. ${keys.length} of ${maxKeys} in use.`} flush data-tour="dev-keys">
         {fresh ? (
@@ -146,14 +152,18 @@ export function DevelopersSection({ keys: k0, maxKeys, canPublishViaApi, publish
         <div className="plx-dev">
           <CopyBox value={SDK_V2_INSTALL} label="Install command" wrap />
           <pre className="plx-code" style={{ maxHeight: 260 }}>{SDK_V2_EMBED}</pre>
-          {canPublishViaApi ? <ToggleRow title="Let my apps publish pages" description="Embedded builders publish under your account, with no per-domain limit." checked={publish} onChange={togglePublish} /> : <Badge tone="neutral">Publishing from embedded builders is on the Pro plan</Badge>}
+          <PlanLock requires="PRO" locked={!canPublishViaApi} message="Letting your embedded builders publish under your account, with no per-domain limit, is part of the Pro plan.">
+            <ToggleRow title="Let my apps publish pages" description="Embedded builders publish under your account, with no per-domain limit." checked={publish} onChange={togglePublish} />
+          </PlanLock>
         </div>
       </Panel>
 
       <Panel title="Compile MJML" description={canCompile ? "Turn MJML into responsive HTML." : "Available on paid plans."} data-tour="dev-compile">
         <div className="plx-dev">
-          <Textarea label="MJML" className="plx-textarea-code" value={mjml} onChange={(e) => setMjml(e.target.value)} disabled={!canCompile} />
-          <div><Button variant="secondary" loading={busy === "compile"} disabled={!canCompile || !mjml.trim()} onClick={compile}>Compile</Button></div>
+          <PlanLock requires="STARTER" locked={!canCompile} message="Turning MJML into responsive HTML comes with the Starter plan and above.">
+            <Textarea label="MJML" className="plx-textarea-code" value={mjml} onChange={(e) => setMjml(e.target.value)} />
+            <div><Button variant="secondary" loading={busy === "compile"} disabled={!mjml.trim()} onClick={compile}>Compile</Button></div>
+          </PlanLock>
           {html ? <pre className="plx-code plx-code--wrap" style={{ maxHeight: 220 }}>{html}</pre> : null}
         </div>
       </Panel>

@@ -44,18 +44,12 @@ const GUIDES: Record<string, Guide> = {
       s("button", "Home", "Save how I get paid", "Tap Save how I get paid."),
     ],
   },
-  "Choosing your web address": {
-    intro: "Pick the link people will type or tap to reach you.",
+  "Finishing up": {
+    intro: "Pick your web address and put your site online, all in one go.",
     steps: [
       s("field", "Home", "Your web address", "Type a short name, like your business name."),
-      s("button", "Home", "Use this address", "Tap Use this address."),
-    ],
-  },
-  "Putting your site online": {
-    intro: "One tap and anyone can visit. You can keep editing afterwards.",
-    steps: [
       s("button", "Home", "Put my site online", "Tap Put my site online."),
-      s("button", "Home", "Preview", "Then tap Preview to see it the way visitors do."),
+      s("button", "Home", "Copy link", "Then tap Copy link and send it to your first customers."),
     ],
   },
   "Putting your app online": {
@@ -68,9 +62,9 @@ const GUIDES: Record<string, Guide> = {
   "Editing the words on your site": {
     intro: "Read each page and fix anything that doesn't sound like you.",
     steps: [
-      s("button", "Home", "Edit my pages", "Tap Edit my pages."),
-      s("tab", "Your site", "Pages", "Tap the page you want to change."),
-      s("button", "Editor", "Publish", "Click a piece of text, change it, then Publish."),
+      s("button", "Home", "Change the words", "Tap Change the words."),
+      s("button", "Words", "Edit this page", "Tap Edit this page, click a piece of text and type your own."),
+      s("button", "Words", "Looks good, next page", "Tap Looks good, next page, or Skip this page, until the end."),
     ],
   },
   "Adding contact details": {

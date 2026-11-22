@@ -4,9 +4,10 @@ import "server-only";
  * tasks.ts) and the numbers on the live dashboard. Every read is wrapped so a hiccup in one
  * source shows a plain empty state instead of breaking the page.
  */
+import { senderOf, type ActivityKind } from "./seeAllLinks";
 import { Template } from "@/lib/db/contentEntities";
 import { BlogPost, LmsEnrollment, LmsPage } from "@/lib/db/contentEntities";
-import { CommerceOrder, CommerceProduct, CommerceSettings } from "@/lib/db/commerceEntities";
+import { CommerceOrder, CommerceProduct, CommerceSettings, CommerceDonationCampaign } from "@/lib/db/commerceEntities";
 import { FormSubmission, PageView } from "@/lib/db/opsEntities";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { bucketVisitsByDay } from "./visitsTrend";
@@ -33,25 +34,37 @@ export type SiteHomeData = { variant: TaskVariant; facts: SiteFacts; commerceEna
 /** The facts behind one site's guided steps. */
 export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile | undefined): Promise<SiteHomeData> {
   const id = site.id;
-  const [tpl, settings, products, posts, lessons, funnel] = await Promise.all([
-    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "liveBuildId", "sourceType", "brand"] })).data, null),
+  const [tpl, settings, products, campaigns, posts, lessons, funnel] = await Promise.all([
+    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "liveBuildId", "sourceType", "brand", "compiledHtml", "draftHtml"] })).data, null),
     safe("store settings", async () => (await CommerceSettings.get({ templateId: id }).go()).data, null),
     safe("products", async () => (await CommerceProduct.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
+    safe("campaigns", async () => (await CommerceDonationCampaign.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
     safe("posts", async () => (await BlogPost.query.primary({ templateId: id }).go({ limit: 1, attributes: ["slug"] })).data, []),
     safe("lessons", async () => (await LmsPage.query.primary({ templateId: id }).go({ pages: "all", attributes: ["id", "kind"] })).data, []),
     safe("course", async () => (await import("@/lib/db/contentEntities").then((m) => m.LmsFunnel.get({ templateId: id }).go())).data, null),
   ]);
   // This site's OWN brand only: its linked Strata project or its saved colours and logo, never the account's (resolveSiteBrand with no profile).
   const own = await resolveSiteBrand({ siteId: id }).catch(() => null).then((r) => (r ? { logoUrl: r.logoUrl, noLogo: r.noLogo, colors: r.colours.map((c) => c.value) } : readSiteBrand(tpl?.brand)));
-  const commerceEnabled = !!settings?.enabled;
-  const variant = taskVariantFor({ kind: site.kind, sells: commerceEnabled }, profile?.goal);
+  const hasProducts = products.length > 0;
+  const hasDonations = campaigns.length > 0;
+  const commerceEnabled = Boolean(settings?.enabled) && (hasProducts || !hasDonations);
+  const acceptsDonations = hasDonations || Boolean(settings?.donationsEnabled && !settings?.enabled);
+  const variant = taskVariantFor({ kind: site.kind, sells: commerceEnabled, hasDonations: acceptsDonations, productCount: products.length }, profile?.goal);
   const created = tpl?.createdAt ? Date.parse(tpl.createdAt) : NaN;
   const updated = tpl?.updatedAt ? Date.parse(tpl.updatedAt) : NaN;
   const lessonCount = lessons.filter((l) => l.kind !== "WELCOME").length;
   const edited = Number.isFinite(created) && Number.isFinite(updated) && updated - created > EDITED_AFTER_MS;
-  const cardsReady = !!settings?.paystackLivePublicKey && !!settings?.paystackLiveSecretKeyEncrypted;
+  const cardsReady =
+    settings?.paymentProvider === "PLATFORM_PAYSTACK" ||
+    settings?.paymentProvider === "PLATFORM_STRIPE" ||
+    (settings?.paymentProvider === "BYO_STRIPE" && !!settings?.stripeLivePublishableKey && !!settings?.stripeLiveSecretKeyEncrypted) ||
+    ((!settings?.paymentProvider || settings?.paymentProvider === "BYO_PAYSTACK") && !!settings?.paystackLivePublicKey && !!settings?.paystackLiveSecretKeyEncrypted);
   const bankReady = !!settings?.bankTransferEnabled && !!settings?.bankTransferAccountNumber;
   const ownDesign = tpl?.sourceType === "RAW_UPLOAD";
+  const personalizedWithSol = Boolean(
+    tpl?.compiledHtml?.includes('data-sol-personalized="true"') ||
+    tpl?.draftHtml?.includes('data-sol-personalized="true"')
+  );
   const facts: SiteFacts = {
     ...EMPTY_FACTS,
     hasSite: true,
@@ -70,6 +83,7 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
     ownDesign,
     published: isPublished(tpl) || (ownDesign && !!site.address),
     signInOn: edited,
+    personalizedWithSol,
   };
   return { variant, facts, commerceEnabled };
 }
@@ -82,6 +96,8 @@ export type SiteStats = {
   activity: OrderRow[];
   activityTitle: string;
   activityEmpty: string;
+  /** What the card lists, so its "See all" opens the real list (lib/dashboardV3/seeAllLinks.ts). */
+  activityKind?: ActivityKind;
   /** Visits for each of the last 7 days, oldest first (for the little trend chart). */
   visitsByDay?: number[];
 };
@@ -98,8 +114,9 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
   let activity: OrderRow[] = [];
   let activityTitle = "Latest activity";
   let activityEmpty = "Nothing yet. Share your link and the first visitors will show up here.";
+  let activityKind: ActivityKind = "none";
 
-  if (variant === "store") {
+  if (variant === "store" || variant === "payments") {
     const [orders, settings] = await Promise.all([
       safe("orders", async () => (await CommerceOrder.query.primary({ templateId: id }).go({ pages: "all" })).data, []),
       safe("currency", async () => (await CommerceSettings.get({ templateId: id }).go()).data, null),
@@ -110,6 +127,7 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
     const month = paid.filter((o) => Date.parse(o.createdAt ?? "") >= monthAgo);
     stats.push({ id: "orders", label: "Orders", value: num(orders.length), hint: `${num(paid.length)} paid` });
     stats.push({ id: "sales", label: "Sales this month", value: formatMoney(month.reduce((s, o) => s + o.amountMinor, 0), currency) });
+    activityKind = "orders";
     activityTitle = "Latest orders";
     activityEmpty = "No orders yet. Share your store link with a few friends to get the first one.";
     activity = [...orders]
@@ -119,6 +137,7 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
   } else if (variant === "course") {
     const enrolled = await safe("students", async () => (await LmsEnrollment.query.primary({ templateId: id }).go({ pages: "all", attributes: ["email", "enrolledAt"] })).data, []);
     stats.push({ id: "students", label: "Students", value: num(enrolled.length) });
+    activityKind = "students";
     activityTitle = "New students";
     activityEmpty = "No students yet. Share your course link to get the first one.";
     activity = [...enrolled].sort((a, b) => (b.enrolledAt ?? "").localeCompare(a.enrolledAt ?? "")).slice(0, 5).map((e) => ({ id: e.email, who: e.email, amount: "", when: e.enrolledAt ?? "", paid: true }));
@@ -127,10 +146,12 @@ export async function loadSiteStats(site: SiteSummary, variant: TaskVariant): Pr
     stats.push({ id: "posts", label: "Posts published", value: num(posts.filter((p) => p.status === "PUBLISHED").length) });
     activityEmpty = "Write a post and share it. Readers show up here.";
   } else if (variant !== "app") {
-    const subs = await safe("messages", async () => (await FormSubmission.query.primary({ templateId: id }).go({ pages: "all", attributes: ["id", "createdAt"] })).data, []);
+    const subs = await safe("messages", async () => (await FormSubmission.query.primary({ templateId: id }).go({ pages: "all", attributes: ["id", "createdAt", "fields", "formName"] })).data, []);
     stats.push({ id: "messages", label: variant === "link" ? "Link taps" : "Messages and sign-ups", value: num(subs.length) });
+    activityKind = "messages";
     activityTitle = "Messages and sign-ups";
     activityEmpty = "Nothing yet. When someone fills in a form on your site, it appears here.";
+    activity = [...subs].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")).slice(0, 5).map((m) => ({ id: m.id, who: senderOf(m.fields, m.formName), amount: "", when: m.createdAt ?? "", paid: true }));
   }
-  return { stats, activity, activityTitle, activityEmpty, visitsByDay: bucketVisitsByDay(visitTimes) };
+  return { stats, activity, activityTitle, activityEmpty, activityKind, visitsByDay: bucketVisitsByDay(visitTimes) };
 }

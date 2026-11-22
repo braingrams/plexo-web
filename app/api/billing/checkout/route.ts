@@ -9,7 +9,7 @@ import { stripePlanMetadata } from "@/lib/billing/stripePlans";
 import { startPaystackPlanCheckout, startPaystackTopupCheckout } from "@/lib/billing/paystackBilling";
 import { PLAN_LABELS, type PaidPlanId, PLAN, RETIRED_PLAN } from "@/lib/plan/plans";
 import { storedPlan } from "@/lib/plan/entitlement";
-import { yearlyOffered, type BillingInterval } from "@/lib/billing/pricing";
+import { creditsForTopupAmount, formatMoney, maxTopupAmount, minTopupAmount, minorUnits, planPrice, yearlyOffered, type BillingInterval } from "@/lib/billing/pricing";
 import { getStripe } from "@/lib/stripe";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
@@ -20,7 +20,7 @@ import { hasRecurringPlan } from "@/lib/billing/oneTime";
 
 type CheckoutRequest =
   | { kind: "subscription"; plan: PaidPlanId | typeof RETIRED_PLAN.ULTRA; interval?: BillingInterval; oneTime?: boolean }
-  | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE" }
+  | { kind: "topup"; pack?: "SMALL" | "MEDIUM" | "LARGE"; customAmount?: number }
   | { kind: "funnel_addon_slot" };
 
 function isValidBody(value: unknown): value is CheckoutRequest {
@@ -32,7 +32,11 @@ function isValidBody(value: unknown): value is CheckoutRequest {
     // ULTRA: a page loaded before the plan rename (it means today's Pro).
     return body.plan === PLAN.STARTER || body.plan === PLAN.PRO || body.plan === PLAN.ENTERPRISE || body.plan === RETIRED_PLAN.ULTRA;
   }
-  if (body.kind === "topup") return body.pack === "SMALL" || body.pack === "MEDIUM" || body.pack === "LARGE";
+  if (body.kind === "topup") {
+    if (body.pack === "SMALL" || body.pack === "MEDIUM" || body.pack === "LARGE") return true;
+    if (typeof body.customAmount === "number" && Number.isFinite(body.customAmount) && body.customAmount > 0) return true;
+    return false;
+  }
   if (body.kind === "funnel_addon_slot") return true;
   return false;
 }
@@ -145,12 +149,100 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         subscription_data: { metadata },
         return_url: returnUrl,
       });
-      return NextResponse.json({ provider: "STRIPE", clientSecret: checkoutSession.client_secret });
+      // The price this form shows, in its currency (Enterprise is a starting point, so it gets no value).
+      const shown = plan === PLAN.ENTERPRISE ? undefined : interval === "yearly" ? planPrice(region, plan, "yearly") ?? undefined : region.monthly[plan];
+      return NextResponse.json({
+        provider: "STRIPE",
+        clientSecret: checkoutSession.client_secret,
+        analytics: {
+          checkoutType: "subscription",
+          currency: region.currency,
+          ...(shown !== undefined ? { value: shown } : {}),
+          item: { item_id: `${plan.toLowerCase()}_${interval}`, item_name: PLAN_LABELS[plan], item_category: "subscription", item_variant: interval, ...(shown !== undefined ? { price: shown } : {}), quantity: 1 },
+        },
+      });
     }
 
-    if (body.kind === "topup" && usesPaystack) {
-      const checkout = await startPaystackTopupCheckout({ user, region, pack: body.pack, callbackUrl: paystackCallbackUrl });
-      return NextResponse.json(checkout);
+    if (body.kind === "topup") {
+      let credits: number;
+      let amountMinor: number;
+      let packLabel: string;
+
+      if (body.customAmount !== undefined) {
+        const min = minTopupAmount(region.currency);
+        if (body.customAmount < min) {
+          return NextResponse.json({ error: `The minimum top-up amount is ${formatMoney(min, region.currency)}.` }, { status: 400 });
+        }
+        const max = maxTopupAmount(region.currency);
+        if (body.customAmount > max) {
+          return NextResponse.json({ error: `The most you can top up at once is ${formatMoney(max, region.currency)}. For more, top up a few times or contact us.` }, { status: 400 });
+        }
+        const calculatedCredits = creditsForTopupAmount(body.customAmount, region.currency, region);
+        if (!calculatedCredits || calculatedCredits <= 0) {
+          return NextResponse.json({ error: "Invalid top-up amount." }, { status: 400 });
+        }
+        credits = calculatedCredits;
+        amountMinor = Math.round(body.customAmount * minorUnits(region.currency));
+        packLabel = "custom";
+      } else if (body.pack) {
+        const offer = topupOffer(region, body.pack);
+        credits = offer.credits;
+        amountMinor = offer.amountMinor;
+        packLabel = body.pack;
+      } else {
+        return NextResponse.json({ error: "Invalid top-up request." }, { status: 400 });
+      }
+
+      if (usesPaystack) {
+        const checkout = await startPaystackTopupCheckout({
+          user,
+          region,
+          pack: body.pack,
+          customAmount: body.customAmount,
+          credits,
+          amountMinor,
+          callbackUrl: paystackCallbackUrl,
+        });
+        return NextResponse.json(checkout);
+      }
+
+      const checkoutSession = await stripe!.checkout.sessions.create({
+        ui_mode: "embedded_page",
+        mode: "payment",
+        customer: customerId!,
+        line_items: [
+          {
+            quantity: 1,
+            price_data: {
+              currency: region.currency.toLowerCase(),
+              unit_amount: amountMinor,
+              product_data: { name: `${credits.toLocaleString("en-US")} AI credits` },
+            },
+          },
+        ],
+        metadata: {
+          plexoUserId: session.user.id,
+          kind: "topup",
+          pack: packLabel,
+          credits: String(credits),
+          amountMinor: String(amountMinor),
+          region: region.id,
+          ...(body.customAmount ? { customAmount: String(body.customAmount) } : {}),
+        },
+        return_url: returnUrl,
+        ...((body as { stayInPage?: unknown }).stayInPage === true ? { redirect_on_completion: "if_required" as const } : {}),
+      });
+      const packValue = amountMinor / minorUnits(region.currency);
+      return NextResponse.json({
+        provider: "STRIPE",
+        clientSecret: checkoutSession.client_secret,
+        analytics: {
+          checkoutType: "credits",
+          currency: region.currency,
+          value: packValue,
+          item: { item_id: `credits_${credits}`, item_name: `${credits.toLocaleString("en-US")} credits`, item_category: "credits", item_variant: "one_time", price: packValue, quantity: 1 },
+        },
+      });
     }
 
     if (body.kind === "funnel_addon_slot") {
@@ -187,7 +279,20 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           },
           return_url: returnUrl,
         });
-        return NextResponse.json({ provider: "STRIPE", clientSecret: checkoutSession.client_secret });
+        // The funnel slot's price comes from Stripe, so the event shows the same amount the form does.
+        const slotPrice = await stripe!.prices.retrieve(priceId);
+        const slotCurrency = (slotPrice.currency ?? "usd").toUpperCase();
+        const slotValue = slotPrice.unit_amount != null ? slotPrice.unit_amount / minorUnits(slotCurrency) : undefined;
+        return NextResponse.json({
+          provider: "STRIPE",
+          clientSecret: checkoutSession.client_secret,
+          analytics: {
+            checkoutType: "funnel_slot",
+            currency: slotCurrency,
+            ...(slotValue !== undefined ? { value: slotValue } : {}),
+            item: { item_id: "funnel_slot", item_name: "Funnel slot", item_category: "addon", item_variant: "monthly", ...(slotValue !== undefined ? { price: slotValue } : {}), quantity: 1 },
+          },
+        });
       } catch (err) {
         await LmsFunnelAddonSlot.patch({ organizationId: orgResolution.organizationId, id: slotId })
           .set({ status: "PAYMENT_FAILED", lastPaymentFailureReason: err instanceof Error ? err.message : "Could not start checkout." })
@@ -195,39 +300,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         throw err;
       }
     }
-
-    // Credits at the flat top-up rate (lib/billing/pricing.ts); the price is worked out here
-    // from the price list, so there are no per-pack Stripe prices to keep in step. The webhook
-    // grants from what was actually paid.
-    const offer = topupOffer(region, body.pack);
-    const checkoutSession = await stripe!.checkout.sessions.create({
-      ui_mode: "embedded_page",
-      mode: "payment",
-      customer: customerId!,
-      line_items: [
-        {
-          quantity: 1,
-          price_data: {
-            currency: offer.currency.toLowerCase(),
-            unit_amount: offer.amountMinor,
-            product_data: { name: `${offer.credits.toLocaleString("en-US")} AI credits` },
-          },
-        },
-      ],
-      metadata: {
-        plexoUserId: session.user.id,
-        kind: "topup",
-        pack: body.pack,
-        credits: String(offer.credits),
-        amountMinor: String(offer.amountMinor),
-        region: region.id,
-      },
-      return_url: returnUrl,
-      // stayInPage: the app editor's top-up panel finishes in place (onComplete) instead of
-      // navigating away; Stripe still redirects for payment methods that need it.
-      ...((body as { stayInPage?: unknown }).stayInPage === true ? { redirect_on_completion: "if_required" as const } : {}),
-    });
-    return NextResponse.json({ provider: "STRIPE", clientSecret: checkoutSession.client_secret });
+    return NextResponse.json({ error: "Invalid request." }, { status: 400 });
   } catch (err) {
     if (err instanceof PlanChangeError) return NextResponse.json({ error: err.message }, { status: err.status });
     return NextResponse.json(

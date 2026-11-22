@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";
@@ -140,7 +141,7 @@ function ProductDetailLayoutSection({ templateId, layout }: { templateId: string
         )}
       </div>
 
-      {error && <p style={{ fontSize: "0.78rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p>}
+      {error && <GateOrError error={error}><p style={{ fontSize: "0.78rem", color: "var(--cmx-danger, #f87171)", margin: 0 }}>{error}</p></GateOrError>}
 
       {showPicker && !layout && (
         <div style={{ marginTop: "0.25rem" }}>

@@ -1,5 +1,7 @@
 "use client";
 
+import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Download, Globe, Send, ShieldCheck } from "lucide-react";
@@ -15,7 +17,7 @@ type Warning = { title: string; detail: string };
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 const SAFETY = [
-  "I know this site will leave my account if they say yes.",
+  "I know this site will leave my account if they accept.",
   "I know they will own its pages, orders and web addresses.",
   "I've told them it's coming, and I trust them with it.",
 ];
@@ -95,17 +97,17 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
         <AsideCard title="What happens if…">
           <ul>
             <li><ShieldCheck size={16} aria-hidden /> <span><b>I give a site away?</b> Nothing moves until they accept, and you can cancel until then.</span></li>
-            <li><ShieldCheck size={16} aria-hidden /> <span><b>They say yes?</b> They own its pages, orders and web addresses. It leaves your account.</span></li>
+            <li><ShieldCheck size={16} aria-hidden /> <span><b>They accept?</b> They own its pages, orders and web addresses. It leaves your account.</span></li>
             <li><ShieldCheck size={16} aria-hidden /> <span><b>I bring a site in?</b> Your old site stays where it is until you switch your address over.</span></li>
           </ul>
         </AsideCard>
         </>
       }
     >
-      {error ? <Notice tone="bad">{error}</Notice> : null}
+      {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
 
       {incoming.length ? (
-        <Panel tone="tint" title="Someone wants to give you a site" description="Have a look, then say yes or no." data-tour="move-incoming">
+        <Panel tone="tint" title="Someone wants to give you a site" description="Have a look, then accept or decline." data-tour="move-incoming">
           {incoming.map((t) => (
             <div key={t.id} className="plx-actionrow">
               <div>
@@ -147,7 +149,7 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
               )}
             </div>
           </div>
-          {!canImport ? <Notice tone="warn">Bringing a site in is part of the Starter plan. <Link href="/dashboard/settings/plan" style={{ fontWeight: 700 }}>See plans</Link></Notice> : null}
+          {!canImport ? <UpgradePrompt tone="info" requiredPlan="STARTER" message="Bringing a site in from another builder is part of the Starter plan." /> : null}
         </div>
       </Panel>
 
@@ -165,7 +167,7 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
         </Panel>
       ) : null}
 
-      <Panel title="Give a site to someone" description="They need a Plexo account, or they can make one. You stay in charge until they say yes." data-tour="move-give">
+      <Panel title="Give a site to someone" description="They need a Plexo account, or they can make one. You stay in charge until they accept." data-tour="move-give">
         {!isOwner ? (
           <Notice tone="warn">Only the owner of the account can give a site away.</Notice>
         ) : sites.length === 0 ? (

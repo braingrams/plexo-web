@@ -193,6 +193,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
       return NextResponse.rewrite(new URL(`/api/runtime/${lookupDomain}${rest}${request.nextUrl.search}`, request.url));
     }
 
+    // The page's own visit counter (lib/pub/visitBeacon.ts): one small, never-cached POST per opened page.
+    if (pathname === "/__plexo/v" && request.method === "POST") {
+      return NextResponse.rewrite(new URL(`/api/public/visit/${encodeURIComponent(lookupDomain)}`, request.url));
+    }
+
     // The site's hosted brand sheet (lib/brand): /__plexo/brand/<siteId>.css on the site's own domain. Behind CloudFront this
     // path has its own short-cache behaviour; the route reads the sheet from storage.
     if (pathname.startsWith("/__plexo/brand/")) {

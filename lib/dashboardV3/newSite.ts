@@ -5,6 +5,7 @@
  * (lib/onboarding/complete.ts siteCreateArgs -> site_create), so there is one way to make a site.
  */
 import type { SolBuildGoal, SolBuildProfile } from "@/lib/ai/solBuildContext";
+import { INDUSTRIES, STYLES } from "@/lib/onboarding/understandWords";
 import { pickDesigns, type DesignChoice } from "@/lib/onboarding/designs";
 import { siteCreateArgs } from "@/lib/onboarding/complete";
 import { getTierFeatures } from "@/lib/subscription";
@@ -13,7 +14,7 @@ import { nextPlanUp, planLabel, toPlanId, PLAN } from "@/lib/plan/plans";
 export const NEW_SITE_PATH = "/dashboard/sites/new";
 export const DESIGNS_PATH = "/dashboard/marketplace";
 export const MOVE_PATH = "/dashboard/migrate/wordpress";
-export const UPLOAD_PATH = "/dashboard/new?classic=1";
+export const UPLOAD_PATH = "/dashboard/templates/upload";
 export const UPGRADE_PATH = "/dashboard/settings/subscription";
 
 const solHref = (prompt: string) => `/dashboard/sol?new=1&draft=${encodeURIComponent(prompt)}`;
@@ -81,12 +82,23 @@ function nameNotTaken(name: string, taken: Set<string>): string {
 }
 
 /** What the designs and the site are made from: the owner's brand with this site's name on it. */
-export function profileFor(goal: NewSiteGoal, name: string, brand: SolBuildProfile["brand"] | undefined): SolBuildProfile {
-  return { goal, brand: { ...(brand ?? {}), name: clean(name).slice(0, 80) || brand?.name || "My website" } };
+export function profileFor(goal: NewSiteGoal, name: string, brand: SolBuildProfile["brand"] | undefined, extra?: { about?: string; industry?: string; tone?: string }): SolBuildProfile {
+  const about = extra?.about ? clean(extra.about).slice(0, 500) : "";
+  return {
+    goal,
+    brand: {
+      ...(brand ?? {}),
+      name: clean(name).slice(0, 80) || brand?.name || "My website",
+      ...(about ? { about } : {}),
+      // What SOL understood from the description (see lib/onboarding/understand.ts): steers which designs fit best.
+      ...(extra?.industry ? { industry: extra.industry } : {}),
+      ...(extra?.tone ? { tone: extra.tone } : {}),
+    },
+  };
 }
 
-export function designPicks(goal: NewSiteGoal, name: string, brand?: SolBuildProfile["brand"]): { top: DesignChoice[]; total: number } {
-  const { top, others } = pickDesigns(profileFor(goal, name, brand));
+export function designPicks(goal: NewSiteGoal, name: string, brand?: SolBuildProfile["brand"], extra?: { about?: string; industry?: string; tone?: string }): { top: DesignChoice[]; total: number } {
+  const { top, others } = pickDesigns(profileFor(goal, name, brand, extra));
   return { top, total: top.length + others.length };
 }
 
@@ -116,7 +128,7 @@ export function paidDesignFrom(search: string): string | null {
   return id && /^[\w-]{1,80}$/.test(id) ? id : null;
 }
 
-export type CreateRequest = { goal: NewSiteGoal; name: string; designId: string; marketDesignId?: string };
+export type CreateRequest = { goal: NewSiteGoal; name: string; designId: string; marketDesignId?: string; personalizedHtml?: string; /** What the owner said the website is for and should look like: shapes the design picked and the words on the site. */ about?: string; /** What SOL understood from it (only the allowed words). */ industry?: string; style?: string };
 
 export function parseCreateRequest(body: unknown): { ok: true; value: CreateRequest } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
@@ -125,12 +137,16 @@ export function parseCreateRequest(body: unknown): { ok: true; value: CreateRequ
   const name = typeof b.name === "string" ? clean(b.name) : "";
   if (!name) return { ok: false, error: "Give your website a name, like your business name." };
   const market = typeof b.marketDesignId === "string" && b.marketDesignId.trim() ? b.marketDesignId.trim() : undefined;
-  return { ok: true, value: { goal, name: name.slice(0, 80), designId: typeof b.designId === "string" ? b.designId : "", ...(market ? { marketDesignId: market } : {}) } };
+  const personalizedHtml = typeof b.personalizedHtml === "string" && b.personalizedHtml.trim() ? b.personalizedHtml.trim() : undefined;
+  const about = typeof b.about === "string" ? clean(b.about).slice(0, 500) : "";
+  const industry = (INDUSTRIES as readonly string[]).find((i) => i === b.industry);
+  const style = (STYLES as readonly string[]).find((i) => i === b.style);
+  return { ok: true, value: { goal, name: name.slice(0, 80), designId: typeof b.designId === "string" ? b.designId : "", ...(market ? { marketDesignId: market } : {}), ...(personalizedHtml ? { personalizedHtml } : {}), ...(about ? { about } : {}), ...(industry ? { industry } : {}), ...(style ? { style } : {}) } };
 }
 
 /** The arguments for site_create: the same ones onboarding builds. */
 export function createArgs(req: CreateRequest, brand: SolBuildProfile["brand"] | undefined): Record<string, unknown> | null {
-  return siteCreateArgs(profileFor(req.goal, req.name, brand), req.designId);
+  return siteCreateArgs(profileFor(req.goal, req.name, brand, { about: req.about, industry: req.industry, tone: req.style }), req.designId);
 }
 
 export type LimitNote = { text: string; upgradeHref: string; upgradeLabel: string } | null;

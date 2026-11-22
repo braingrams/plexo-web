@@ -1,8 +1,9 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Tag, Trash2, Truck, Upload, X } from "lucide-react";
-import { Badge, Button, Card, EmptyState, Input, Modal, Select, Skeleton, Textarea, useToast } from "../ui";
+import { Badge, Button, Card, EmptyState, Input, Modal, OptimisticLoader, Select, Skeleton, Textarea, useToast } from "../ui";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { draftsFromProduct, MAX_OPTIONS, splitValues, syncVariantRows, variantPayload, type OptionDraft, type VariantDraft } from "@/app/dashboard/commerce/[templateId]/products/VariantsEditor";
 import { errMsg, hubApi } from "./hubApi";
@@ -260,7 +261,13 @@ export function DiscountsPanel({ siteId, currency }: { siteId: string; currency:
 
   return (
     <>
-      {loadError ? <p className="plx-field__error" role="alert">{loadError}</p> : !list ? <Card><Skeleton height={20} width="30%" style={{ marginBottom: 14 }} /><Skeleton height={56} /></Card> : list.length === 0 ? (
+      {loadError ? (
+        <p className="plx-field__error" role="alert">{loadError}</p>
+      ) : !list ? (
+        <Card padding="lg" style={{ minHeight: 180, display: "grid", placeItems: "center" }}>
+          <OptimisticLoader steps={["Loading discount codes…", "Checking promo rules…"]} subtitle="Loading discounts" />
+        </Card>
+      ) : list.length === 0 ? (
         <EmptyState title="Offer a discount" body="Make a code like WELCOME10 and share it. People type it at checkout and the price drops." action={<Button leftIcon={<Plus size={18} aria-hidden />} onClick={open}>Make a discount code</Button>} illustration={<Tag size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />
       ) : (
         <Card padding="none" className="plx-listcard">
@@ -294,7 +301,7 @@ export function DiscountsPanel({ siteId, currency }: { siteId: string; currency:
               <Input label="Ends on" optional type="date" value={form.expires} onChange={(e) => setForm({ ...form, expires: e.target.value })} />
               <Input label="Most uses" optional inputMode="numeric" value={form.limit} onChange={(e) => setForm({ ...form, limit: e.target.value })} placeholder="No limit" />
             </div>
-            {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+            {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
           </div>
         ) : null}
       </Modal>
@@ -372,7 +379,12 @@ export function DeliveryPanel({ siteId, currency }: { siteId: string; currency: 
   }
 
   if (loadError) return <p className="plx-field__error" role="alert">{loadError}</p>;
-  if (!methods || !flags) return <Card><Skeleton height={20} width="30%" style={{ marginBottom: 14 }} /><Skeleton height={56} /></Card>;
+  if (!methods || !flags)
+    return (
+      <Card padding="lg" style={{ minHeight: 180, display: "grid", placeItems: "center" }}>
+        <OptimisticLoader steps={["Loading delivery options…", "Configuring shipping and pickup…"]} subtitle="Loading delivery methods" />
+      </Card>
+    );
   return (
     <>
       <Card>
@@ -414,7 +426,7 @@ export function DeliveryPanel({ siteId, currency }: { siteId: string; currency: 
             <Input label="How long it takes" optional value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })} placeholder="1 to 2 days" />
             <Textarea label={form.type === "PICKUP" ? "Pickup address" : "Note for customers"} optional value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
             <label className="plx-toggle"><span><b>Offer this at checkout</b></span><input type="checkbox" className="plx-switch" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /></label>
-            {error ? <p className="plx-field__error" role="alert">{error}</p> : null}
+            {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
           </div>
         ) : null}
       </Modal>

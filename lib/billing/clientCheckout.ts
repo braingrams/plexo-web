@@ -1,5 +1,6 @@
 "use client";
 import { PaidPlanId } from "@/lib/plan/plans";
+import { trackEvent } from "@/lib/analytics";
 
 // One "Upgrade" (or "Buy credits") button for everyone: the server picks Stripe (US dollars) or
 // Paystack (naira, cedis, shillings, rand) from the person's region (POST /api/billing/checkout),
@@ -16,7 +17,7 @@ import type { BillingInterval } from "./pricing";
 
 export type CheckoutBody =
   | { kind: "subscription"; plan: PaidPlanId; interval?: BillingInterval; /** Pay for one period by transfer, card or USSD, with no automatic renewal (Paystack regions). */ oneTime?: boolean; returnTo?: string }
-  | { kind: "topup"; pack: "SMALL" | "MEDIUM" | "LARGE"; stayInPage?: boolean; returnTo?: string }
+  | { kind: "topup"; pack?: "SMALL" | "MEDIUM" | "LARGE"; customAmount?: number; stayInPage?: boolean; returnTo?: string }
   | { kind: "funnel_addon_slot"; returnTo?: string };
 
 export type CheckoutResult =
@@ -28,9 +29,18 @@ export type CheckoutResult =
   | { kind: "cancelled" }
   | { kind: "error"; message: string };
 
+/** What the checkout form shows (spec 7.1): the server reports the currency and price it used. */
+export type CheckoutAnalytics = {
+  checkoutType: "subscription" | "credits" | "funnel_slot";
+  currency: string;
+  value?: number;
+  item: { item_id: string; item_name: string; item_category: string; item_variant: string; price?: number; quantity: number };
+};
+
 type CheckoutResponse = {
   provider?: "STRIPE" | "PAYSTACK";
   clientSecret?: string;
+  analytics?: CheckoutAnalytics;
   changed?: boolean;
   message?: string;
   accessCode?: string;
@@ -122,6 +132,17 @@ function openPaystackPopup(accessCode: string, authorizationUrl: string | undefi
     });
 }
 
+/** begin_checkout: once the payment form is open (spec 7.1). Clears the ecommerce object first, as the spec requires. */
+function trackBeginCheckout(a: CheckoutAnalytics | undefined): void {
+  if (!a) return;
+  trackEvent({ ecommerce: null });
+  trackEvent({
+    event: "begin_checkout",
+    checkout_type: a.checkoutType,
+    ecommerce: { currency: a.currency, ...(a.value !== undefined ? { value: a.value } : {}), items: [{ ...a.item, quantity: 1 }] },
+  });
+}
+
 /** Starts a checkout for a plan, credits or a funnel slot, whichever provider the person pays with. */
 export async function startCheckout(body: CheckoutBody): Promise<CheckoutResult> {
   let data: CheckoutResponse;
@@ -138,6 +159,9 @@ export async function startCheckout(body: CheckoutBody): Promise<CheckoutResult>
   }
   if (data.changed) return { kind: "changed", message: data.message ?? "Your plan is updating now." };
   if (data.provider === "PAYSTACK" && data.accessCode) return openPaystackPopup(data.accessCode, data.authorizationUrl);
-  if (data.clientSecret) return { kind: "stripe", clientSecret: data.clientSecret };
+  if (data.clientSecret) {
+    trackBeginCheckout(data.analytics);
+    return { kind: "stripe", clientSecret: data.clientSecret };
+  }
   return { kind: "error", message: data.error ?? "We couldn't start the payment. Please try again." };
 }

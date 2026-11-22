@@ -1,5 +1,7 @@
 import { BlogPost } from "@/lib/db/contentEntities";
 import { getTierFeatures } from "@/lib/subscription";
+import { blogLimitGate } from "@/lib/plan/limitGates";
+import type { PaidPlanId } from "@/lib/plan/plans";
 
 export const QUOTA_EXCEEDED = "QUOTA_EXCEEDED" as const;
 
@@ -40,7 +42,10 @@ export type QuotaCheckResult =
   | {
       ok: false;
       error: string;
-      code: typeof QUOTA_EXCEEDED;
+      code: "PLAN_BLOG_LIMIT";
+      /** The plan that lifts the limit (a plan-gate body, see lib/plan/planGate.ts). */
+      requiredPlan: PaidPlanId;
+      upgradeUrl: string;
       plan: string;
       limit: number;
       count: number;
@@ -55,10 +60,13 @@ export async function assertPublishedBlogPostQuota(
 ): Promise<QuotaCheckResult> {
   const status = await getPublishedBlogPostQuotaStatus(templateId, plan);
   if (status.limit === null || status.count < status.limit) return { ok: true };
+  const gate = blogLimitGate(status.limit);
   return {
     ok: false,
-    error: `Your plan allows a maximum of ${status.limit} published blog posts. Upgrade to publish more.`,
-    code: QUOTA_EXCEEDED,
+    error: gate.message,
+    code: "PLAN_BLOG_LIMIT",
+    requiredPlan: gate.requiredPlan,
+    upgradeUrl: "/dashboard/settings/subscription",
     plan: status.plan,
     limit: status.limit,
     count: status.count,

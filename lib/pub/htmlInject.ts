@@ -1,4 +1,6 @@
 import type { CommerceTheme } from "@/lib/commerce/deriveCommerceTheme";
+import { analyticsSnippet } from "@/lib/consent/snippet";
+import { DEFAULT_CONSENT, type ConsentSettings } from "@/lib/consent/model";
 // Serve-time HTML injection shared by every kind of published site — builder pages,
 // raw uploads (app/pub/[domain]/[[...slug]]/route.ts) and React projects
 // (lib/projects/serve.ts) — so a platform-level tag behaves identically everywhere.
@@ -48,6 +50,23 @@ export function insertBeforeBodyEnd(html: string, fragment: string): string {
     return html.slice(0, insertAt) + fragment + html.slice(insertAt);
   }
   return html + fragment;
+}
+
+/**
+ * The Google Analytics tag for a site whose owner turned it on (lib/googleAnalytics), with the cookie notice for
+ * visitors who need one (lib/consent). Only a well-formed measurement ID (G-XXXX) is ever written into the page, and a
+ * page that already mentions that ID (a migrated site with its own tag, or the owner's header code) is left alone so
+ * visits are not counted twice. Callers run this AFTER the owner's header/footer code is added, so that check sees it.
+ */
+export function injectGoogleAnalyticsTag(html: string, measurementId: string, consent?: { required: boolean; settings: ConsentSettings }): string {
+  if (!/^G-[A-Z0-9]{4,20}$/.test(measurementId) || html.includes(measurementId)) return html;
+  const tag = analyticsSnippet({ measurementId, required: consent?.required ?? false, settings: consent?.settings ?? DEFAULT_CONSENT });
+  const headMatch = html.match(/<head[^>]*>/i);
+  if (headMatch && headMatch.index !== undefined) {
+    const idx = headMatch.index + headMatch[0].length;
+    return html.slice(0, idx) + tag + html.slice(idx);
+  }
+  return tag + html;
 }
 
 /** Marker the content widget (public/plexo-content.js) fills in — a plain div that works in every builder. */
@@ -170,3 +189,55 @@ export function injectCommerceScript(html: string, storefrontPath: string, check
   }
   return html + scriptTag;
 }
+
+/**
+ * The owner's saved header/footer code (lib/customCode), already validated at save time. Header code goes
+ * just before </head> (or right after <head> when there's no closing tag), footer code just before </body>.
+ * Never called on the shared Plexo address or below Starter (see lib/customCode/gate.ts).
+ */
+export const OWNER_HEAD_MARK = "<!--plexo:owner-head-->";
+export const OWNER_FOOTER_MARK = "<!--plexo:owner-footer-->";
+
+export function injectCustomCode(html: string, code: { head?: string | null; footer?: string | null }): string {
+  let out = html;
+  // Once only: a page that already carries the marker (served through two layers) is never given the code twice.
+  if (code.head && !out.includes(OWNER_HEAD_MARK)) {
+    const masked = out.replace(/<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi, (b) => " ".repeat(b.length));
+    const block = OWNER_HEAD_MARK + code.head;
+    const close = /<\/head\s*>/i.exec(masked);
+    if (close) {
+      out = out.slice(0, close.index) + block + out.slice(close.index);
+    } else {
+      // No <head>: go after <head ...>, else after <html ...>, else after the doctype — never in front of it (that would break the page's mode).
+      const open = /<head[^>]*>/i.exec(masked) ?? /<html[^>]*>/i.exec(masked) ?? /<!doctype[^>]*>/i.exec(masked);
+      out = open ? out.slice(0, open.index + open[0].length) + block + out.slice(open.index + open[0].length) : block + out;
+    }
+  }
+  if (code.footer && !out.includes(OWNER_FOOTER_MARK)) out = insertBeforeBodyEnd(out, OWNER_FOOTER_MARK + code.footer);
+  return out;
+}
+
+/**
+ * The page's own script (the "Custom JavaScript" box of the classic editor), put before </body>. It lives in the design, not in the
+ * compiled page, because the page sanitiser removes every inline script. Used when a classic page is served and when one is turned into code.
+ */
+export function injectCustomJs(html: string, customJs: string | null | undefined): string {
+  const script = (customJs ?? "").trim();
+  if (!script) return html;
+  const scriptTag = `<script>\n${script}\n</script>`;
+  const maskedHtml = html.replace(
+    /<(script|style)\b(?:"[^"]*"|'[^']*'|[^'">])*>[\s\S]*?<\/\1\s*>/gi,
+    (block) => " ".repeat(block.length),
+  );
+  let insertAt = -1;
+  const bodyCloseRe = /<\/body\s*>/gi;
+  let match: RegExpExecArray | null;
+  while ((match = bodyCloseRe.exec(maskedHtml)) !== null) {
+    insertAt = match.index;
+  }
+  if (insertAt !== -1) {
+    return html.slice(0, insertAt) + scriptTag + html.slice(insertAt);
+  }
+  return html + scriptTag;
+}
+

@@ -33,6 +33,7 @@ export type TemplateEditorProps = {
   pixabayKey?: string;
   currentUserId: string;
   currentUserRole: string;
+  initialAutosave?: boolean;
   organizationId: string;
   isBlogLayout?: boolean;
   commerceEnabled?: boolean;
@@ -44,6 +45,9 @@ export type TemplateEditorProps = {
   canTryNewEditor?: boolean;
   canGoBackToClassic?: boolean;
   templateSlug?: string | null;
+  canConvertToCode?: boolean;
+  initialConvertTo?: "code" | "text";
+  focusNodeId?: string;
 };
 
 function EditorSkeleton() {

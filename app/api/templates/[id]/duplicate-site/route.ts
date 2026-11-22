@@ -1,3 +1,5 @@
+import { templateLimitGate } from "@/lib/plan/limitGates";
+import { limitGateResponse } from "@/lib/plan/planGateResponse";
 import { randomUUID } from "node:crypto";
 import { recompileCopiedV2Page } from "@/lib/v2/copy";
 import { NextRequest, NextResponse } from "next/server";
@@ -105,11 +107,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     const { data: orgRoots } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
     const count = orgRoots.filter((t) => !t.parentId && t.kind === existing.kind && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout).length;
     if (count >= limit) {
-      const label = existing.kind === "LANDING_PAGE" ? "landing pages" : "email templates";
-      return NextResponse.json(
-        { error: `Your plan allows a maximum of ${limit} ${label}. Upgrade to create more.`, plan: resolved.subscriptionPlan },
-        { status: 403 },
-      );
+      return limitGateResponse(templateLimitGate(existing.kind === "LANDING_PAGE" ? "LANDING_PAGE" : "EMAIL", limit));
     }
   }
 

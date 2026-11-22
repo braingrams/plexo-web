@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { SUPPORTED_STORE_CURRENCIES } from "@/lib/commerce/currency";
@@ -213,7 +214,7 @@ export function DiscountsClient({ templateId, initialDiscounts, currency }: { te
                 <input type="number" value={usageLimit} onChange={(e) => setUsageLimit(e.target.value)} placeholder="Unlimited" style={inputStyle} />
               </FieldLabel>
 
-              {error && <p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)" }}>{error}</p>}
+              {error && <GateOrError error={error}><p style={{ fontSize: "0.82rem", color: "var(--cmx-danger, #f87171)" }}>{error}</p></GateOrError>}
 
               <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
                 <button type="button" onClick={() => setModalOpen(false)} style={{ padding: "0.6rem 1.1rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--cmx-ink, rgb(255,255,255)) 10%, transparent)", background: "transparent", color: "var(--cmx-muted, rgba(240,242,255,0.65))", cursor: "pointer", fontFamily: "inherit", fontSize: "0.85rem", fontWeight: 600 }}>

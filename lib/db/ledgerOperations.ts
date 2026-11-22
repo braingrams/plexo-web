@@ -9,7 +9,7 @@ import { allowancePlan } from "@/lib/plan/entitlement";
 import { planLabel } from "@/lib/plan/plans";
 import { computeCostUsd, creditsForUsd } from "@/lib/credits/pricing";
 import { MAX_TOKENS } from "@/lib/ai/generate";
-import type { AiActionMode, AiProvider, ConcreteTier, GenerateOutcome } from "@/lib/ai/types";
+import { type AiActionMode, type AiProvider, type ConcreteTier, type GenerateOutcome, AI_ACTION_LABELS } from "@/lib/ai/types";
 
 type UserItem = EntityItem<typeof User>;
 
@@ -316,7 +316,7 @@ export async function chargeUsage(
 ): Promise<{ creditsCharged: number; allowanceBalance: number; topupBalance: number; overdrawnBy: number }> {
   const usd = computeCostUsd(params.provider, params.tier, params.usage);
   const credits = creditsForUsd(usd);
-  const description = `${params.mode} (${params.provider}/${params.tier})`;
+  const description = AI_ACTION_LABELS[params.mode] || `${params.mode} (${params.provider}/${params.tier})`;
   const metadata = {
     provider: params.provider,
     tier: params.tier,

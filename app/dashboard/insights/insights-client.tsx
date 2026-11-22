@@ -9,6 +9,8 @@ import { ActivityHeatmap, type HeatmapPoint } from "../_components/ActivityHeatm
 import { VisitorDetailsModal } from "../_components/VisitorDetailsModal";
 import { TrafficChart } from "../_components/TrafficChart";
 import { useLayoutMode } from "../layout-mode-context";
+import { UpgradePrompt } from "../_components/UpgradePrompt";
+import { parsePlanGate, type PlanGate } from "@/lib/plan/planGate";
 
 type TimelineDay = {
   date: string;
@@ -30,6 +32,7 @@ export function InsightsClient({ v3 = false }: { v3?: boolean }) {
   const [filterType, setFilterType] = useState<"all" | "published">("all");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>(() => searchParams.get("templateId") || "all");
   const [loading, setLoading] = useState(true);
+  const [gate, setGate] = useState<PlanGate | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   // Data from API
@@ -54,6 +57,7 @@ export function InsightsClient({ v3 = false }: { v3?: boolean }) {
     fetch(`/api/v1/analytics?${query.toString()}`)
       .then((res) => res.json())
       .then((data) => {
+        setGate(parsePlanGate(data));
         if (data.success) {
           setTotalViews(data.totalViews);
           setTotalUnique(data.totalUnique);
@@ -86,6 +90,12 @@ export function InsightsClient({ v3 = false }: { v3?: boolean }) {
         title={v3 ? "Visits" : "Insights"}
         subtitle={v3 ? "How many people are looking at your sites, and when." : "Traffic and engagement across your published landing pages."}
       />
+
+      {gate && (
+        <div style={{ marginBottom: "1.5rem" }}>
+          <UpgradePrompt message={gate.message} requiredPlan={gate.requiredPlan} returnTo="/dashboard/insights" tone="info" />
+        </div>
+      )}
 
       <div
         style={{

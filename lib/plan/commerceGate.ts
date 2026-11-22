@@ -12,6 +12,8 @@
 import { CommerceProduct } from "@/lib/db/commerceEntities";
 import { getTierFeatures } from "@/lib/subscription";
 import { planFromOwner, workspaceOwner } from "./workspacePlan";
+import type { LimitGate } from "./limitGates";
+import { planThatEnables, planThatRaises } from "./planNeeded";
 
 export type CommercePlan = { plan: string; onTrial: boolean };
 
@@ -80,4 +82,25 @@ export async function checkoutPlanBlock(settings: { organizationId: string; paym
   if (!getTierFeatures(p.plan).commerceEnabled) return "This store isn't taking orders right now. Please check back soon.";
   if (!takesLivePayments(settings)) return null;
   return livePaymentError(p, settings.paymentProvider);
+}
+
+// ── The same checks as plan-gate bodies (message + the plan that lifts them) ──────────────
+
+/** Switching the store on, or choosing a payment setup, or adding products: the first plan-limit that applies, or null. */
+export function commerceSettingsGate(p: CommercePlan, change: { enabled?: boolean; paymentProvider?: string | null }): LimitGate | null {
+  if (change.enabled === true) {
+    const message = commerceEnableError(p);
+    if (message) return { code: "PLAN_COMMERCE_LIMIT", message, requiredPlan: planThatEnables((f) => f.commerceEnabled), details: {} };
+  }
+  const own = paymentProviderError(p, change.paymentProvider);
+  if (own) return { code: "PLAN_OWN_PAYMENT_KEYS", message: own, requiredPlan: planThatEnables((f) => f.ownPaymentKeysEnabled), details: {} };
+  return null;
+}
+
+export function productLimitGate(p: CommercePlan, existing: number, adding = 1): LimitGate | null {
+  const message = productLimitError(p, existing, adding);
+  if (!message) return null;
+  const features = getTierFeatures(p.plan);
+  if (!features.commerceEnabled) return { code: "PLAN_COMMERCE_LIMIT", message, requiredPlan: planThatEnables((f) => f.commerceEnabled), details: {} };
+  return { code: "PLAN_PRODUCT_LIMIT", message, requiredPlan: planThatRaises((f) => f.maxCommerceProducts, features.maxCommerceProducts), details: { limit: features.maxCommerceProducts, existing } };
 }

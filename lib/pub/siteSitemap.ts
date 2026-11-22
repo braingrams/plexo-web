@@ -26,9 +26,9 @@ function encodeSegments(segments: string[]): string {
 }
 
 /** Every publicly-served page of a site, depth-first, as absolute URLs on `host`. */
-async function listSitePages(root: TemplateItem, host: string, homeOnly: boolean): Promise<{ loc: string; lastmod?: string }[]> {
-  const out: { loc: string; lastmod?: string }[] = [];
-  if (!isNoindex(root.compiledHtml)) out.push({ loc: `https://${host}/`, lastmod: root.updatedAt });
+export async function listSitePages(root: TemplateItem, host: string, homeOnly: boolean): Promise<{ loc: string; lastmod?: string; name?: string }[]> {
+  const out: { loc: string; lastmod?: string; name?: string }[] = [];
+  if (!isNoindex(root.compiledHtml)) out.push({ loc: `https://${host}/`, lastmod: root.updatedAt, name: root.name });
   if (homeOnly) return out;
 
   const queue: { node: TemplateItem; segments: string[] }[] = [{ node: root, segments: [] }];
@@ -41,7 +41,7 @@ async function listSitePages(root: TemplateItem, host: string, homeOnly: boolean
       const childSegments = [...segments, child.slug];
       queue.push({ node: child, segments: childSegments });
       if (child.redirectTo || isNoindex(child.compiledHtml)) continue;
-      out.push({ loc: `https://${host}/${encodeSegments(childSegments)}${child.urlTrailingSlash ? "/" : ""}`, lastmod: child.updatedAt });
+      out.push({ loc: `https://${host}/${encodeSegments(childSegments)}${child.urlTrailingSlash ? "/" : ""}`, lastmod: child.updatedAt, name: child.name });
     }
   }
   return out;
@@ -68,7 +68,8 @@ export async function buildSiteSitemap(root: TemplateItem, host: string, opts: {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
 }
 
-export function buildSiteRobotsTxt(host: string, noindex: boolean): string {
+export function buildSiteRobotsTxt(host: string, noindex: boolean, opts: { aiRules?: string } = {}): string {
   if (noindex) return "User-agent: *\nDisallow: /\n";
-  return `User-agent: *\nAllow: /\n\nSitemap: https://${host}/sitemap.xml\n`;
+  const ai = opts.aiRules ? `${opts.aiRules.trimEnd()}\n\n` : "";
+  return `User-agent: *\nAllow: /\n\n${ai}Sitemap: https://${host}/sitemap.xml\n`;
 }

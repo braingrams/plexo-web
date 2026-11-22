@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { OptimisticLoader } from "@/app/dashboard/_v3/ui/OptimisticLoader";
 
 /**
  * The filters and the results live in different parts of the (server-rendered) page, so this shares one "loading" flag
@@ -31,13 +32,13 @@ export function SkeletonCard() {
   );
 }
 
-/** Wraps the results: shows placeholder cards while a new filter is loading. */
+/** Wraps the results: shows engaging optimistic loader while a new filter is loading. */
 export function MarketplaceResults({ children }: { children: React.ReactNode }) {
   const b = useMarketplaceBrowse();
   if (!b?.pending) return <>{children}</>;
   return (
-    <div role="status" aria-label="Loading templates" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-9 w-full">
-      {Array.from({ length: 6 }, (_, i) => <SkeletonCard key={i} />)}
+    <div role="status" aria-label="Loading templates" className="w-full flex items-center justify-center py-16">
+      <OptimisticLoader steps={["Searching templates in marketplace…", "Matching design recipes and styles…", "Preparing live template cards…"]} subtitle="Browsing marketplace catalog" />
     </div>
   );
 }
@@ -45,8 +46,8 @@ export function MarketplaceResults({ children }: { children: React.ReactNode }) 
 /** The placeholder grid, for places that load their own results (the dashboard's marketplace modal). */
 export function MarketplaceSkeletonGrid() {
   return (
-    <div role="status" aria-label="Loading templates" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-9 w-full">
-      {Array.from({ length: 6 }, (_, i) => <SkeletonCard key={i} />)}
+    <div role="status" aria-label="Loading templates" className="w-full flex items-center justify-center py-16">
+      <OptimisticLoader steps={["Loading templates from catalog…", "Matching design recipes and styles…", "Preparing live template cards…"]} subtitle="Browsing marketplace catalog" />
     </div>
   );
 }

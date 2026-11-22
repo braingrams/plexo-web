@@ -1,3 +1,5 @@
+import { funnelSlotsGate } from "@/lib/plan/limitGates";
+import { limitGateResponse } from "@/lib/plan/planGateResponse";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
@@ -29,7 +31,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   funnels.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""));
 
-  return NextResponse.json({ funnels, slots });
+  // When every slot is taken the screen can show the upgrade prompt up front, before anyone fills in a name.
+  const slotsGate = slots.hasSlotAvailable ? null : funnelSlotsGate(slots.used, slots.total);
+  return NextResponse.json({ funnels, slots, slotsGate: slotsGate && { message: slotsGate.message, requiredPlan: slotsGate.requiredPlan, canBuySlot: slotsGate.details.canBuySlot } });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -59,13 +63,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const slots = await getAvailableFunnelSlots(resolved.organizationId, resolved.subscriptionPlan);
   if (!slots.hasSlotAvailable) {
-    return NextResponse.json(
-      {
-        error: "You've used every funnel slot your plan includes. Buy another slot to create more.",
-        slots,
-      },
-      { status: 403 },
-    );
+    return limitGateResponse(funnelSlotsGate(slots.used, slots.total));
   }
 
   const funnelId = randomUUID();

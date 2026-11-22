@@ -1,3 +1,4 @@
+import { funnelSlotsGate, planGateMessage } from "@/lib/plan/limitGates";
 import { PLAN } from "@/lib/plan/plans";
 import { randomUUID } from "node:crypto";
 import type { resolveUser } from "@/lib/auth/resolveUser";
@@ -226,7 +227,7 @@ export async function handleLmsTool(toolName: string, args: any, resolved: Resol
 
       const slots = await getAvailableFunnelSlots(resolved.organizationId, resolved.subscriptionPlan);
       if (!slots.hasSlotAvailable) {
-        throw new Error(`You've used every funnel slot your plan includes (${slots.used}/${slots.total}). Buy another slot to create more.`);
+        throw new Error(planGateMessage(funnelSlotsGate(slots.used, slots.total)));
       }
 
       const funnelId = randomUUID();

@@ -358,6 +358,17 @@ export function DashboardShellModern({ children, userName, userEmail, organizati
 
               <ClassicSwitchItems onPick={() => setMenuOpen(false)} />
 
+              <a
+                href="https://plexopages.com"
+                target="_blank"
+                rel="noopener"
+                onClick={() => setMenuOpen(false)}
+                style={{ display: "flex", alignItems: "center", gap: "0.6rem", padding: "0.55rem 0.6rem", borderRadius: 10, fontSize: "0.82rem", fontWeight: 500, color: "rgba(240,242,255,0.7)", textDecoration: "none" }}
+              >
+                <IconSettings />
+                Plexo website
+              </a>
+
               <div style={{ height: 1, background: "rgba(255,255,255,0.06)", margin: "0.3rem 0" }} />
 
               <button

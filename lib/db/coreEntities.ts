@@ -104,6 +104,10 @@ export const User = new Entity(
       // stated preference, same as Prisma did).
       hideBranding: { type: "boolean", default: false },
       manageLandingPagePublishing: { type: "boolean", default: false },
+      // Where this account was first created: "plexo" (deliberately signed up on Plexo's own sign-up form),
+      // "strata" (signed in from Strata), or "charisol" (any other Charisol account signing in). Unset = created before this was recorded
+      // (treated as "plexo" by the admin broadcast filters — see plexo-admin lib/broadcast/segments.ts).
+      signupSource: { type: "string" },
       // Plan picked at signup before email verification completes — see server/auth.ts's
       // databaseHooks and app/auth/complete-subscription. Null once resolved.
       pendingPlan: { type: [PLAN.STARTER, PLAN.PRO, RETIRED_PLAN.ULTRA, PLAN.ENTERPRISE] as const },
@@ -128,6 +132,10 @@ export const User = new Entity(
       isConfirmed: { type: "boolean", default: false },
       suspendedAt: { type: "string" },
       suspendedReason: { type: "string" },
+      // Admin email broadcast status: when true, excluded from all broadcast/marketing sends.
+      emailInactive: { type: "boolean", default: false },
+      emailInactiveAt: { type: "string" },
+      emailInactiveReason: { type: "string" },
       // Charisol Auth (server/charisolAccount.ts). `charisolSub` is the shared Charisol
       // account this user signed in as (Google or password). `charisolPasswordAt` is set the
       // first time they sign in with a Charisol PASSWORD — from then on Charisol holds their
@@ -231,6 +239,8 @@ export const User = new Entity(
       phoneSavedAt: { type: "string" },
       // Light / Dark / System (default System when unset). Mirrored in the plexo-theme cookie.
       themePreference: { type: ["light", "dark", "system"] as const },
+      // The editor's Autosave switch (on when unset), kept per person so it follows them between devices. lib/editor/autosavePref.ts.
+      editorAutosave: { type: "boolean" },
       // The product walkthrough (app/dashboard/_v3/tour): whether they've been asked, which tour
       // and where they are in it, so it resumes across pages and devices. lib/dashboardV3/tour.ts.
       tourState: { type: "any" },
@@ -865,10 +875,14 @@ export const Notification = new Entity(
       id: { type: "string", required: true },
       organizationId: { type: "string", required: true },
       userId: { type: "string", required: true },
-      type: { type: ["MENTION", "COMMENT_REPLY", "COMMENT_RESOLVED", "INVITE_ACCEPTED"] as const, required: true },
+      type: { type: "string", required: true },
       actorId: { type: "string" },
       commentId: { type: "string" },
       templateId: { type: "string" },
+      title: { type: "string" },
+      message: { type: "string" },
+      link: { type: "string" },
+      actionLabel: { type: "string" },
       readAt: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
     },
@@ -901,6 +915,9 @@ export const NotificationPreferences = new Entity(
       payments: { type: "boolean", default: true },
       commentMentions: { type: "boolean", default: true },
       notificationEmail: { type: "string" },
+      inAppNotifications: { type: "boolean", default: true },
+      inAppSound: { type: "boolean", default: true },
+      soundChoice: { type: "string", default: "chime" },
     },
     indexes: {
       // One per org, co-located with the Organization root item.

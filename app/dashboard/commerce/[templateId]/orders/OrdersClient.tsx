@@ -1,5 +1,6 @@
 "use client";
 
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 
@@ -578,7 +579,7 @@ export function OrdersClient({ templateId, initialOrders, initialTotal, initialA
               </select>
             </FieldLabel>
 
-            {actionError && <p style={{ fontSize: "0.8rem", color: "var(--cmx-danger, #f87171)", marginTop: "0.75rem" }}>{actionError}</p>}
+            {actionError && <GateOrError error={actionError}><p style={{ fontSize: "0.8rem", color: "var(--cmx-danger, #f87171)", marginTop: "0.75rem" }}>{actionError}</p></GateOrError>}
 
             {selected.status === "REFUNDED" && selected.refundReason && (
               <div style={{ fontSize: "0.76rem", color: "var(--cmx-muted, rgba(240,242,255,0.5))", marginTop: "1rem", lineHeight: 1.5 }}>

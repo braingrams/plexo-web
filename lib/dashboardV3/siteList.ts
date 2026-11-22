@@ -50,7 +50,7 @@ export function summarizeSites(templates: TemplateRow[], domains: DomainRow[], o
     .map((t) => ({
       id: t.id,
       name: t.name?.trim() || "Untitled site",
-      kind: siteKindOf({ sourceType: t.sourceType, isLmsFunnel: t.isLmsFunnel }),
+      kind: siteKindOf({ sourceType: t.sourceType, isLmsFunnel: t.isLmsFunnel, migratedFrom: t.migratedFrom }),
       status: live.has(t.id) ? ("live" as const) : ("draft" as const),
       address: live.get(t.id) ?? null,
       updatedAt: t.updatedAt ?? null,

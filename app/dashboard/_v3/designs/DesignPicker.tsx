@@ -26,7 +26,7 @@ import { Eye, Layers, Search } from "lucide-react";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
 import { getStripePromise } from "@/lib/stripeClientPromise";
 import { priceBadge, useLabel } from "@/lib/onboarding/marketDesigns";
-import { Badge, Button, EmptyState, Input, Modal, Notice, SegmentedControl, Skeleton } from "../ui";
+import { Badge, Button, EmptyState, Input, Modal, Notice, OptimisticLoader, SegmentedControl, Skeleton } from "../ui";
 import { DesignPreview } from "./DesignPreview";
 import "./designs.css";
 
@@ -123,11 +123,13 @@ export function DesignPicker({ goal, profile, onUse, returnTo, busy, mock, endpo
 
       {nothing ? (
         <EmptyState title="No designs match yet" body={filtered ? "Try fewer filters or a different word." : "New designs are added all the time. Check back soon, or pick one of the designs above."} action={filtered ? <Button onClick={reset}>Show all designs</Button> : undefined} />
+      ) : loading && !data ? (
+        <div style={{ padding: "48px 24px", display: "grid", placeItems: "center" }}>
+          <OptimisticLoader steps={["Finding designs for your site…", "Matching layouts, fonts, and color styles…"]} subtitle="Loading design library" />
+        </div>
       ) : (
         <ul className="plx-dzgrid" style={{ listStyle: "none", margin: 0, padding: 0 }}>
-          {(loading && !data ? Array.from({ length: 6 }, () => null) : designs).map((d, i) => d === null ? (
-            <li key={i} className="plx-dzcard"><Skeleton height="auto" style={{ aspectRatio: "4 / 3" }} /></li>
-          ) : (
+          {designs.map((d) => (
             <li key={d.id} className="plx-dzcard">
               <button type="button" className="plx-dzcard__thumb" aria-label={`Preview ${d.name}`} onClick={() => setPreviewId(d.id)} style={{ border: 0, padding: 0, cursor: "pointer", width: "100%" }}>
                 {d.html ? <iframe title={`Picture of ${d.name}`} srcDoc={d.html} sandbox="" tabIndex={-1} loading="lazy" className="plx-dzcard__frame" /> : <span className="plx-dzcard__ph"><Layers size={34} aria-hidden /></span>}

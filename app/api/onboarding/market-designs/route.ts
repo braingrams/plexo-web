@@ -21,6 +21,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   const parsed = sanitizeBuildProfile(body.profile ?? {});
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
   const brief = briefFromProfile(parsed.value);
+  if (!brief.industry && brief.about) {
+    const { detectIndustry } = await import("@charisol/plexo-sdk/v2/compile");
+    brief.industry = detectIndustry(brief);
+  }
   const filters: PickerFilters = {
     q: typeof body.q === "string" ? body.q.slice(0, 80) : undefined,
     price: body.price === "free" || body.price === "paid" ? body.price : undefined,

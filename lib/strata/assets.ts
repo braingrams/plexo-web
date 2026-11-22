@@ -20,21 +20,21 @@ type Raw = Record<string, unknown>;
 
 async function strata(userId: string, path: string, init: { method?: string; form?: FormData } = {}): Promise<Raw> {
   const base = strataApiUrl();
-  if (!base) throw new StrataError("Strata isn't set up on this Plexo yet.", "server", 503);
+  if (!base) throw new StrataError("Saving your brand isn't available on this Plexo yet.", "server", 503);
   const token = await loadStrataToken(userId);
-  if (!token) throw new StrataError("Your Strata sign-in has run out. Reconnect Strata to continue.", "expired", 401);
+  if (!token) throw new StrataError("Your brand sign-in has run out. Reconnect your brand to continue.", "expired", 401);
   let res: Response;
   try {
     res = await fetch(`${base}${path}`, { method: init.method ?? "GET", headers: { Authorization: `Bearer ${token}`, Accept: "application/json" }, body: init.form });
   } catch {
-    throw new StrataError("Couldn't reach Strata. Check your connection and try again.", "network");
+    throw new StrataError("Couldn't reach your brand. Check your connection and try again.", "network");
   }
   const body = (await res.json().catch(() => ({}))) as Raw;
   if (res.ok) return body;
-  if (res.status === 401) throw new StrataError("Your Strata sign-in has run out. Reconnect Strata to continue.", "expired", 401);
-  if (res.status === 403) throw new StrataError("You can see this Strata project but not change it. Ask its owner for edit access.", "forbidden", 403);
-  if (res.status === 404) throw new StrataError("That Strata project wasn't found. It may have been deleted, or you may no longer have access.", "not_found", 404);
-  throw new StrataError("Strata had a problem. Please try again in a moment.", "server", res.status);
+  if (res.status === 401) throw new StrataError("Your brand sign-in has run out. Reconnect your brand to continue.", "expired", 401);
+  if (res.status === 403) throw new StrataError("You can see this brand but not change it. Ask its owner for edit access.", "forbidden", 403);
+  if (res.status === 404) throw new StrataError("That brand wasn't found. It may have been deleted, or you may no longer have access.", "not_found", 404);
+  throw new StrataError("Something went wrong with your brand. Please try again in a moment.", "server", res.status);
 }
 
 /** A project's pictures and videos (fonts, documents and the like are left out). */

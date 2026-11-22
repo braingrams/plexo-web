@@ -353,7 +353,7 @@ describe("Strata project routes", () => {
     state.rows.set("u1", connectedRow(STRATA_SESSION_MAX_AGE_MS + 1000));
     const res = await listProjects(req("/projects"));
     expect(res.status).toBe(401);
-    expect(await res.json()).toMatchObject({ kind: "expired", error: expect.stringMatching(/Connect Strata/) });
+    expect(await res.json()).toMatchObject({ kind: "expired", error: expect.stringMatching(/Connect your design system/) });
     expect(strataCalls).toHaveLength(0);
   });
 

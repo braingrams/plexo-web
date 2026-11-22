@@ -12,6 +12,8 @@ import type { DesignSystem } from "@charisol/plexo-sdk/v2/compile";
 
 import { displayBrand, normalizeHex, type SiteBrand } from "@/lib/dashboardV3/brandLook";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
+import { sanitizeCustomFonts, type CustomFont } from "@/lib/fonts/customFonts";
+import { hasVoice, mergeVoice, voicePromptBlock, voiceSummary, type BrandVoice } from "./brandVoice";
 import { catalogueFromDesignSystem, componentLine, usageHint, type BrandComponentInfo } from "./brandComponents";
 
 type DesignToken = DesignSystem["tokens"][number];
@@ -44,11 +46,21 @@ export type ResolvedBrand = {
   name?: string;
   about?: string;
   industry?: string;
-  /** The brand's voice or feel, when somebody wrote one down (the account's onboarding answer). Strata holds none yet. */
+  /** The brand's voice in one plain line ("friendly, warm; casual; for busy parents"), derived from `words`. */
   voice?: string;
+  /** The brand's tagline, when one is set. */
+  tagline?: string;
+  /** The brand's words in full: tagline, short description, tones, formality, audience, words they like and avoid (lib/brand/brandVoice.ts). */
+  words?: BrandVoice;
   /** Main colour first. */
   colours: BrandColour[];
   fonts: { heading?: string; body?: string };
+  /** How many design tokens the linked brand holds (its colours, fonts, spacing...), for the brand bible overview. */
+  tokenCount?: number;
+  /** The weight each font is used at, when the brand says. */
+  fontWeights?: { heading?: number; body?: number };
+  /** Fonts the owner uploaded (lib/fonts/customFonts.ts). */
+  customFonts?: CustomFont[];
   radius?: string;
   /** The brand's ready-made components (a button, a card...) from the linked Strata project's published design system; empty when none. */
   components: BrandComponentInfo[];
@@ -97,7 +109,7 @@ export function primaryFontOf(stack: string | undefined): string | null {
 }
 
 /** Colours (with their roles), fonts and corner radius out of a Strata-shaped design system. Unresolvable tokens are left out. */
-export function brandFromDesignSystem(ds: Pick<DesignSystem, "tokens" | "name"> | null | undefined): { name?: string; colours: BrandColour[]; fonts: { heading?: string; body?: string }; radius?: string } {
+export function brandFromDesignSystem(ds: Pick<DesignSystem, "tokens" | "name"> | null | undefined): { name?: string; colours: BrandColour[]; fonts: { heading?: string; body?: string }; fontWeights?: { heading?: number; body?: number }; radius?: string } {
   if (!ds || !Array.isArray(ds.tokens)) return { colours: [], fonts: {} };
   const map = new Map(ds.tokens.map((t) => [t.key, t]));
   const colours: BrandColour[] = [];
@@ -122,10 +134,17 @@ export function brandFromDesignSystem(ds: Pick<DesignSystem, "tokens" | "name"> 
   const heading = font(["--font-family-heading", "--semantic-font-family-heading", "--font-family-sans", "--font-family-base"]);
   const body = font(["--font-family-body", "--semantic-font-family-body", "--font-family-base", "--font-family-sans"]);
   const radius = resolveToken(map, "--radius-md");
+  const weight = (key: string) => {
+    const n = Number(resolveToken(map, key));
+    return Number.isInteger(n) && n >= 100 && n <= 900 ? n : undefined;
+  };
+  const hw = weight("--font-weight-heading");
+  const bw = weight("--font-weight-body");
   return {
     name: ds.name,
     colours,
     fonts: { ...(heading ? { heading } : {}), ...(body ? { body } : {}) },
+    ...(hw || bw ? { fontWeights: { ...(hw ? { heading: hw } : {}), ...(bw ? { body: bw } : {}) } } : {}),
     ...(radius && /^\d+(\.\d+)?(px|rem)?$/.test(radius) ? { radius: /^\d+(\.\d+)?$/.test(radius) ? `${radius}px` : radius } : {}),
   };
 }
@@ -183,6 +202,8 @@ export function strataPushTokens(existing: DesignToken[], brand: Pick<ResolvedBr
 export type TokenRequest = {
   colours?: Partial<Record<BrandRole, string>>;
   fonts?: { heading?: string; body?: string };
+  /** The weight each font is used at (100 to 900), e.g. { heading: 700, body: 400 }. */
+  fontWeights?: { heading?: number | string; body?: number | string };
   /** Corner radius in px (the "medium" corner every component uses). */
   radius?: number | string;
   /** Spacing steps in px, keyed by step: { "4": 16 } or { "space-4": "16px" }. */
@@ -256,6 +277,18 @@ export function planTokenChanges(existing: DesignToken[], req: TokenRequest): { 
     const label = key === "--font-family-heading" ? "heading font" : key === "--font-family-body" ? "body font" : "font";
     const value = fontStack(family);
     put(key, { value }, { key, name: tokenName(key), value, type: "font family", unit: null, layer: "brand", comment: null }, label, (c) => primaryFontOf(c.value) === family);
+  }
+
+  for (const which of ["heading", "body"] as const) {
+    const raw = req.fontWeights?.[which];
+    if (raw === undefined) continue;
+    const w = Number(raw);
+    if (!Number.isInteger(w) || w < 100 || w > 900 || w % 100 !== 0) {
+      skipped.push(`The ${which} font weight must be 100, 200 ... up to 900.`);
+      continue;
+    }
+    const key = `--font-weight-${which}`;
+    put(key, { value: String(w) }, { key, name: tokenName(key), value: String(w), type: "font weight", unit: null, layer: "brand", comment: null }, `${which} font weight`, (c) => Number(c.value) === w);
   }
 
   if (req.radius !== undefined) {
@@ -333,6 +366,9 @@ export function mergeBrand(input: { siteId?: string | null; siteName?: string; l
 
   const clean = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) || undefined : undefined);
   const name = clean(input.siteName, 80) ?? clean(profile?.name, 80);
+  const words = mergeVoice(own?.voice, { about: profile?.about, tone: profile?.tone });
+  // The owner's own words describe the voice; without them, the onboarding answer is shown as they typed it.
+  const summary = own?.voice ? voiceSummary(words) : clean(profile?.tone, 80) || voiceSummary(words);
   return {
     source,
     siteId: input.siteId ?? null,
@@ -341,11 +377,16 @@ export function mergeBrand(input: { siteId?: string | null; siteName?: string; l
     syncOn: !!linked && linked.syncOn,
     status: linked ? linked.status : "off",
     ...(name ? { name } : {}),
-    ...(clean(profile?.about, 400) ? { about: clean(profile?.about, 400) } : {}),
+    ...((words.aboutLine ?? clean(profile?.about, 400)) ? { about: words.aboutLine ?? clean(profile?.about, 400) } : {}),
     ...(clean(profile?.industry, 80) ? { industry: clean(profile?.industry, 80) } : {}),
-    ...(clean(profile?.tone, 80) ? { voice: clean(profile?.tone, 80) } : {}),
+    ...(summary ? { voice: summary } : {}),
+    ...(words.tagline ? { tagline: words.tagline } : {}),
+    ...(hasVoice(words) ? { words } : {}),
     colours: dedupeColours(colours).slice(0, 8),
     fonts: strata?.fonts ?? (ownFonts as ResolvedBrand["fonts"]),
+    ...(strata?.fontWeights ? { fontWeights: strata.fontWeights } : {}),
+    ...(linked?.designSystem?.tokens?.length ? { tokenCount: linked.designSystem.tokens.length } : {}),
+    ...(sanitizeCustomFonts(own?.customFonts).length ? { customFonts: sanitizeCustomFonts(own?.customFonts) } : {}),
     ...(strata?.radius ? { radius: strata.radius } : {}),
     components: linked ? catalogueFromDesignSystem(linked.designSystem) : [],
     ...(logoUrl ? { logoUrl } : {}),
@@ -371,6 +412,7 @@ export function applyBriefDefaults<T extends { colors?: unknown; fonts?: unknown
   if (!f?.heading && !f?.body && (brand.fonts.heading || brand.fonts.body)) (next.fonts = { heading: brand.fonts.heading, body: brand.fonts.body }), filled.push("fonts");
   if (!brief.logoUrl && brand.logoUrl) (next.logoUrl = brand.logoUrl), filled.push("logo");
   if (!brief.tone && brand.voice) (next.tone = brand.voice), filled.push("tone");
+  if (!(brief as { tagline?: unknown }).tagline && brand.tagline) (next.tagline = brand.tagline), filled.push("tagline");
   return { brief: next as T, filled };
 }
 
@@ -384,15 +426,17 @@ const sourceWords = (b: ResolvedBrand): string =>
  * Values are the owner's own data, quoted and capped: context about the business, never instructions.
  */
 export function brandPromptBlock(b: ResolvedBrand | null | undefined, siteName?: string): string {
-  if (!b || (!b.colours.length && !b.logoUrl && !b.noLogo && !b.fonts.heading && !b.fonts.body)) return "";
+  if (!b) return "";
+  const words = voicePromptBlock(b.words);
+  const wordsOrNote = words || (b.voice ? `## How this brand speaks\n- Voice: "${b.voice}"` : "");
+  if (!b.colours.length && !b.logoUrl && !b.noLogo && !b.fonts.heading && !b.fonts.body) return wordsOrNote;
   const name = (b.project?.name ?? siteName ?? b.name)?.replace(/\s+brand$/i, "");
   const lines: string[] = [`## This site's brand (${sourceWords(b)})`];
   if (b.colours.length) lines.push(`- Colours: ${b.colours.map((c) => `${c.role === "colour" ? "colour" : c.role} ${c.value}`).join(", ")}`);
-  if (b.fonts.heading || b.fonts.body) lines.push(`- Fonts: headings ${b.fonts.heading ?? "(site default)"}, body ${b.fonts.body ?? b.fonts.heading ?? "(site default)"}`);
+  if (b.fonts.heading || b.fonts.body) lines.push(`- Fonts: headings ${b.fonts.heading ?? "(site default)"}${b.fontWeights?.heading ? ` at weight ${b.fontWeights.heading}` : ""}, body ${b.fonts.body ?? b.fonts.heading ?? "(site default)"}${b.fontWeights?.body ? ` at weight ${b.fontWeights.body}` : ""}`);
   if (b.radius) lines.push(`- Corner radius: ${b.radius}`);
   if (b.logoUrl) lines.push(`- Logo: ${b.logoUrl}`);
   else if (b.noLogo) lines.push("- Logo: none, set the business name as a clean wordmark");
-  if (b.voice) lines.push(`- Voice: "${b.voice}"`);
   if (b.linked && !b.components.length) lines.push("- Ready-made components: none yet. When you build something reusable (a button, a card, a banner), offer once to save it to the brand (create_brand_component), so it is in Strata for every page.");
   const how = b.linked
     ? `Pages of this site already link to the brand sheet, so colours and fonts come from it: in the visual editor you do not need setBrand (it would only repeat these values); in raw HTML, apps and emails use these exact values, or the variables from ${b.stylesheet ?? "/__plexo/brand/<siteId>.css"} (var(--color-action-primary-bg), var(--color-text-primary), var(--font-family-heading), var(--font-family-body), var(--radius-md)).`
@@ -404,6 +448,8 @@ export function brandPromptBlock(b: ResolvedBrand | null | undefined, siteName?:
   lines.push(
     `Use this brand on EVERYTHING you build or change for this site (new pages, new sections, restyles, emails, blog and store layouts, funnel and course pages, apps), automatically. ${how} Never ask the owner for colours, fonts or a logo while this brand exists. Tell them plainly once: "I'll use your ${name ?? "saved"} brand." Don't mention it again unless they ask. If they ask for something off-brand, do it for that item only and say so.`,
   );
+  if (b.linked) lines.push("Wording for the owner: say \"brand\" (\"your brand\", \"saved your brand\"), never \"Strata\", unless the owner uses that word first. Beginners do not know the tool behind it.");
+  if (wordsOrNote) lines.push("", wordsOrNote);
   return lines.join("\n");
 }
 
@@ -432,11 +478,15 @@ export function brandForClient(b: ResolvedBrand): Record<string, unknown> {
     name: b.name ?? null,
     colours: b.colours,
     fonts: b.fonts,
+    fontWeights: b.fontWeights ?? null,
+    uploadedFonts: (b.customFonts ?? []).map((f) => f.family),
     radius: b.radius ?? null,
     components: b.components.map((c) => ({ ...c, howToUse: usageHint(c) })),
     logoUrl: b.logoUrl ?? null,
     noLogo: b.noLogo ?? false,
     voice: b.voice ?? null,
+    tagline: b.tagline ?? null,
+    words: b.words ?? null,
     stylesheet: b.stylesheet,
     howToUse: b.linked
       ? "Pages link to this brand's hosted stylesheet, so a visual page needs no setBrand. For raw HTML, apps and emails use these values (or the CSS variables in the stylesheet). Pass nothing else: the brand is applied by default."

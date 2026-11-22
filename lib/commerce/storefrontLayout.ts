@@ -4,6 +4,7 @@ import { recompileSiteLayoutDependents } from "@/lib/siteLayoutCore";
 import { ensureUniqueSlug } from "@/server/slugDynamo";
 import { SiteLayout, Template } from "@/lib/db/contentEntities";
 import { CommerceSettings } from "@/lib/db/commerceEntities";
+import { SYSTEM_SLUGS } from "@/lib/dashboardV3/hubTabs";
 import { designFormatOf, type DesignFormat } from "@/lib/v2/design";
 import {
   buildCheckoutV2,
@@ -334,6 +335,25 @@ export async function ensureOrderConfirmationPage(templateId: string, organizati
       });
   if (settings) await CommerceSettings.patch({ templateId }).set({ orderConfirmationTemplateId }).go();
   else await CommerceSettings.create({ id: randomUUID(), templateId, organizationId, orderConfirmationTemplateId }).go();
+}
+
+/**
+ * Upgrades an auto-generated system page (store, checkout, order-confirmation, track-order)
+ * from legacy V1 to V2 if the site format is V2 (or migrated/raw-upload).
+ */
+export async function upgradeSystemPageToV2(
+  page: { id: string; name: string; slug?: string | null; sourceType?: string | null; designFormat?: string | null },
+  rootTemplateId: string,
+): Promise<{ ok: boolean; design?: any; html?: string }> {
+  if (!page.slug || !SYSTEM_SLUGS.has(page.slug) || page.sourceType !== "BUILDER" || page.designFormat === "v2") return { ok: false };
+  const info = await siteInfo(rootTemplateId);
+  if (info.format !== "v2") return { ok: false };
+  const key: PageKey = page.slug === "checkout" ? "checkout" : page.slug === "order-confirmation" ? "confirmation" : page.slug === "track-order" ? "tracking" : "storefront";
+  const plan = await planFor(rootTemplateId);
+  const designJson = designFor(key, plan);
+  const compiledHtml = await compileGenerated(rootTemplateId, { id: page.id, name: page.name, designFormat: "v2", designJson });
+  await Template.patch({ id: page.id }).set({ designFormat: "v2", designJson, compiledHtml }).go();
+  return { ok: true, design: designJson, html: compiledHtml };
 }
 
 /** Replaces every string in a JSON value that is exactly `from` with `to` (a link's address). Returns the same object when nothing matched. */

@@ -1,4 +1,6 @@
 "use client";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
+import { planGateForMessage } from "@/lib/plan/planGate";
 import { PLAN } from "@/lib/plan/plans";
 
 import "./learners.css";
@@ -42,6 +44,7 @@ export function CourseSettings({ courses, current, experience, initial, products
   const [name, setName] = useState("Full course access");
   const [amount, setAmount] = useState("");
   const [busy, setBusy] = useState(false);
+  const [limitMsg, setLimitMsg] = useState<string | null>(null);
   const [redirect, setRedirect] = useState(initial.welcomeRedirectPath ?? "");
   const base = `/api/v1/lms/funnels/${current.id}`;
 
@@ -53,7 +56,9 @@ export function CourseSettings({ courses, current, experience, initial, products
       toast.show({ title: "Saved", tone: "success", durationMs: 2200 });
     } catch (e) {
       setS(before);
-      toast.show({ title: "We couldn't save that", description: errMsg(e), tone: "danger" });
+      // A plan limit (rather than a hiccup) is explained with the upgrade prompt right here.
+      if (planGateForMessage(errMsg(e))) setLimitMsg(errMsg(e));
+      else toast.show({ title: "We couldn't save that", description: errMsg(e), tone: "danger" });
     }
   }
 
@@ -68,7 +73,8 @@ export function CourseSettings({ courses, current, experience, initial, products
       setProducts((p) => [...p, { id: made.product.id, name: made.product.name, priceMinor }]);
       await save({ signupMode: "PAID", signupProductId: made.product.id });
     } catch (e) {
-      toast.show({ title: "We couldn't set the price", description: errMsg(e), tone: "danger" });
+      if (planGateForMessage(errMsg(e))) setLimitMsg(errMsg(e));
+      else toast.show({ title: "We couldn't set the price", description: errMsg(e), tone: "danger" });
     } finally {
       setBusy(false);
     }
@@ -77,6 +83,7 @@ export function CourseSettings({ courses, current, experience, initial, products
   const chosen = products.find((p) => p.id === s.signupProductId);
   return (
     <CourseFrame courses={courses} current={current} tab="settings" experience={experience}>
+      {limitMsg ? <GateOrError error={limitMsg}>{null}</GateOrError> : null}
       <div className="plx-two">
         <div className="plx-hub__col">
           <Card padding="lg">

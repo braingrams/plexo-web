@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { syncPageEntries } from "@/lib/customSections/placements";
 import { sanitizePlexoPayload } from "@/server/sanitizer";
 
 import { resolveUser } from "@/lib/auth/resolveUser";
@@ -97,6 +98,7 @@ export async function POST(
       draftHtml: sanitizedPayload.compiledHtml,
     })
     .go();
+  await syncPageEntries(existing.id);
   const { data: updated } = await Template.get({ id: existing.id }).go();
   if (!updated)
     throw new Error(

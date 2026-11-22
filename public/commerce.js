@@ -417,6 +417,16 @@
     return checkoutConfigPromise;
   }
 
+  // "By placing your order you agree to our Terms of sale" — only when the owner has set terms (checkout-config.terms).
+  function termsNote(config) {
+    if (!config || !config.terms || !config.terms.url) return null;
+    return el("p", { class: "pc-muted", style: { fontSize: "12px", textAlign: "center", margin: "0" } }, [
+      "By placing your order you agree to our ",
+      el("a", { href: config.terms.url, target: "_blank", rel: "noopener noreferrer", style: { color: "inherit", textDecoration: "underline" } }, ["terms of sale and refund policy"]),
+      ".",
+    ]);
+  }
+
   function defaultPaymentMethod(config) {
     if (checkoutFormState.paymentMethod === "BANK_TRANSFER" && config.payment.bankTransfer) return "BANK_TRANSFER";
     if (checkoutFormState.paymentMethod === "ONLINE" && config.payment.online) return "ONLINE";
@@ -979,6 +989,8 @@
       var extra = customFieldsSection(config.fields, answers, null);
       if (extra) body.appendChild(extra);
       body.appendChild(paymentBox);
+      var bookingTerms = termsNote(config);
+      if (bookingTerms) body.appendChild(bookingTerms);
       body.appendChild(payBtn);
       body.appendChild(el("p", { class: "pc-muted", style: { margin: "0", fontSize: "11.5px", textAlign: "center" } }, ["Secure checkout — you'll stay on this page."]));
       emailField.input.focus();
@@ -2464,6 +2476,7 @@
             el("span", {}, [money(total, snapshot.currency)]),
           ]),
           paymentSection,
+          termsNote(config),
           payBtn,
           el("p", { class: "pc-muted", style: { fontSize: "11px", textAlign: "center", margin: "0" } }, [
             isBankTransfer ? "Direct bank transfer · confirmed by the store once received" : "Secured by " + (snapshot.paymentGateway === "stripe" ? "Stripe" : "Paystack"),
@@ -2941,7 +2954,7 @@
               : null,
             el("div", { style: { display: "flex", justifyContent: "space-between", fontSize: "16px", fontWeight: "700", color: "#16233F" } }, [el("span", {}, ["Total"]), el("span", {}, [money(order.amountMinor, order.currency)])]),
             order.status === "PAID" && opts.inline
-              ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13px", lineHeight: "1.55" } }, ["Thank you! A receipt and any download or access details are on their way to " + email + "."])
+              ? el("p", { class: "pc-muted", style: { margin: "0", fontSize: "13px", lineHeight: "1.55" } }, [order.orderSuccessMessage || ("Thank you! A receipt and any download or access details are on their way to " + email + ".")])
               : null,
             opts.inline
               ? null
@@ -3285,9 +3298,15 @@
     if (preset && amountBox) amountBox.value = String(Number(preset.getAttribute("data-plexo-amount-minor")) / 100);
 
     function errorHere(msg) {
+      var formMsg = form.querySelector(".forminator-response-message");
+      if (formMsg) {
+        formMsg.textContent = msg;
+        formMsg.style.display = "block";
+        formMsg.removeAttribute("aria-hidden");
+      }
       var box = form.querySelector(".pc-donation-error");
       if (!box) {
-        box = el("div", { class: "pc-error pc-donation-error" });
+        box = el("div", { class: "pc-error pc-donation-error", style: { margin: "12px 0", padding: "10px 14px", borderRadius: "8px", background: "#fef2f2", color: "#991b1b", fontSize: "13px" } });
         form.appendChild(box);
       }
       box.textContent = msg;
@@ -3299,7 +3318,7 @@
       var amount = 0;
       var customField = form.querySelector("[data-plexo-custom-amount]");
       if (chosen && chosen.hasAttribute("data-plexo-amount-minor")) amount = Number(chosen.getAttribute("data-plexo-amount-minor"));
-      else if (customField) amount = Math.round(parseFloat(customField.value || "0") * 100);
+      else if (customField) amount = Math.round(parseFloat((customField.value || "0").replace(/,/g, "")) * 100);
       if (!amount || amount <= 0) return errorHere("Please choose or enter an amount.");
       var monthly = form.querySelector("[data-plexo-monthly]");
       var first = form.querySelector("[data-plexo-donor-first]");
