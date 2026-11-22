@@ -7,7 +7,7 @@
 		"predev": "node scripts/copy-monaco.mjs",
 		"dev": "next dev",
 		"prebuild": "node scripts/copy-monaco.mjs",
-		"build": "next build",
+		"build": "next build --webpack",
 		"start": "next start",
 		"test": "vitest run"
 	},
