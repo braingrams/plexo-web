@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from "react";
 import { useEffect, useState } from "react";
-import { trackEvent, trackPurchaseOnce, subscriptionItem, purchaseTypeFor, analyticsPlan } from "@/lib/analytics";
+import { purchasePayload, trackPurchaseOnce } from "@/lib/analytics";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useTopupPacks, packLabel } from "../_components/useTopupPacks";
 import { StripeCheckoutModal } from "../_components/StripeCheckoutModal";
@@ -158,19 +158,9 @@ export function BillingSection({ plan, paying = plan !== PLAN.FREE, planNote = n
           return;
         }
         if (data.status === "complete") {
-          if (data.paymentStatus === "paid" && data.transactionId && (data.plan === PLAN.STARTER || data.plan === PLAN.PRO || data.plan === PLAN.ENTERPRISE)) {
-            trackPurchaseOnce(String(data.transactionId), {
-              event: "purchase",
-              purchase_type: purchaseTypeFor(data.previousPlan),
-              previous_plan: analyticsPlan(data.previousPlan ?? PLAN.FREE),
-              ecommerce: {
-                transaction_id: String(data.transactionId),
-                currency: String(data.currency ?? "").toUpperCase(),
-                value: Number(data.amount ?? 0) / 100,
-                items: [subscriptionItem(data.plan)],
-              },
-            });
-          }
+          // Purchase: once the payment is paid and Stripe has its transaction ID (spec 7.2).
+          const purchase = purchasePayload(data);
+          if (purchase && data.transactionId) trackPurchaseOnce(String(data.transactionId), purchase);
           setCheckoutStatus({ kind: "success", text: "Payment received — your plan is updating now." });
           setTimeout(() => {
             if (cancelled) return;
@@ -269,15 +259,6 @@ export function BillingSection({ plan, paying = plan !== PLAN.FREE, planNote = n
     setError(null);
     const result = await beginCheckout(returnTo ? { ...body, returnTo } : body);
     setBusyAction(null);
-    if (result.kind === "stripe" && body.kind === "subscription") {
-      // The payment form is open now. Clear the previous ecommerce object first, as the spec requires.
-      trackEvent({ ecommerce: null });
-      trackEvent({
-        event: "begin_checkout",
-        checkout_type: "subscription",
-        ecommerce: { currency: "USD", value: subscriptionItem(body.plan).price, items: [subscriptionItem(body.plan)] },
-      });
-    }
     handleResult(result, returnTo);
   }
 

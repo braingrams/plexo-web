@@ -1,4 +1,4 @@
-import { PLAN, RETIRED_PLAN, PaidPlanId } from "@/lib/plan/plans";
+import { PLAN, PLAN_LABELS, RETIRED_PLAN, PaidPlanId } from "@/lib/plan/plans";
 /** Google Tag Manager container ID (GTM-…). GA4 and other tags are configured inside the container. */
 export const GTM_CONTAINER_ID = "GTM-N5VXD9KB";
 /** The only deployment that sends GTM and Clarity data. Staging and PR previews build with other URLs. */
@@ -28,24 +28,44 @@ export function trackUserIdentifiedOnce(params: { user_id: string; plan_name: st
   trackEvent({ event: "user_identified", ...params });
 }
 
-const PLAN_ITEMS = {
-  STARTER: { name: "Starter", price: 9 },
-  PRO: { name: "Pro", price: 19 },
-  // Enterprise is a custom plan, so $99 is only the list-price starting point, not a fixed charge.
-  ENTERPRISE: { name: "Enterprise", price: 99 },
-} as const;
+/** A confirmed checkout, as the session endpoint reports it (see app/api/billing/checkout/session). */
+export type SessionPurchase = {
+  paymentStatus: string | null;
+  transactionId: string | null;
+  amount: number | null;
+  currency: string | null;
+  plan: string | null;
+  interval: string | null;
+  previousPlan: string | null;
+  kind: string | null;
+  credits: number | null;
+};
 
-/** The ecommerce item for a subscription plan, with the spec's item IDs. Prices are the USD list prices. */
-export function subscriptionItem(plan: PaidPlanId): { item_id: string; item_name: string; item_category: string; item_variant: string; price: number; quantity: number } {
-  const item = PLAN_ITEMS[plan];
-  return {
-    item_id: `${plan.toLowerCase()}_monthly`,
-    item_name: item.name,
-    item_category: "subscription",
-    item_variant: "monthly",
-    price: item.price,
-    quantity: 1,
-  };
+/**
+ * The purchase event for a confirmed checkout (spec 7.2), or null when the payment isn't one we track.
+ * Amounts are what Stripe charged, in the currency it was charged in. Subscriptions with no recorded
+ * previous plan send previous_plan "unknown" and count as an upgrade.
+ */
+export function purchasePayload(s: SessionPurchase): DataLayerEvent | null {
+  if (s.paymentStatus !== "paid" || !s.transactionId) return null;
+  const value = Number(s.amount ?? 0) / 100;
+  const ecommerce = (item: Record<string, unknown>) => ({ transaction_id: String(s.transactionId), currency: String(s.currency ?? "").toUpperCase(), value, items: [{ ...item, price: value, quantity: 1 }] });
+  if (s.kind === "topup" && s.credits) {
+    return { event: "purchase", purchase_type: "credit_pack", ecommerce: ecommerce({ item_id: `credits_${s.credits}`, item_name: `${s.credits.toLocaleString("en-US")} credits`, item_category: "credits", item_variant: "one_time" }) };
+  }
+  if (s.kind === "lms_addon_slot") {
+    return { event: "purchase", purchase_type: "funnel_slot", ecommerce: ecommerce({ item_id: "funnel_slot", item_name: "Funnel slot", item_category: "addon", item_variant: "monthly" }) };
+  }
+  if (s.plan === PLAN.STARTER || s.plan === PLAN.PRO || s.plan === PLAN.ENTERPRISE) {
+    const interval = s.interval === "yearly" ? "yearly" : "monthly";
+    return {
+      event: "purchase",
+      purchase_type: s.previousPlan == null ? "upgrade" : purchaseTypeFor(s.previousPlan),
+      previous_plan: s.previousPlan ? analyticsPlan(s.previousPlan) : "unknown",
+      ecommerce: ecommerce({ item_id: `${s.plan.toLowerCase()}_${interval}`, item_name: PLAN_LABELS[s.plan], item_category: "subscription", item_variant: interval }),
+    };
+  }
+  return null;
 }
 
 /** The template name for create_project: snake_case, as the spec's examples are. */
