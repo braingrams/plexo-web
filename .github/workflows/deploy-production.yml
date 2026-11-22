@@ -250,6 +250,7 @@ jobs:
           PLEXO_CONTENT_TABLE: plexo-content
           PLEXO_OPS_TABLE: plexo-ops
           PLEXO_IMPORT_TABLE: plexo-import
+          NODE_OPTIONS: "--max-old-space-size=6144"
         run: |
           rm -rf .next/cache/turbopack
           npx open-next build

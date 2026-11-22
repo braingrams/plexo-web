@@ -38,6 +38,10 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [{ protocol: "https", hostname: "**.amazonaws.com" }],
   },
+  experimental: {
+    webpackMemoryOptimizations: true,
+    cpus: 2,
+  },
 };
 
 export default nextConfig;
