@@ -4,33 +4,43 @@ import { personalizeTemplate } from "@/lib/onboarding/personalize";
 
 export const maxDuration = 120;
 
-const PERSONALIZATION_CREDIT_COST = 1;
-
 /**
  * GET: Returns the credit cost and available credit balance for template personalization.
- * Adheres to SOL Rule 1: BYOK users pay 0 credits; Plexo AI users pay in AI credits.
+ * Adheres to SOL Rule 1: BYOK users pay 0 credits; Plexo AI users pay based on real model token cost.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const { resolveUser } = await import("@/lib/auth/resolveUser");
     const resolved = await resolveUser(request);
     if (!resolved) {
-      return NextResponse.json({ cost: PERSONALIZATION_CREDIT_COST, availableCredits: 0 });
+      return NextResponse.json({ cost: 20, availableCredits: 0 });
     }
 
-    const { solRouteForUser } = await import("@/lib/ai/solEngine");
+    const { solRouteForUser, tierFor } = await import("@/lib/ai/solEngine");
     const solRoute = await solRouteForUser(resolved.userId);
-    const { ensureCreditPeriod } = await import("@/lib/db/ledgerOperations");
+    const { ensureCreditPeriod, estimateWorstCaseCost } = await import("@/lib/db/ledgerOperations");
     const balance = await ensureCreditPeriod(resolved.userId).catch(() => ({ available: 0, total: 0 }));
 
-    const cost = !("error" in solRoute) && solRoute.route.paidBy === "own-key" ? 0 : PERSONALIZATION_CREDIT_COST;
+    if (!("error" in solRoute) && solRoute.route.paidBy === "own-key") {
+      return NextResponse.json({
+        cost: 0,
+        availableCredits: balance.available,
+        paidBy: "own-key",
+      });
+    }
+
+    const tier = !("error" in solRoute) ? tierFor(solRoute.route, solRoute.plan, "MEDIUM") : "BASIC";
+    const provider = !("error" in solRoute) ? solRoute.route.provider : "bedrock_claude";
+    // Realistic credit estimate for a template HTML with ~3,000 output tokens
+    const cost = estimateWorstCaseCost(provider, tier, "edit_raw_html", 12000, 3000);
+
     return NextResponse.json({
       cost,
       availableCredits: balance.available,
-      paidBy: !("error" in solRoute) ? solRoute.route.paidBy : "plexo",
+      paidBy: "plexo",
     });
   } catch {
-    return NextResponse.json({ cost: PERSONALIZATION_CREDIT_COST, availableCredits: 0 });
+    return NextResponse.json({ cost: 20, availableCredits: 0 });
   }
 }
 
@@ -66,6 +76,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     const tier = tierFor(solRoute.route, solRoute.plan, "MEDIUM");
     const approxChars = (templateHtml?.length ?? 12000) + 2000;
+    const { estimateWorstCaseCost } = await import("@/lib/db/ledgerOperations");
+    const estimatedCost = solRoute.route.paidBy === "own-key" ? 0 : estimateWorstCaseCost(solRoute.route.provider, tier, "edit_raw_html", approxChars, 3000);
 
     // SOL Rule 3: pre-flight affordability check before running
     const cannotAfford = await checkCanAfford(resolved.userId, solRoute.route, tier, "edit_raw_html", approxChars);
@@ -77,7 +89,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           error: "You don't have enough AI credits to personalize your website with SOL. Top up to continue.",
           outOfCredits: true,
           availableCredits: balance.available,
-          cost: PERSONALIZATION_CREDIT_COST,
+          cost: estimatedCost,
         },
         { status: 402 }
       );
@@ -98,7 +110,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
     return NextResponse.json({
       ...result,
-      cost: solRoute.route.paidBy === "own-key" ? 0 : PERSONALIZATION_CREDIT_COST,
+      cost: estimatedCost,
       creditsRemaining: updated.available,
     });
   } catch (err) {

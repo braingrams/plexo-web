@@ -188,7 +188,7 @@ export function SolPersonalizeModal({
 
         {!hasCredits && (
           <div style={{ fontSize: 12, color: "var(--plx-muted)", textAlign: "center" }}>
-            You need at least 1 credit to personalize this template. Click below to add credits and continue seamlessly.
+            You need at least {creditCost} {creditCost === 1 ? "credit" : "credits"} to personalize this template. Click below to add credits and continue seamlessly.
           </div>
         )}
       </div>

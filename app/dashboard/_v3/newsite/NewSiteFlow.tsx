@@ -72,7 +72,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const [isPersonalized, setIsPersonalized] = useState(false);
   const [personalizedHtml, setPersonalizedHtml] = useState<string | null>(null);
   const [availableCredits, setAvailableCredits] = useState<number | null>(null);
-  const [creditCost, setCreditCost] = useState(1);
+  const [creditCost, setCreditCost] = useState(20);
   const [paidBy, setPaidBy] = useState<"plexo" | "own-key">("plexo");
   const [showPersonalizeModal, setShowPersonalizeModal] = useState(false);
   const [showCreditModal, setShowCreditModal] = useState(false);
