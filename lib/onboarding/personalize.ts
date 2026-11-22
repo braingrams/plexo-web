@@ -350,8 +350,11 @@ export function personalizeTemplateHtml(input: {
   };
 }
 
+import type { SolRoute } from "@/lib/ai/solEngine";
+import type { ConcreteTier } from "@/lib/ai/types";
+
 /**
- * Uses SOL AI directly (via system AI provider) to deeply personalize a template HTML.
+ * Uses SOL AI directly (via system AI provider or BYOK key via SOL Engine) to deeply personalize a template HTML.
  */
 export async function personalizeWithAi(input: {
   html: string;
@@ -362,15 +365,30 @@ export async function personalizeWithAi(input: {
   templateDescription?: string;
   brandColor?: string;
   logoUrl?: string;
+  userId?: string;
+  solRoute?: { route: SolRoute; tier: ConcreteTier };
 }): Promise<PersonalizedResult | null> {
   try {
-    const { resolveSystemProvider } = await import("@/lib/ai/systemProvider");
     const { callProvider } = await import("@/lib/ai/generate");
     const { resolveModel } = await import("@/lib/ai/modelRegistry");
 
-    const { provider, apiKey } = resolveSystemProvider();
-    const model = resolveModel(provider, "MEDIUM");
+    let provider: import("@/lib/ai/types").AiProvider;
+    let apiKey: string;
+    let tier: ConcreteTier;
 
+    if (input.solRoute) {
+      provider = input.solRoute.route.provider;
+      apiKey = input.solRoute.route.apiKey;
+      tier = input.solRoute.tier;
+    } else {
+      const { resolveSystemProvider } = await import("@/lib/ai/systemProvider");
+      const system = resolveSystemProvider();
+      provider = system.provider;
+      apiKey = system.apiKey;
+      tier = "MEDIUM";
+    }
+
+    const model = resolveModel(provider, tier);
     const domain = detectPersonalizationDomain(input.about || "", input.goal);
     const photos = DOMAIN_STOCK_PHOTOS[domain] || DOMAIN_STOCK_PHOTOS.music;
 
@@ -395,16 +413,29 @@ Domain: ${domain}
 Original HTML template to personalize:
 ${input.html}`;
 
-    const res = await callProvider(
-      provider,
-      model,
-      apiKey,
-      systemPrompt,
-      userPrompt,
-      16000
-    );
+    let usage: { inputTokens?: number; outputTokens?: number } | undefined;
+    let res;
+    try {
+      res = await callProvider(
+        provider,
+        model,
+        apiKey,
+        systemPrompt,
+        userPrompt,
+        16000
+      );
+      usage = res.usage;
+    } finally {
+      // Rule 3: What was used is charged through the SOL engine (Plexo's AI only; see chargeFor).
+      if (input.userId && input.solRoute) {
+        const { chargeFor } = await import("@/lib/ai/solEngine");
+        await chargeFor(input.userId, input.solRoute.route, tier, "edit_raw_html", usage).catch((e) =>
+          console.warn("[sol] chargeFor error:", e)
+        );
+      }
+    }
 
-    let raw = (res.text || "").trim();
+    let raw = (res?.text || "").trim();
     if (raw.startsWith("```")) {
       raw = raw.replace(/^```(?:html)?\s*/i, "").replace(/\s*```$/i, "");
     }
@@ -437,6 +468,8 @@ export async function personalizeTemplate(input: {
   templateHtml?: string;
   templateName?: string;
   templateDescription?: string;
+  userId?: string;
+  solRoute?: { route: SolRoute; tier: ConcreteTier };
 }): Promise<PersonalizedResult> {
   let html = input.templateHtml;
   let templateName = input.templateName;
@@ -474,8 +507,8 @@ export async function personalizeTemplate(input: {
   }
 
   if (html) {
-    // Connect with SOL AI directly to personalize when system provider is available
-    if (process.env.SYSTEM_AI_PROVIDER) {
+    // Connect with SOL AI directly to personalize when system provider or SOL route is available
+    if (process.env.SYSTEM_AI_PROVIDER || input.solRoute) {
       try {
         const aiResult = await personalizeWithAi({
           html,
@@ -486,11 +519,19 @@ export async function personalizeTemplate(input: {
           templateDescription,
           brandColor,
           logoUrl,
+          userId: input.userId,
+          solRoute: input.solRoute,
         });
         if (aiResult) return aiResult;
       } catch (err) {
         console.warn("SOL AI personalization encountered an error, falling back to deterministic engine:", err);
       }
+    }
+
+    // Deduct fallback flat credit if using Plexo AI
+    if (input.userId && input.solRoute && input.solRoute.route.paidBy === "plexo") {
+      const { chargeFlatCredits } = await import("@/lib/db/ledgerOperations");
+      await chargeFlatCredits(input.userId, 1, "Personalize template with SOL").catch(() => undefined);
     }
 
     return personalizeTemplateHtml({
