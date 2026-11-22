@@ -43,12 +43,15 @@ export async function POST(
   const senderName = settings?.emailSenderName || template.name;
   const brandColor = settings?.emailBrandColor || siteBrand?.colors?.[0] || "#111111";
   const logoUrl = settings?.emailLogoUrl || siteBrand?.logoUrl;
-  const footerNote = settings?.emailFooterText || `Hi! We've received your payment successfully. Thank you for choosing ${template.name}. We appreciate your business and look forward to serving you! 😊`;
+  const customFooterText = settings?.emailFooterText?.trim() || "";
 
   const bodyHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 540px; margin: 0 auto; color: #111111;">
-      <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px;">
-        ${footerNote}
+      <h1 style="margin: 0 0 12px; font-size: 22px; font-weight: 800; color: #111111; letter-spacing: -0.4px;">
+        Thank you for your payment
+      </h1>
+      <p style="font-size: 15px; line-height: 1.6; margin-bottom: 24px; color: #374151;">
+        Hi! We've received your payment successfully. Thank you for choosing ${senderName}. We appreciate your business and look forward to serving you!
       </p>
 
       <div style="background: #F8F9FA; border: 1px solid #E5E7EB; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
@@ -71,9 +74,14 @@ export async function POST(
     </div>
   `;
 
+  const footerHtml = customFooterText
+    ? `<p style="margin: 0 0 8px; font-size: 12.5px; color: #6B7280; line-height: 1.5;">${customFooterText}</p>`
+    : undefined;
+
   const html = emailShell({
     title: `Payment receipt from ${senderName}`,
     bodyHtml,
+    footerHtml,
     brand: {
       name: senderName,
       logoUrl: logoUrl || undefined,
@@ -88,6 +96,8 @@ export async function POST(
       to,
       subject: `[Test Receipt] Payment to ${senderName}`,
       html,
+      fromName: senderName,
+      fromEmail: settings?.emailSenderEmail || undefined,
       context: "commerce_receipt",
       organizationId,
       templateId: id,
@@ -97,6 +107,8 @@ export async function POST(
       to,
       subject: `[Test Receipt] Payment to ${senderName}`,
       html,
+      fromName: senderName,
+      fromEmail: settings?.emailSenderEmail || undefined,
     });
   }
 

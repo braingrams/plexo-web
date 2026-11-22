@@ -359,9 +359,81 @@ export function EmailBrandingCard({
           description="Connect your MailDrip account so customer receipts, orders, and confirmations send directly through your own verified identity and custom branding."
         />
 
-        <div className="plx-emailbrand__layout" style={{ marginTop: 16 }}>
-          {/* Left Column: Interactive Workflow & Customization */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
+        {data.maildripConnected && !editing ? (
+          /* Compact Summary View: entire form and preview are hidden until user clicks Edit */
+          <div
+            style={{
+              marginTop: 16,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 16,
+              padding: "16px 18px",
+              borderRadius: "var(--plx-radius-sm, 8px)",
+              background: "var(--plx-surface)",
+              border: "1px solid var(--plx-border)",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0, flex: 1 }}>
+              <span
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: "var(--plx-radius-sm, 8px)",
+                  border: "1px solid var(--plx-border)",
+                  background: "var(--plx-tint)",
+                  display: "grid",
+                  placeItems: "center",
+                  overflow: "hidden",
+                  flexShrink: 0,
+                }}
+              >
+                {effectiveLogo ? (
+                  <img src={effectiveLogo} alt="" style={{ maxWidth: 36, maxHeight: 36, objectFit: "contain" }} />
+                ) : (
+                  <span style={{ width: 20, height: 20, borderRadius: "50%", background: effectiveColor }} />
+                )}
+              </span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <b style={{ color: "var(--plx-heading)", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {effectiveSenderName}
+                  </b>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 700,
+                      padding: "1px 6px",
+                      borderRadius: 999,
+                      background: "var(--plx-tint)",
+                      color: "var(--plx-deep)",
+                      border: "1px solid var(--plx-border)",
+                    }}
+                  >
+                    MailDrip Active
+                  </span>
+                </div>
+                <span className="plx-small" style={{ color: "var(--plx-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  Sending from {data.maildripConnectedEmail || "your MailDrip account"}
+                  {data.emailFooterText ? ` · "${data.emailFooterText}"` : ""}
+                </span>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <Button variant="secondary" size="sm" loading={sendingTest} onClick={() => void sendTestEmail()}>
+                Send test email
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+                Edit email branding
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="plx-emailbrand__layout" style={{ marginTop: 16 }}>
+            {/* Left Column: Interactive Workflow & Customization */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
             {/* Step 1: MailDrip Connection State */}
             {!data.maildripConnected ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -531,78 +603,6 @@ export function EmailBrandingCard({
                 >
                   <AlertCircle size={15} style={{ flexShrink: 0 }} aria-hidden />
                   <span>Connect MailDrip above to unlock custom display name, logo, accent colors, and custom receipt notes.</span>
-                </div>
-              </div>
-            ) : !editing && (data.emailSenderName || data.emailBrandColor || data.emailLogoUrl || data.emailFooterText) ? (
-              /* Compact Summary View */
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 14,
-                    padding: "16px 18px",
-                    borderRadius: "var(--plx-radius-sm, 8px)",
-                    background: "var(--plx-surface)",
-                    border: "1px solid var(--plx-border)",
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0, flex: 1 }}>
-                    <span
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: "var(--plx-radius-sm, 8px)",
-                        border: "1px solid var(--plx-border)",
-                        background: "var(--plx-tint)",
-                        display: "grid",
-                        placeItems: "center",
-                        overflow: "hidden",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {effectiveLogo ? (
-                        <img src={effectiveLogo} alt="" style={{ maxWidth: 36, maxHeight: 36, objectFit: "contain" }} />
-                      ) : (
-                        <span style={{ width: 20, height: 20, borderRadius: "50%", background: effectiveColor }} />
-                      )}
-                    </span>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                        <b style={{ color: "var(--plx-heading)", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {effectiveSenderName}
-                        </b>
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 700,
-                            padding: "1px 6px",
-                            borderRadius: 999,
-                            background: "var(--plx-tint)",
-                            color: "var(--plx-deep)",
-                            border: "1px solid var(--plx-border)",
-                          }}
-                        >
-                          MailDrip Active
-                        </span>
-                      </div>
-                      <span className="plx-small" style={{ color: "var(--plx-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        Sending from {data.maildripConnectedEmail || "your MailDrip account"}
-                        {data.emailFooterText ? ` · "${data.emailFooterText}"` : ""}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                    <Button variant="secondary" size="sm" loading={sendingTest} onClick={() => void sendTestEmail()}>
-                      Send test email
-                    </Button>
-                    <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
-                      Edit email branding
-                    </Button>
-                  </div>
                 </div>
               </div>
             ) : (
@@ -1194,6 +1194,7 @@ export function EmailBrandingCard({
             </div>
           </div>
         </div>
+      )}
 
         {error ? (
           <GateOrError error={error}>

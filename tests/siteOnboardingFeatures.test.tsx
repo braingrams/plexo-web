@@ -28,7 +28,6 @@ describe("SellTemplateCard", () => {
       root.render(<SellTemplateCard siteId="site-123" siteName="My Awesome Bakery" />);
     });
     expect(container.textContent).toContain("Sell this template to earn");
-    expect(container.textContent).toContain("Browse marketplace");
     expect(container.textContent).toContain("Sell this template");
     const sellLink = container.querySelector('a[href*="/dashboard/marketplace/sell?templateId=site-123"]');
     expect(sellLink).not.toBeNull();

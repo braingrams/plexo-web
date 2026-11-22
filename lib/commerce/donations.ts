@@ -462,7 +462,16 @@ async function sendDonationReceipt(order: OrderItem, subscription: DonationSubsc
     brand: emailConfig.brand,
     footerText: emailConfig.footerText,
   });
-  await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, context: "commerce_donation_receipt", organizationId: order.organizationId, templateId: order.templateId });
+  await sendCommerceEmail(apiKey, {
+    to: order.customerEmail,
+    subject,
+    html,
+    fromName: emailConfig.fromName,
+    fromEmail: emailConfig.fromEmail,
+    context: "commerce_donation_receipt",
+    organizationId: order.organizationId,
+    templateId: order.templateId,
+  });
 }
 
 /** Resends the donation confirmation receipt to the donor. */

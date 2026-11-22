@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { Notification, NotificationPreferences, User } from "@/lib/db/coreEntities";
+import { Invitation, Notification, NotificationPreferences, Organization, User } from "@/lib/db/coreEntities";
 import { Template } from "@/lib/db/contentEntities";
 import { listIncomingTransfers, listOutgoingTransfers } from "@/lib/siteTransferDynamo";
 import { CommerceOrder } from "@/lib/db/commerceEntities";
@@ -33,11 +33,18 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     dbNotifsResult,
     incomingTransfers,
     outgoingTransfers,
+    pendingInvitesResult,
   ] = await Promise.all([
     NotificationPreferences.get({ organizationId }).go().catch(() => ({ data: null })),
     Notification.query.primary({ userId }).go({ order: "desc" }).catch(() => ({ data: [] })),
     userEmail ? listIncomingTransfers(userEmail).catch(() => []) : [],
     organizationId ? listOutgoingTransfers(organizationId).catch(() => []) : [],
+    userEmail
+      ? Invitation.scan
+          .where((attr, op) => op.eq(attr.email, userEmail) && op.eq(attr.status, "pending"))
+          .go({ pages: "all" })
+          .catch(() => ({ data: [] }))
+      : Promise.resolve({ data: [] }),
   ]);
 
   const templateIds = Array.from(new Set([...incomingTransfers.map((t) => t.templateId), ...outgoingTransfers.map((t) => t.templateId)]));
@@ -71,7 +78,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
   }
 
-  // 2. Outgoing transfers waiting for acceptance
+  // 2. Pending Workspace / Team Invitations
+  const pendingInvites = pendingInvitesResult?.data ?? [];
+  for (const inv of pendingInvites) {
+    const [{ data: org }, { data: inviter }] = await Promise.all([
+      Organization.get({ id: inv.organizationId }).go().catch(() => ({ data: null })),
+      User.get({ id: inv.inviterId }).go().catch(() => ({ data: null })),
+    ]);
+    notifications.push({
+      id: `workspace-invite-${inv.id}`,
+      type: "MENTION",
+      title: `Invitation to join ${org?.name || "a workspace"}`,
+      message: `${inviter?.name || inviter?.email || "A team member"} invited you to join "${org?.name || "the workspace"}" as ${inv.role}.`,
+      link: `/accept-invite/${inv.id}`,
+      actionLabel: "Accept invite",
+      read: false,
+      createdAt: inv.createdAt ?? new Date().toISOString(),
+      meta: { invitationId: inv.id, organizationId: inv.organizationId, role: inv.role },
+    });
+  }
+
+  // 3. Outgoing transfers waiting for acceptance
   for (const t of outgoingTransfers) {
     const siteName = templateMap.get(t.templateId) || "Website";
     notifications.push({
@@ -87,15 +114,44 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     });
   }
 
-  // 3. Stored database notifications
+  // 4. Stored database notifications (visual design comments, mentions, etc.)
   if (dbNotifsResult?.data) {
     for (const n of dbNotifsResult.data) {
+      // Purge any corrupted or empty legacy rows from the database
+      if ((!n.message || n.message.trim() === "") && (!n.title || n.title === "Notification") && !n.actorId && !n.templateId) {
+        void Notification.delete({ userId, createdAt: n.createdAt, id: n.id }).go().catch(() => null);
+        continue;
+      }
+
+      let title = n.title;
+      let message = n.message || "";
+      let link = n.link || "/dashboard";
+
+      // If it's a visual design comment or mention with missing metadata, hydrate it
+      if ((!title || title === "Notification") && (n.actorId || n.templateId)) {
+        const [{ data: actor }, { data: site }] = await Promise.all([
+          n.actorId ? User.get({ id: n.actorId }).go().catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+          n.templateId ? Template.get({ id: n.templateId }).go().catch(() => ({ data: null })) : Promise.resolve({ data: null }),
+        ]);
+        const authorName = actor?.name || "A collaborator";
+        const siteName = site?.name || "your site design";
+        title = n.type === "MENTION" ? `${authorName} mentioned you on "${siteName}"` : `${authorName} commented on "${siteName}"`;
+        if (!message) message = "Added a comment to your visual design.";
+        if (n.templateId) link = `/dashboard/sites/${n.templateId}?tab=pages`;
+      }
+
+      // If still without a valid message or title, skip
+      if (!title || title === "Notification") {
+        void Notification.delete({ userId, createdAt: n.createdAt, id: n.id }).go().catch(() => null);
+        continue;
+      }
+
       notifications.push({
         id: n.id,
         type: (n.type as AppNotification["type"]) || "SYSTEM",
-        title: n.title || "Notification",
-        message: n.message || "",
-        link: n.link || "/dashboard",
+        title,
+        message,
+        link,
         actionLabel: n.actionLabel || "View",
         read: Boolean(n.readAt),
         createdAt: n.createdAt,
@@ -131,7 +187,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const { userId, organizationId } = resolved;
   const body = (await request.json().catch(() => ({}))) as {
-    action?: "read" | "read_all" | "settings";
+    action?: "read" | "read_all" | "settings" | "delete";
     notificationId?: string;
     settings?: {
       inAppNotifications?: boolean;
@@ -139,6 +195,17 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       soundChoice?: string;
     };
   };
+
+  if (body.action === "delete" && body.notificationId) {
+    if (!body.notificationId.startsWith("transfer-") && !body.notificationId.startsWith("workspace-invite-")) {
+      const list = await Notification.query.primary({ userId }).go({ order: "desc" }).catch(() => ({ data: [] }));
+      const match = list.data.find((n) => n.id === body.notificationId);
+      if (match) {
+        await Notification.delete({ userId, createdAt: match.createdAt, id: match.id }).go().catch(() => null);
+      }
+    }
+    return NextResponse.json({ success: true });
+  }
 
   if (body.action === "read_all") {
     const list = await Notification.query.primary({ userId }).go({ order: "desc" }).catch(() => ({ data: [] }));

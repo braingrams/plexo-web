@@ -100,7 +100,16 @@ export async function sendOrderStatusEmail(
   });
 
   try {
-    await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, context: "commerce_order_status", organizationId, templateId });
+    await sendCommerceEmail(apiKey, {
+      to: order.customerEmail,
+      subject,
+      html,
+      fromName: emailConfig.fromName,
+      fromEmail: emailConfig.fromEmail,
+      context: "commerce_order_status",
+      organizationId,
+      templateId,
+    });
   } catch (err) {
     // sendCommerceEmail already logs the failure via logEmailDelivery — this catch just
     // stops it from bubbling into a caller that just recorded a real, already-final

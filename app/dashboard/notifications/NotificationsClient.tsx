@@ -67,6 +67,15 @@ export function NotificationsClient() {
     show({ title: "All notifications marked as read", tone: "success" });
   };
 
+  const deleteNotification = async (id: string) => {
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    void fetch("/api/v1/notifications", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", notificationId: id }),
+    });
+  };
+
   const saveSettings = async (inApp: boolean, sound: boolean, choice: SoundChoice) => {
     setInAppEnabled(inApp);
     setSoundEnabled(sound);
@@ -86,8 +95,11 @@ export function NotificationsClient() {
     }
   };
 
-  const filtered = notifications.filter((n) => (filter === "unread" ? !n.read : true));
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const validNotifications = notifications.filter(
+    (n) => (n.title && n.title !== "Notification") || (n.message && n.message.trim().length > 0),
+  );
+  const filtered = validNotifications.filter((n) => (filter === "unread" ? !n.read : true));
+  const unreadCount = validNotifications.filter((n) => !n.read).length;
 
   const getIcon = (type: AppNotification["type"]) => {
     switch (type) {
@@ -118,7 +130,7 @@ export function NotificationsClient() {
   };
 
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", padding: "24px 16px 64px", display: "flex", flexDirection: "column", gap: 24 }}>
+    <div className="plx-page">
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
@@ -153,7 +165,7 @@ export function NotificationsClient() {
             cursor: "pointer",
           }}
         >
-          All ({notifications.length})
+          All ({validNotifications.length})
         </button>
         <button
           type="button"
@@ -173,7 +185,7 @@ export function NotificationsClient() {
         </button>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 300px", gap: 24, alignItems: "start" }}>
+      <div className="plx-page__grid">
         {/* Notifications Feed */}
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {loading ? (
@@ -273,6 +285,22 @@ export function NotificationsClient() {
                           Mark read
                         </button>
                       )}
+
+                      <button
+                        type="button"
+                        onClick={() => void deleteNotification(item.id)}
+                        style={{
+                          border: 0,
+                          background: "transparent",
+                          fontSize: 11,
+                          color: "var(--plx-muted)",
+                          cursor: "pointer",
+                          padding: 0,
+                          marginLeft: "auto",
+                        }}
+                      >
+                        Dismiss
+                      </button>
                     </div>
                   </div>
                 </div>

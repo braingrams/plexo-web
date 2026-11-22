@@ -113,12 +113,17 @@ export function NotificationBell() {
     };
   }, [open]);
 
-  const effectiveNotifications = notifications.map((n) => ({
+  const validNotifications = notifications.filter(
+    (n) => (n.title && n.title !== "Notification") || (n.message && n.message.trim().length > 0),
+  );
+
+  const effectiveNotifications = validNotifications.map((n) => ({
     ...n,
     read: n.read || localRead.has(n.id),
   }));
 
-  const unreadCount = effectiveNotifications.filter((n) => !n.read).length;
+  const unreadNotifications = effectiveNotifications.filter((n) => !n.read);
+  const unreadCount = unreadNotifications.length;
 
   const markAsRead = async (id: string, link?: string) => {
     const next = new Set(localRead);
@@ -337,7 +342,7 @@ export function NotificationBell() {
 
           {/* Notifications List */}
           <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column" }}>
-            {effectiveNotifications.length === 0 ? (
+            {unreadNotifications.length === 0 ? (
               <div style={{ padding: "36px 20px", textAlign: "center", color: "var(--plx-muted)" }}>
                 <span
                   style={{
@@ -356,10 +361,10 @@ export function NotificationBell() {
                 <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: "var(--plx-heading)" }}>
                   All caught up!
                 </p>
-                <span className="plx-small">No new notifications right now.</span>
+                <span className="plx-small">No unread notifications right now.</span>
               </div>
             ) : (
-              effectiveNotifications.map((item) => (
+              unreadNotifications.map((item) => (
                 <div
                   key={item.id}
                   onClick={() => void markAsRead(item.id, item.link)}

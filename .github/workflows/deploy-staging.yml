@@ -57,7 +57,10 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .next/cache
-          key: nextjs-staging-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          key: nextjs-staging-v2-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            nextjs-staging-v2-${{ hashFiles('package-lock.json') }}-
+            nextjs-staging-v2-
 
       - name: Install app dependencies
         run: npm ci
@@ -234,7 +237,9 @@ jobs:
           PLEXO_CONTENT_TABLE: plexo-content-staging-plexo
           PLEXO_OPS_TABLE: plexo-ops-staging-plexo
           PLEXO_IMPORT_TABLE: plexo-import-staging-plexo
-        run: npx open-next build
+        run: |
+          rm -rf .next/cache/turbopack
+          npx open-next build
 
       - name: Install CDK project
         working-directory: ./cdk
