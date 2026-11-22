@@ -465,6 +465,20 @@ async function sendDonationReceipt(order: OrderItem, subscription: DonationSubsc
   await sendCommerceEmail(apiKey, { to: order.customerEmail, subject, html, context: "commerce_donation_receipt", organizationId: order.organizationId, templateId: order.templateId });
 }
 
+/** Resends the donation confirmation receipt to the donor. */
+export async function resendDonationReceipt(templateId: string, orderId: string): Promise<{ success: boolean; to: string }> {
+  const { data: order } = await CommerceOrder.get({ templateId, id: orderId }).go();
+  if (!order) throw new Error("Order not found.");
+  const meta = (order.metadata ?? {}) as { campaignId?: string; subscriptionId?: string | null; renewal?: boolean };
+  let subscription: DonationSubscriptionItem | null = null;
+  if (meta.subscriptionId) {
+    const res = await CommerceDonationSubscription.get({ templateId, id: meta.subscriptionId }).go();
+    subscription = res.data ?? null;
+  }
+  await sendDonationReceipt(order, subscription);
+  return { success: true, to: order.customerEmail };
+}
+
 /**
  * A monthly gift's later charge (the gateway billed it on its own) → a new PAID donation
  * order, so every month shows in Orders and moves the campaign total. Returns the order for

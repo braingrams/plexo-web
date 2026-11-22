@@ -17,7 +17,7 @@ type Warning = { title: string; detail: string };
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 const SAFETY = [
-  "I know this site will leave my account if they say yes.",
+  "I know this site will leave my account if they accept.",
   "I know they will own its pages, orders and web addresses.",
   "I've told them it's coming, and I trust them with it.",
 ];
@@ -167,7 +167,7 @@ export function MovingSection({ sites, incoming, outgoing, isOwner, canImport, m
         </Panel>
       ) : null}
 
-      <Panel title="Give a site to someone" description="They need a Plexo account, or they can make one. You stay in charge until they say yes." data-tour="move-give">
+      <Panel title="Give a site to someone" description="They need a Plexo account, or they can make one. You stay in charge until they accept." data-tour="move-give">
         {!isOwner ? (
           <Notice tone="warn">Only the owner of the account can give a site away.</Notice>
         ) : sites.length === 0 ? (

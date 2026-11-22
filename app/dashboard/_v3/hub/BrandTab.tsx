@@ -320,6 +320,7 @@ export function BrandComponents({ components, projectId, height }: { components:
 export function BrandTab({ siteId, siteName, brand, defaults = null, experience, sourceType = "BUILDER", strataClient, strataPreviewState, strataPreviewVoice }: { siteId: string; siteName: string; brand: SiteBrand | null; defaults?: HubBrand; experience?: string; sourceType?: string; /** Dev preview only. */ strataClient?: StrataPickerClient; strataPreviewState?: BrandState; /** Dev preview only. */ strataPreviewVoice?: BrandVoice | null }) {
   const { show } = useToast();
   const [meta, setMeta] = useState<Meta | null>(null);
+  const [metaEditing, setMetaEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -378,6 +379,7 @@ export function BrandTab({ siteId, siteName, brand, defaults = null, experience,
     try {
       await hubApi(`/api/v1/templates/${siteId}/site-meta`, { method: "PUT", json: meta }, "We couldn't save that. Please try again.");
       show({ title: "Saved", tone: "success" });
+      setMetaEditing(false);
     } catch (e) {
       setError(errMsg(e));
     } finally {
@@ -423,17 +425,43 @@ export function BrandTab({ siteId, siteName, brand, defaults = null, experience,
         <Card>
           <CardHeader title="Browser tab and sharing" description="What people see in their browser tab and when your link is shared." />
           {meta ? (
-            <div className="plx-form">
-              <Input label="Title in the browser tab" value={meta.htmlTitle ?? ""} onChange={(e) => setMeta({ ...meta, htmlTitle: e.target.value })} placeholder={siteName} />
-              <Textarea label="One sentence about your site" help={!meta.metaDescription && suggestion ? <>Shown when your link is shared or found online. <Button variant="link" onClick={() => setMeta({ ...meta, metaDescription: suggestion })}>Use the words from Your words</Button></> : "Shown when your link is shared or found online."} value={meta.metaDescription ?? ""} placeholder={suggestion || undefined} onChange={(e) => setMeta({ ...meta, metaDescription: e.target.value })} style={{ minHeight: 88 }} />
-              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                <span className="plx-hrow__thumb" style={{ width: 48, height: 48 }}>{meta.favicon ? <img src={meta.favicon} alt="" /> : <ImagePlus size={20} aria-hidden />}</span>
-                <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && icon(e.target.files[0])} />
-                <Button variant="secondary" loading={uploading} onClick={() => fileRef.current?.click()}>{meta.favicon ? "Change small icon" : "Add a small icon"}</Button>
+            !metaEditing && (meta.htmlTitle || meta.metaDescription || meta.favicon) ? (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap", padding: "4px 0" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
+                  <span className="plx-hrow__thumb" style={{ width: 44, height: 44, flexShrink: 0 }}>
+                    {meta.favicon ? <img src={meta.favicon} alt="" /> : <ImagePlus size={18} aria-hidden />}
+                  </span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                    <b style={{ color: "var(--plx-heading)", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {meta.htmlTitle || siteName}
+                    </b>
+                    <span className="plx-small" style={{ color: "var(--plx-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {meta.metaDescription || "Browser tab title and link sharing details are set"}
+                    </span>
+                  </div>
+                </div>
+                <Button variant="secondary" size="sm" onClick={() => setMetaEditing(true)}>
+                  Edit sharing details
+                </Button>
               </div>
-              {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
-              <div><Button loading={busy} onClick={save}>Save</Button></div>
-            </div>
+            ) : (
+              <div className="plx-form">
+                <Input label="Title in the browser tab" value={meta.htmlTitle ?? ""} onChange={(e) => setMeta({ ...meta, htmlTitle: e.target.value })} placeholder={siteName} />
+                <Textarea label="One sentence about your site" help={!meta.metaDescription && suggestion ? <>Shown when your link is shared or found online. <Button variant="link" onClick={() => setMeta({ ...meta, metaDescription: suggestion })}>Use the words from Your words</Button></> : "Shown when your link is shared or found online."} value={meta.metaDescription ?? ""} placeholder={suggestion || undefined} onChange={(e) => setMeta({ ...meta, metaDescription: e.target.value })} style={{ minHeight: 88 }} />
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <span className="plx-hrow__thumb" style={{ width: 48, height: 48 }}>{meta.favicon ? <img src={meta.favicon} alt="" /> : <ImagePlus size={20} aria-hidden />}</span>
+                  <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && icon(e.target.files[0])} />
+                  <Button variant="secondary" loading={uploading} onClick={() => fileRef.current?.click()}>{meta.favicon ? "Change small icon" : "Add a small icon"}</Button>
+                </div>
+                {error ? <GateOrError error={error}><p className="plx-field__error" role="alert">{error}</p></GateOrError> : null}
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <Button loading={busy} onClick={save}>Save</Button>
+                  {(meta.htmlTitle || meta.metaDescription || meta.favicon) && (
+                    <Button variant="secondary" onClick={() => setMetaEditing(false)}>Cancel</Button>
+                  )}
+                </div>
+              </div>
+            )
           ) : error ? (
             <p className="plx-field__error" role="alert">{error}</p>
           ) : (

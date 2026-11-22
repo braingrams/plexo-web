@@ -85,6 +85,10 @@ export function EmailBrandingCard({
   // Swatch color popover
   const [colorMenuOpen, setColorMenuOpen] = useState(false);
 
+  // Edit mode toggle for compact view
+  const [editing, setEditing] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
+
   const fetchSettings = async () => {
     try {
       setLoading(true);
@@ -127,11 +131,34 @@ export function EmailBrandingCard({
       if (!res.ok) throw new Error(json.error || "Failed to save email settings");
 
       setData((prev) => (prev ? { ...prev, ...payload } : prev));
+      setEditing(false);
       show({ title: "Email branding saved", tone: "success" });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to save email settings");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const sendTestEmail = async () => {
+    setSendingTest(true);
+    try {
+      const res = await fetch(`/api/v1/templates/${siteId}/email-settings/test`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to send test email");
+      show({
+        title: `Test email sent to ${json.to}!`,
+        description: "Check your inbox to inspect your live branded receipt.",
+        tone: "success",
+      });
+    } catch (err) {
+      show({ title: err instanceof Error ? err.message : "Failed to send test email", tone: "danger" });
+    } finally {
+      setSendingTest(false);
     }
   };
 
@@ -450,8 +477,8 @@ export function EmailBrandingCard({
                       </span>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--plx-muted)" }}>
-                      <div><b>Sender:</b> Plexo Notifications</div>
-                      <div><b>Address:</b> notifications@plexopages.com</div>
+                      <div><b>Sender:</b> Plexo</div>
+                      <div><b>Address:</b> plexopages@gmail.com</div>
                       <div><b>Branding:</b> Default system templates</div>
                     </div>
                   </div>
@@ -504,6 +531,78 @@ export function EmailBrandingCard({
                 >
                   <AlertCircle size={15} style={{ flexShrink: 0 }} aria-hidden />
                   <span>Connect MailDrip above to unlock custom display name, logo, accent colors, and custom receipt notes.</span>
+                </div>
+              </div>
+            ) : !editing && (data.emailSenderName || data.emailBrandColor || data.emailLogoUrl || data.emailFooterText) ? (
+              /* Compact Summary View */
+              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 14,
+                    padding: "16px 18px",
+                    borderRadius: "var(--plx-radius-sm, 8px)",
+                    background: "var(--plx-surface)",
+                    border: "1px solid var(--plx-border)",
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 0, flex: 1 }}>
+                    <span
+                      style={{
+                        width: 44,
+                        height: 44,
+                        borderRadius: "var(--plx-radius-sm, 8px)",
+                        border: "1px solid var(--plx-border)",
+                        background: "var(--plx-tint)",
+                        display: "grid",
+                        placeItems: "center",
+                        overflow: "hidden",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {effectiveLogo ? (
+                        <img src={effectiveLogo} alt="" style={{ maxWidth: 36, maxHeight: 36, objectFit: "contain" }} />
+                      ) : (
+                        <span style={{ width: 20, height: 20, borderRadius: "50%", background: effectiveColor }} />
+                      )}
+                    </span>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <b style={{ color: "var(--plx-heading)", fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {effectiveSenderName}
+                        </b>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "1px 6px",
+                            borderRadius: 999,
+                            background: "var(--plx-tint)",
+                            color: "var(--plx-deep)",
+                            border: "1px solid var(--plx-border)",
+                          }}
+                        >
+                          MailDrip Active
+                        </span>
+                      </div>
+                      <span className="plx-small" style={{ color: "var(--plx-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        Sending from {data.maildripConnectedEmail || "your MailDrip account"}
+                        {data.emailFooterText ? ` · "${data.emailFooterText}"` : ""}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                    <Button variant="secondary" size="sm" loading={sendingTest} onClick={() => void sendTestEmail()}>
+                      Send test email
+                    </Button>
+                    <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
+                      Edit email branding
+                    </Button>
+                  </div>
                 </div>
               </div>
             ) : (
@@ -868,10 +967,18 @@ export function EmailBrandingCard({
                     style={{ minHeight: 76 }}
                   />
 
-                  <div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <Button loading={saving} onClick={() => void saveSettings()}>
                       Save email branding
                     </Button>
+                    <Button variant="secondary" loading={sendingTest} onClick={() => void sendTestEmail()}>
+                      Send test email
+                    </Button>
+                    {(data.emailSenderName || data.emailBrandColor || data.emailLogoUrl || data.emailFooterText) && (
+                      <Button variant="secondary" onClick={() => setEditing(false)}>
+                        Cancel
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -991,14 +1098,14 @@ export function EmailBrandingCard({
                     <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 4 }}>
                         <b style={{ fontSize: 12, color: "var(--plx-heading)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {(data.maildripConnected || previewTab === "branded") ? effectiveSenderName : "Plexo Notifications"}
+                          {(data.maildripConnected || previewTab === "branded") ? effectiveSenderName : "Plexo"}
                         </b>
                         <span style={{ fontSize: 10, color: "var(--plx-muted)" }}>9:41 AM</span>
                       </div>
                       <span style={{ fontSize: 11, color: "var(--plx-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                         {(data.maildripConnected || previewTab === "branded")
                           ? `<${data.maildripConnectedEmail || `notifications@${siteName.toLowerCase().replace(/[^a-z0-9]/g, "") || "brand"}.com`}>`
-                          : "<notifications@plexopages.com>"}
+                          : "<plexopages@gmail.com>"}
                       </span>
                     </div>
                   </div>
@@ -1051,7 +1158,7 @@ export function EmailBrandingCard({
                   </div>
 
                   <p style={{ margin: 0, fontSize: 11, lineHeight: 1.45, color: "var(--plx-text)" }}>
-                    Something as simple as Hi! We&apos;ve received your payment successfully. Thank you for choosing {siteName}. We appreciate your business and look forward to serving you! 😊
+                    Hi! We&apos;ve received your payment successfully. Thank you for choosing {siteName}. We appreciate your business and look forward to serving you! 😊
                   </p>
 
                   {/* Big Receipt Amount */}

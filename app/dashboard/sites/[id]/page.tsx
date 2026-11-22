@@ -68,16 +68,9 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
     case "health":
       content = <HealthTab siteId={id} siteName={site.name} live={site.status === "live"} editHref={site.editHref} />;
       break;
-    case "settings": {
-      const pages = await loadHubPages(ctx.organizationId, id).catch(() => []);
-      content = (
-        <>
-          <SettingsTab site={site} features={site.features} experience={ctx.experience} />
-          <AddMoreCards siteId={id} siteName={site.name} features={site.features} pages={examplePages(pages)} />
-        </>
-      );
+    case "settings":
+      content = <SettingsTab site={site} features={site.features} experience={ctx.experience} />;
       break;
-    }
     case "more": {
       const pages = await loadHubPages(ctx.organizationId, id).catch(() => []);
       content = <MoreTab site={site} features={site.features} pages={examplePages(pages)} experience={ctx.experience} />;

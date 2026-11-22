@@ -132,6 +132,10 @@ export const User = new Entity(
       isConfirmed: { type: "boolean", default: false },
       suspendedAt: { type: "string" },
       suspendedReason: { type: "string" },
+      // Admin email broadcast status: when true, excluded from all broadcast/marketing sends.
+      emailInactive: { type: "boolean", default: false },
+      emailInactiveAt: { type: "string" },
+      emailInactiveReason: { type: "string" },
       // Charisol Auth (server/charisolAccount.ts). `charisolSub` is the shared Charisol
       // account this user signed in as (Google or password). `charisolPasswordAt` is set the
       // first time they sign in with a Charisol PASSWORD — from then on Charisol holds their
@@ -871,10 +875,14 @@ export const Notification = new Entity(
       id: { type: "string", required: true },
       organizationId: { type: "string", required: true },
       userId: { type: "string", required: true },
-      type: { type: ["MENTION", "COMMENT_REPLY", "COMMENT_RESOLVED", "INVITE_ACCEPTED"] as const, required: true },
+      type: { type: "string", required: true },
       actorId: { type: "string" },
       commentId: { type: "string" },
       templateId: { type: "string" },
+      title: { type: "string" },
+      message: { type: "string" },
+      link: { type: "string" },
+      actionLabel: { type: "string" },
       readAt: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
     },
@@ -907,6 +915,9 @@ export const NotificationPreferences = new Entity(
       payments: { type: "boolean", default: true },
       commentMentions: { type: "boolean", default: true },
       notificationEmail: { type: "string" },
+      inAppNotifications: { type: "boolean", default: true },
+      inAppSound: { type: "boolean", default: true },
+      soundChoice: { type: "string", default: "chime" },
     },
     indexes: {
       // One per org, co-located with the Organization root item.

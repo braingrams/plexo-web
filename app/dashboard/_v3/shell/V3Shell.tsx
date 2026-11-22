@@ -40,6 +40,7 @@ import { SolSidebarProvider } from "../../sol/_components/SolSidebarContext";
 import { SolChatsColumn } from "../sol/SolChatsColumn";
 import { PlexoLogo } from "../brand/PlexoLogo";
 import { ThemeSwitch } from "../theme/ThemeContext";
+import { NotificationBell } from "../notifications/NotificationBell";
 import { TourProvider, persistTourState, useTour } from "../tour/TourProvider";
 import { Avatar } from "../ui/Avatar";
 import { useToast } from "../ui/Toast";
@@ -270,6 +271,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
             <div className="plx-topbar__theme" data-tour="theme-switch">
               <ThemeSwitch compact />
             </div>
+            <NotificationBell />
             <HelpMenu />
             <AccountMenu user={user} experience={experience} persist={persist} onExperienceChange={onExperienceChange} workspaces={workspaces} currentWorkspaceId={currentWorkspaceId} onWorkspaceSwitch={onWorkspaceSwitch} />
           </div>

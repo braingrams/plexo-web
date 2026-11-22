@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown, ChevronUp, Copy, HeartHandshake, Pencil, Plus, Power, Wallet, X } from "lucide-react";
-import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, Textarea } from "../../ui";
+import { Badge, Button, Card, CardHeader, EmptyState, Input, Modal, Textarea, useToast } from "../../ui";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import type { DonationsOverview } from "@/lib/commerce/donations";
 import { draftFrom, goalPercent, monthlyStatusWords, newDraft } from "@/lib/commerce/donationForm";
@@ -24,14 +24,32 @@ function Pager({ page, pages, onChange }: { page: number; pages: number; onChang
 /** Donations in the hub: your donation forms, how much they've raised, monthly donors and every gift. Same calls as the old page. */
 export function DonationsPanel({ templateId, initial }: { templateId: string; initial: DonationsOverview }) {
   const d = useDonations(templateId, initial);
+  const { show } = useToast();
   const { data, draft, setDraft } = d;
   const [donorPage, setDonorPage] = useState(1);
   const [giftPage, setGiftPage] = useState(1);
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const [showOptional, setShowOptional] = useState(false);
   const money = (n: number) => formatMoney(n, data.currency);
   const donors = paginate(data.monthlyDonors, donorPage, 10);
   const gifts = paginate(data.recentGifts, giftPage, 10);
   const paymentsHref = `/dashboard/sites/${templateId}?tab=donations&sub=payments`;
+
+  const resendReceipt = async (orderId: string, email: string) => {
+    setResendingId(orderId);
+    try {
+      const res = await fetch(`/api/v1/commerce/${templateId}/donations/orders/${orderId}/resend-receipt`, {
+        method: "POST",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Failed to resend receipt");
+      show({ title: `Receipt resent to ${email}`, tone: "success" });
+    } catch (err) {
+      show({ title: err instanceof Error ? err.message : "Failed to resend receipt", tone: "danger" });
+    } finally {
+      setResendingId(null);
+    }
+  };
 
   const openNew = () => {
     d.setError(null);
@@ -126,9 +144,26 @@ export function DonationsPanel({ templateId, initial }: { templateId: string; in
               <>
                 <ul className="plx-money__list">
                   {gifts.items.map((g) => (
-                    <li key={g.id} className="plx-money__row">
-                      <span className="plx-hrow__main"><span className="plx-hrow__title">{g.donorName ?? g.donorEmail}</span><span className="plx-hrow__sub">{g.campaignName}{g.monthly ? " · monthly" : ""} · {g.status === "REFUNDED" ? "Refunded" : new Date(g.createdAt ?? "").toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</span></span>
-                      <b className="plx-hrow__price">{formatMoney(g.amountMinor, g.currency)}</b>
+                    <li key={g.id} className="plx-money__row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                      <span className="plx-hrow__main">
+                        <span className="plx-hrow__title">{g.donorName ?? g.donorEmail}</span>
+                        <span className="plx-hrow__sub">
+                          {g.campaignName}{g.monthly ? " · monthly" : ""} · {g.status === "REFUNDED" ? "Refunded" : new Date(g.createdAt ?? "").toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <b className="plx-hrow__price">{formatMoney(g.amountMinor, g.currency)}</b>
+                        {g.donorEmail && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            loading={resendingId === g.id}
+                            onClick={() => void resendReceipt(g.id, g.donorEmail)}
+                          >
+                            Resend receipt
+                          </Button>
+                        )}
+                      </div>
                     </li>
                   ))}
                 </ul>

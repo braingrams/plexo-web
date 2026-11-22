@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowRight, BadgeDollarSign, Store, Tag } from "lucide-react";
+import { ArrowRight, BadgeDollarSign, Tag } from "lucide-react";
 import { ButtonLink } from "../ui";
 
 export type SellTemplateCardProps = {
@@ -10,12 +10,10 @@ export type SellTemplateCardProps = {
 };
 
 /**
- * Proper card for selling a site design on the marketplace to earn money,
- * and discovering/browsing other marketplace templates.
+ * Proper card for selling a site design on the marketplace to earn money.
  */
 export function SellTemplateCard({ siteId, siteName }: SellTemplateCardProps) {
   const sellHref = `/dashboard/marketplace/sell?templateId=${encodeURIComponent(siteId)}`;
-  const browseHref = `/dashboard/marketplace`;
 
   return (
     <section aria-labelledby="sell-template-heading" className="plx-sell-card-wrap">
@@ -89,19 +87,12 @@ export function SellTemplateCard({ siteId, siteName }: SellTemplateCardProps) {
               }}
             >
               Turn &ldquo;{siteName}&rdquo; into a reusable template for creators and businesses worldwide.
-              Earn money on every sale, or browse the marketplace for ready-made designs to inspire your next build.
+              Earn money on every sale with creator royalties.
             </p>
           </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-          <ButtonLink
-            href={browseHref}
-            variant="secondary"
-            leftIcon={<Store size={16} />}
-          >
-            Browse marketplace
-          </ButtonLink>
           <ButtonLink
             href={sellHref}
             variant="primary"

@@ -11,6 +11,7 @@ import type { HubFeatures } from "@/lib/dashboardV3/hubTabs";
 import { TabBar } from "./HubFrame";
 import { LinkPending } from "../ui/LinkPending";
 import { DeleteSiteDialog } from "./DeleteSiteDialog";
+import { TransferSiteDialog } from "./TransferSiteDialog";
 import { errMsg, hubApi } from "./hubApi";
 import { shopHref } from "@/lib/dashboardV3/shopSections";
 import { advancedHref, advancedKind } from "@/lib/dashboardV3/hubAdvanced";
@@ -22,6 +23,7 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
   const [name, setName] = useState(site.name);
   const [busy, setBusy] = useState<"save" | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [transferring, setTransferring] = useState(false);
   const [showMigration, setShowMigration] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,24 +85,13 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
 
           {features.migrated ? (
             <section id="set-migration" className="plx-hs__sec">
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: showMigration ? 12 : 0 }}>
                 <h3 className="plx-hs__h" style={{ margin: 0 }}>Moved from WordPress</h3>
                 <Button variant="secondary" size="sm" onClick={() => setShowMigration((s) => !s)}>
                   {showMigration ? "Hide details" : "Show details"}
                 </Button>
               </div>
-              {showMigration ? (
-                <MigrationHistory siteId={site.id} />
-              ) : (
-                <Card padding="md" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                  <span className="plx-small" style={{ color: "var(--plx-muted)" }}>
-                    WordPress migration details and sync runs are hidden. Expand to review re-migration actions and import history.
-                  </span>
-                  <Button variant="ghost" size="sm" onClick={() => setShowMigration(true)}>
-                    Show details
-                  </Button>
-                </Card>
-              )}
+              {showMigration ? <MigrationHistory siteId={site.id} /> : null}
             </section>
           ) : null}
 
@@ -123,6 +114,21 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
             </section>
           ) : null}
 
+          <section id="set-transfer" className="plx-hs__sec" data-tour="hub-set-transfer">
+            <h3 className="plx-hs__h">Transfer</h3>
+            <Card padding="none">
+              <div className="plx-hs__row">
+                <div className="plx-hs__lab">
+                  <b>Give this site to someone</b>
+                  <span>They need a Plexo account, or they can make one. You stay in charge until they accept.</span>
+                </div>
+                <div className="plx-hs__ctl plx-hs__ctl--end">
+                  <Button variant="secondary" onClick={() => setTransferring(true)}>Transfer site</Button>
+                </div>
+              </div>
+            </Card>
+          </section>
+
           <section id="set-danger" className="plx-hs__sec plx-hs__sec--danger">
             <h3 className="plx-hs__h">Delete</h3>
             <Card padding="none" className="plx-hs__danger">
@@ -139,6 +145,7 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
           </section>
         </div>
       </div>
+      <TransferSiteDialog site={transferring ? site : null} onClose={() => setTransferring(false)} />
       <DeleteSiteDialog site={deleting ? { id: site.id, name: site.name, status: site.status, address: site.address, kind: site.kind } : null} onClose={() => setDeleting(false)} />
     </>
   );
