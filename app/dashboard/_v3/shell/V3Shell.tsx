@@ -37,6 +37,7 @@ import type { OrgBranding } from "../../dashboard-shell";
 import { switchLabel, useVersionSwitch } from "../../_versions/VersionUi";
 import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { SolSidebarProvider } from "../../sol/_components/SolSidebarContext";
+import { SolStudioProvider } from "../sol/studio/SolStudioProvider";
 import { SolChatsColumn } from "../sol/SolChatsColumn";
 import { PlexoLogo } from "../brand/PlexoLogo";
 import { ThemeSwitch } from "../theme/ThemeContext";
@@ -116,7 +117,9 @@ export function V3Shell(props: V3ShellProps) {
       initialDriving={props.tourAutoDrive}
     >
       <SolSidebarProvider>
-        <ShellFrame {...props} />
+        <SolStudioProvider>
+          <ShellFrame {...props} />
+        </SolStudioProvider>
       </SolSidebarProvider>
     </TourProvider>
   );

@@ -82,10 +82,26 @@ export const DOMAIN_STOCK_PHOTOS: Record<string, string[]> = {
     "https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=1200&q=80",
     "https://images.unsplash.com/photo-1472851294608-062f824d29cc?auto=format&fit=crop&w=1200&q=80",
   ],
+  fitness: [
+    "https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1581009146145-b5ef050c2e1e?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1574680096145-d05b474e2155?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1540497077202-7c8a3999166f?auto=format&fit=crop&w=1200&q=80",
+  ],
 };
 
 export function detectPersonalizationDomain(about: string, goal?: string): string {
   const lower = about.toLowerCase();
+  if (
+    lower.includes("gym") || lower.includes("fitness") || lower.includes("workout") ||
+    lower.includes("crossfit") || lower.includes("training") || lower.includes("trainer") ||
+    lower.includes("coach") || lower.includes("strength") || lower.includes("athletics") ||
+    lower.includes("bodybuilding") || lower.includes("exercise") || lower.includes("weightlifting") ||
+    lower.includes("barbell")
+  ) {
+    return "fitness";
+  }
   if (
     lower.includes("show") || lower.includes("performance") || lower.includes("gig") ||
     lower.includes("tour") || lower.includes("concert") || lower.includes("music") ||
@@ -105,7 +121,7 @@ export function detectPersonalizationDomain(about: string, goal?: string): strin
   if (
     lower.includes("clinic") || lower.includes("health") || lower.includes("wellness") ||
     lower.includes("therapy") || lower.includes("care") || lower.includes("doctor") ||
-    lower.includes("dental") || lower.includes("yoga") || lower.includes("gym")
+    lower.includes("dental") || lower.includes("yoga")
   ) {
     return "wellness";
   }
@@ -131,6 +147,32 @@ export function detectPersonalizationDomain(about: string, goal?: string): strin
 }
 
 /**
+ * Transforms conversational prompt instructions (e.g. "I run a gym business, and i want people to discover me...")
+ * into polished, professional third-person marketing copy suitable for a live website lead paragraph.
+ */
+function cleanAboutToMarketingCopy(raw: string, brandName: string, domainName: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  // Check for conversational meta-instruction phrasing (e.g. "I run a gym business, and i want people to discover me and be able to reach out to me...")
+  if (
+    /i\s+(?:run|own|have|operate)\s+a\s+.*(?:business|company|gym|shop|store)/i.test(trimmed) ||
+    /i\s+want\s+people\s+to\s+discover\s+me\s+and\s+be\s+able\s+to\s+reach/i.test(trimmed)
+  ) {
+    if (domainName === "fitness") {
+      return `${brandName} is a premier strength gym and coaching studio built for real results. From coach-led sessions to tailored workout programs, we help you build strength, confidence, and a sustainable fitness lifestyle.`;
+    }
+    if (domainName === "music") {
+      return `The official creative home of ${brandName}. Catch upcoming live shows, watch exclusive music videos, and stream latest audio releases on Spotify and Apple Music.`;
+    }
+    if (domainName === "food") {
+      return `Original recipes, culinary inspiration, and unforgettable dining experiences handcrafted by ${brandName}.`;
+    }
+    return `${brandName} empowers you with personalized service, expert guidance, and proven results. Reach out today to get started.`;
+  }
+  return trimmed;
+}
+
+/**
  * Directly personalizes an existing template HTML document with the owner's brand name,
  * about narrative, tailored headlines, bento cards, feature strips, forms, footers,
  * and relevant domain photography without replacing the template's layout.
@@ -144,6 +186,7 @@ export function personalizeTemplateHtml(input: {
   templateDescription?: string;
   brandColor?: string;
   logoUrl?: string;
+  details?: { location?: string; whatsapp?: string; offering?: string };
 }): PersonalizedResult {
   let html = input.html;
   const name = input.name.trim() || "Your Brand";
@@ -151,26 +194,52 @@ export function personalizeTemplateHtml(input: {
   const about = (input.about || "").trim();
   const domain = detectPersonalizationDomain(about, input.goal);
 
-  // 1. Extract the template's original brand/creator name from templateName (e.g. "Chef Tomi: food creator...")
+  // 1. Extract the template's original brand/creator name from templateName (e.g. "Chef Tomi: food creator...", "Iron & Grain: strength gym...")
   const rawTemplateName = (input.templateName || "").trim();
   const colonIdx = rawTemplateName.search(/[:—–-]/);
   const originalBrandName = (colonIdx > 0 ? rawTemplateName.slice(0, colonIdx) : rawTemplateName).trim();
 
   // Replace original brand name in text nodes outside of tags
   if (originalBrandName && name && originalBrandName.toLowerCase() !== name.toLowerCase()) {
-    // Replace in <title>
+    const variants = new Set<string>();
+    variants.add(originalBrandName);
+    variants.add(originalBrandName.toUpperCase());
+    variants.add(originalBrandName.toLowerCase());
+    if (originalBrandName.includes("&")) {
+      variants.add(originalBrandName.replace(/&/g, "&amp;"));
+      variants.add(originalBrandName.toUpperCase().replace(/&/g, "&amp;"));
+      variants.add(originalBrandName.replace(/&/g, "and"));
+      variants.add(originalBrandName.toUpperCase().replace(/&/g, "AND"));
+    }
+    // Sort variants by length descending so longer ones match first
+    const sortedVariants = Array.from(variants).sort((a, b) => b.length - a.length);
+
+    // Replace in title
     html = html.replace(/<title>([\s\S]*?)<\/title>/gi, (_, content) => {
-      const updated = content.replace(new RegExp(escapeRegex(originalBrandName), "gi"), name);
+      let updated = content;
+      for (const v of sortedVariants) {
+        updated = updated.replace(new RegExp(escapeRegex(v), "gi"), name);
+      }
       return `<title>${updated}</title>`;
     });
 
     // Replace in visible text between HTML tags
     const parts = html.split(/(<[^>]+>)/g);
-    const re = new RegExp(`\\b${escapeRegex(originalBrandName)}\\b`, "gi");
     for (let i = 0; i < parts.length; i += 2) {
-      parts[i] = parts[i].replace(re, name);
+      for (const v of sortedVariants) {
+        const isUpper = v === v.toUpperCase() && v !== v.toLowerCase();
+        const replacement = isUpper ? name.toUpperCase() : name;
+        parts[i] = parts[i].replace(new RegExp(escapeRegex(v), "g"), replacement);
+      }
     }
     html = parts.join("");
+
+    // Also replace in attributes like alt, title, aria-label
+    for (const v of sortedVariants) {
+      const isUpper = v === v.toUpperCase() && v !== v.toLowerCase();
+      const replacement = isUpper ? name.toUpperCase() : name;
+      html = html.replace(new RegExp(`((?:alt|title|aria-label)="[^"]*?)${escapeRegex(v)}([^"]*?")`, "g"), `$1${replacement}$2`);
+    }
   }
 
   // 2. Intelligent tailored headlines and narrative
@@ -178,33 +247,37 @@ export function personalizeTemplateHtml(input: {
   let subhero = "";
   let cta = "Get started";
 
-  if (domain === "music") {
+  if (domain === "fitness") {
+    hero = `Build Strength. Move Better. Welcome to ${name}`;
+    subhero = cleanAboutToMarketingCopy(about, name, "fitness") || `Premier strength training and coach-led workouts built for real results. Whether you are stepping into the gym for the first time or looking to break your personal records, our community and coaching support your journey.`;
+    cta = "Claim your free pass";
+  } else if (domain === "music") {
     hero = `${name} — Live Shows & Performances`;
-    subhero = about || `The official creative home of ${name}. Catch upcoming live shows, watch exclusive music videos, and stream latest audio releases on Spotify.`;
+    subhero = cleanAboutToMarketingCopy(about, name, "music") || `The official creative home of ${name}. Catch upcoming live shows, watch exclusive music videos, and stream latest audio releases on Spotify.`;
     cta = "See upcoming shows";
   } else if (domain === "food") {
     hero = `Savour Handcrafted Flavours with ${name}`;
-    subhero = about || `Original recipes, culinary inspiration, and unforgettable dining experiences created by ${name}.`;
+    subhero = cleanAboutToMarketingCopy(about, name, "food") || `Original recipes, culinary inspiration, and unforgettable dining experiences created by ${name}.`;
     cta = "Explore recipes & menu";
   } else if (domain === "wellness") {
     hero = `Compassionate, Holistic Care at ${name}`;
-    subhero = about || `Empowering your wellness journey with personalized treatment and dedicated support.`;
+    subhero = cleanAboutToMarketingCopy(about, name, "wellness") || `Empowering your wellness journey with personalized treatment and dedicated support.`;
     cta = "Book a consultation";
   } else if (domain === "tech") {
     hero = `Modern Digital Solutions by ${name}`;
-    subhero = about || `High-performance software and developer tools built to scale your workflow effortlessly.`;
+    subhero = cleanAboutToMarketingCopy(about, name, "tech") || `High-performance software and developer tools built to scale your workflow effortlessly.`;
     cta = "Get started";
   } else if (domain === "store") {
     hero = `Handcrafted Quality from ${name}`;
-    subhero = about || `Curated with care, delivered to your door. Discover our signature collection.`;
+    subhero = cleanAboutToMarketingCopy(about, name, "store") || `Curated with care, delivered to your door. Discover our signature collection.`;
     cta = "Shop the collection";
   } else if (domain === "creative") {
     hero = `Designed for Impact. Built by ${name}.`;
-    subhero = about || `We craft high-performance digital experiences and brand identities that help ambitious creators grow.`;
+    subhero = cleanAboutToMarketingCopy(about, name, "creative") || `We craft high-performance digital experiences and brand identities that help ambitious creators grow.`;
     cta = "Explore our work";
   } else {
     hero = `Welcome to ${name}`;
-    subhero = about || `Discover what makes ${name} unique. Crafted with care and built for you.`;
+    subhero = cleanAboutToMarketingCopy(about, name, "business") || `Discover what makes ${name} unique. Crafted with care and built for you.`;
     cta = "Get started";
   }
 
@@ -290,11 +363,50 @@ export function personalizeTemplateHtml(input: {
     html = html.replace(/©\s*\d{4}\s*[^·<]*Kitchen Ltd/gi, `© 2026 ${escapeHtml(name)}`);
     html = html.replace(/partners@tomiskitchen\.co/gi, `booking@${slug}.com`);
     html = html.replace(/Pans,\s*knives and oil are in the shop[^.<]*/gi, "Streaming live on Spotify, Apple Music, and YouTube.");
+  } else if (domain === "fitness") {
+    const locUpper = input.details?.location ? input.details.location.toUpperCase() : "FITNESS HUB";
+    const locTitle = input.details?.location || "Downtown";
+    html = html.replace(/STRENGTH GYM\s*·\s*CHEESE LANE,\s*BRISTOL/gi, `STRENGTH GYM · ${escapeHtml(locUpper)}`);
+    html = html.replace(/CHEESE LANE,\s*BRISTOL/gi, escapeHtml(locUpper));
+    html = html.replace(/Cheese Lane,\s*Bristol/gi, escapeHtml(locTitle));
+    html = html.replace(/Cheese Lane/gi, escapeHtml(locTitle));
+
+    // Timetable card
+    html = html.replace(/TODAY AT (?:IRON &amp; GRAIN|IRON & GRAIN)/gi, `TODAY AT ${escapeHtml(name.toUpperCase())}`);
+    html = html.replace(/Today at (?:Iron &amp; Grain|Iron & Grain)/gi, `Today at ${escapeHtml(name)}`);
+
+    // Offering customization
+    if (input.details?.offering) {
+      html = html.replace(/Barbell Club/gi, escapeHtml(input.details.offering));
+    }
+
+    // WhatsApp / Contact links
+    if (input.details?.whatsapp) {
+      const waDigits = input.details.whatsapp.replace(/[^0-9]/g, "");
+      html = html.replace(/\b0117\s*\d{3}\s*\d{4}\b/g, escapeHtml(input.details.whatsapp));
+      html = html.replace(/href="tel:[^"]*"/gi, `href="https://wa.me/${waDigits}" target="_blank" rel="noopener"`);
+    }
+
+    // Schedule / Hours & Footers
+    html = html.replace(/Open until 22:00/gi, "Open Daily · 6:00 - 22:00");
+    html = html.replace(/Claim your free week/gi, "Claim Your Free Pass");
+    html = html.replace(/See the classes/gi, "View Class Timetable");
+    html = html.replace(/©\s*\d{4}\s*Iron &amp; Grain Ltd/gi, `© 2026 ${escapeHtml(name)}`);
+    html = html.replace(/©\s*\d{4}\s*Iron & Grain Ltd/gi, `© 2026 ${escapeHtml(name)}`);
   } else if (domain === "tech") {
     html = html.replace(/●\s*COOKING VIDEOS EVERY SUNDAY/gi, "● DEVELOPER TOOLS &amp; API");
     html = html.replace(/Dinner in 20,\s*40 or 90 minutes\./gi, "Features Built for Speed and Scale");
     html = html.replace(/Cook this tonight/gi, "Learn more");
     html = html.replace(/The Sunday Supper Letter/gi, "The Developer Dispatch");
+  }
+
+  // General details replacement across any template
+  if (input.details?.location) {
+    html = html.replace(/\b(?:Bristol|Cheese Lane)\b/gi, escapeHtml(input.details.location));
+  }
+  if (input.details?.whatsapp) {
+    const waDigits = input.details.whatsapp.replace(/[^0-9]/g, "");
+    html = html.replace(/href="tel:[^"]*"/gi, `href="https://wa.me/${waDigits}" target="_blank" rel="noopener"`);
   }
 
   // 7. High-Resolution Domain Photo Replacement
@@ -367,6 +479,7 @@ export async function personalizeWithAi(input: {
   logoUrl?: string;
   userId?: string;
   solRoute?: { route: SolRoute; tier: ConcreteTier };
+  details?: { location?: string; whatsapp?: string; offering?: string };
 }): Promise<PersonalizedResult | null> {
   try {
     const { callProvider } = await import("@/lib/ai/generate");
@@ -397,8 +510,8 @@ Your job is to deeply personalize an existing HTML web page template for a clien
 
 STRICT INSTRUCTIONS:
 1. Deep personalization: Rewrite headlines, paragraphs, media cards, bento grid items, feature stats, forms, and footers to fit the client's brand and domain.
-2. If the client is an artist/musician, ensure every section focuses on music, live shows, performances, Spotify/Apple streaming, and tours (NOT cooking, recipes, or pasta).
-3. Do NOT copy-paste raw prompt instructions. Write clean, punchy, persuasive copy.
+2. If the client is a gym / fitness brand, focus entirely on workouts, coaching, and strength (never medical/therapy copy).
+3. Do NOT copy-paste raw prompt instructions. Write clean, punchy, persuasive marketing copy.
 4. Replace content image src attributes with the provided domain photography URLs:
 ${photos.map((p, i) => `Photo ${i + 1}: ${p}`).join("\n")}
 5. Preserve the entire HTML document structure, CSS classes, inline styles, IDs, and scripts.
@@ -409,6 +522,9 @@ ${photos.map((p, i) => `Photo ${i + 1}: ${p}`).join("\n")}
 Description / Intent: "${input.about || ""}"
 Goal: ${input.goal || "business-site"}
 Domain: ${domain}
+${input.details?.location ? `Location / City: "${input.details.location}"` : ""}
+${input.details?.whatsapp ? `WhatsApp / Contact: "${input.details.whatsapp}"` : ""}
+${input.details?.offering ? `Core Offering / Class: "${input.details.offering}"` : ""}
 
 Original HTML template to personalize:
 ${input.html}`;
@@ -445,9 +561,9 @@ ${input.html}`;
         html: raw,
         summary: `SOL AI deeply personalized your template copy, cards, and photos for "${input.name}".`,
         headlines: {
-          hero: `${input.name} — Live Shows & Performances`,
+          hero: `${input.name} — Personalized`,
           subhero: input.about || "",
-          cta: "See upcoming shows",
+          cta: "Get started",
         },
       };
     }
@@ -470,6 +586,7 @@ export async function personalizeTemplate(input: {
   templateDescription?: string;
   userId?: string;
   solRoute?: { route: SolRoute; tier: ConcreteTier };
+  details?: { location?: string; whatsapp?: string; offering?: string };
 }): Promise<PersonalizedResult> {
   let html = input.templateHtml;
   let templateName = input.templateName;
@@ -521,6 +638,7 @@ export async function personalizeTemplate(input: {
           logoUrl,
           userId: input.userId,
           solRoute: input.solRoute,
+          details: input.details,
         });
         if (aiResult) return aiResult;
       } catch (err) {
@@ -543,6 +661,7 @@ export async function personalizeTemplate(input: {
       templateDescription,
       brandColor,
       logoUrl,
+      details: input.details,
     });
   }
 

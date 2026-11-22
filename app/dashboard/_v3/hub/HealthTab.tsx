@@ -8,6 +8,7 @@ import { Check, Code2, Gauge, Monitor, PartyPopper, Pencil, RefreshCw, Smartphon
 import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
 import { BannerStack, Button, ButtonLink, Card, CardHeader, Modal, Notice, OptimisticLoader, SegmentedControl, Skeleton } from "../ui";
 import { TabBar } from "./HubFrame";
+import { useSolStudio } from "../sol/studio/SolStudioProvider";
 import { scoreLook } from "@/lib/siteHealth/explain";
 import type { MetricView } from "@/lib/siteHealth/explain";
 import type { AutoFixId, HealthStatus, Issue, Rating } from "@/lib/siteHealth/types";
@@ -215,8 +216,8 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
   const [device, setDevice] = useState<"phone" | "computer">("phone");
   const [preview, setPreview] = useState<{ issue: Issue; loaded: Preview | null; text: string; business?: BusinessValues; items?: TextItem[]; regenerating?: boolean } | null>(null);
   const [everything, setEverything] = useState<EverythingPreview | "loading" | null>(null);
+  const studio = useSolStudio();
   const [solTarget, setSolTarget] = useState<"all" | Issue | null>(null);
-  const [solBusy, setSolBusy] = useState(false);
   const [solDoneSummary, setSolDoneSummary] = useState<string | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [justFixed, setJustFixed] = useState(false);
@@ -397,28 +398,34 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
     }
   }
 
-  async function runSolFix() {
-    setSolBusy(true);
+  /** "Fix with SOL": SOL Studio opens right here and shows the fix happening, instead of a button that just spins. */
+  function runSolFix() {
+    const target = solTarget;
+    if (!target) return;
     setError(null);
-    try {
-      const res = await fetch(`/api/v1/sites/${siteId}/health/sol-fix`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ target: solTarget === "all" ? "all" : solTarget?.id }),
-      });
-      const json = (await res.json().catch(() => ({}))) as { error?: string; payload?: Payload; done?: Array<{ label: string }> };
-      if (!res.ok || !json.payload) {
-        throw new Error(json.error ?? "SOL could not complete all fixes. Please try again.");
-      }
-      setData(json.payload);
-      setJustFixed(true);
-      setSolTarget(null);
-      setSolDoneSummary(`SOL knocked out ${json.done?.length ?? "all"} issues on your site! All speed, picture, contrast, and AI visibility optimizations are live.`);
-    } catch (e) {
-      setError(e instanceof Error && e.message ? e.message : "SOL fix failed. Please try again.");
-    } finally {
-      setSolBusy(false);
-    }
+    setSolTarget(null);
+    type Fixed = { payload: Payload; done?: Array<{ label: string }> };
+    studio.runScript<Fixed>({
+      title: target === "all" ? "Fixing your site" : `Fixing "${target.title}"`,
+      script: async (api) => {
+        api.say(target === "all" ? "I'll go through everything that slows your site down or makes it hard for Google and AI assistants to read, and fix what I can." : `I'll fix **${target.title}** on your site.`);
+        return api.step("sol_fix_site", async () => {
+          const res = await fetch(`/api/v1/sites/${siteId}/health/sol-fix`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ target: target === "all" ? "all" : target.id }),
+          }).catch(() => null);
+          const json = (await res?.json().catch(() => ({}))) as { error?: string; payload?: Payload; done?: Array<{ label: string }> } | undefined;
+          if (!res?.ok || !json?.payload) throw new Error(json?.error ?? "SOL couldn't finish the fixes this time. Please try again: nothing was lost.");
+          return { payload: json.payload, done: json.done };
+        });
+      },
+      onFinished: (fixed) => {
+        setData(fixed.payload);
+        setJustFixed(true);
+        setSolDoneSummary(`SOL fixed ${fixed.done?.length ?? "all"} ${fixed.done?.length === 1 ? "issue" : "issues"} on your site. The speed, picture, contrast and AI-visibility improvements are live.`);
+      },
+    });
   }
 
   const report = data?.last?.report ?? null;
@@ -452,21 +459,6 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
   const open = data?.issues.filter((i) => i.severity !== "good" && !i.autoFix?.on) ?? [];
   const fixed = data?.issues.filter((i) => i.severity === "good" || i.autoFix?.on) ?? [];
   const anyOn = !!data?.issues.some((i) => i.autoFix?.on);
-
-  const solAllPrompt = `Please fix all the site health and SEO issues on my site "${siteName || "my site"}". Specifically:
-1. Audit and fix the headings outline so there is exactly one clear <h1> and properly nested <h2> and <h3> tags.
-2. Fill in any missing search summaries or metadata.
-3. Optimize for search engines and AI assistants.
-Please perform the updates and let me know what you changed.`;
-  const solAllHref = `/dashboard/sol?new=1&draft=${encodeURIComponent(solAllPrompt)}`;
-
-  const solIssuePrompt = solTarget && solTarget !== "all"
-    ? `Please fix the "${solTarget.title}" issue on my site "${siteName || "my site"}".
-Context: ${solTarget.why}
-${solTarget.steps?.length ? `Steps needed: ${solTarget.steps.join(", ")}` : ""}
-Please analyze my page, make the necessary updates in one pass, and tell me what you fixed.`
-    : "";
-  const solIssueHref = `/dashboard/sol?new=1&draft=${encodeURIComponent(solIssuePrompt)}`;
 
   return (
     <>
@@ -615,7 +607,6 @@ Please analyze my page, make the necessary updates in one pass, and tell me what
             <Button
               variant="primary"
               leftIcon={<SolGlyph size={16} />}
-              loading={solBusy}
               onClick={runSolFix}
             >
               {solTarget === "all" ? "Fix all with SOL" : "Fix this with SOL"}

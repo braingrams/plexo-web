@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Coins, FileText, Image as ImageIcon } from "lucide-react";
+import { Coins, FileText, MessageCircle, Palette } from "lucide-react";
 import { Modal } from "@/app/dashboard/_v3/ui/Modal";
 import { Button } from "@/app/dashboard/_v3/ui/Button";
 import { SolGlyph } from "@/app/dashboard/_v3/sol/SolGlyph";
@@ -58,7 +58,7 @@ export function SolPersonalizeModal({
           </span>
         </div>
       }
-      description={`SOL will analyze your brand profile and customize this entire design specifically for ${brandName}.`}
+      description={`SOL will tailor this design to ${brandName}. You watch it work, and it asks you if it needs anything.`}
       footer={
         <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 10, width: "100%" }}>
           <Button variant="secondary" onClick={onClose}>
@@ -106,25 +106,25 @@ export function SolPersonalizeModal({
               <FileText size={16} />
             </div>
             <div>
-              <strong style={{ color: "var(--plx-heading)" }}>Authentic Copywriting:</strong> Rewrites headlines, bento cards, bio, and calls-to-action to reflect what you do.
+              <strong style={{ color: "var(--plx-heading)" }}>Your words:</strong> Rewrites the headlines, cards, buttons and footer so they say what your business does.
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: "var(--plx-body)" }}>
             <div style={{ marginTop: 2, color: "var(--plx-deep)" }}>
-              <ImageIcon size={16} />
+              <Palette size={16} />
             </div>
             <div>
-              <strong style={{ color: "var(--plx-heading)" }}>Curated Domain Photography:</strong> Replaces generic stock photos with curated high-resolution photography fitting your industry.
+              <strong style={{ color: "var(--plx-heading)" }}>Your name and logo:</strong> Uses your logo and colours, or your business name if you haven&apos;t added a logo.
             </div>
           </div>
 
           <div style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 13, color: "var(--plx-body)" }}>
             <div style={{ marginTop: 2, color: "var(--plx-deep)" }}>
-              <Check size={16} />
+              <MessageCircle size={16} />
             </div>
             <div>
-              <strong style={{ color: "var(--plx-heading)" }}>Domain Alignment:</strong> Adapts media links, feature badges, and newsletter sections to your brand goals.
+              <strong style={{ color: "var(--plx-heading)" }}>A few quick questions:</strong> Only what it truly needs, like where you are or how people reach you. You can skip any of them.
             </div>
           </div>
         </div>
@@ -163,7 +163,7 @@ export function SolPersonalizeModal({
               <div style={{ fontSize: 12, color: "var(--plx-muted)" }}>
                 {isByok
                   ? "Billed directly by your provider (0 Plexo credits)"
-                  : `Estimated ${creditCost} credit for full-page personalization`}
+                  : `Up to ${creditCost} ${creditCost === 1 ? "credit" : "credits"} for the whole page. You only pay for what SOL uses.`}
               </div>
             </div>
           </div>

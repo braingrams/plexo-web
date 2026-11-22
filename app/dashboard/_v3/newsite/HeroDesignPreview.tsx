@@ -5,20 +5,19 @@ import { Laptop, Smartphone, Tablet, RefreshCw } from "lucide-react";
 import { SolGlyph } from "../sol/SolGlyph";
 import { Button } from "../ui";
 import { getStoredViewport, setStoredViewport, type ViewportMode } from "@/lib/dashboardV3/previewViewport";
-import { SolWorkingCanvas } from "./SolWorkingCanvas";
 
 export type HeroDesignPreviewProps = {
   html: string | null;
   designName: string;
   designDescription?: string;
   siteName: string;
+  /** "Personalize with SOL" was pressed (the screen decides what happens: confirm, then open the studio). */
   onPersonalize?: () => void;
-  isPersonalizing?: boolean;
+  /** While set, SOL Studio replaces the preview and the personalize button waits. */
+  studio?: React.ReactNode;
   personalized?: boolean;
   onSeeAll?: () => void;
   totalDesigns?: number;
-  availableCredits?: number | null;
-  creditCost?: number;
 };
 
 export function HeroDesignPreview({
@@ -27,12 +26,10 @@ export function HeroDesignPreview({
   designDescription,
   siteName,
   onPersonalize,
-  isPersonalizing,
+  studio,
   personalized,
   onSeeAll,
   totalDesigns = 0,
-  availableCredits,
-  creditCost = 1,
 }: HeroDesignPreviewProps) {
   const [device, setDevice] = useState<ViewportMode>("desktop");
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -93,13 +90,14 @@ export function HeroDesignPreview({
           padding: "10px 16px",
           background: "var(--plx-sunken)",
           borderBottom: "1px solid var(--plx-border)",
-          gap: 12,
-          flexWrap: "nowrap",
+          gap: 8,
+          flexWrap: "wrap",
           minWidth: 0,
         }}
       >
+        <style>{`@media (max-width: 720px){.plx-hero-url{display:none !important}.plx-hero-bar-actions{width:100%;justify-content:space-between}}`}</style>
         {/* Left: Window Dots & Template Name */}
-        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 1 }}>
           <div style={{ display: "flex", gap: 6 }} aria-hidden>
             <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--plx-danger)", display: "inline-block" }} />
             <span style={{ width: 10, height: 10, borderRadius: "50%", background: "var(--plx-warning)", display: "inline-block" }} />
@@ -133,6 +131,7 @@ export function HeroDesignPreview({
 
         {/* Center: URL pill */}
         <div
+          className="plx-hero-url"
           style={{
             display: "flex",
             alignItems: "center",
@@ -156,7 +155,7 @@ export function HeroDesignPreview({
         </div>
 
         {/* Right: Device switch + Personalize button */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        <div className="plx-hero-bar-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, marginLeft: "auto" }}>
           {/* Device toggle */}
           <div
             role="radiogroup"
@@ -237,12 +236,10 @@ export function HeroDesignPreview({
             <Button
               size="sm"
               variant={personalized ? "secondary" : "primary"}
-              loading={isPersonalizing}
-              loadingLabel="Personalizing…"
               leftIcon={<SolGlyph size={14} />}
               onClick={onPersonalize}
-              disabled={isPersonalizing}
-              title="Deeply personalizes headlines, story, cards, and photos with SOL"
+              disabled={!!studio || !html}
+              title="SOL rewrites this design's words for your business and adds your logo"
             >
               {personalized ? "Re-personalize with SOL" : "Personalize with SOL"}
             </Button>
@@ -265,8 +262,8 @@ export function HeroDesignPreview({
           transition: "background 0.2s ease",
         }}
       >
-        {isPersonalizing ? (
-          <SolWorkingCanvas siteName={siteName} />
+        {studio ? (
+          <div style={{ position: "absolute", inset: 0, display: "flex" }}>{studio}</div>
         ) : !html ? (
           <div
             style={{

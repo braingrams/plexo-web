@@ -23,6 +23,7 @@ import { BrandStepContent } from "./BrandStepContent";
 import type { PickerDesign } from "../designs/DesignPicker";
 import { CreditModal } from "../sol/CreditModal";
 import { SolPersonalizeModal } from "./SolPersonalizeModal";
+import { PersonalizeStudio, type PersonalizeResult } from "./PersonalizeStudio";
 
 export type NewSiteContext = {
   plan: string;
@@ -68,7 +69,8 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const [error, setError] = useState("");
   const [loadingDesigns, setLoadingDesigns] = useState(false);
   const [isContinuing, setIsContinuing] = useState(false);
-  const [isPersonalizing, setIsPersonalizing] = useState(false);
+  // The run number of the SOL Studio open over the preview (null: closed). A new number starts SOL afresh.
+  const [studioRun, setStudioRun] = useState<number | null>(null);
   const [isPersonalized, setIsPersonalized] = useState(false);
   const [personalizedHtml, setPersonalizedHtml] = useState<string | null>(null);
   const [availableCredits, setAvailableCredits] = useState<number | null>(null);
@@ -211,63 +213,24 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     }
   };
 
-  /** Personalizes the currently displayed design with SOL based on name, about, and goal */
-  const personalizeWithSol = async () => {
-    if (!goal || isPersonalizing) return;
+  /** "Personalize with SOL": confirm what it costs, then SOL Studio opens over the preview and starts. */
+  const askToPersonalize = () => {
+    if (studioRun !== null) return;
+    setShowPersonalizeModal(true);
+  };
+  const startPersonalizing = () => {
+    setShowPersonalizeModal(false);
     if (paidBy !== "own-key" && availableCredits !== null && availableCredits < creditCost) {
       setShowCreditModal(true);
       return;
     }
-    setIsPersonalizing(true);
-    const chosen = designs.find((d) => d.id === designId) ?? designs[0] ?? null;
-    try {
-      const res = await fetch("/api/onboarding/personalize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          profile: { goal, brand: { ...(brand ?? {}), name: name.trim(), ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}) } },
-          designId,
-          templateHtml: chosen?.html ?? undefined,
-          templateName: chosen?.name ?? undefined,
-          templateDescription: chosen?.description ?? undefined,
-        }),
-      });
-      const text = await res.text();
-      let data: Record<string, unknown> | null = null;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        // Response was not JSON (e.g. gateway timeout or HTML)
-      }
-      if (res.status === 402 || data?.outOfCredits) {
-        if (typeof data?.availableCredits === "number") setAvailableCredits(data.availableCredits);
-        setShowCreditModal(true);
-        return;
-      }
-      if (!res.ok || !data) {
-        throw new Error((data?.error as string) || "SOL encountered a temporary delay while personalizing. Please try again.");
-      }
-      if (typeof data.html === "string" && data.html) {
-        setPersonalizedHtml(data.html);
-        setIsPersonalized(true);
-        if (typeof data.creditsRemaining === "number") {
-          setAvailableCredits(data.creditsRemaining);
-        }
-        toast.show({
-          title: "Template personalized with SOL",
-          description: (data.summary as string) || `Headlines, copy, and images tailored to "${name.trim()}".`,
-          tone: "success",
-        });
-      }
-    } catch (err) {
-      toast.show({
-        title: "Could not personalize template",
-        description: err instanceof Error ? err.message : "Please try again.",
-        tone: "info",
-      });
-    } finally {
-      setIsPersonalizing(false);
-    }
+    setStudioRun((n) => (n ?? 0) + 1);
+  };
+  /** SOL finished: the preview now shows the personalized design. */
+  const personalized = (result: PersonalizeResult) => {
+    setPersonalizedHtml(result.html);
+    setIsPersonalized(true);
+    if (typeof result.creditsRemaining === "number") setAvailableCredits(result.creditsRemaining);
   };
 
   /** Makes the site (from the kit design, or from a marketplace design) and opens it. */
@@ -329,6 +292,8 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   }, []);
 
   useEffect(() => { if (preview?.screen === "look") void toLook(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  // SOL Studio belongs to the "Pick a look" screen: leaving it closes the studio, so coming back never restarts SOL by itself.
+  useEffect(() => { if (screen !== "look") setStudioRun(null); }, [screen]);
   useEffect(() => { /* focus lands on the heading of each screen */ document.getElementById("plx-ns-title")?.focus(); }, [screen]);
 
   const heading = (title: string, lead?: string) => (
@@ -472,13 +437,22 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         designName={chosenDesign?.name ?? (loadingDesigns ? "Loading design…" : "Website Design")}
         designDescription={chosenDesign?.description}
         siteName={name.trim()}
-        onPersonalize={() => setShowPersonalizeModal(true)}
-        isPersonalizing={isPersonalizing}
+        onPersonalize={askToPersonalize}
+        studio={
+          studioRun !== null && chosenDesign?.html ? (
+            <PersonalizeStudio
+              key={studioRun}
+              profile={{ goal: goal || "business-site", brand: { ...(brand ?? {}), name: name.trim(), ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}) } }}
+              design={{ id: chosenDesign.id, name: chosenDesign.name, description: chosenDesign.description, html: chosenDesign.html }}
+              creditCost={creditCost}
+              onApplied={personalized}
+              onClose={() => setStudioRun(null)}
+            />
+          ) : null
+        }
         personalized={isPersonalized}
         onSeeAll={() => { setError(""); setScreen("all"); }}
         totalDesigns={total || designs.length}
-        availableCredits={availableCredits}
-        creditCost={creditCost}
       />
 
       <SolPersonalizeModal
@@ -488,10 +462,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         availableCredits={availableCredits}
         creditCost={creditCost}
         paidBy={paidBy}
-        onProceed={() => {
-          setShowPersonalizeModal(false);
-          void personalizeWithSol();
-        }}
+        onProceed={startPersonalizing}
         onTopup={() => {
           setShowPersonalizeModal(false);
           setShowCreditModal(true);
@@ -521,7 +492,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
       ) : null}
       <div className="plx-ns__actions">
         <Button variant="ghost" onClick={() => { setError(""); setScreen("all"); }}>{total > 1 ? `See all designs (${total})` : "See all designs"}</Button>
-        <Button size="lg" disabled={loadingDesigns} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={create}>Create my website</Button>
+        <Button size="lg" disabled={loadingDesigns || studioRun !== null} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={create}>Create my website</Button>
       </div>
     </>
   );

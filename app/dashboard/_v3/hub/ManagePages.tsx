@@ -9,6 +9,7 @@ import type { HubPage } from "@/lib/dashboardV3/hubData";
 import { cleanPathPart, deletePageMessage, movePage, orderedPages, pathProblem } from "@/lib/dashboardV3/hubView";
 import { errMsg, hubApi } from "./hubApi";
 import { pageLabel } from "@/lib/dashboardV3/pagesList";
+import { solStudioHref } from "@/lib/dashboardV3/solStudioLink";
 
 type Menu = { available: boolean; hrefs: string[] };
 
@@ -82,7 +83,7 @@ export function ManagePagesList({ siteId, siteName, pages }: { siteId: string; s
     }
   }
 
-  const solHome = (p: HubPage) => `/dashboard/sol?new=1&draft=${encodeURIComponent(`Make "${pageLabel(p)}" the home page of my site "${siteName}".`)}`;
+  const solHome = (p: HubPage) => solStudioHref(`Make "${pageLabel(p)}" the home page of my site "${siteName}".`, { siteId });
 
   return (
     <>

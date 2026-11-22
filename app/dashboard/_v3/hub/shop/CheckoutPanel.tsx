@@ -7,6 +7,7 @@ import type { CheckoutField, CheckoutFieldType } from "@/lib/commerce/checkoutFi
 import { CHECKOUT_COUNTRIES, checkoutCountryName } from "@/lib/commerce/countries";
 import { questionProblem, receiveProblem } from "@/lib/commerce/shopSettingsForm";
 import { defaultTerms, termsPromptForSol, termsUrlProblem } from "@/lib/commerce/terms";
+import { solStudioHref } from "@/lib/dashboardV3/solStudioLink";
 import { Group, SaveBar, Switch, putSettings, useSettingsForm } from "./useSettingsForm";
 
 const MAX_FIELDS = 20;
@@ -129,7 +130,7 @@ export function CheckoutPanel({ templateId, initial }: { templateId: string; ini
         <Textarea label="Your terms" optional help={v.terms.trim() ? "Customers read this on a simple page on your site." : "Not set yet. Start from our friendly text and change it to fit your shop."} value={v.terms} rows={10} maxLength={10000} onChange={(e) => form.patch({ terms: e.target.value })} />
         <div className="plx-hchips">
           <Button variant="secondary" size="sm" onClick={() => form.patch({ terms: defaultTerms(initial.shopName ?? "", initial.contactEmail ?? "") })}>{v.terms.trim() ? "Replace with our friendly text" : "Start from our friendly text"}</Button>
-          <Link className="plx-btn plx-btn--ghost plx-btn--sm" href={`/dashboard/sol?new=1&draft=${encodeURIComponent(termsPromptForSol(initial.shopName ?? "my shop"))}`}><MessageCircle size={16} aria-hidden /> Ask SOL to write it</Link>
+          <Link className="plx-btn plx-btn--ghost plx-btn--sm" href={solStudioHref(termsPromptForSol(initial.shopName ?? "my shop"), { siteId: templateId })}><MessageCircle size={16} aria-hidden /> Ask SOL to write it</Link>
         </div>
         <Input label="Or link to your own page" optional help="If you already have terms on another page, paste its address. Customers go there instead." value={v.termsUrl} onChange={(e) => form.patch({ termsUrl: e.target.value })} placeholder="https://yoursite.com/terms" />
       </Group>

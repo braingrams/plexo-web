@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowRight, Check, Clock, HeartHandshake } from "lucide-react";
 import { Button, ButtonLink, Modal, useToast } from "../ui";
 import { addOnsFor, hubTabHref, type AddOnId, type HubFeatures } from "@/lib/dashboardV3/hubTabs";
+import { solStudioHref } from "@/lib/dashboardV3/solStudioLink";
 import { addMoreExample, type ExamplePage } from "@/lib/dashboardV3/addMoreExamples";
 import { errMsg, hubApi } from "./hubApi";
 
@@ -109,7 +110,7 @@ export function AddMoreCards({ siteId, siteName, features, pages = [] }: { siteI
     }
   }
 
-  const solHref = `/dashboard/sol?new=1&draft=${encodeURIComponent(`Add an email sign-up form to my site "${siteName}".`)}`;
+  const solHref = solStudioHref(`Add an email sign-up form to my site "${siteName}".`, { siteId });
 
   return (
     <>

@@ -111,6 +111,11 @@ const SPECIAL: Record<string, [string, string]> = {
   turn_off_visitor_numbers: ["Switching off visitor numbers", "Switched off visitor numbers"],
   share_visitor_numbers_with_google: ["Sharing your numbers with your Google account", "Shared your numbers with your Google account"],
   set_cookie_notice: ["Updating your cookie notice", "Updated your cookie notice"],
+  // Steps SOL Studio narrates for work that isn't a chat tool (personalizing a design, fixing site health).
+  studio_read_design: ["Reading your brand and this design", "Read your brand and this design"],
+  studio_write_words: ["Writing your words", "Wrote your words"],
+  studio_apply_brand: ["Putting it together with your brand", "Put it together with your brand"],
+  sol_fix_site: ["Fixing your site", "Fixed your site"],
 };
 const OWNED = new Set(["page", "pages", "site", "shop", "blog post", "blog", "product", "products", "order", "orders", "funnel", "app", "profile", "layout", "form", "settings", "domain", "discount", "customers"]);
 

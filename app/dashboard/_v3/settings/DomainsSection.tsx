@@ -8,6 +8,7 @@ import { ArrowRight, Check, ChevronDown, ExternalLink, Globe, Link2, MoreHorizon
 import { Badge, Button, ButtonLink, Input, Modal, SegmentedControl, Select, useToast } from "../ui";
 import { errMsg, hubApi } from "../hub/hubApi";
 import type { AddressRow } from "@/lib/dashboardV3/domainsData";
+import { solStudioHref } from "@/lib/dashboardV3/solStudioLink";
 import { addressCounts, addressStatus, filterAddresses, filtersActive, groupBySite, NO_FILTERS, relinkDomainValue, STATUS_LABEL, switchPlan, type AddressFilters, type AddressStatus } from "@/lib/dashboardV3/domainsView";
 import { AsideCard, AsideStats, CopyBox, Notice, SettingsPageShell } from "./bits";
 
@@ -216,7 +217,7 @@ export function DomainsSection({ addresses: a0, sites, canUseOwn, mock = false }
               <li><div><b>Wait a little, then check.</b><p className="plx-small" style={{ margin: "4px 0 10px" }}>It can take a few minutes to a few hours. Your free address keeps working meanwhile.</p>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
                   <Button size="sm" loading={busy === row.id} onClick={() => check(row)}>Check now</Button>
-                  <ButtonLink size="sm" variant="secondary" href={`/dashboard/sol?new=1&draft=${encodeURIComponent(`Help me connect my own domain ${row.domain} to my site "${row.siteName}". I'm not technical, please go step by step.`)}`}>We&apos;ll help you do it</ButtonLink>
+                  <ButtonLink size="sm" variant="secondary" href={solStudioHref(`Help me connect my own domain ${row.domain} to my site "${row.siteName}". I'm not technical, please go step by step.`, { siteId: row.siteId })}>We&apos;ll help you do it</ButtonLink>
                 </div></div></li>
             </ol>
           </div>

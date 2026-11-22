@@ -1,0 +1,20 @@
+/* SOL Studio: SOL working right where you are. Tokens only (no colour literals). */
+.sol3-studio { display: flex; flex-direction: column; min-height: 0; min-width: 0; height: 100%; width: 100%; position: relative; background: var(--plx-bg); color: var(--plx-text); }
+.sol3-studio__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px clamp(16px, 3vw, 24px); background: var(--plx-surface); border-bottom: 1px solid var(--plx-border); flex-shrink: 0; }
+.sol3-studio__who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.sol3-studio__title { margin: 0; font-size: 15px; font-weight: 800; color: var(--plx-heading); line-height: 1.2; }
+.sol3-studio__status { margin: 2px 0 0; display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--plx-muted); }
+.sol3-studio__dot { width: 8px; height: 8px; border-radius: 999px; background: var(--plx-brand); flex-shrink: 0; }
+.sol3-studio__dot[data-state="working"] { animation: sol3-studio-pulse 1.2s ease-in-out infinite; }
+.sol3-studio__dot[data-state="asking"] { background: var(--plx-warning); }
+.sol3-studio__dot[data-state="error"] { background: var(--plx-danger); }
+.sol3-studio__dot[data-state="done"] { background: var(--plx-success); }
+@keyframes sol3-studio-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .sol3-studio__dot[data-state="working"] { animation: none; } }
+.sol3-studio .sol3-scroll { padding: 20px clamp(16px, 3vw, 24px) 12px; }
+.sol3-studio__foot { flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; padding: 12px clamp(16px, 3vw, 24px) clamp(16px, 3vw, 20px); background: var(--plx-surface); border-top: 1px solid var(--plx-border); }
+.sol3-studio__foot[data-empty="true"] { display: none; }
+.sol3-studio__row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.sol3-studio__follow { display: flex; gap: 10px; align-items: center; }
+.sol3-studio__follow .plx-input { flex: 1; min-width: 0; }
+.sol3-studio__err { margin: 0; font-size: 14px; line-height: 1.45; color: var(--plx-text); }

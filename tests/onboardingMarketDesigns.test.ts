@@ -213,4 +213,57 @@ describe("personalizeTemplateHtml", () => {
     expect(result.html).toContain("booking@murano.com");
     expect(result.html).toContain("Streaming live on Spotify, Apple Music, and YouTube.");
   });
+
+  it("deeply personalizes a strength gym template for a fitness business without raw prompt pasting", async () => {
+    const { personalizeTemplateHtml } = await import("@/lib/onboarding/personalize");
+    const rawTemplate = `<!doctype html>
+<html>
+<head><title>Iron &amp; Grain: strength gym and coaching</title></head>
+<body>
+  <nav><span class="logo">IRON &amp; GRAIN</span></nav>
+  <div class="hero">
+    <div class="badge">STRENGTH GYM · CHEESE LANE, BRISTOL</div>
+    <h1>IRON &amp; GRAIN</h1>
+    <p class="lead">Original coaching and barbells.</p>
+    <div class="card">TODAY AT IRON &amp; GRAIN</div>
+    <div class="class-item">Barbell Club</div>
+    <a href="tel:0117 999 1234" class="btn">Claim your free week</a>
+    <footer>© 2026 Iron &amp; Grain Ltd · Cheese Lane, Bristol</footer>
+  </div>
+</body>
+</html>`;
+
+    const result = personalizeTemplateHtml({
+      html: rawTemplate,
+      name: "Musti",
+      about: "I run a gym business, and i want people to discover me and be able to reach out to me about fitness, workout and lifestyle",
+      templateName: "Iron & Grain: strength gym and coaching",
+      details: {
+        location: "Lagos, Nigeria",
+        whatsapp: "+2348012345678",
+        offering: "Personal Training",
+      },
+    });
+
+    // 1. Must replace brand name everywhere, including logo, title, and timetable
+    expect(result.html).toContain("<title>Musti — Build Strength. Move Better. Welcome to Musti</title>");
+    expect(result.html).toContain('<span class="logo">Musti</span>');
+    expect(result.html).not.toContain("IRON &amp; GRAIN");
+    expect(result.html).not.toContain("Iron &amp; Grain");
+    expect(result.html).toContain("TODAY AT Musti");
+
+    // 2. Must tailor the headline to strength/fitness (NOT compassionate holistic care)
+    expect(result.html).toContain("Build Strength. Move Better. Welcome to Musti");
+    expect(result.html).not.toContain("Compassionate, Holistic Care");
+
+    // 3. Must NOT paste the raw first-person user prompt
+    expect(result.html).not.toContain("I run a gym business, and i want people to discover me");
+    expect(result.html).toContain("Musti is a premier strength gym and coaching studio");
+
+    // 4. Must integrate location, whatsapp, and offering
+    expect(result.html).toContain("STRENGTH GYM · LAGOS, NIGERIA");
+    expect(result.html).toContain("Personal Training");
+    expect(result.html).toContain("https://wa.me/2348012345678");
+    expect(result.html).toContain("© 2026 Musti");
+  });
 });
