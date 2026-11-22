@@ -7,7 +7,7 @@ export default async function LoadingPreview({ searchParams }: { searchParams: P
   const q = await searchParams;
   const shape = (["hub", "settings", "list", "cards"].includes(q.shape ?? "") ? q.shape : "settings") as RouteLoadingShape;
   return (
-    <div data-plexo-v3 style={{ background: "var(--plx-bg)", minHeight: "100vh" }}>
+    <div style={{ background: "var(--plx-bg)" }}>
       <RouteLoading shape={shape} />
     </div>
   );

@@ -258,12 +258,13 @@ export function HeroDesignPreview({
           display: "flex",
           justifyContent: "center",
           alignItems: "flex-start",
-          overflowY: "hidden",
+          overflowY: studio ? "clip" : "hidden",
+          overflowX: studio ? "clip" : undefined,
           transition: "background 0.2s ease",
         }}
       >
         {studio ? (
-          <div style={{ position: "absolute", inset: 0, display: "flex" }}>{studio}</div>
+          <div style={{ position: "absolute", inset: 0, display: "flex", minHeight: 0, overflow: "clip" }}>{studio}</div>
         ) : !html ? (
           <div
             style={{

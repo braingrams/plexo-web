@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeBuildProfile } from "@/lib/dashboardV3/profile";
-import { extractTextNodes, finishDesign, planPersonalization, writeCopy, MAX_NODES } from "@/lib/onboarding/solPersonalize";
+import { PlainError, extractTextNodes, finishDesign, planPersonalization, writeCopy, MAX_NODES } from "@/lib/onboarding/solPersonalize";
 
 export const maxDuration = 120;
 
@@ -117,6 +117,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ replacements });
   } catch (err) {
     console.warn("[onboarding/personalize]", err);
+    if (err instanceof PlainError) return NextResponse.json({ error: err.message }, { status: 502 });
     return NextResponse.json({ error: "SOL hit a snag while personalizing. Please try again: nothing was changed." }, { status: 500 });
   }
 }

@@ -60,16 +60,10 @@ export function RouteLoading({ shape }: { shape: RouteLoadingShape }) {
       role="status"
       aria-live="polite"
       aria-label="Loading"
-      style={{
-        minHeight: "55vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        width: "100%",
-        padding: "48px 24px",
-      }}
     >
-      <OptimisticLoader title={title} steps={steps} subtitle={subtitle} />
+      {/* The building page runs edge to edge: it cancels the content area's own padding (32px, or 20px/16px/96px on phones). */}
+      <style>{`.plx-ldg{margin:-32px;width:calc(100% + 64px);height:calc(var(--plx-dvh, 100dvh) - 73px);display:block}.plx-ldg .plx-optimistic-loader{height:100%;min-height:0;border-radius:0}@media (max-width:900px){.plx-ldg{margin:-20px -16px calc(-96px - env(safe-area-inset-bottom));width:calc(100% + 32px);height:calc(var(--plx-dvh, 100dvh) - 64px - 68px - env(safe-area-inset-bottom))}}`}</style>
+      <OptimisticLoader variant="page" title={title} steps={steps} subtitle={subtitle} />
     </div>
   );
 }

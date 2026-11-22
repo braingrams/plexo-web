@@ -1,5 +1,5 @@
 /* SOL Studio: SOL working right where you are. Tokens only (no colour literals). */
-.sol3-studio { display: flex; flex-direction: column; min-height: 0; min-width: 0; height: 100%; width: 100%; position: relative; background: var(--plx-bg); color: var(--plx-text); }
+.sol3-studio { overflow: clip; max-height: 100%; display: flex; flex-direction: column; min-height: 0; min-width: 0; height: 100%; width: 100%; position: relative; background: var(--plx-bg); color: var(--plx-text); }
 .sol3-studio__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px clamp(16px, 3vw, 24px); background: var(--plx-surface); border-bottom: 1px solid var(--plx-border); flex-shrink: 0; }
 .sol3-studio__who { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .sol3-studio__title { margin: 0; font-size: 15px; font-weight: 800; color: var(--plx-heading); line-height: 1.2; }

@@ -7,6 +7,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, FilePlus2, Truck } from "lucide-react";
 import { Button, ButtonLink, Input, Modal, Notice, OptimisticLoader, Textarea, useToast } from "../ui";
+import { brandPreviewHtml } from "@/lib/onboarding/brandPreview";
 import { type PickedBrand, type StrataPickerClient } from "../brand/StrataBrandPicker";
 import { NO_SELECTION, selectionToChoice, type PickerSelection } from "@/lib/dashboardV3/strataPicker";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
@@ -107,7 +108,12 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     const base = context.brand ?? undefined;
     return picked && (picked.colors.length || picked.logoUrl) ? { ...(base ?? {}), ...(picked.colors.length ? { colors: picked.colors } : {}), ...(picked.logoUrl ? { logoUrl: picked.logoUrl } : {}) } : base;
   }, [context.brand, picked]);
-
+  const chosenDesign = designs.find((d) => d.id === designId) ?? designs[0] ?? null;
+  // The design as the owner will see it: their name and chosen colour on it from the start, before SOL does anything.
+  const brandedHtml = useMemo(
+    () => (chosenDesign?.html ? brandPreviewHtml(chosenDesign.html, { name: name.trim(), color: brand?.colors?.[0], designName: chosenDesign.name }) : null),
+    [chosenDesign?.html, chosenDesign?.name, name, brand?.colors],
+  );
   const pickGoal = (g: NewSiteGoal) => {
     setGoal(g);
     if (!nameEdited) setName(defaultSiteName(context.brand?.name, g, context.siteNames));
@@ -335,7 +341,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     const app = goal !== "" && isAppGoal(goal);
     if (isContinuing) {
       return (
-        <OptimisticLoader
+        <OptimisticLoader variant="page"
           stage="finding-designs"
           siteName={name.trim() || "your brand"}
         />
@@ -405,7 +411,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
 
   if (screen === "making") {
     return (
-      <OptimisticLoader
+      <OptimisticLoader variant="page"
         stage="making-site"
         siteName={name.trim() || "your website"}
       />
@@ -423,8 +429,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     );
   }
 
-  const chosenDesign = designs.find((d) => d.id === designId) ?? designs[0] ?? null;
-  const displayHtml = personalizedHtml ?? chosenDesign?.html ?? null;
+  const displayHtml = personalizedHtml ?? brandedHtml;
 
   return (
     <>
@@ -443,7 +448,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
             <PersonalizeStudio
               key={studioRun}
               profile={{ goal: goal || "business-site", brand: { ...(brand ?? {}), name: name.trim(), ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}) } }}
-              design={{ id: chosenDesign.id, name: chosenDesign.name, description: chosenDesign.description, html: chosenDesign.html }}
+              design={{ id: chosenDesign.id, name: chosenDesign.name, description: chosenDesign.description, html: brandedHtml ?? chosenDesign.html }}
               creditCost={creditCost}
               onApplied={personalized}
               onClose={() => setStudioRun(null)}

@@ -37,10 +37,20 @@ describe("SellTemplateCard", () => {
 describe("OptimisticLoader", () => {
   it("renders animated action words", () => {
     act(() => {
-      root.render(<OptimisticLoader stage="finding-designs" siteName="Acme" />);
+      root.render(<OptimisticLoader variant="page" stage="finding-designs" siteName="Acme" />);
     });
     expect(container.textContent).toContain("Finding the best look for Acme");
     expect(container.textContent).toContain("Putting together your brand data");
+  });
+});
+
+describe("OptimisticLoader inline", () => {
+  it("is a quiet skeleton, not the full page builder", () => {
+    act(() => {
+      root.render(<OptimisticLoader subtitle="Loading brand style" />);
+    });
+    expect(container.querySelector(".plx-pb")).toBeNull();
+    expect(container.querySelector('[role="status"]')?.getAttribute("aria-label")).toBe("Loading brand style");
   });
 });
 

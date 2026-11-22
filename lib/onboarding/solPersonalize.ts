@@ -11,76 +11,11 @@
 import type { AskUserQuestionSpec } from "@/app/dashboard/sol/_components/types";
 import type { SolRoute } from "@/lib/ai/solEngine";
 import type { ConcreteTier } from "@/lib/ai/types";
+import { brandColorCss } from "./brandPreview";
 import { DOMAIN_STOCK_PHOTOS, detectPersonalizationDomain } from "./personalize";
 
-// ── Text of the page ───────────────────────────────────────────────────────────────────────
-
-export type TextNode = { id: number; text: string };
-
-const SKIPPED_ELEMENTS = ["script", "style", "noscript", "svg", "template", "textarea", "iframe"];
-const TOKEN = new RegExp(`<!--[\\s\\S]*?-->|<(${SKIPPED_ELEMENTS.join("|")})\\b[\\s\\S]*?<\\/\\1\\s*>|<[^>]+>`, "gi");
-
-/** Most snippets SOL is asked to look at, and the most characters of them (a page's headlines, cards and buttons come well under this). */
-export const MAX_NODES = 260;
-const MAX_NODE_CHARS = 220;
-const MAX_TOTAL_CHARS = 14_000;
-const MAX_REPLACEMENT_CHARS = 600;
-
-function decodeEntities(s: string): string {
-  return s
-    .replace(/&nbsp;/g, " ")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&(?:#39|#x27|apos);/g, "'")
-    .replace(/&amp;/g, "&");
-}
-
-function encodeText(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-}
-
-/** Walks the page and calls `onText` for every visible piece of text, in reading order, with its running number. */
-function mapText(html: string, onText: (id: number, text: string) => string | undefined): string {
-  let id = 0;
-  let out = "";
-  let last = 0;
-  const visit = (chunk: string): string => {
-    if (!/[\p{L}\p{N}]/u.test(chunk)) return chunk;
-    const [, lead, body, trail] = chunk.match(/^(\s*)([\s\S]*?)(\s*)$/) as RegExpMatchArray;
-    const next = onText(id++, decodeEntities(body).replace(/\s+/g, " ").trim());
-    return next === undefined ? chunk : `${lead}${encodeText(next)}${trail}`;
-  };
-  for (const m of html.matchAll(TOKEN)) {
-    const at = m.index ?? 0;
-    out += visit(html.slice(last, at)) + m[0];
-    last = at + m[0].length;
-  }
-  return out + visit(html.slice(last));
-}
-
-/** The visible text of a design, numbered, trimmed to what SOL can usefully rewrite in one go. */
-export function extractTextNodes(html: string): TextNode[] {
-  const nodes: TextNode[] = [];
-  let total = 0;
-  mapText(html, (id, text) => {
-    if (nodes.length < MAX_NODES && total < MAX_TOTAL_CHARS) {
-      const clipped = text.slice(0, MAX_NODE_CHARS);
-      nodes.push({ id, text: clipped });
-      total += clipped.length;
-    }
-    return undefined;
-  });
-  return nodes;
-}
-
-/** Puts rewritten text back where it came from; everything else on the page is left exactly as it was. */
-export function applyTextNodes(html: string, replacements: Record<string, string>): string {
-  return mapText(html, (id) => {
-    const next = replacements[String(id)];
-    return typeof next === "string" && next.trim() ? next.trim().slice(0, MAX_REPLACEMENT_CHARS) : undefined;
-  });
-}
+export { extractTextNodes, applyTextNodes, MAX_NODES, type TextNode } from "./htmlText";
+import { extractTextNodes, applyTextNodes, type TextNode } from "./htmlText";
 
 // ── Talking to SOL ─────────────────────────────────────────────────────────────────────────
 
@@ -197,16 +132,49 @@ Chosen design: ${design.name ?? "a design"}${design.description ? ` — ${design
 ${answered.length ? `\nWhat the owner told you:\n${answered.map((a) => `- ${a.question} ${a.answer}`).join("\n")}\n` : ""}
 Snippets:
 ${JSON.stringify(nodes.map((n) => [n.id, n.text]))}`;
-  const parsed = parseJsonObject(await askSol(ctx, system, user, 8000));
-  const raw = parsed && typeof parsed.r === "object" && parsed.r && !Array.isArray(parsed.r) ? (parsed.r as Record<string, unknown>) : null;
-  if (!raw) throw new Error("SOL couldn't finish the words this time. Please try again: you haven't lost anything.");
   const allowed = new Set(nodes.map((n) => String(n.id)));
   const replacements: Record<string, string> = {};
-  for (const [id, value] of Object.entries(raw)) {
-    if (allowed.has(id) && typeof value === "string" && value.trim()) replacements[id] = value.trim().slice(0, MAX_REPLACEMENT_CHARS);
-  }
-  if (Object.keys(replacements).length === 0) throw new Error("SOL couldn't finish the words this time. Please try again: you haven't lost anything.");
+  // Long designs are written in small batches: each reply stays short (so it can't be cut off) and a slow or odd reply only costs one batch, not the page.
+  const batches: TextNode[][] = [];
+  for (let i = 0; i < nodes.length; i += WRITE_BATCH) batches.push(nodes.slice(i, i + WRITE_BATCH));
+  const writeBatch = async (batch: TextNode[]): Promise<void> => {
+    const prompt = user.replace(/Snippets:[\s\S]*$/, `Snippets:\n${JSON.stringify(batch.map((n) => [n.id, n.text]))}`);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const text = await askSol(ctx, system, prompt, 4000);
+      const parsed = parseJsonObject(text);
+      const raw = parsed && typeof parsed.r === "object" && parsed.r && !Array.isArray(parsed.r) ? (parsed.r as Record<string, unknown>) : salvageReplacements(text);
+      let got = 0;
+      for (const [id, value] of Object.entries(raw)) {
+        if (allowed.has(id) && typeof value === "string" && value.trim()) {
+          replacements[id] = value.trim().slice(0, 600);
+          got++;
+        }
+      }
+      if (got > 0) return;
+    }
+  };
+  for (let i = 0; i < batches.length; i += 3) await Promise.all(batches.slice(i, i + 3).map(writeBatch));
+  if (Object.keys(replacements).length === 0) throw new PlainError("SOL couldn't finish the words this time. Please try again: you haven't lost anything.");
   return replacements;
+}
+
+/** Most snippets sent to SOL per request when rewriting a design's words. */
+const WRITE_BATCH = 70;
+
+/** An error whose message is already written for the site owner and can be shown as it is. */
+export class PlainError extends Error {}
+
+/** The finished `"id": "text"` pairs out of a reply that was cut off or isn't clean JSON. */
+export function salvageReplacements(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const m of text.matchAll(/"(\d{1,4})"\s*:\s*"((?:[^"\\]|\\.)*)"/g)) {
+    try {
+      out[m[1]] = JSON.parse(`"${m[2]}"`) as string;
+    } catch {
+      /* skip a broken entry */
+    }
+  }
+  return out;
 }
 
 // ── Putting it together ────────────────────────────────────────────────────────────────────
@@ -236,8 +204,9 @@ export function finishDesign(input: {
     html = html.replace(/(style="[^"]*background(?:-image)?\s*:\s*url\(['"]?)([^'")]+)(['"]?\)[^"]*")/gi, (_m, a, _old, c) => `${a}${next()}${c}`);
   }
 
-  if (input.brandColor && /^#[0-9a-f]{3,8}$/i.test(input.brandColor) && html.includes("</head>")) {
-    html = html.replace("</head>", `<style data-sol-brand="true">:root{--primary:${input.brandColor};--brand:${input.brandColor};--accent:${input.brandColor};}</style></head>`);
+  const colorCss = input.brandColor ? brandColorCss(input.brandColor) : null;
+  if (colorCss && html.includes("</head>") && !html.includes("data-plx-brand-preview")) {
+    html = html.replace("</head>", `<style data-sol-brand="true">${colorCss}</style></head>`);
   }
 
   // The owner's logo where the design has one; otherwise their name (already written in by the words step) stays as the logo.
