@@ -276,6 +276,7 @@ const PIECE_DEFINITIONS: Record<string, { icon: React.ComponentType<{ size?: num
 
 /** The brand's ready-made components (buttons, cards...), kept with the brand. SOL and any AI helper use them before inventing their own. */
 export function BrandComponents({ components, projectId, height }: { components: Array<{ name: string; variants: string[]; slots: Array<{ role: string }> }>; projectId: string | null; height?: number }) {
+  if (!components || components.length === 0) return null;
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   return (
     <Card data-tour="hub-brand-components" style={{ display: "flex", flexDirection: "column", height: height ? `${height}px` : undefined, maxHeight: height ? `${height}px` : 520, boxSizing: "border-box" }}>
@@ -417,7 +418,7 @@ export function BrandTab({ siteId, siteName, brand, defaults = null, experience,
         >
           <span />
         </Modal>
-      <div className="plx-hub__split">
+      <div className={brandState?.resolved?.components?.length ? "plx-hub__split" : ""}>
         <BrandComponents components={brandState?.resolved?.components ?? []} projectId={brandState?.projectId ?? null} />
         <Card>
           <CardHeader title="Browser tab and sharing" description="What people see in their browser tab and when your link is shared." />
@@ -442,7 +443,13 @@ export function BrandTab({ siteId, siteName, brand, defaults = null, experience,
           )}
         </Card>
       </div>
-      <EmailBrandingCard siteId={siteId} siteName={siteName} defaultLogo={brand?.logoUrl} defaultColor={brand?.colors?.[0]} />
+      <EmailBrandingCard
+        siteId={siteId}
+        siteName={siteName}
+        defaultLogo={brand?.logoUrl}
+        defaultColor={brand?.colors?.[0]}
+        savedColors={brandState?.resolved?.colours?.map((c) => c.value) ?? brand?.colors}
+      />
       </div>
     </>
   );

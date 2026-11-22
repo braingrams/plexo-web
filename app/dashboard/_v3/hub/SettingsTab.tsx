@@ -22,6 +22,7 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
   const [name, setName] = useState(site.name);
   const [busy, setBusy] = useState<"save" | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [showMigration, setShowMigration] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function rename() {
@@ -82,8 +83,24 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
 
           {features.migrated ? (
             <section id="set-migration" className="plx-hs__sec">
-              <h3 className="plx-hs__h">Moved from WordPress</h3>
-              <MigrationHistory siteId={site.id} />
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <h3 className="plx-hs__h" style={{ margin: 0 }}>Moved from WordPress</h3>
+                <Button variant="secondary" size="sm" onClick={() => setShowMigration((s) => !s)}>
+                  {showMigration ? "Hide details" : "Show details"}
+                </Button>
+              </div>
+              {showMigration ? (
+                <MigrationHistory siteId={site.id} />
+              ) : (
+                <Card padding="md" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                  <span className="plx-small" style={{ color: "var(--plx-muted)" }}>
+                    WordPress migration details and sync runs are hidden. Expand to review re-migration actions and import history.
+                  </span>
+                  <Button variant="ghost" size="sm" onClick={() => setShowMigration(true)}>
+                    Show details
+                  </Button>
+                </Card>
+              )}
             </section>
           ) : null}
 

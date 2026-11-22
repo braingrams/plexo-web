@@ -1,9 +1,27 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, ExternalLink, ImagePlus, Mail, Shield, Unlink, Upload } from "lucide-react";
+import {
+  AlertCircle,
+  Archive,
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ImagePlus,
+  Layers,
+  Mail,
+  Palette as PaletteIcon,
+  Send,
+  Shield,
+  Smartphone,
+  Trash2,
+  Unlink,
+  Upload,
+} from "lucide-react";
 import { Button, Card, CardHeader, Input, Modal, OptimisticLoader, Textarea, useToast } from "../ui";
 import { friendlyConnectError } from "@/lib/commerce/mailingList";
+import { PALETTE } from "@/lib/onboarding/flow";
 
 export type EmailSettingsData = {
   enterprise: boolean;
@@ -28,11 +46,13 @@ export function EmailBrandingCard({
   siteName,
   defaultLogo,
   defaultColor,
+  savedColors,
 }: {
   siteId: string;
   siteName: string;
   defaultLogo?: string;
   defaultColor?: string;
+  savedColors?: string[];
 }) {
   const { show } = useToast();
   const [data, setData] = useState<EmailSettingsData | null>(null);
@@ -57,6 +77,12 @@ export function EmailBrandingCard({
   // Uploading logo state
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Unconnected state preview toggle: "default" vs "branded"
+  const [previewTab, setPreviewTab] = useState<"default" | "branded">("default");
+
+  // Swatch color popover
+  const [colorMenuOpen, setColorMenuOpen] = useState(false);
 
   const fetchSettings = async () => {
     try {
@@ -237,7 +263,7 @@ export function EmailBrandingCard({
     return (
       <Card data-tour="hub-brand-email-gate">
         <CardHeader
-          title="Site email branding & MailDrip"
+          title="Site Custom Email Branding"
           description="Deliver clean, branded transactional emails (payment receipts, donations, orders) carrying this site's custom logo, sender name, and verified sending domain."
         />
         <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "4px 0" }}>
@@ -288,292 +314,775 @@ export function EmailBrandingCard({
   }
 
   const effectiveLogo = data.emailLogoUrl || defaultLogo || data.siteLogoUrl;
-  const effectiveColor = data.emailBrandColor || defaultColor || data.siteBrandColor;
+  const effectiveColor = data.emailBrandColor || defaultColor || data.siteBrandColor || PALETTE[0].hex;
+  const effectiveSenderName = data.emailSenderName.trim() || siteName;
+  const effectiveFooterText = data.emailFooterText.trim() || "Please keep this email as your payment receipt.";
+
+  // Distinct brand saved colors
+  const brandColors = Array.from(
+    new Set([defaultColor, data.siteBrandColor, ...(savedColors ?? [])].filter((c): c is string => Boolean(c))),
+  );
 
   return (
     <>
       <Card data-tour="hub-brand-email">
         <CardHeader
-          title="Site email branding & MailDrip"
-          description="Configure custom email branding and MailDrip sending specifically for this site. Overrides account-level branding on outgoing emails."
+          title="Site Custom Email Branding"
+          description="Connect your MailDrip account so customer receipts, orders, and confirmations send directly through your own verified identity and custom branding."
         />
 
-        <div className="plx-settings" style={{ marginTop: 8 }}>
-          <label className="plx-toggle">
-            <span>
-              <b>Use custom email branding for this site</b>
-              <span className="plx-small" style={{ display: "block" }}>
-                When enabled, customer receipts, donation confirmations, and order updates will carry this site&apos;s custom logo, sender name, and colors.
-              </span>
-            </span>
-            <input
-              type="checkbox"
-              className="plx-switch"
-              checked={data.emailBrandEnabled}
-              disabled={saving}
-              onChange={(e) => {
-                const next = e.target.checked;
-                setData({ ...data, emailBrandEnabled: next });
-                void saveSettings({ emailBrandEnabled: next });
-              }}
-            />
-          </label>
-        </div>
+        <div className="plx-emailbrand__layout" style={{ marginTop: 16 }}>
+          {/* Left Column: Interactive Workflow & Customization */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
+            {/* Step 1: MailDrip Connection State */}
+            {!data.maildripConnected ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                {/* Visual Animated Pipeline: Plexo -> MailDrip -> Customer */}
+                <div className="plx-mailflow" aria-label="MailDrip sending workflow">
+                  <div className="plx-mailflow__node">
+                    <span className="plx-mailflow__icon" title="Plexo system">
+                      <Layers size={18} aria-hidden />
+                    </span>
+                    <b style={{ fontSize: 12, color: "var(--plx-heading)" }}>Plexo</b>
+                    <span className="plx-small" style={{ fontSize: 11, color: "var(--plx-muted)" }}>
+                      Triggers receipt
+                    </span>
+                  </div>
 
-        {data.emailBrandEnabled && (
-          <div className="plx-form" style={{ marginTop: 20 }}>
-            <div className="plx-form__two">
-              <Input
-                label="Sender display name ('From Name')"
-                placeholder={siteName}
-                value={data.emailSenderName}
-                onChange={(e) => setData({ ...data, emailSenderName: e.target.value })}
-                help="Appears as the sender name in customer inboxes and receipt headers (e.g. Charisol)."
-              />
-              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                <label className="plx-field__label">Sending email address</label>
+                  <div className="plx-mailflow__track" aria-hidden>
+                    <div className="plx-mailflow__packet" />
+                  </div>
+
+                  <div className="plx-mailflow__node">
+                    <span
+                      className="plx-mailflow__icon"
+                      style={{
+                        borderColor: "var(--plx-focus)",
+                        background: "var(--plx-surface)",
+                        color: "var(--plx-deep)",
+                      }}
+                      title="Your MailDrip Account"
+                    >
+                      <Mail size={18} aria-hidden />
+                    </span>
+                    <b style={{ fontSize: 12, color: "var(--plx-heading)", maxWidth: 100, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {siteName}
+                    </b>
+                    <span className="plx-small" style={{ fontSize: 11, color: "var(--plx-muted)" }}>
+                      MailDrip sender
+                    </span>
+                  </div>
+
+                  <div className="plx-mailflow__track" aria-hidden>
+                    <div className="plx-mailflow__packet" style={{ animationDelay: "1.1s" }} />
+                  </div>
+
+                  <div className="plx-mailflow__node">
+                    <span className="plx-mailflow__icon" title="Customer inbox">
+                      <Smartphone size={18} aria-hidden />
+                    </span>
+                    <b style={{ fontSize: 12, color: "var(--plx-heading)" }}>Customer</b>
+                    <span className="plx-small" style={{ fontSize: 11, color: "var(--plx-muted)" }}>
+                      From {siteName}
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    padding: "16px 18px",
+                    borderRadius: "var(--plx-radius-md, 12px)",
+                    background: "var(--plx-elevated)",
+                    border: "1px solid var(--plx-border)",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 12,
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+                    <div>
+                      <b style={{ fontSize: 14, color: "var(--plx-heading)" }}>Step 1: Connect your MailDrip account</b>
+                      <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--plx-muted)", lineHeight: 1.45 }}>
+                        Plexo sends outbound payment receipts and confirmations through your MailDrip account. Connect MailDrip first so your emails carry your own verified domain and sender name.
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      leftIcon={<Mail size={15} aria-hidden />}
+                      onClick={() => {
+                        setConnectModal(true);
+                        setVerifying(false);
+                        setConnectError(null);
+                      }}
+                    >
+                      Connect MailDrip
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Before vs After comparison cards */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12 }}>
+                  <div
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "var(--plx-radius-sm, 8px)",
+                      background: "var(--plx-tint)",
+                      border: "1px solid var(--plx-border)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "2px 6px",
+                          borderRadius: 999,
+                          background: "var(--plx-surface)",
+                          color: "var(--plx-muted)",
+                          border: "1px solid var(--plx-border)",
+                        }}
+                      >
+                        Before (Default)
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--plx-muted)" }}>
+                      <div><b>Sender:</b> Plexo Notifications</div>
+                      <div><b>Address:</b> notifications@plexopages.com</div>
+                      <div><b>Branding:</b> Default system templates</div>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "14px 16px",
+                      borderRadius: "var(--plx-radius-sm, 8px)",
+                      background: "var(--plx-surface)",
+                      border: "1px solid var(--plx-border)",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontWeight: 700,
+                          padding: "2px 6px",
+                          borderRadius: 999,
+                          background: "var(--plx-tint)",
+                          color: "var(--plx-deep)",
+                          border: "1px solid var(--plx-border)",
+                        }}
+                      >
+                        After (Connected)
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 12, color: "var(--plx-text)" }}>
+                      <div><b>Sender:</b> {siteName}</div>
+                      <div><b>Address:</b> Your verified sending domain</div>
+                      <div><b>Branding:</b> Your logo, accent colors &amp; footer</div>
+                    </div>
+                  </div>
+                </div>
+
                 <div
                   style={{
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    height: 42,
-                    padding: "0 12px",
+                    padding: "10px 14px",
+                    borderRadius: "var(--plx-radius-sm, 8px)",
+                    background: "var(--plx-tint)",
+                    color: "var(--plx-muted)",
+                    fontSize: 12,
+                  }}
+                >
+                  <AlertCircle size={15} style={{ flexShrink: 0 }} aria-hidden />
+                  <span>Connect MailDrip above to unlock custom display name, logo, accent colors, and custom receipt notes.</span>
+                </div>
+              </div>
+            ) : (
+              /* Connected State: MailDrip Status & Full Customization Form */
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                {/* Connected status badge */}
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    padding: "12px 16px",
                     borderRadius: "var(--plx-radius-sm, 8px)",
                     background: "var(--plx-tint)",
                     border: "1px solid var(--plx-border)",
-                    color: "var(--plx-heading)",
-                    fontSize: 14,
-                    boxSizing: "border-box",
+                    flexWrap: "wrap",
                   }}
                 >
-                  <Mail size={16} style={{ color: "var(--plx-muted)", flexShrink: 0 }} aria-hidden />
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {data.maildripConnected && data.maildripConnectedEmail
-                      ? data.maildripConnectedEmail
-                      : "notifications@plexopages.com"}
-                  </span>
-                  <span
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span
+                      style={{
+                        display: "grid",
+                        placeItems: "center",
+                        width: 32,
+                        height: 32,
+                        borderRadius: "50%",
+                        background: "var(--plx-surface)",
+                        border: "1px solid var(--plx-border)",
+                        color: "var(--plx-deep)",
+                      }}
+                    >
+                      <Check size={16} aria-hidden />
+                    </span>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <b style={{ color: "var(--plx-heading)", fontSize: 13 }}>MailDrip Connected &amp; Active</b>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "2px 6px",
+                            borderRadius: 999,
+                            background: "var(--plx-surface)",
+                            color: "var(--plx-deep)",
+                            border: "1px solid var(--plx-border)",
+                          }}
+                        >
+                          Verified Identity
+                        </span>
+                      </div>
+                      <span className="plx-small" style={{ color: "var(--plx-muted)" }}>
+                        Sending from {data.maildripConnectedEmail || "your MailDrip account"}
+                      </span>
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    loading={disconnecting}
+                    leftIcon={<Unlink size={13} aria-hidden />}
+                    style={{ color: "var(--plx-danger)" }}
+                    onClick={() => void disconnectMaildrip()}
+                  >
+                    Disconnect
+                  </Button>
+                </div>
+
+                {/* Custom Branding Controls */}
+                <div className="plx-form">
+                  <div className="plx-form__two">
+                    <Input
+                      label="Sender display name ('From Name')"
+                      placeholder={siteName}
+                      value={data.emailSenderName}
+                      onChange={(e) => setData({ ...data, emailSenderName: e.target.value })}
+                      help="Appears as the sender in customer inboxes (e.g. Charisol)."
+                    />
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <label className="plx-field__label">Sending email address</label>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          height: 42,
+                          padding: "0 12px",
+                          borderRadius: "var(--plx-radius-sm, 8px)",
+                          background: "var(--plx-tint)",
+                          border: "1px solid var(--plx-border)",
+                          color: "var(--plx-heading)",
+                          fontSize: 14,
+                          boxSizing: "border-box",
+                        }}
+                      >
+                        <Mail size={16} style={{ color: "var(--plx-muted)", flexShrink: 0 }} aria-hidden />
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {data.maildripConnectedEmail || "Connected account"}
+                        </span>
+                        <span
+                          style={{
+                            marginLeft: "auto",
+                            fontSize: 11,
+                            fontWeight: 700,
+                            padding: "2px 6px",
+                            borderRadius: 999,
+                            background: "var(--plx-surface)",
+                            color: "var(--plx-deep)",
+                            border: "1px solid var(--plx-border)",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          MailDrip
+                        </span>
+                      </div>
+                      <span className="plx-small" style={{ color: "var(--plx-muted)" }}>
+                        Powered by your connected MailDrip account&apos;s verified sending domain.
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Logo Row */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <label className="plx-field__label">Email header logo</label>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: 64,
+                          height: 44,
+                          borderRadius: "var(--plx-radius-sm, 8px)",
+                          background: "var(--plx-tint)",
+                          border: "1px solid var(--plx-border)",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {effectiveLogo ? (
+                          <img
+                            src={effectiveLogo}
+                            alt="Email logo preview"
+                            style={{ maxHeight: 34, maxWidth: 54, objectFit: "contain" }}
+                          />
+                        ) : (
+                          <ImagePlus size={18} style={{ color: "var(--plx-muted)" }} aria-hidden />
+                        )}
+                      </span>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        hidden
+                        onChange={(e) => e.target.files?.[0] && void uploadLogo(e.target.files[0])}
+                      />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        loading={uploadingLogo}
+                        leftIcon={<Upload size={14} aria-hidden />}
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        {data.emailLogoUrl ? "Change logo" : "Upload email logo"}
+                      </Button>
+                      {defaultLogo && data.emailLogoUrl !== defaultLogo && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setData({ ...data, emailLogoUrl: defaultLogo })}
+                        >
+                          Use site logo
+                        </Button>
+                      )}
+                      {data.emailLogoUrl && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          style={{ color: "var(--plx-danger)" }}
+                          onClick={() => setData({ ...data, emailLogoUrl: "" })}
+                        >
+                          Remove
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Brand Accent Color (Swatch Popover, No raw hex input) */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    <label className="plx-field__label">Brand accent color</label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <button
+                          type="button"
+                          onClick={() => setColorMenuOpen((o) => !o)}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 10,
+                            padding: "6px 14px",
+                            borderRadius: "var(--plx-radius-sm, 8px)",
+                            border: "1px solid var(--plx-border)",
+                            background: "var(--plx-surface)",
+                            cursor: "pointer",
+                            fontSize: 13,
+                            color: "var(--plx-heading)",
+                          }}
+                          aria-expanded={colorMenuOpen}
+                        >
+                          <span
+                            style={{
+                              width: 20,
+                              height: 20,
+                              borderRadius: "50%",
+                              background: effectiveColor,
+                              border: "1px solid var(--plx-border)",
+                            }}
+                            aria-hidden
+                          />
+                          <span>{data.emailBrandColor || "Select accent color"}</span>
+                          <ChevronDown size={14} style={{ color: "var(--plx-muted)" }} aria-hidden />
+                        </button>
+
+                        {effectiveColor && defaultColor && data.emailBrandColor !== defaultColor && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setData({ ...data, emailBrandColor: defaultColor })}
+                          >
+                            Use site color
+                          </Button>
+                        )}
+                      </div>
+
+                      {/* Swatch Popover */}
+                      {colorMenuOpen && (
+                        <div
+                          style={{
+                            padding: 14,
+                            borderRadius: "var(--plx-radius-md, 12px)",
+                            background: "var(--plx-surface)",
+                            border: "1px solid var(--plx-border)",
+                            boxShadow: "var(--plx-shadow-elevated)",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: 12,
+                            maxWidth: 360,
+                          }}
+                        >
+                          {/* Saved brand colors */}
+                          {brandColors.length > 0 && (
+                            <div>
+                              <span className="plx-small" style={{ display: "block", marginBottom: 6, fontWeight: 700, color: "var(--plx-muted)" }}>
+                                Brand saved colors
+                              </span>
+                              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                                {brandColors.map((hex) => {
+                                  const selected = effectiveColor.toLowerCase() === hex.toLowerCase();
+                                  return (
+                                    <button
+                                      key={hex}
+                                      type="button"
+                                      aria-label={`Select color ${hex}`}
+                                      onClick={() => {
+                                        setData({ ...data, emailBrandColor: hex });
+                                        setColorMenuOpen(false);
+                                      }}
+                                      style={{
+                                        width: 32,
+                                        height: 32,
+                                        borderRadius: "50%",
+                                        background: hex,
+                                        border: selected ? "2px solid var(--plx-focus)" : "1px solid var(--plx-border)",
+                                        cursor: "pointer",
+                                        display: "grid",
+                                        placeItems: "center",
+                                        color: "var(--plx-surface)",
+                                        padding: 0,
+                                      }}
+                                    >
+                                      {selected ? <Check size={14} aria-hidden /> : null}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Curated Swatches from PALETTE */}
+                          <div>
+                            <span className="plx-small" style={{ display: "block", marginBottom: 6, fontWeight: 700, color: "var(--plx-muted)" }}>
+                              Preset palette swatches
+                            </span>
+                            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                              {PALETTE.map((p) => {
+                                const selected = effectiveColor.toLowerCase() === p.hex.toLowerCase();
+                                return (
+                                  <button
+                                    key={p.name}
+                                    type="button"
+                                    title={p.name}
+                                    aria-label={`Select ${p.name}`}
+                                    onClick={() => {
+                                      setData({ ...data, emailBrandColor: p.hex });
+                                      setColorMenuOpen(false);
+                                    }}
+                                    style={{
+                                      width: 32,
+                                      height: 32,
+                                      borderRadius: "50%",
+                                      background: p.hex,
+                                      border: selected ? "2px solid var(--plx-focus)" : "1px solid var(--plx-border)",
+                                      cursor: "pointer",
+                                      display: "grid",
+                                      placeItems: "center",
+                                      color: "var(--plx-surface)",
+                                      padding: 0,
+                                    }}
+                                  >
+                                    {selected ? <Check size={14} aria-hidden /> : null}
+                                  </button>
+                                );
+                              })}
+
+                              {/* Native Color Picker Swatch */}
+                              <label
+                                title="Pick custom color"
+                                style={{
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: "50%",
+                                  background: "var(--plx-tint)",
+                                  border: "1px dashed var(--plx-border)",
+                                  display: "grid",
+                                  placeItems: "center",
+                                  cursor: "pointer",
+                                  position: "relative",
+                                  color: "var(--plx-heading)",
+                                }}
+                              >
+                                <PaletteIcon size={16} aria-hidden />
+                                <input
+                                  type="color"
+                                  value={effectiveColor}
+                                  onChange={(e) => setData({ ...data, emailBrandColor: e.target.value.toUpperCase() })}
+                                  style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Textarea
+                    label="Custom receipt footer text"
+                    placeholder="e.g. Please keep this email as your payment receipt. Thank you for your support!"
+                    value={data.emailFooterText}
+                    onChange={(e) => setData({ ...data, emailFooterText: e.target.value })}
+                    help="Appears at the bottom of customer receipts and notification emails."
+                    style={{ minHeight: 76 }}
+                  />
+
+                  <div>
+                    <Button loading={saving} onClick={() => void saveSettings()}>
+                      Save email branding
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column: Live Mobile Phone Mockup */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {/* Mockup Header Toggle */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+              <span className="plx-small" style={{ fontWeight: 700, color: "var(--plx-heading)" }}>
+                Mobile inbox preview
+              </span>
+              {!data.maildripConnected ? (
+                <div style={{ display: "inline-flex", padding: 2, borderRadius: 999, background: "var(--plx-tint)", border: "1px solid var(--plx-border)" }}>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab("default")}
                     style={{
-                      marginLeft: "auto",
-                      fontSize: 11,
-                      fontWeight: 700,
-                      padding: "2px 6px",
+                      border: 0,
                       borderRadius: 999,
-                      background: "var(--plx-surface)",
-                      color: data.maildripConnected ? "var(--plx-deep)" : "var(--plx-muted)",
-                      border: "1px solid var(--plx-border)",
-                      whiteSpace: "nowrap",
+                      padding: "2px 8px",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      background: previewTab === "default" ? "var(--plx-surface)" : "transparent",
+                      color: previewTab === "default" ? "var(--plx-heading)" : "var(--plx-muted)",
+                      cursor: "pointer",
                     }}
                   >
-                    {data.maildripConnected ? "MailDrip" : "Default"}
-                  </span>
+                    Default Plexo
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPreviewTab("branded")}
+                    style={{
+                      border: 0,
+                      borderRadius: 999,
+                      padding: "2px 8px",
+                      fontSize: 11,
+                      fontWeight: 600,
+                      background: previewTab === "branded" ? "var(--plx-surface)" : "transparent",
+                      color: previewTab === "branded" ? "var(--plx-heading)" : "var(--plx-muted)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    With MailDrip
+                  </button>
                 </div>
-                <span className="plx-small" style={{ color: "var(--plx-muted)" }}>
-                  {data.maildripConnected
-                    ? "Powered by your connected MailDrip account's verified sending domain."
-                    : "Connect MailDrip below to send from your own domain."}
-                </span>
-              </div>
-            </div>
-
-            {/* Logo and Accent Color Row */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <label className="plx-field__label">Email header logo</label>
-              <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+              ) : (
                 <span
                   style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    width: 64,
-                    height: 48,
-                    borderRadius: "var(--plx-radius-sm, 8px)",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    padding: "2px 8px",
+                    borderRadius: 999,
                     background: "var(--plx-tint)",
+                    color: "var(--plx-deep)",
                     border: "1px solid var(--plx-border)",
-                    overflow: "hidden",
                   }}
                 >
-                  {effectiveLogo ? (
-                    <img
-                      src={effectiveLogo}
-                      alt="Email logo preview"
-                      style={{ maxHeight: 36, maxWidth: 56, objectFit: "contain" }}
-                    />
-                  ) : (
-                    <ImagePlus size={20} style={{ color: "var(--plx-muted)" }} aria-hidden />
-                  )}
+                  Live Updates
                 </span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  hidden
-                  onChange={(e) => e.target.files?.[0] && void uploadLogo(e.target.files[0])}
-                />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  loading={uploadingLogo}
-                  leftIcon={<Upload size={14} aria-hidden />}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {data.emailLogoUrl ? "Change logo" : "Upload email logo"}
-                </Button>
-                {defaultLogo && data.emailLogoUrl !== defaultLogo && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setData({ ...data, emailLogoUrl: defaultLogo })}
-                  >
-                    Use site logo
-                  </Button>
-                )}
-                {data.emailLogoUrl && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    style={{ color: "var(--plx-danger)" }}
-                    onClick={() => setData({ ...data, emailLogoUrl: "" })}
-                  >
-                    Remove
-                  </Button>
-                )}
-              </div>
-            </div>
-
-            <div className="plx-form__two" style={{ alignItems: "flex-end" }}>
-              <Input
-                label="Brand accent color"
-                placeholder="var(--plx-brand)"
-                value={data.emailBrandColor}
-                onChange={(e) => setData({ ...data, emailBrandColor: e.target.value })}
-                help="Used for header accents, badge highlights, and email buttons."
-              />
-              {effectiveColor && data.emailBrandColor !== effectiveColor && (
-                <div style={{ paddingBottom: 10 }}>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setData({ ...data, emailBrandColor: effectiveColor })}
-                  >
-                    Use site color
-                  </Button>
-                </div>
               )}
             </div>
 
-            <Textarea
-              label="Custom footer text (optional)"
-              placeholder="e.g. Thank you for your support. All contributions are tax-deductible."
-              value={data.emailFooterText}
-              onChange={(e) => setData({ ...data, emailFooterText: e.target.value })}
-              help="Appears at the bottom of customer receipts and notification emails."
-              style={{ minHeight: 76 }}
-            />
+            {/* Smartphone Chassis */}
+            <div className="plx-phone" aria-hidden>
+              {/* Top Notch */}
+              <div className="plx-phone__notch" />
 
-            <div>
-              <Button loading={saving} onClick={() => void saveSettings()}>
-                Save email branding
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* MailDrip Delivery Section */}
-        <div
-          style={{
-            marginTop: 20,
-            padding: "16px 18px",
-            borderRadius: "var(--plx-radius-md, 12px)",
-            background: "var(--plx-tint)",
-            border: "1px solid var(--plx-border)",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span
-                style={{
-                  display: "grid",
-                  placeItems: "center",
-                  width: 36,
-                  height: 36,
-                  borderRadius: "50%",
-                  background: "var(--plx-surface)",
-                  border: "1px solid var(--plx-border)",
-                  color: "var(--plx-deep)",
-                }}
-              >
-                <Mail size={18} aria-hidden />
-              </span>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <b style={{ color: "var(--plx-heading)", fontSize: 14 }}>MailDrip Sending</b>
-                  {data.maildripConnected ? (
-                    <span
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 4,
-                        fontSize: 12,
-                        fontWeight: 700,
-                        padding: "2px 8px",
-                        borderRadius: 999,
-                        background: "var(--plx-surface)",
-                        color: "var(--plx-deep)",
-                        border: "1px solid var(--plx-border)",
-                      }}
-                    >
-                      <Check size={12} aria-hidden /> Connected
-                    </span>
-                  ) : (
-                    <span
-                      style={{
-                        fontSize: 12,
-                        padding: "2px 8px",
-                        borderRadius: 999,
-                        background: "var(--plx-surface)",
-                        color: "var(--plx-muted)",
-                        border: "1px solid var(--plx-border)",
-                      }}
-                    >
-                      Default Delivery
-                    </span>
-                  )}
+              <div className="plx-phone__screen">
+                {/* Mobile Status Bar */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: "var(--plx-muted)", padding: "0 4px" }}>
+                  <span>9:41</span>
+                  <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                    <span>5G</span>
+                    <span style={{ display: "inline-block", width: 14, height: 8, borderRadius: 2, border: "1px solid currentColor" }} />
+                  </div>
                 </div>
-                <p style={{ margin: "2px 0 0", fontSize: 13, color: "var(--plx-muted)", lineHeight: 1.45 }}>
-                  {data.maildripConnected
-                    ? `Connected as ${data.maildripConnectedEmail || "your MailDrip account"}. Transactional emails for this site send through your MailDrip sending configuration.`
-                    : "Connect your MailDrip account so outbound receipts and store notifications send directly through your own verified identity."}
-                </p>
-              </div>
-            </div>
 
-            <div>
-              {data.maildripConnected ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  loading={disconnecting}
-                  leftIcon={<Unlink size={14} aria-hidden />}
-                  style={{ color: "var(--plx-danger)" }}
-                  onClick={() => void disconnectMaildrip()}
-                >
-                  Disconnect
-                </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  leftIcon={<Mail size={14} aria-hidden />}
-                  onClick={() => {
-                    setConnectModal(true);
-                    setVerifying(false);
-                    setConnectError(null);
+                {/* Email Client App Navigation */}
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--plx-border)", paddingBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, color: "var(--plx-link)", fontSize: 12, fontWeight: 600 }}>
+                    <ChevronLeft size={16} />
+                    <span>Inbox</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, color: "var(--plx-muted)" }}>
+                    <Archive size={14} />
+                    <Trash2 size={14} />
+                  </div>
+                </div>
+
+                {/* Email Message Header */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <b style={{ fontSize: 13, lineHeight: 1.35, color: "var(--plx-heading)" }}>
+                    Thank you for your payment — {siteName}
+                  </b>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <div
+                      style={{
+                        width: 30,
+                        height: 30,
+                        borderRadius: "50%",
+                        background: (data.maildripConnected || previewTab === "branded") ? effectiveColor : "var(--plx-elevated)",
+                        display: "grid",
+                        placeItems: "center",
+                        color: "var(--plx-surface)",
+                        fontWeight: 800,
+                        fontSize: 12,
+                        flexShrink: 0,
+                      }}
+                    >
+                      {(data.maildripConnected || previewTab === "branded") ? effectiveSenderName.charAt(0).toUpperCase() : "P"}
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", minWidth: 0, flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 4 }}>
+                        <b style={{ fontSize: 12, color: "var(--plx-heading)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {(data.maildripConnected || previewTab === "branded") ? effectiveSenderName : "Plexo Notifications"}
+                        </b>
+                        <span style={{ fontSize: 10, color: "var(--plx-muted)" }}>9:41 AM</span>
+                      </div>
+                      <span style={{ fontSize: 11, color: "var(--plx-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {(data.maildripConnected || previewTab === "branded")
+                          ? `<${data.maildripConnectedEmail || `notifications@${siteName.toLowerCase().replace(/[^a-z0-9]/g, "") || "brand"}.com`}>`
+                          : "<notifications@plexopages.com>"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Email Body Card */}
+                <div
+                  style={{
+                    borderRadius: 14,
+                    background: "var(--plx-elevated)",
+                    border: "1px solid var(--plx-border)",
+                    padding: 12,
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 10,
                   }}
                 >
-                  Connect MailDrip
-                </Button>
-              )}
+                  {/* Brand Header */}
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: "1px solid var(--plx-border)", paddingBottom: 8 }}>
+                    {(data.maildripConnected || previewTab === "branded") && effectiveLogo ? (
+                      <img src={effectiveLogo} alt="" style={{ maxHeight: 24, maxWidth: 90, objectFit: "contain" }} />
+                    ) : (
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: "50%",
+                            background: (data.maildripConnected || previewTab === "branded") ? effectiveColor : "var(--plx-brand)",
+                          }}
+                        />
+                        <b style={{ fontSize: 12, color: "var(--plx-heading)" }}>
+                          {(data.maildripConnected || previewTab === "branded") ? effectiveSenderName : "Plexo"}
+                        </b>
+                      </div>
+                    )}
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: "1px 6px",
+                        borderRadius: 999,
+                        background: "var(--plx-surface)",
+                        color: (data.maildripConnected || previewTab === "branded") ? effectiveColor : "var(--plx-muted)",
+                        border: "1px solid var(--plx-border)",
+                      }}
+                    >
+                      Receipt
+                    </span>
+                  </div>
+
+                  <p style={{ margin: 0, fontSize: 11, lineHeight: 1.45, color: "var(--plx-text)" }}>
+                    Something as simple as Hi! We&apos;ve received your payment successfully. Thank you for choosing {siteName}. We appreciate your business and look forward to serving you! 😊
+                  </p>
+
+                  {/* Big Receipt Amount */}
+                  <div style={{ padding: "4px 0" }}>
+                    <div style={{ fontSize: 24, fontWeight: 800, color: (data.maildripConnected || previewTab === "branded") ? effectiveColor : "var(--plx-heading)", lineHeight: 1 }}>
+                      $1.00
+                    </div>
+                  </div>
+
+                  {/* Receipt Meta Table */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, fontSize: 11, borderTop: "1px solid var(--plx-border)", paddingTop: 8 }}>
+                    <div style={{ color: "var(--plx-muted)" }}>AMOUNT</div>
+                    <div style={{ fontWeight: 600, color: "var(--plx-heading)", textAlign: "right" }}>$1.00</div>
+
+                    <div style={{ color: "var(--plx-muted)" }}>FOR</div>
+                    <div style={{ fontWeight: 600, color: "var(--plx-heading)", textAlign: "right" }}>Payment Order</div>
+
+                    <div style={{ color: "var(--plx-muted)" }}>DATE</div>
+                    <div style={{ fontWeight: 600, color: "var(--plx-heading)", textAlign: "right" }}>Nov 22, 2026</div>
+
+                    <div style={{ color: "var(--plx-muted)" }}>RECEIPT</div>
+                    <div style={{ fontWeight: 600, color: "var(--plx-heading)", textAlign: "right" }}>DON-88A81BD5</div>
+                  </div>
+
+                  {/* Receipt Footer Note */}
+                  <div style={{ borderTop: "1px solid var(--plx-border)", paddingTop: 8, fontSize: 10, color: "var(--plx-muted)", lineHeight: 1.4 }}>
+                    {(data.maildripConnected || previewTab === "branded")
+                      ? effectiveFooterText
+                      : "Please keep this email as your payment receipt."}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -698,7 +1207,7 @@ export function EmailBrandingCard({
               <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 8 }}>
                 <Button variant="ghost" onClick={() => setVerifying(false)}>Back</Button>
                 <Button loading={connectBusy} onClick={() => void submitVerify()}>
-                  Verify & Connect
+                  Verify &amp; Connect
                 </Button>
               </div>
             </>

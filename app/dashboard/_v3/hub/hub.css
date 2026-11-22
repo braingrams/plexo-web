@@ -783,3 +783,113 @@ a.plx-gcard:hover { transform: translateY(-2px); border-color: var(--plx-border-
   box-shadow: var(--plx-shadow-card);
 }
 
+/* Custom Email Branding & MailDrip flow */
+@keyframes plx-mail-stream {
+  0% { left: 0%; opacity: 0; }
+  25% { opacity: 1; }
+  75% { opacity: 1; }
+  100% { left: 100%; opacity: 0; }
+}
+
+.plx-emailbrand__layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 340px);
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .plx-emailbrand__layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.plx-mailflow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 18px 16px;
+  border-radius: var(--plx-radius-md, 12px);
+  background: var(--plx-tint);
+  border: 1px solid var(--plx-border);
+  position: relative;
+  overflow: hidden;
+}
+
+.plx-mailflow__node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-align: center;
+  min-width: 80px;
+  z-index: 2;
+}
+
+.plx-mailflow__icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--plx-surface);
+  border: 1px solid var(--plx-border);
+  color: var(--plx-deep);
+  box-shadow: var(--plx-shadow-card, none);
+}
+
+.plx-mailflow__track {
+  flex: 1;
+  height: 2px;
+  background: var(--plx-border);
+  position: relative;
+  overflow: hidden;
+  margin: 0 4px;
+  margin-bottom: 24px;
+}
+
+.plx-mailflow__packet {
+  position: absolute;
+  top: -3px;
+  left: 0;
+  width: 16px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--plx-brand);
+  animation: plx-mail-stream 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Phone preview frame */
+.plx-phone {
+  width: 100%;
+  max-width: 340px;
+  margin: 0 auto;
+  border-radius: 36px;
+  border: 3px solid var(--plx-border-strong);
+  background: var(--plx-surface);
+  box-shadow: 0 16px 36px var(--plx-tint);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+}
+
+.plx-phone__notch {
+  width: 88px;
+  height: 18px;
+  border-radius: 999px;
+  background: var(--plx-border-strong);
+  margin: 8px auto 4px;
+}
+
+.plx-phone__screen {
+  padding: 8px 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: inherit;
+  font-size: 13px;
+}
+
+
