@@ -7,6 +7,7 @@ import { SolStudio } from "../sol/studio/SolStudio";
 import { StudioCreditsError, type StudioApi } from "../sol/studio/types";
 import { useStudioScript } from "../sol/studio/useStudioScript";
 import { browserPlace } from "@/lib/onboarding/place";
+import { extractTextNodes, MAX_NODES } from "@/lib/onboarding/htmlText";
 import type { AskUserQuestionSpec } from "../../sol/_components/types";
 
 export type PersonalizeDesign = { id: string; name: string; description?: string; html: string };
@@ -28,6 +29,36 @@ async function callStage<T>(stage: "plan" | "write" | "finish", body: Record<str
   return data as T;
 }
 
+const BATCH = 25;
+
+/** A failure worth trying again: the gateway timed out, SOL was briefly busy, or the network blipped. Not credits, not a bad request. */
+const retryable = (err: unknown) => !(err instanceof StudioCreditsError);
+
+/** SOL writes the design's words in small, separate requests (so none runs long enough to time out), a few at a time, each tried up to three times. */
+async function writeWords(base: Record<string, unknown>, html: string, answers: unknown, creditCost: number): Promise<Record<string, string>> {
+  const ids = extractTextNodes(html).slice(0, MAX_NODES).map((n) => n.id);
+  const batches: number[][] = [];
+  for (let i = 0; i < ids.length; i += BATCH) batches.push(ids.slice(i, i + BATCH));
+  const out: Record<string, string> = {};
+  let lastError: unknown = null;
+  const one = async (batch: number[]) => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        Object.assign(out, (await callStage<{ replacements: Record<string, string> }>("write", { ...base, answers, ids: batch }, creditCost)).replacements);
+        return;
+      } catch (err) {
+        if (!retryable(err)) throw err;
+        lastError = err;
+        await new Promise((r) => setTimeout(r, 600 * (attempt + 1)));
+      }
+    }
+  };
+  for (let i = 0; i < batches.length; i += 4) await Promise.all(batches.slice(i, i + 4).map(one));
+  // A few pieces that never came back are fine (they keep the design's words); nothing at all is a real failure.
+  if (Object.keys(out).length === 0) throw lastError instanceof Error ? lastError : new Error("SOL couldn't finish the words this time. Please try again: you haven't lost anything.");
+  return out;
+}
+
 /**
  * SOL Studio for "Personalize with SOL": SOL reads the brand and the chosen design, asks what it
  * really needs to know, rewrites the words and puts the owner's logo/colours in, as live steps.
@@ -42,7 +73,7 @@ export function PersonalizeStudio({ profile, design, creditCost, onApplied, onCl
     api.say(`I'll tailor **${design.name}** to **${profile.brand.name}**: your words, your name and your logo.`);
     const plan = (kept.current.plan ??= await api.step("studio_read_design", () => callStage<Plan>("plan", base, creditCost)));
     const answers = plan.questions.length ? await api.ask(plan.questions) : [];
-    const replacements = (kept.current.replacements ??= await api.step("studio_write_words", async () => (await callStage<{ replacements: Record<string, string> }>("write", { ...base, answers }, creditCost)).replacements));
+    const replacements = (kept.current.replacements ??= await api.step("studio_write_words", () => writeWords(base, design.html, answers, creditCost)));
     const finished = await api.step("studio_apply_brand", () => callStage<PersonalizeResult>("finish", { ...base, replacements, domain: plan.domain }, creditCost));
     if (!finished.html) throw new Error("SOL couldn't put your design together this time. Please try again: nothing was changed.");
     api.say(finished.summary || `Your design is ready for ${profile.brand.name}.`);

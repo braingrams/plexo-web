@@ -126,7 +126,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           .filter((a) => a.question && a.answer)
           .slice(0, 6)
       : [];
-    const replacements = await writeCopy(ctx, brand, design, nodes.slice(0, MAX_NODES), answers);
+    // The studio asks for the words in small batches (`ids`), so no single request runs long enough for a gateway to cut it off.
+    const wanted = Array.isArray(body.ids) ? new Set((body.ids as unknown[]).filter((i): i is number => typeof i === "number")) : null;
+    const toWrite = (wanted ? nodes.filter((n) => wanted.has(n.id)) : nodes).slice(0, MAX_NODES);
+    if (toWrite.length === 0) return NextResponse.json({ replacements: {} });
+    const replacements = await writeCopy(ctx, brand, design, toWrite, answers);
     return NextResponse.json({ replacements });
   } catch (err) {
     console.warn("[onboarding/personalize]", err);

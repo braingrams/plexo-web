@@ -54,3 +54,7 @@
   .plx-ns__title { font-size: 24px; }
   .plx-ns__actions > * { width: 100%; }
 }
+
+.plx-ns__kind { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.plx-ns__kind > div { width: min(100%, 280px); }
+.plx-ns__kindhelp { font-size: 13px; color: var(--plx-muted); }

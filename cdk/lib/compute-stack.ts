@@ -1089,6 +1089,28 @@ export class ComputeStack extends cdk.Stack {
       ),
     });
 
+    // SOL personalizing a design in onboarding suggests cities, phone formats and prices that fit where the owner is
+    // (app/api/onboarding/personalize). Same reasoning as billing above: the location headers only reach the app when a
+    // policy names them, and the managed policies that do also forward Host, which a Lambda Function URL rejects.
+    const onboardingOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, "OnboardingOriginRequestPolicy", {
+      originRequestPolicyName: `${this.stackName}-onboarding`,
+      comment: "SOL onboarding: forwards the viewer's country and city plus the usual request headers, never Host",
+      cookieBehavior: cloudfront.OriginRequestCookieBehavior.all(),
+      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
+      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
+        "cloudfront-viewer-country",
+        "cloudfront-viewer-country-name",
+        "cloudfront-viewer-city",
+        "x-forwarded-host",
+        "accept",
+        "accept-language",
+        "content-type",
+        "origin",
+        "referer",
+        "user-agent",
+      ),
+    });
+
     const distribution = new cloudfront.Distribution(this, "Distribution", {
       domainNames: appDomain ? [appDomain] : undefined,
       certificate: appCert,
@@ -1160,6 +1182,18 @@ export class ComputeStack extends cdk.Stack {
           cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
           originRequestPolicy: billingOriginRequestPolicy,
+          functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+          responseHeadersPolicy: securityHeadersPolicy,
+        },
+        "api/onboarding/personalize": {
+          origin: new origins.FunctionUrlOrigin(serverFnUrl, {
+            customHeaders: { "x-origin-verify": originVerifySecret! },
+            readTimeout: cdk.Duration.seconds(60),
+          }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          originRequestPolicy: onboardingOriginRequestPolicy,
           functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
           responseHeadersPolicy: securityHeadersPolicy,
         },

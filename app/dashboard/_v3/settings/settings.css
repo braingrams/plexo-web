@@ -177,7 +177,7 @@
 .plx-person__main b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plx-person__main span { color: var(--plx-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .plx-person__end { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.plx-person__end .plx-field { min-width: 150px; }
+.plx-person__end .plx-field:where(:not([data-plx-canvas] *)) { min-width: 150px; }
 @media (max-width: 700px) {
   .plx-person { grid-template-columns: auto minmax(0, 1fr); padding: 16px 20px; }
   .plx-person__end { grid-column: 1 / -1; justify-content: flex-start; }
@@ -199,7 +199,7 @@
 .plx-addrsteps .plx-steps { padding-top: 20px; }
 @media (max-width: 600px) { .plx-addrsteps { padding: 4px 20px 20px; } }
 .plx-searchrow { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
-.plx-searchrow > .plx-field { flex: 1 1 220px; }
+.plx-searchrow > .plx-field:where(:not([data-plx-canvas] *)) { flex: 1 1 220px; }
 .plx-dnsrow { display: flex; flex-direction: column; gap: 4px; }
 .plx-findrow { display: flex; align-items: center; gap: 12px; padding: 14px 0; border-top: 1px solid var(--plx-border); min-height: 64px; }
 .plx-findrow:first-child { border-top: 0; }
@@ -293,7 +293,7 @@
 .plx-addrrow__end { justify-content: flex-end; flex-wrap: nowrap; }
 .plx-showsbtn--static { cursor: default; border-color: transparent; background: transparent; padding-left: 0; }
 .plx-showsbtn--static:hover { background: transparent; border-color: transparent; }
-.plx-menu .plx-menu__bad, .plx-menu .plx-menu__bad svg { color: var(--plx-danger); }
+.plx-menu:where(:not([data-plx-canvas] *)) .plx-menu__bad, .plx-menu:where(:not([data-plx-canvas] *)) .plx-menu__bad svg { color: var(--plx-danger); }
 .plx-switchplan { padding: 16px 18px; border-radius: 14px; background: var(--plx-tint); border: 1px solid var(--plx-border); display: flex; flex-direction: column; gap: 10px; }
 .plx-switchplan ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .plx-switchplan li { display: grid; grid-template-columns: 20px 1fr; gap: 10px; font-size: 15px; line-height: 1.45; }

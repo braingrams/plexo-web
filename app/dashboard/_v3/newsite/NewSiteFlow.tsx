@@ -6,7 +6,8 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, FilePlus2, Truck } from "lucide-react";
-import { Button, ButtonLink, Input, Modal, Notice, OptimisticLoader, Textarea, useToast } from "../ui";
+import { Button, ButtonLink, Input, Modal, Notice, OptimisticLoader, Select, Textarea, useToast } from "../ui";
+import { BUSINESS_TYPES, businessTypeById, inferBusinessType } from "@/lib/onboarding/businessType";
 import { brandPreviewHtml } from "@/lib/onboarding/brandPreview";
 import { type PickedBrand, type StrataPickerClient } from "../brand/StrataBrandPicker";
 import { NO_SELECTION, selectionToChoice, type PickerSelection } from "@/lib/dashboardV3/strataPicker";
@@ -66,6 +67,14 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   // "Briefly describe what you want your website to look like": steers which designs are shown and the words on the site.
   const [about, setAbout] = useState("");
   const [feel, setFeel] = useState<{ industry: string; style: string } | null>(null);
+  /** The kind of business the owner picked (empty: let SOL work it out), and what the designs were actually chosen for. */
+  const [typePick, setTypePick] = useState("");
+  const [typeUsed, setTypeUsed] = useState<{ id: string; label: string; source: string } | null>(null);
+  const typeGuess = useMemo(() => {
+    const g = inferBusinessType(name, about);
+    return g && (g.score >= 5 || (g.score >= 3 && g.margin >= 1.5)) ? businessTypeById(g.id) ?? null : null;
+  }, [name, about]);
+  const typeOptions = useMemo(() => BUSINESS_TYPES.map((t) => ({ value: t.id, label: t.label })), []);
   const [designId, setDesignId] = useState("");
   const [error, setError] = useState("");
   const [loadingDesigns, setLoadingDesigns] = useState(false);
@@ -153,7 +162,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     }, 700);
   };
 
-  const toLook = async () => {
+  const toLook = async (typeOverride?: string) => {
     if (!goal) return;
     if (!name.trim()) return setError("Give your website a name, like your business name.");
     setError("");
@@ -174,6 +183,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
               ...(brand ?? {}),
               name: name.trim(),
               ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}),
+              ...((typeOverride ?? typePick) ? { businessType: typeOverride ?? typePick } : {}),
             },
           },
           mock: preview?.mock,
@@ -209,6 +219,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
       }
 
       setFeel(data.understood ?? null);
+      setTypeUsed(data.businessType ?? null);
       setDesigns(loadedDesigns);
       setTotal(totalCount);
       setDesignId(loadedDesigns[0]?.id ?? "");
@@ -377,6 +388,15 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
           maxLength={500}
           onChange={(e) => setAbout(e.target.value)}
         />
+        <Select
+          fieldClassName="plx-ns__name"
+          label="What kind of business is it?"
+          optional
+          help="So the designs we show are made for your kind of business. Not sure? Leave it and SOL works it out from what you wrote."
+          value={typePick}
+          options={[{ value: "", label: typeGuess ? `Auto: looks like ${typeGuess.label}` : "Not sure: let SOL work it out" }, ...typeOptions]}
+          onChange={(e) => setTypePick(e.target.value)}
+        />
         <div className="plx-ns__actions">
           <span />
           <Button size="lg" disabled={!goal} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={toBrand}>{app ? "Build it with SOL" : "Continue"}</Button>
@@ -403,7 +423,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         />
         <div className="plx-ns__actions" style={{ marginTop: 12 }}>
           <span />
-          <Button size="lg" rightIcon={<ArrowRight size={18} aria-hidden />} onClick={toLook}>Continue to designs</Button>
+          <Button size="lg" rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => void toLook()}>Continue to designs</Button>
         </div>
       </>
     );
@@ -424,7 +444,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         <div className="plx-ns__top">{back("look")}<p className="plx-ns__step">{stepText("all", brandStep)}</p></div>
         {heading(`All designs for ${name.trim() || "your website"}`, "Made by designers on Plexo, best fit first. Free ones cost nothing; paid ones are a one-time price. Your logo and colours are added to your Brand page.")}
         {error ? <GateOrError error={error}><Notice kind="warning" title="Something went wrong">{error}</Notice></GateOrError> : null}
-        <SeeAllDesigns goal={goal} name={name.trim()} brand={brand} extra={{ about: about.trim(), industry: feel?.industry, tone: feel?.style }} mock={preview?.mock} onUse={useMarketDesign} />
+        <SeeAllDesigns goal={goal} name={name.trim()} brand={brand} extra={{ about: about.trim(), industry: feel?.industry, tone: feel?.style, businessType: typePick || typeUsed?.id }} mock={preview?.mock} onUse={useMarketDesign} />
       </>
     );
   }
@@ -436,6 +456,18 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
       <div className="plx-ns__top">{back(brandStep ? "brand" : "goal")}<p className="plx-ns__step">{stepText("look", brandStep)}</p></div>
       {heading(`Pick a look for ${name.trim() || "your website"}`, "Tailored to your brand and goals. Preview on desktop or mobile, personalize with SOL, or explore all designs.")}
       {error ? <GateOrError error={error}><Notice kind="warning" title="Something went wrong">{error}</Notice></GateOrError> : null}
+      {typeUsed && !loadingDesigns ? (
+        <div className="plx-ns__kind">
+          <Select
+            hideLabel
+            label="Kind of business"
+            value={typePick || typeUsed.id}
+            options={typeOptions}
+            onChange={(e) => { setTypePick(e.target.value); void toLook(e.target.value); }}
+          />
+          <span className="plx-ns__kindhelp">Designs for this kind of business. Not right? Pick another.</span>
+        </div>
+      ) : null}
 
       <HeroDesignPreview
         html={displayHtml}

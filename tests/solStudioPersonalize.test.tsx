@@ -79,12 +79,15 @@ describe("SOL Studio personalizing a design", () => {
     const { host, onApplied } = await mount();
     await click(buttonWith(host, "Lagos, Nigeria"));
     await click(buttonWith(host, "Send my answers"));
-    expect(host.textContent).toContain("SOL hit a snag while personalizing");
+    // Each piece is tried three times (with a short pause) before it is reported.
+    await vi.waitFor(() => expect(host.textContent).toContain("SOL hit a snag while personalizing"), { timeout: 6000 });
+    expect(calls.map((c) => c.stage)).toEqual(["plan", "write", "write", "write"]);
     expect(onApplied).not.toHaveBeenCalled();
 
     writeFails = false;
     await click(buttonWith(host, "Try again"));
-    expect(calls.map((c) => c.stage)).toEqual(["plan", "write", "write", "finish"]);
+    await vi.waitFor(() => expect(onApplied).toHaveBeenCalledTimes(1));
+    expect(calls.map((c) => c.stage)).toEqual(["plan", "write", "write", "write", "write", "finish"]);
     expect(onApplied).toHaveBeenCalledTimes(1);
   });
 

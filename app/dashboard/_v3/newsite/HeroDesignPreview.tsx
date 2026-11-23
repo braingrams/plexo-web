@@ -33,6 +33,7 @@ export function HeroDesignPreview({
 }: HeroDesignPreviewProps) {
   const [device, setDevice] = useState<ViewportMode>("desktop");
   const canvasRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
   const [canvasSize, setCanvasSize] = useState<{ width: number; height: number }>({ width: 0, height: 600 });
 
   useEffect(() => {
@@ -56,6 +57,14 @@ export function HeroDesignPreview({
     return () => ro.disconnect();
   }, []);
 
+  // On a small screen the studio fills the screen: bring it fully into view when it opens, so its buttons are not below the fold.
+  const studioOpen = !!studio;
+  useEffect(() => {
+    if (!studioOpen || typeof window === "undefined" || window.innerWidth > 900) return;
+    const id = window.setTimeout(() => frameRef.current?.scrollIntoView({ block: "start", behavior: "smooth" }), 150);
+    return () => window.clearTimeout(id);
+  }, [studioOpen]);
+
   useEffect(() => {
     setDevice(getStoredViewport());
   }, []);
@@ -69,6 +78,7 @@ export function HeroDesignPreview({
 
   return (
     <div
+      ref={frameRef}
       className="plx-hero-preview-container"
       style={{
         display: "flex",
@@ -95,7 +105,7 @@ export function HeroDesignPreview({
           minWidth: 0,
         }}
       >
-        <style>{`.plx-hero-preview-container{--plx-studio-h:clamp(380px,calc(var(--plx-dvh,100dvh) - 330px),600px)}@media (max-width: 900px){.plx-hero-preview-container{--plx-studio-h:clamp(420px,calc(var(--plx-dvh,100dvh) - 456px),600px)}}@media (max-width: 720px){.plx-hero-url{display:none !important}.plx-hero-bar-actions{width:100%;justify-content:space-between}}`}</style>
+        <style>{`.plx-hero-foot{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 18px;background:var(--plx-surface);border-top:1px solid var(--plx-border);font-size:13px;color:var(--plx-muted)}.plx-hero-desc{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.45;min-width:0}.plx-hero-hint{font-size:12px;font-weight:600;white-space:nowrap;flex-shrink:0}.plx-hero-preview-container{--plx-studio-h:clamp(380px,calc(var(--plx-dvh,100dvh) - 330px),600px)}@media (max-width: 900px){.plx-hero-preview-container{--plx-studio-h:clamp(360px,calc(var(--plx-dvh,100dvh) - 160px),600px)}}@media (max-width: 720px){.plx-hero-hint{display:none}.plx-hero-url{display:none !important}.plx-hero-bar-actions{width:100%;justify-content:space-between}}`}</style>
         {/* Left: Window Dots & Template Name */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flexShrink: 1 }}>
           <div style={{ display: "flex", gap: 6 }} aria-hidden>
@@ -258,13 +268,13 @@ export function HeroDesignPreview({
           display: "flex",
           justifyContent: "center",
           alignItems: "flex-start",
-          overflowY: studio ? "clip" : "hidden",
-          overflowX: studio ? "clip" : undefined,
+          overflowY: studio ? "visible" : "hidden",
+          overflowX: studio ? "visible" : undefined,
           transition: "background 0.2s ease",
         }}
       >
         {studio ? (
-          <div style={{ position: "absolute", inset: 0, display: "flex", minHeight: 0, overflow: "clip" }}>{studio}</div>
+          <div style={{ position: "absolute", inset: 0, display: "flex", minHeight: 0 }}>{studio}</div>
         ) : !html ? (
           <div
             style={{
@@ -399,21 +409,10 @@ export function HeroDesignPreview({
         )}
       </div>
 
-      {designDescription && (
-        <div
-          style={{
-            padding: "10px 18px",
-            background: "var(--plx-surface)",
-            borderTop: "1px solid var(--plx-border)",
-            fontSize: 13,
-            color: "var(--plx-muted)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <span>{designDescription}</span>
-          <span style={{ fontSize: 12, fontWeight: 600 }}>Scroll inside to inspect entire page</span>
+      {designDescription && !studio && (
+        <div className="plx-hero-foot">
+          <span className="plx-hero-desc" title={designDescription}>{designDescription}</span>
+          <span className="plx-hero-hint">Scroll inside to look around</span>
         </div>
       )}
     </div>

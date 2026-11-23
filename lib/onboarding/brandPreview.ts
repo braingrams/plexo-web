@@ -67,11 +67,64 @@ export function sampleBrandName(designName: string | undefined): string | null {
   return first.length >= 3 && first.length <= 40 ? first : null;
 }
 
+/** The sample name as the page writes it: the whole name, or its first words ("Careline Home Nursing" is written "Careline" on the page). */
+export function sampleNameOnPage(html: string, designName: string | undefined): string | null {
+  const full = sampleBrandName(designName);
+  if (!full) return null;
+  const words = full.split(/\s+/);
+  const texts = extractTextNodes(html).map((n) => n.text.toLowerCase());
+  for (let n = words.length; n >= 1; n--) {
+    const candidate = words.slice(0, n).join(" ");
+    if (candidate.length < 3) continue;
+    if (n < words.length && /^(the|a|an|my|our|of|and)$/i.test(words[n - 1])) continue;
+    const lower = candidate.toLowerCase();
+    if (texts.some((t) => t.includes(lower))) return candidate;
+  }
+  return null;
+}
+
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * Every way the page writes its sample business name, longest first. Designs use the full name in a few places and a short
+ * form ("Careline", "Harbour Mind", "Oakridge") everywhere else, so ALL of them have to be swapped or the owner keeps seeing
+ * the template's name. The single first word is only used when it is clearly the brand and not a common word: a brand shows
+ * up alone (a logo, a heading) or mid-sentence with a capital ("at Stackhouse"); a common word ("Still", "Little") only
+ * ever starts a sentence.
+ */
+export function sampleNamesOnPage(html: string, designName: string | undefined): string[] {
+  const full = sampleBrandName(designName);
+  if (!full) return [];
+  const nodes = extractTextNodes(html).map((n) => n.text);
+  const words = full.split(/\s+/);
+  const lowerAll = nodes.map((t) => t.toLowerCase());
+  const found: string[] = [];
+  for (let n = words.length; n >= 2; n--) {
+    if (/^(the|a|an|my|our|of|and|&)$/i.test(words[n - 1])) continue;
+    const candidate = words.slice(0, n).join(" ");
+    if (lowerAll.some((t) => t.includes(candidate.toLowerCase()))) found.push(candidate);
+  }
+  const word = words[0].replace(/[^A-Za-z0-9\u00C0-\u024F'’-]/g, "");
+  if (word.length >= 3 && !/^(the|a|an|my|our|of|and)$/i.test(word)) {
+    // Look only at what is left once the longer forms are taken out, so "Little" in "Little Sprouts" does not count as a lone word.
+    let rest = nodes;
+    for (const f of found) rest = rest.map((t) => t.split(new RegExp(escapeRe(f), "gi")).join("\u0000"));
+    const mid = new RegExp(`[a-z,;:)(] ${escapeRe(word)}(?![A-Za-z])`);
+    const brandLike = rest.some((t) => t.trim().toLowerCase() === word.toLowerCase() || mid.test(t) || new RegExp(`(?<![A-Za-z])${escapeRe(word.toUpperCase())}(?![A-Za-z])`).test(t) && word.toUpperCase() !== word);
+    // The design's own email or web address starts with it ("partners@marlowelaw.co.uk"): it is the brand.
+    const inAddress = lowerAll.some((t) => new RegExp(`(@|www\\.)${escapeRe(word.toLowerCase())}`).test(t));
+    if (brandLike || inAddress) found.push(word);
+  }
+  return Array.from(new Set(found)).sort((a, b) => b.length - a.length);
+}
 
 /** Puts the owner's name wherever the design says its sample business name (keeping ALL CAPS where the design shouts it). */
 export function swapBrandName(html: string, sample: string, name: string): string {
-  const re = new RegExp(escapeRe(sample), "gi");
+  // A one-word name only counts as written or in capitals: "larch-wood floors" is not the brand "Larch".
+  const single = !/\s/.test(sample) && /[A-Z]/.test(sample);
+  const re = single
+    ? new RegExp(`(?<![A-Za-z])(?:${escapeRe(sample)}|${escapeRe(sample.toUpperCase())})(?![A-Za-z]|-[a-z])`, "g")
+    : new RegExp(`(?<![A-Za-z])${escapeRe(sample)}(?![A-Za-z])`, "gi");
   const replacements: Record<string, string> = {};
   for (const node of extractTextNodes(html)) {
     if (!re.test(node.text)) continue;
@@ -81,21 +134,45 @@ export function swapBrandName(html: string, sample: string, name: string): strin
   return Object.keys(replacements).length ? applyTextNodes(html, replacements) : html;
 }
 
+/**
+ * The accent's other shades (a darker one for small text, a lighter tint for a highlight) move to the owner's colour too,
+ * keeping their own lightness, so a purple button never sits beside a rust-coloured label.
+ */
+function recolourShades(html: string, oldAccent: string, newColor: string): string {
+  const [oh, os] = toHsl(oldAccent);
+  const [nh, ns] = toHsl(newColor);
+  if (os < 0.3) return html;
+  return html.replace(/#[0-9a-fA-F]{6}\b/g, (hit) => {
+    const hex = expand(hit);
+    if (hex === expand(newColor)) return hit;
+    const [h, s, l] = toHsl(hex);
+    const apart = Math.min(Math.abs(h - oh), 360 - Math.abs(h - oh));
+    if (apart > 14 || s < 0.35 || l < 0.12 || l > 0.9) return hit;
+    return fromHsl([nh, Math.min(1, (s / os) * ns), l]);
+  });
+}
+
 export type BrandPreviewInput = { name?: string; color?: string; designName?: string };
 
 /** The design with the owner's name and colour on it. Anything missing or unusable is simply left as the design has it. */
 export function brandPreviewHtml(html: string, input: BrandPreviewInput): string {
   let out = html;
   const name = input.name?.trim();
-  const sample = sampleBrandName(input.designName);
-  if (name && sample && name.toLowerCase() !== sample.toLowerCase()) out = swapBrandName(out, sample, name.slice(0, 60));
+  if (name) {
+    for (const sample of sampleNamesOnPage(html, input.designName)) {
+      // A short form already inside the owner's own name would only repeat it.
+      if (name.toLowerCase().includes(sample.toLowerCase())) continue;
+      out = swapBrandName(out, sample, name.slice(0, 60));
+    }
+  }
 
   const color = input.color && HEX.test(input.color) ? expand(input.color) : null;
   if (color) {
-    // A design built on brand variables follows the variables; one with colours written straight in gets its main accent swapped.
-    if (!/--color-brand-primary-500/.test(out)) {
-      const accent = dominantAccent(out);
-      if (accent && accent !== color) out = out.replace(new RegExp(escapeRe(accent), "gi"), color);
+    // The design's main accent (the colour its buttons and highlights use) becomes the owner's colour everywhere it is written, tokens included.
+    const accent = dominantAccent(out);
+    if (accent && accent !== color) {
+      out = out.replace(new RegExp(escapeRe(accent), "gi"), color);
+      out = recolourShades(out, accent, color);
     }
     const css = brandColorCss(color);
     if (css) out = out.includes("</head>") ? out.replace("</head>", `<style data-plx-brand-preview="true">${css}</style></head>`) : `<style data-plx-brand-preview="true">${css}</style>${out}`;

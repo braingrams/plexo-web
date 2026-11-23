@@ -1417,6 +1417,7 @@ export function TemplateEditorClient({
             stockKeys={{ unsplash: unsplashKey, pexels: pexelsKey, pixabay: pixabayKey }}
             kind={templateKind}
             headerRight={headerRightNode}
+            hostModeSwitch={canConvertToCode && !isReadOnlyRole}
             beginner={beginner}
             onPublish={() => handlePublish()}
             hasAddress={hasAddress ?? undefined}

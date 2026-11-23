@@ -69,7 +69,7 @@ button.plx-hrow:hover, a.plx-hrow:hover { background: var(--plx-elevated); }
 }
 .plx-listcard { padding: 0; overflow: hidden; }
 
-.plx-form { display: flex; flex-direction: column; gap: 18px; }
+.plx-form:where(:not([data-plx-canvas] *)) { display: flex; flex-direction: column; gap: 18px; }
 .plx-form__two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 480px) { .plx-form__two { grid-template-columns: 1fr; } }
 .plx-toggle { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 48px; }
@@ -96,7 +96,7 @@ button.plx-hrow:hover, a.plx-hrow:hover { background: var(--plx-elevated); }
 .plx-addon { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; height: 100%; }
 .plx-addon__ic { width: 44px; height: 44px; border-radius: 12px; background: var(--plx-tint); color: var(--plx-deep); display: grid; place-items: center; }
 .plx-addon p { margin: 4px 0 0; color: var(--plx-muted); font-size: 14px; line-height: 1.5; }
-.plx-addon .plx-btn { margin-top: auto; }
+.plx-addon .plx-btn:where(:not([data-plx-canvas] *)) { margin-top: auto; }
 
 /* Visits */
 .plx-bars { display: flex; align-items: flex-end; gap: 6px; height: 160px; }
@@ -474,8 +474,8 @@ a.plx-gcard:hover { transform: translateY(-2px); border-color: var(--plx-border-
 .plx-pbrowse { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .plx-ptools { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .plx-pstatus { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.plx-check { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; font-size: 14px; min-height: 44px; }
-.plx-check input { width: 22px; height: 22px; accent-color: var(--plx-deep); cursor: pointer; flex: none; margin: 0; }
+.plx-check:where(:not([data-plx-canvas] *)) { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; font-weight: 700; font-size: 14px; min-height: 44px; }
+.plx-check:where(:not([data-plx-canvas] *)) input { width: 22px; height: 22px; accent-color: var(--plx-deep); cursor: pointer; flex: none; margin: 0; }
 .plx-bulkbar { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; padding: 8px 16px; border: 2px solid var(--plx-focus); background: var(--plx-tint); border-radius: 14px; }
 .plx-bulkbar__n { color: var(--plx-muted); font-size: 14px; flex: 1 1 160px; }
 .plx-bulkbar__btns { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -636,7 +636,7 @@ a.plx-gcard:hover { transform: translateY(-2px); border-color: var(--plx-border-
 .plx-shopbody .plx-hub__bar { margin-bottom: 2px; }
 .plx-shopbody .plx-grp { padding: 16px 18px; gap: 12px; border-radius: 16px; }
 .plx-shopbody .plx-grp__body { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px 20px; }
-.plx-shopbody .plx-grp__body > :not(.plx-field) { grid-column: 1 / -1; }
+.plx-shopbody .plx-grp__body > :not(.plx-field:where(:not([data-plx-canvas] *))) { grid-column: 1 / -1; }
 .plx-shopbody .plx-hset { gap: 14px; }
 /* Brand words: removable word chips and tone buttons. */
 .plx-hwchips { display: flex; flex-wrap: wrap; gap: 6px; }

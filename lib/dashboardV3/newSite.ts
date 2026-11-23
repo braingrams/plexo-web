@@ -82,7 +82,7 @@ function nameNotTaken(name: string, taken: Set<string>): string {
 }
 
 /** What the designs and the site are made from: the owner's brand with this site's name on it. */
-export function profileFor(goal: NewSiteGoal, name: string, brand: SolBuildProfile["brand"] | undefined, extra?: { about?: string; industry?: string; tone?: string }): SolBuildProfile {
+export function profileFor(goal: NewSiteGoal, name: string, brand: SolBuildProfile["brand"] | undefined, extra?: { about?: string; industry?: string; tone?: string; businessType?: string }): SolBuildProfile {
   const about = extra?.about ? clean(extra.about).slice(0, 500) : "";
   return {
     goal,
@@ -93,11 +93,12 @@ export function profileFor(goal: NewSiteGoal, name: string, brand: SolBuildProfi
       // What SOL understood from the description (see lib/onboarding/understand.ts): steers which designs fit best.
       ...(extra?.industry ? { industry: extra.industry } : {}),
       ...(extra?.tone ? { tone: extra.tone } : {}),
+      ...(extra?.businessType ? { businessType: extra.businessType } : {}),
     },
   };
 }
 
-export function designPicks(goal: NewSiteGoal, name: string, brand?: SolBuildProfile["brand"], extra?: { about?: string; industry?: string; tone?: string }): { top: DesignChoice[]; total: number } {
+export function designPicks(goal: NewSiteGoal, name: string, brand?: SolBuildProfile["brand"], extra?: { about?: string; industry?: string; tone?: string; businessType?: string }): { top: DesignChoice[]; total: number } {
   const { top, others } = pickDesigns(profileFor(goal, name, brand, extra));
   return { top, total: top.length + others.length };
 }

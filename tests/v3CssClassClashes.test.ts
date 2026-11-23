@@ -18,7 +18,9 @@ describe("v3 dashboard stylesheets", () => {
     const clashes = analyze(files).filter((c) => {
       if (!SHARED_BASES.has(c.cls)) return true;
       // a shared base must live in v3.css; other files may only add rules scoped by a second class/attribute
-      return c.uses.some((u) => path.basename(u.file) !== "v3.css" && u.selectors.some((s) => /^\.[\w-]+\s*(?:[a-z]|$|:|,)/i.test(s) && !/^\.[\w-]+(?:\.|\[|\s+\.)/.test(s)));
+      // the editor-canvas guard (see customerPageIsolation.test.ts) is not a scoping class, so look past it
+      const plain = (s: string) => s.split(":where(:not([data-plx-canvas] *))").join("");
+      return c.uses.some((u) => path.basename(u.file) !== "v3.css" && u.selectors.some((raw) => { const s = plain(raw); return /^\.[\w-]+\s*(?:[a-z]|$|:|,)/i.test(s) && !/^\.[\w-]+(?:\.|\[|\s+\.)/.test(s); }));
     });
     const message =
       "These class names have rules in more than one CSS file. On a client navigation only some stylesheets are loaded, " +

@@ -1235,10 +1235,10 @@
   resolved "https://registry.npmjs.org/@charisol/auth-sdk-web/-/auth-sdk-web-0.2.1.tgz"
   integrity sha512-tk5iPw3X3w9Z14W+IF8+ATVsYoEGlU4HjSifO2eMeaOFnJQXi6K2uALkzp5ou3ttpnXQyfxPOXNJelwZWKdIOw==
 
-"@charisol/plexo-sdk@^2.0.35":
-  version "2.0.35"
-  resolved "https://registry.npmjs.org/@charisol/plexo-sdk/-/plexo-sdk-2.0.35.tgz"
-  integrity sha512-pQEKyAXjHsSJMNrNPamLK7qGbQ9ePo+F/5LXoVk/n2cmsmhZ8o8HT+Y5D75WS/2NRpTa41VNXeGADz5LX0bjlg==
+"@charisol/plexo-sdk@^2.0.37":
+  version "2.0.37"
+  resolved "https://registry.npmjs.org/@charisol/plexo-sdk/-/plexo-sdk-2.0.37.tgz"
+  integrity sha512-qGwQaDiXtPJ9hiIms5v0ayx0Rw5nEwPE24R95qkAKG0oMYvN3MrV9csjfWftJLmRmqGzP0CCEneDX36qQCjdww==
   dependencies:
     "@codemirror/autocomplete" "^6.20.4"
     "@codemirror/commands" "^6.11.1"

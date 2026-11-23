@@ -28,28 +28,9 @@ export interface BlogAppearance {
   fontPreset?: string | null;
 }
 
-/**
- * Presentational layer shared by every public blog page (listing, archives, post
- * detail). Deliberately self-contained CSS (no dependency on the tenant's own
- * page-builder theme) — a clean, editorial, WordPress-reader-familiar look that works
- * for any site, with just enough BlogSite-driven theming (accent color, font, logo,
- * header image — see SiteHeader) to approximate a migrated site's old brand without
- * reimplementing an arbitrary WordPress theme (not portable: PHP templates + theme CSS
- * tied to WordPress's own rendering engine).
- */
-export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {}) {
-  const accent = sanitizeHexColor(appearance?.accentColor);
-  const font = resolveFontStack(appearance?.fontPreset);
-  // null for the 4 system stacks (no download needed) or an invalid/legacy value.
-  const googleFontHref = buildGoogleFontHref(font);
-
-  return (
-    <>
-      {googleFontHref && <link rel="stylesheet" href={googleFontHref} />}
-      <style
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{
-          __html: `
+/** The blog theme's stylesheet text (shared by the live pages and the isolated dashboard preview). */
+export function blogStylesCss(accent: string, font: string): string {
+  return `
         .plexo-blog { --plexo-accent: ${accent}; --plexo-font: ${font}; font-family: var(--plexo-font); color: #17181c; background: #fff; min-height: 100vh; }
         .plexo-blog a { color: var(--plexo-accent); text-decoration: none; }
         .plexo-blog a:hover { text-decoration: underline; }
@@ -164,8 +145,38 @@ export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {})
         .plexo-comment-form__replying-to { font-size: 0.8rem; color: var(--plexo-comment-meta, #6b7280); margin: 0; }
         .plexo-comment-form__replying-to button { background: none; border: none; color: var(--plexo-accent); cursor: pointer; font-size: 0.8rem; }
         .plexo-comment-form__status { font-size: 0.8rem; color: var(--plexo-comment-meta, #6b7280); margin: 0; min-height: 1.2em; }
-        `,
-        }}
+        `;
+}
+
+/** The same theme as markup for a standalone document (font link + style), for the dashboard's isolated preview frame. */
+export function blogStylesHead(appearance?: BlogAppearance): string {
+  const accent = sanitizeHexColor(appearance?.accentColor);
+  const font = resolveFontStack(appearance?.fontPreset);
+  const href = buildGoogleFontHref(font);
+  return `${href ? `<link rel="stylesheet" href="${href.replace(/"/g, "&quot;")}">` : ""}<style>${blogStylesCss(accent, font)}</style>`;
+}
+
+/**
+ * Presentational layer shared by every public blog page (listing, archives, post
+ * detail). Deliberately self-contained CSS (no dependency on the tenant's own
+ * page-builder theme) — a clean, editorial, WordPress-reader-familiar look that works
+ * for any site, with just enough BlogSite-driven theming (accent color, font, logo,
+ * header image — see SiteHeader) to approximate a migrated site's old brand without
+ * reimplementing an arbitrary WordPress theme (not portable: PHP templates + theme CSS
+ * tied to WordPress's own rendering engine).
+ */
+export function BlogStyles({ appearance }: { appearance?: BlogAppearance } = {}) {
+  const accent = sanitizeHexColor(appearance?.accentColor);
+  const font = resolveFontStack(appearance?.fontPreset);
+  // null for the 4 system stacks (no download needed) or an invalid/legacy value.
+  const googleFontHref = buildGoogleFontHref(font);
+
+  return (
+    <>
+      {googleFontHref && <link rel="stylesheet" href={googleFontHref} />}
+      <style
+        // eslint-disable-next-line react/no-danger
+        dangerouslySetInnerHTML={{ __html: blogStylesCss(accent, font) }}
       />
     </>
   );
