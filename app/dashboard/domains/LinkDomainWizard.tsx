@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { analyticsPlan, trackOnce } from "@/lib/analytics";
 import { CustomSelect } from "../../_components/CustomSelect";
 import { registrableDomain } from "@/lib/domains/registrable";
 import {
@@ -39,6 +40,8 @@ export type WizardDomain = {
 };
 
 export type LinkDomainWizardProps = {
+  /** The workspace's plan, for the connect_domain event. */
+  plan?: string;
   onClose: () => void;
   landingPages: { id: string; name: string }[];
   /** Finish setting up a domain that already exists (opens at the first step still to do). */
@@ -196,7 +199,7 @@ function friendlyError(status: number, payload: { error?: unknown }): string {
 // ───────────────────────────────────────────────────────────── the wizard
 
 export function LinkDomainWizard(props: LinkDomainWizardProps) {
-  const { existing, landingPages, canUseCustomDomain, baseDomain, routingTarget } = props;
+  const { existing, landingPages, canUseCustomDomain, baseDomain, routingTarget, plan } = props;
   const titleId = useId();
   const modalRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -226,6 +229,12 @@ export function LinkDomainWizard(props: LinkDomainWizardProps) {
 
   const customDomain = normalizeDomainInput(domainInput, { final: true });
   const cert: CertUi = certUi(live.certificateStatus, !!(live.certificateValidationName && live.certificateValidationValue));
+
+  // connect_domain (spec 6.7): a custom domain whose certificate is live. Once per domain.
+  useEffect(() => {
+    if (!created || created.type !== "CUSTOM" || cert !== "live") return;
+    trackOnce(`connect_domain_${created.id}`, { event: "connect_domain", project_id: created.templateId, plan_name: plan ? analyticsPlan(plan) : "unknown" });
+  }, [cert, created, plan]);
   const position = stepPosition(step, type);
 
   // ── dialog behaviour: focus in, keep it in, Esc closes, page behind doesn't scroll
