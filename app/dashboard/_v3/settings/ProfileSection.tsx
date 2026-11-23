@@ -149,7 +149,7 @@ export function ProfileSection({ name: initialName, email, phone, image: initial
       {error ? <GateOrError error={error}><Notice tone="bad">{error}</Notice></GateOrError> : null}
 
       <Panel title="Your profile" description="This is how you appear to the people you work with.">
-        <div className="plx-sform">
+        <div className="plx-sform plx-sform--wide" style={{ maxWidth: 760 }}>
           <div className="plx-photo">
             <Avatar name={saved || email} src={image} size={80} />
             <div className="plx-photo__actions">
@@ -160,13 +160,17 @@ export function ProfileSection({ name: initialName, email, phone, image: initial
               {image ? <Button variant="ghost" size="sm" onClick={removePhoto}>Remove</Button> : null}
             </div>
           </div>
-          <Input label="Your name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" help="What your team and customers see." error={!name.trim() && dirty ? "Please type the name you'd like us to use." : undefined} onKeyDown={(e) => e.key === "Enter" && dirty && name.trim() && void saveName()} />
-          <Input label="Your email" value={email} readOnly help="This is what you sign in with." />
-          <div className="plx-field">
-            <label className="plx-field__label" htmlFor="profile-country">Country</label>
-            <CountrySelect id="profile-country" value={selectedCountry} onChange={handleCountryChange} />
+          <div className="plx-sform__two">
+            <Input label="Your name" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" help="What your team and customers see." error={!name.trim() && dirty ? "Please type the name you'd like us to use." : undefined} onKeyDown={(e) => e.key === "Enter" && dirty && name.trim() && void saveName()} />
+            <Input label="Your email" value={email} readOnly help="This is what you sign in with." />
           </div>
-          {phone ? <Input label="Your phone number" value={phone} readOnly help="Saved when you connected WhatsApp." /> : null}
+          <div className="plx-sform__two">
+            <div className="plx-field">
+              <label className="plx-field__label" htmlFor="profile-country">Country</label>
+              <CountrySelect id="profile-country" value={selectedCountry} onChange={handleCountryChange} />
+            </div>
+            {phone ? <Input label="Your phone number" value={phone} readOnly help="Saved when you connected WhatsApp." /> : null}
+          </div>
         </div>
       </Panel>
 
