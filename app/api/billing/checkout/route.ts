@@ -250,6 +250,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (orgResolution.status === "needs-choice") {
         return NextResponse.json({ error: "Choose an active organization before buying a funnel slot." }, { status: 400 });
       }
+      if (orgResolution.role === "guest") {
+        return NextResponse.json({ error: "Only the workspace owner or an admin can buy this." }, { status: 403 });
+      }
 
       // Created PENDING_PAYMENT before checkout — same "pending row before payment"
       // discipline as app/api/v1/domains/purchase/route.ts, so an abandoned checkout just

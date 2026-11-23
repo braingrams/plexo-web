@@ -202,6 +202,11 @@ async function runTurn(msg: InboundWhatsAppMessage, link: { userId: string; orga
     return;
   }
 
+  if (resolved.role === "guest") {
+    await reply(msg.from, "SOL isn't available with site-only access yet. Ask the account owner if you need something done.");
+    return;
+  }
+
   const pending = await findPending(link.conversationId);
   let prepared;
   if (pending?.questions?.length) {

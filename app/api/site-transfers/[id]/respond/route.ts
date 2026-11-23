@@ -69,6 +69,11 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   // action === "accept"
   const orgResolution = await ensureActiveOrganization(session.user.id);
+  // Receiving a site puts it into the workspace you are working in. A member invited to specific sites must not do that to the
+  // owner's workspace: switch to your own workspace first.
+  if (orgResolution.status === "resolved" && orgResolution.role === "guest") {
+    return NextResponse.json({ error: "Switch to your own workspace to accept a site.", needsOrgChoice: true }, { status: 409 });
+  }
   if (orgResolution.status === "needs-choice") {
     return NextResponse.json({ error: "Choose which of your organizations should receive this site first, then try again.", needsOrgChoice: true }, { status: 409 });
   }

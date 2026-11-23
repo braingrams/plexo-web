@@ -1,5 +1,8 @@
 import { PLAN } from "@/lib/plan/plans";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
+import { classifyGuestPage } from "@/lib/access/siteAccess";
+import { guestRoleForSite } from "@/lib/access/siteAccessStore";
 import { ThemeProvider } from "next-themes";
 
 import { auth } from "@/server/authDynamo";
@@ -53,6 +56,15 @@ export default async function DashboardLayout({
   const orgResolution = await ensureActiveOrganization(session.user.id);
   if (orgResolution.status === "needs-choice") {
     redirect("/choose-org");
+  }
+
+  // Someone invited to specific sites only may open the site list, their own sites and their own profile. Every other screen sends them
+  // back to their sites. Fails closed: if the address can't be read, they are sent back too.
+  if (orgResolution.role === "guest") {
+    const path = (await headers()).get("x-plexo-path") ?? "";
+    const decision = path ? classifyGuestPage(path) : { kind: "denied" as const };
+    if (decision.kind === "denied") redirect("/dashboard/sites");
+    if (decision.kind === "site" && !(await guestRoleForSite(orgResolution.siteAccess, decision.siteId, orgResolution.organizationId))) redirect("/dashboard/sites");
   }
 
   // The workspace's plan (its owner's — a teammate gets the same options as the owner) decides

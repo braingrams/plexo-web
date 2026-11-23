@@ -3,6 +3,7 @@
  * stored for new submissions and never shown for old ones, so the owner only sees what the visitor actually wrote.
  */
 const TECHNICAL = [
+  /^_plx_check$/i,
   /^cf-turnstile-response$/i,
   /^g-recaptcha-response$/i,
   /^h-captcha-response$/i,

@@ -1,3 +1,4 @@
+import { issueHumanCheck } from "@/lib/forms/humanCheck";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocumentNode } from "@charisol/plexo-sdk/v2/compile";
 
@@ -243,6 +244,8 @@ describe("public form submit finds the form in a v2 design", () => {
     const send = (fields: Record<string, string>) => {
       const fd = new FormData();
       for (const [k, v] of Object.entries(fields)) fd.append(k, v);
+      // The ticket the page asked for when it loaded (lib/forms/humanCheck.ts), a few seconds old by the time the form is sent.
+      fd.append("_plx_check", issueHumanCheck("root", Date.now() - 10_000));
       return POST(
         new Request("http://site.test/api/public/forms/root/submit?form=Contact&page=root&fid=frm", { method: "POST", headers: { host: "site.test", referer: "http://site.test/contact" }, body: fd }) as never,
         { params: Promise.resolve({ templateId: "root" }) },

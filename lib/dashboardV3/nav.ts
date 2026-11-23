@@ -25,6 +25,8 @@ export type NavInput = {
   /** True when any of their sites has a course — shows Learners whatever the goal. */
   teaches?: boolean;
   siteCount?: number;
+  /** A member invited to specific sites only: the menu shows just Home and their sites. */
+  guest?: boolean;
 };
 
 /** Both open the shop that is switched on (/dashboard/commerce picks it), on the right tab. */
@@ -38,6 +40,13 @@ export function parseExperience(value: unknown): Experience | null {
 }
 
 export function buildV3Nav(input: NavInput): V3NavItem[] {
+  // Someone invited to specific sites: just Home and their sites. Everything else in the workspace is closed to them.
+  if (input.guest) {
+    return [
+      { id: "home", label: "Home", href: "/dashboard", icon: "home", primary: true },
+      { id: "sites", label: (input.siteCount ?? 0) > 1 ? "My sites" : "My site", href: "/dashboard/sites", icon: "sites", primary: true },
+    ];
+  }
   const experience = input.experience ?? "beginner";
   const sells = input.goal === "store" || !!input.sells;
   const teaches = input.goal === "course" || !!input.teaches;

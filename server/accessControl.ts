@@ -81,6 +81,9 @@ export const roles = {
   // Read-only: can view templates and comment threads, but every mutating
   // statement is absent so hasPermission() rejects all of them.
   viewer: ac.newRole({}),
+  // A member who was invited to specific sites only (Member.siteAccess). On their own they can do nothing in the workspace; on each
+  // of their sites they act with the role they were given there (lib/auth/resolveUser.ts swaps it in per request).
+  guest: ac.newRole({}),
 } as const;
 
 export type OrgRole = keyof typeof roles;

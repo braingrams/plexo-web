@@ -12,7 +12,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (!session?.user?.id || !session.user.email) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const orgResolution = await ensureActiveOrganization(session.user.id);
-  const activeOrgId = orgResolution.status === "resolved" ? orgResolution.organizationId : null;
+  // A member invited to specific sites does not see (or act on) the workspace's transfers.
+  const activeOrgId = orgResolution.status === "resolved" && orgResolution.role !== "guest" ? orgResolution.organizationId : null;
 
   const [incoming, outgoing] = await Promise.all([
     listIncomingTransfers(session.user.email.toLowerCase()),

@@ -35,6 +35,39 @@
   var DEFAULT_SUCCESS = "Thank you! We've received your message and someone will reach out to you soon.";
   var ERROR_TEXT = "Sorry, that didn't send. Please check your details and try again.";
 
+  // Plexo's own "are you a person?" check, on every form. The page asks for a small signed ticket when it loads; the form carries it
+  // along when it is sent (lib/forms/humanCheck.ts). Nothing for the visitor to tick.
+  var CHECK_FIELD = "_plx_check";
+  var checkToken = null, checkPending = null;
+  function fetchCheck() {
+    if (checkToken) return Promise.resolve(checkToken);
+    if (!checkPending) {
+      checkPending = Promise.resolve()
+        .then(function () { return fetch("/api/public/forms/" + TEMPLATE_ID + "/check", { credentials: "same-origin", cache: "no-store" }); })
+        .then(function (r) { return r && r.ok ? r.json() : {}; })
+        .then(function (d) { checkToken = d && d.token ? d.token : null; checkPending = null; return checkToken; })
+        .catch(function () { checkPending = null; return null; });
+    }
+    return checkPending;
+  }
+  function putCheck(form) {
+    if (!checkToken || !form || !form.tagName || form.tagName !== "FORM") return;
+    var input = form.querySelector('input[name="' + CHECK_FIELD + '"]');
+    if (!input) {
+      input = document.createElement("input");
+      input.type = "hidden";
+      input.name = CHECK_FIELD;
+      form.appendChild(input);
+    }
+    input.value = checkToken;
+  }
+  // As soon as the page is up (so the ticket is a few seconds old by the time anyone has filled in a form), and again when a form is touched.
+  function warmCheck() { if (!document.querySelector("form")) return; fetchCheck().then(function () { var f = document.querySelectorAll("form"); for (var i = 0; i < f.length; i++) putCheck(f[i]); }); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", warmCheck); else warmCheck();
+  document.addEventListener("focusin", function (e) { var f = e.target && e.target.closest ? e.target.closest("form") : null; if (f) { if (checkToken) putCheck(f); else warmCheck(); } }, true);
+  // Whatever way the form is sent (this script's own fetch, or the form's own post), the ticket goes with it.
+  document.addEventListener("submit", function (e) { var f = e.target; if (f && f.tagName === "FORM") putCheck(f); }, true);
+
   function marker(form) {
     var v = form.getAttribute("data-plexo-form");
     return v === null ? null : v.trim();
@@ -213,8 +246,16 @@
       }
     }
   }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { showReturnThanks(); showMigratedReturn(); });
-  else { showReturnThanks(); showMigratedReturn(); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { showReturnThanks(); showMigratedReturn(); showCheckError(); });
+  else { showReturnThanks(); showMigratedReturn(); showCheckError(); }
+
+  // Back from a post Plexo's own check turned away (no ticket, or sent too fast): say what to do.
+  function showCheckError() {
+    var m = location.search.match(/[?&]plexo_form_error=(check|fast)(&|$)/);
+    if (!m) return;
+    showCard(m[1] === "fast" ? "That was very quick. Please wait a moment and send it again." : "We couldn't confirm you're a person. Please reload the page and send it again.", true);
+    try { history.replaceState(null, "", location.pathname + location.search.replace(/([?&])plexo_form_error=[^&#]*(&|$)/, function (_, a, b) { return b ? a : ""; }).replace(/\?$/, "") + location.hash); } catch (err) { /* old browsers */ }
+  }
 
   // Back from a plain form post that the captcha turned away: say what to do, next to the form.
   function showReturnError() {

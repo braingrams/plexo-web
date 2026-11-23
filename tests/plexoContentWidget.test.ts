@@ -88,8 +88,9 @@ describe("content widget", () => {
 
 describe("form connector", () => {
   const submit = (form: HTMLFormElement) => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
-  // The connector also asks (once per form) whether a verification box is set up; only sends count here.
-  const sends = (mock: { mock: { calls: unknown[][] } }) => mock.mock.calls.filter((c) => !String(c[0]).includes("/captcha?"));
+  // The connector also asks (once per form) whether a verification box is set up, and (once per page) for its "are you a person" ticket;
+  // only sends count here.
+  const sends = (mock: { mock: { calls: unknown[][] } }) => mock.mock.calls.filter((c) => !String(c[0]).includes("/captcha?") && !String(c[0]).includes("/check"));
 
   it("connects a form with no action, names unnamed fields, and shows a thank-you", async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ ok: true, redirect: null }) }));
@@ -122,7 +123,7 @@ describe("form connector", () => {
       document.getElementById(id)!.dispatchEvent(ev);
       expect(ev.defaultPrevented).toBe(false);
     }
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(sends(fetchMock)).toHaveLength(0);
   });
 
   it("never takes over a shop form — a checkout that is swallowed makes no order", async () => {
@@ -143,7 +144,7 @@ describe("form connector", () => {
       document.getElementById("f")!.dispatchEvent(ev);
       expect(ev.defaultPrevented, path).toBe(false);
     }
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(sends(fetchMock)).toHaveLength(0);
   });
 
   it("draws the owner's verification box on a migrated form that has one saved, and none on a form that doesn't", async () => {
@@ -184,7 +185,29 @@ describe("form connector", () => {
     expect(ex.defaultPrevented).toBe(false);
     submit(document.getElementById("y") as HTMLFormElement);
     await flush();
-    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toContain("form=Newsletter");
+    expect((sends(fetchMock)[0] as unknown as [string])[0]).toContain("form=Newsletter");
+  });
+
+  it("asks for the ticket when the page loads, and sends it along with the form", async () => {
+    const fetchMock = vi.fn(async (url: string) => (String(url).includes("/check") ? { ok: true, json: async () => ({ token: "v1.abc.def" }) } : { ok: true, json: async () => ({ ok: true, redirect: null }) }));
+    vi.stubGlobal("fetch", fetchMock);
+    document.body.innerHTML = `<form id="contact"><input name="Email" value="a@b.co"><button type="submit">Send</button></form>`;
+    load(formsJs, { "data-template-id": "tpl_1", "data-auto": "true" });
+    await flush(); await flush();
+    expect(fetchMock.mock.calls.some((c) => String(c[0]).includes("/api/public/forms/tpl_1/check"))).toBe(true);
+    submit(document.getElementById("contact") as HTMLFormElement);
+    await flush(); await flush();
+    const [, init] = sends(fetchMock)[0] as unknown as [string, RequestInit];
+    expect((init.body as FormData).get("_plx_check")).toBe("v1.abc.def");
+  });
+
+  it("asks for nothing on a page with no form", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    document.body.innerHTML = `<p>No forms here</p>`;
+    load(formsJs, { "data-template-id": "tpl_1", "data-auto": "true" });
+    await flush();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("shows the server's message when sending fails", async () => {

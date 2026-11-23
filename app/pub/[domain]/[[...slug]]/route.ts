@@ -38,6 +38,8 @@ import { applyAnalyticsTag } from "@/lib/googleAnalytics/serveTag";
 import { aiRobotsRules } from "@/lib/siteHealth/speedFixes";
 import { cleanPathFor, mountedSegments, normalizeMountPrefix, unmountLocation, unmountText } from "@/lib/pub/mountPrefix";
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
+import { looksLikeBrowserPost, machineSource } from "@/lib/forms/trafficGuards";
+import { HUMAN_CHECK_FIELD, verifyHumanCheck } from "@/lib/forms/humanCheck";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 
 type TemplateItem = EntityItem<typeof Template>;
@@ -1099,7 +1101,15 @@ async function handlePageFormPost(
   if (!(await checkCommerceRateLimit(`forms:page:${templateId}:${clientIp(request)}`, 10))) {
     return NextResponse.json({ error: "Too many submissions. Please try again shortly." }, { status: 429 });
   }
+  // A post with no sign of a browser on this site is a machine (a scanner, or a WordPress service still calling the old site): drop it quietly.
+  if (!looksLikeBrowserPost(request.headers, host)) return wordPressAjaxStub();
   const fields = await readSubmittedFields(request);
+  // Calls from WordPress plugins and services (MalCare, backups, monitoring) are never a visitor's message.
+  if (machineSource(fields)) return wordPressAjaxStub();
+  // Plexo's own check (lib/forms/humanCheck.ts): a form on a page of this site carries a ticket the page asked for when it loaded.
+  const humanCheck = verifyHumanCheck(fields[HUMAN_CHECK_FIELD], templateId);
+  delete fields[HUMAN_CHECK_FIELD];
+  if (humanCheck !== "ok") return back(`${path}${path.includes("?") ? "&" : "?"}plexo_form_error=${humanCheck === "too-fast" ? "fast" : "check"}`);
   // Spam trap: a filled-in hidden field means a bot — answer as if it worked.
   if (fields["_hp_field"]) return back(samePage);
   delete fields["_hp_field"];
@@ -1150,7 +1160,10 @@ export async function POST(
   if (!isAjax && !isCaptureRoute) return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
   if (!root.migratedFrom) return isAjax ? wordPressAjaxStub() : NextResponse.json({ error: "Method not allowed." }, { status: 405 });
 
+  // (A route a migrated widget or app posts to on purpose can come from a server, so only pages and admin-ajax need to look like a browser.)
+  if (!isCaptureRoute && !looksLikeBrowserPost(request.headers, decodeURIComponent(domain))) return wordPressAjaxStub();
   const fields = await readSubmittedFields(request);
+  if (machineSource(fields)) return wordPressAjaxStub();
   if (isAjax && !looksLikeFormSubmission(fields)) return wordPressAjaxStub();
   if (Object.keys(fields).length === 0) return NextResponse.json({ success: false, message: "Nothing was submitted." }, { status: 400 });
 

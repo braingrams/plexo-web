@@ -123,8 +123,10 @@ const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
   admin: "Admin",
   editor: "Editor",
-  commenter: "Commenter",
+  commenter: "Reviewer",
   viewer: "Viewer",
+  blogger: "Writer",
+  guest: "Access to selected sites",
 };
 
 export function buildInviteEmail(input: {

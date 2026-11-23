@@ -245,6 +245,13 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     }
   }
 
+  // The dashboard layout needs to know which page is being opened (a layout cannot see the address), so a member who was invited to
+  // specific sites can be kept out of every other screen in one place. See lib/access/siteAccess.ts.
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
+    const forwarded = new Headers(request.headers);
+    forwarded.set("x-plexo-path", pathname);
+    return NextResponse.next({ request: { headers: forwarded } });
+  }
   return NextResponse.next();
 }
 

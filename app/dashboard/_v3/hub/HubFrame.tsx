@@ -79,7 +79,7 @@ function FoldedSiteActions({ site }: { site: HubFrameSite }) {
   );
 }
 
-export function HubFrame({ site, tabs, current, experience, children }: { site: HubFrameSite; tabs: HubTab[]; current: HubTabId; experience: Experience; children: React.ReactNode }) {
+export function HubFrame({ site, tabs, current, experience, children, readOnly = false, guest = false }: { site: HubFrameSite; tabs: HubTab[]; current: HubTabId; experience: Experience; children: React.ReactNode; /** This person may look but not change the site: no Edit button. */ readOnly?: boolean; /** A member invited to this site only: no link into the web address settings. */ guest?: boolean }) {
   const currentHref = hubTabHref(site.id, current);
   return (
     <div className="plx-page plx-hub" data-tour="hub-main">
@@ -100,6 +100,8 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
               <a href={`https://${site.address}`} target="_blank" rel="noreferrer">
                 {site.address} <ExternalLink size={14} aria-hidden />
               </a>
+            ) : guest ? (
+              <span style={{ fontWeight: 600 }}>Not online yet</span>
             ) : (
               <Link href={hubTabHref(site.id, "address")} style={{ fontWeight: 600 }}>
                 Not online yet. Choose a web address
@@ -110,7 +112,7 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
         </div>
         <div className="plx-hub__actions" data-tour="hub-actions">
           <FoldedSiteActions site={site} />
-          {site.deployed ? (
+          {readOnly ? null : site.deployed ? (
             <ButtonLink href={site.editHref.startsWith("/dashboard/apps/") ? site.editHref : hubTabHref(site.id, "app")} leftIcon={site.editHref.startsWith("/dashboard/apps/") ? <Pencil size={16} aria-hidden /> : <Upload size={16} aria-hidden />}>
               {site.editHref.startsWith("/dashboard/apps/") ? "Edit app" : "Update app"}
             </ButtonLink>

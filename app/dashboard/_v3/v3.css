@@ -772,6 +772,16 @@ html[data-plx-nav="running"] [data-plexo-v3] main { opacity: .62; transition: op
 .plx-code__where b { color: var(--plx-text); }
 .plx-code__list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; line-height: 1.45; }
 
+/* Site-by-site team access */
+.plx-siteaccess { display: flex; flex-direction: column; gap: 12px; }
+.plx-siteaccess__list { border: 1px solid var(--plx-border); border-radius: 14px; overflow: hidden; background: var(--plx-surface); }
+.plx-siteaccess__row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 12px 16px; border-bottom: 1px solid var(--plx-border); }
+.plx-siteaccess__row:last-child { border-bottom: 0; }
+.plx-siteaccess__row[data-on="true"] { background: var(--plx-tint); }
+.plx-siteaccess__name { display: flex; align-items: center; gap: 10px; flex: 1 1 200px; min-width: 0; font-weight: 700; font-size: 15px; cursor: pointer; overflow-wrap: anywhere; }
+.plx-siteaccess__name input { width: 18px; height: 18px; accent-color: var(--plx-brand); flex: none; }
+.plx-siteaccess__role { flex: 1 1 260px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.plx-siteaccess__chips { display: flex; flex-wrap: wrap; gap: 6px; }
 /* Form messages inbox */
 .plx-inbox__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--plx-border); flex-wrap: wrap; }
 .plx-inbox__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

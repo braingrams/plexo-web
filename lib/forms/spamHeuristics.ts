@@ -10,6 +10,8 @@
  * make up most of what actually shows up.
  */
 
+import { machineSource } from "./trafficGuards";
+
 const URL_PATTERN = /https?:\/\/\S+/gi;
 
 const SPAM_PHRASES = [
@@ -29,16 +31,23 @@ function looksLikeGibberish(value: string): boolean {
   return !/[aeiouAEIOU]/.test(letters);
 }
 
+/** A promotional phrase, matched as whole words (so "seo" is not found inside "Seoul"). */
+export function promoPhrase(text: string): string | null {
+  const lower = text.toLowerCase();
+  return SPAM_PHRASES.find((phrase) => new RegExp(`(^|[^a-z0-9])${phrase.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`).test(lower)) ?? null;
+}
+
 export function spamReasons(fields: Record<string, string>): string[] {
   const reasons: string[] = [];
+  const machine = machineSource(fields);
+  if (machine) reasons.push(`Sent by ${machine}, not a visitor`);
   const values = Object.values(fields);
   const combined = values.join(" ");
 
   const urlMatches = combined.match(URL_PATTERN);
   if (urlMatches && urlMatches.length >= 2) reasons.push(`Contains ${urlMatches.length} links`);
 
-  const lower = combined.toLowerCase();
-  const matchedPhrase = SPAM_PHRASES.find((phrase) => lower.includes(phrase));
+  const matchedPhrase = promoPhrase(combined);
   if (matchedPhrase) reasons.push(`Mentions "${matchedPhrase}"`);
 
   if (values.some(looksLikeGibberish)) reasons.push("Looks like random text");
@@ -48,4 +57,19 @@ export function spamReasons(fields: Record<string, string>): string[] {
 
 export function isLikelySpam(fields: Record<string, string>): boolean {
   return spamReasons(fields).length > 0;
+}
+
+/**
+ * Spam we are sure about, which is dropped before it is stored: a machine call, text that is only keyboard-mash, three or more links, or
+ * a link with a sales phrase. Anything merely suspicious (one phrase, two links) is still kept, marked "Likely spam", and not emailed.
+ * Wrongly dropping a real customer costs more than keeping a piece of spam, so this list stays narrow.
+ */
+export function isCertainSpam(fields: Record<string, string>): boolean {
+  if (machineSource(fields)) return true;
+  const values = Object.values(fields);
+  const combined = values.join(" ");
+  const links = (combined.match(URL_PATTERN) ?? []).length;
+  if (links >= 3) return true;
+  if (links >= 1 && promoPhrase(combined)) return true;
+  return values.some(looksLikeGibberish);
 }

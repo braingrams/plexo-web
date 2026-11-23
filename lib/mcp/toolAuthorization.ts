@@ -38,7 +38,7 @@ export function toolNeed(name: string, groups: ToolGroups): ToolNeed {
   return { resource, action: "update" };
 }
 
-const ROLE_LABEL: Record<string, string> = { owner: "an owner", admin: "an admin", editor: "an editor", blogger: "a blogger", commenter: "a commenter", viewer: "a viewer" };
+const ROLE_LABEL: Record<string, string> = { owner: "an owner", admin: "an admin", editor: "an editor", blogger: "a blogger", commenter: "a commenter", viewer: "a viewer", guest: "a site-only member" };
 const AREA: Record<ToolResource, string> = { template: "pages and the site", blog: "the blog", commerce: "the shop", lms: "courses", domain: "web addresses" };
 
 /** Only owners and admins can take money out of the wallet. API keys (no role) are the owner's own. */
@@ -55,6 +55,8 @@ export type ScopeMember = { role?: string | null; scopedTemplateIds?: readonly s
 export function authorizeToolCall(input: { role: OrgRole | null; toolName: string; args: Record<string, unknown> | null | undefined; groups: ToolGroups; member?: ScopeMember }): string | null {
   const { role, toolName, groups } = input;
   if (role === null) return null; // an API key
+  // Someone invited to specific sites only: SOL and other assistants act for the whole workspace, so they are not available to them yet.
+  if (role === "guest") return "SOL isn't available with site-only access yet. Ask the account owner if you need something done.";
   const need = toolNeed(toolName, groups);
   const who = ROLE_LABEL[role] ?? "a team member";
   const defined = roles[role];

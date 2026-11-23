@@ -47,7 +47,7 @@ export function FormDestinationsClient({ templateId }: { templateId: string }) {
 
   return (
     <Card data-testid="form-destinations">
-      <CardHeader title="Where messages go" description="Every message shows up in the inbox below and is emailed to you. Open a form's settings to also add senders to a list or pass messages on to another tool." action={<ButtonLink href="/dashboard/settings/notifications" variant="secondary" size="sm">Change where emails go</ButtonLink>} />
+      <CardHeader title="Where messages go" description="Every message shows up in the inbox below and is emailed to you. Plexo checks every form for spam and bots, with nothing for visitors to tick. Open a form's settings to add a verification box, add senders to a list or pass messages on to another tool." action={<ButtonLink href="/dashboard/settings/notifications" variant="secondary" size="sm">Change where emails go</ButtonLink>} />
       {data.maildrip.error ? <Notice kind="warning" title="MailDrip isn't responding">{data.maildrip.error}</Notice> : null}
       <div>
         {(showAll ? data.forms : data.forms.slice(0, FORMS_SHOWN_FIRST)).map((form) => <FormRow key={form.formName} templateId={templateId} form={form} overview={data} onSaved={load} />)}
@@ -104,6 +104,7 @@ function FormRow({ templateId, form, overview, onSaved }: { templateId: string; 
         <b>{form.formName}</b>
         <div className="plx-forms__chips">
           <Badge tone="success">Emailed to you</Badge>
+          <Badge tone="neutral">Spam check on</Badge>
           {form.maildripGroupId ? <Badge tone="info">Added to your mailing list</Badge> : null}
           {form.webhookUrl ? <Badge tone="info">Sent to another tool</Badge> : null}
           {form.captcha?.active ? <Badge tone="neutral">Verification box on</Badge> : null}
@@ -145,7 +146,7 @@ function FormRow({ templateId, form, overview, onSaved }: { templateId: string; 
               </div>
             </div>
           ) : (
-            <div><Button variant="secondary" size="sm" onClick={() => setCaptchaOpen(true)}>Add a verification box to stop bots</Button></div>
+            <div><Button variant="secondary" size="sm" onClick={() => setCaptchaOpen(true)}>Add a verification box for extra protection</Button></div>
           )}
 
           {form.redirectUrl ? <p className="plx-small" style={{ margin: 0 }}>After sending, visitors go to <b>{form.redirectUrl}</b>.</p> : null}

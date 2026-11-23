@@ -8,6 +8,7 @@ import { TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import type { EntityItem } from "electrodb";
 import { docClient } from "@/lib/db/client";
 import { Organization, Member, Invitation, User } from "@/lib/db/coreEntities";
+import { cleanSiteAccess, hasSiteAccess, type SiteAccess } from "@/lib/access/siteAccess";
 import type { OrgRole } from "@/server/accessControl";
 import { sendMaildripEmail } from "@/lib/mail/maildrip";
 import { buildInviteEmail } from "@/lib/mail/templates";
@@ -81,7 +82,7 @@ export async function getOrgBrandDynamo(
 const INVITATION_TTL_DAYS = 7;
 
 export type ActiveOrgResolution =
-  | { status: "resolved"; organizationId: string; organizationName: string; role: OrgRole }
+  | { status: "resolved"; organizationId: string; organizationName: string; role: OrgRole; /** For a site-only member (role "guest"): their sites and role on each. Empty for everyone else. */ siteAccess: SiteAccess }
   | { status: "needs-choice"; organizations: { id: string; name: string; role: OrgRole }[] };
 
 export async function ensureActiveOrganization(userId: string): Promise<ActiveOrgResolution> {
@@ -93,7 +94,7 @@ export async function ensureActiveOrganization(userId: string): Promise<ActiveOr
   if (activeOrgId) {
     const active = memberships.find((m) => m.organizationId === activeOrgId);
     if (active) {
-      return { status: "resolved", organizationId: active.organizationId, organizationName: active.organization.name, role: active.role };
+      return { status: "resolved", organizationId: active.organizationId, organizationName: active.organization.name, role: active.role, siteAccess: active.siteAccess };
     }
   }
 
@@ -102,7 +103,7 @@ export async function ensureActiveOrganization(userId: string): Promise<ActiveOr
     // them a personal workspace, same slug convention as the original org.ts.
     const { data: user } = await User.get({ id: userId }).go();
     const org = await ensurePersonalWorkspace(userId, `${user?.name ?? "My"}'s Workspace`);
-    return { status: "resolved", organizationId: org.id, organizationName: org.name, role: "owner" };
+    return { status: "resolved", organizationId: org.id, organizationName: org.name, role: "owner", siteAccess: {} };
   }
 
   if (memberships.length === 1) {
@@ -111,7 +112,7 @@ export async function ensureActiveOrganization(userId: string): Promise<ActiveOr
     // during a page render rely on setActiveOrganizationCookie being called from the
     // nearest Server Action / Route Handler in the request (e.g. the dashboard layout's
     // own action), not from here.
-    return { status: "resolved", organizationId: only.organizationId, organizationName: only.organization.name, role: only.role };
+    return { status: "resolved", organizationId: only.organizationId, organizationName: only.organization.name, role: only.role, siteAccess: only.siteAccess };
   }
 
   return {
@@ -139,7 +140,7 @@ export async function setActiveOrganizationCookie(organizationId: string): Promi
 // here; tests/singlePersonalWorkspace.test.ts fails if one comes back.
 
 export async function listMembers(organizationId: string): Promise<
-  { id: string; userId: string; role: OrgRole; scopedTemplateIds: string[]; name: string; email: string }[]
+  { id: string; userId: string; role: OrgRole; scopedTemplateIds: string[]; siteAccess: SiteAccess; name: string; email: string }[]
 > {
   const { data: members } = await Member.query.primary({ organizationId }).go();
   const users = await Promise.all(members.map((m) => User.get({ id: m.userId }).go()));
@@ -150,6 +151,7 @@ export async function listMembers(organizationId: string): Promise<
       userId: m.userId,
       role: m.role as OrgRole,
       scopedTemplateIds: m.scopedTemplateIds ?? [],
+      siteAccess: cleanSiteAccess(m.siteAccess),
       name: user?.name ?? "Unknown",
       email: user?.email ?? "",
     };
@@ -170,11 +172,15 @@ export async function updateMemberRole(
   userId: string,
   role: OrgRole,
   scopedTemplateIds?: string[],
+  siteAccess?: SiteAccess,
 ): Promise<void> {
   const nextScopedTemplateIds = role === "editor" ? (scopedTemplateIds ?? []) : [];
+  // Site access only ever belongs to a site-only member (role "guest"); every other role clears it, so a member who is later made an
+  // ordinary teammate never keeps a stale list.
+  const nextSiteAccess = role === "guest" ? cleanSiteAccess(siteAccess) : {};
 
   if (role !== "owner") {
-    await Member.patch({ organizationId, userId }).set({ role, scopedTemplateIds: nextScopedTemplateIds }).go();
+    await Member.patch({ organizationId, userId }).set({ role, scopedTemplateIds: nextScopedTemplateIds, siteAccess: nextSiteAccess }).go();
     return;
   }
 
@@ -189,8 +195,8 @@ export async function updateMemberRole(
   const toDemote = currentOwners.filter((m) => m.userId !== userId);
 
   const updates = [
-    Member.patch({ organizationId, userId }).set({ role: "owner", scopedTemplateIds: [] }).params(),
-    ...toDemote.map((m) => Member.patch({ organizationId, userId: m.userId }).set({ role: "admin", scopedTemplateIds: [] }).params()),
+    Member.patch({ organizationId, userId }).set({ role: "owner", scopedTemplateIds: [], siteAccess: {} }).params(),
+    ...toDemote.map((m) => Member.patch({ organizationId, userId: m.userId }).set({ role: "admin", scopedTemplateIds: [], siteAccess: {} }).params()),
   ];
 
   await docClient.send(
@@ -208,6 +214,7 @@ export type InvitationView = {
   email: string;
   role: OrgRole;
   scopedTemplateIds: string[];
+  siteAccess: SiteAccess;
   status: string;
   inviterEmail: string;
   createdAt: string;
@@ -233,6 +240,7 @@ async function hydrateInvitation(inv: EntityItem<typeof Invitation>): Promise<In
     email: inv.email,
     role: inv.role as OrgRole,
     scopedTemplateIds: inv.scopedTemplateIds ?? [],
+    siteAccess: cleanSiteAccess(inv.siteAccess),
     status: inv.status ?? "pending",
     inviterEmail: inviter?.email ?? "",
     createdAt: inv.createdAt ?? new Date().toISOString(),
@@ -296,12 +304,13 @@ export async function createInvitation(
   inviterId: string,
   inviterName: string,
   scopedTemplateIds?: string[],
+  siteAccess?: SiteAccess,
 ): Promise<InvitationView> {
   const id = randomUUID();
   const expiresAt = new Date(Date.now() + INVITATION_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
   // Same "only editor is scopable" rule as updateMemberRole — see that function's comment.
   const nextScopedTemplateIds = role === "editor" ? (scopedTemplateIds ?? []) : [];
-  await Invitation.create({ id, organizationId, email, role, scopedTemplateIds: nextScopedTemplateIds, inviterId, expiresAt }).go();
+  await Invitation.create({ id, organizationId, email, role, scopedTemplateIds: nextScopedTemplateIds, siteAccess: role === "guest" ? cleanSiteAccess(siteAccess) : {}, inviterId, expiresAt }).go();
 
   const brand = await getOrgBrandDynamo(organizationId);
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
@@ -351,6 +360,7 @@ export async function acceptInvitation(id: string, userId: string): Promise<{ or
       userId,
       role: inv.role,
       scopedTemplateIds: inv.scopedTemplateIds ?? [],
+      siteAccess: inv.role === "guest" ? cleanSiteAccess(inv.siteAccess) : {},
     }).go();
   } catch (err) {
     // Already a member of this org (e.g. the same invite accepted twice concurrently, or

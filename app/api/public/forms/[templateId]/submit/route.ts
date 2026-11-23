@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
+import { HUMAN_CHECK_FIELD, humanCheckMessage, verifyHumanCheck } from "@/lib/forms/humanCheck";
 import { FormSettings } from "@/lib/db/opsEntities";
 import { Template } from "@/lib/db/contentEntities";
 import { ALL_CAPTCHA_RESPONSE_FIELDS, CAPTCHA_RESPONSE_FIELDS, verifyCaptcha } from "@/lib/forms/captcha";
@@ -82,6 +83,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     formData = await request.formData();
   } catch {
     return NextResponse.json({ error: "Invalid form submission." }, { status: 400 });
+  }
+
+  // Plexo's own check on every form (lib/forms/humanCheck.ts): the page asked for a ticket when it loaded, and a person takes a few
+  // seconds to fill the form in. A post without a genuine, aged ticket is a script, not a visitor.
+  const humanCheck = verifyHumanCheck(formData.get(HUMAN_CHECK_FIELD), templateId);
+  if (humanCheck !== "ok") {
+    void recordSecurityEvent({ type: "form_bot_blocked", detail: `A form post to site ${templateId} had no valid human check (${humanCheck})`, ip: clientIp(request), dedupeKey: `check:${templateId}:${clientIp(request)}` });
+    const message = humanCheckMessage(humanCheck);
+    if (wantsJson) return NextResponse.json({ error: message }, { status: 400 });
+    const wanted = new URL(request.url).searchParams.get("redirect") ?? "/";
+    const back = new URL(wanted.startsWith("/") && !wanted.startsWith("//") ? wanted : "/", request.url);
+    back.searchParams.set("plexo_form_error", humanCheck === "too-fast" ? "fast" : "check");
+    return NextResponse.redirect(back, { status: 303 });
   }
 
   let fields = collectFormFields(formData.entries());
