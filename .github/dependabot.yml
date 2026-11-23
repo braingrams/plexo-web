@@ -1,13 +1,14 @@
-# Keeps dependencies and CI actions current, so a security fix reaches the app within a week instead of waiting for someone to notice.
-# Free for private repositories. Updates are grouped so a week's worth arrives as a couple of pull requests, not dozens.
+# Keeps dependencies and CI actions current without burying the team in pull requests.
+# Security fixes are opened as soon as they exist (they are separate from the schedule below). Everything else arrives at most once a
+# month, as one pull request for the app's packages and one for the CI actions. Major versions are left for planned work, because they
+# change behaviour (and for the deploy actions, can change how a release reaches AWS).
 version: 2
 updates:
   - package-ecosystem: npm
     directory: /
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 2
     groups:
       security:
         applies-to: security-updates
@@ -15,12 +16,17 @@ updates:
       minor-and-patch:
         update-types: ["minor", "patch"]
     ignore:
-      # Majors are planned work (they change behaviour); security fixes inside a major are still offered.
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 3
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]

@@ -344,7 +344,7 @@ export const FormSettings = new Entity(
 // Queryable record of every transactional/notification email send attempt — replaces the
 // previous state of scattered, inconsistent console.error/console.info calls with no way
 // to answer "did this email actually send." Covers both send paths: MailDrip (HTTP API)
-// and direct SMTP (nodemailer) — see lib/mail/logEmail.ts, the one writer.
+// and direct SMTP (no longer used; kept so old rows still read) — see lib/mail/logEmail.ts, the one writer.
 export const EmailLog = new Entity(
   {
     model: { entity: "emailLog", version: "1", service: "plexoOps" },

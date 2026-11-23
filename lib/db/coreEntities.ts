@@ -712,6 +712,8 @@ export const PlatformSettings = new Entity(
       autoPublishMarketplaceListings: { type: "boolean", default: false },
       marketplaceFeeBps: { type: "number", default: 2000 },
       commercePlatformFeeBps: { type: "number", default: 0 },
+      // Which admin gets which team emails (lib/admin/alertTopics.ts). Edited by super admins in plexo-admin.
+      adminAlerts: { type: "any" },
       updatedAt: { type: "string", default: () => new Date().toISOString(), watch: "*", set: () => new Date().toISOString() },
     },
     indexes: {
