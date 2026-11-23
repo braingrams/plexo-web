@@ -771,3 +771,26 @@ html[data-plx-nav="running"] [data-plexo-v3] main { opacity: .62; transition: op
 .plx-code__where { padding: 12px 14px; border-radius: 12px; background: var(--plx-sunken); border: 1px solid var(--plx-border); font-size: 14px; line-height: 1.55; color: var(--plx-muted); }
 .plx-code__where b { color: var(--plx-text); }
 .plx-code__list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; line-height: 1.45; }
+
+/* Form messages inbox */
+.plx-inbox__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--plx-border); flex-wrap: wrap; }
+.plx-inbox__actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plx-inbox__row { display: flex; align-items: stretch; border-bottom: 1px solid var(--plx-border); }
+.plx-inbox__row:last-child { border-bottom: 0; }
+.plx-inbox__check { margin: 0 0 0 18px; align-self: center; width: 18px; height: 18px; accent-color: var(--plx-brand); flex: none; }
+.plx-inbox__open { font: inherit; text-align: left; flex: 1; min-width: 0; display: flex; gap: 14px; align-items: flex-start; padding: 16px 18px; background: transparent; border: 0; color: var(--plx-text); cursor: pointer; }
+.plx-inbox__open:hover { background: var(--plx-ghost-hover); }
+.plx-inbox__avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--plx-tint); color: var(--plx-text); border: 1px solid var(--plx-border); font-weight: 800; }
+.plx-inbox__text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.plx-inbox__top { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.plx-inbox__top b { font-size: 15px; }
+.plx-inbox__preview { color: var(--plx-text); font-size: 14.5px; line-height: 1.45; overflow-wrap: anywhere; }
+.plx-inbox__fields { margin: 0; display: grid; gap: 14px; }
+.plx-inbox__fields dt { font-size: 13px; font-weight: 800; color: var(--plx-muted); margin: 0 0 3px; }
+.plx-inbox__fields dd { margin: 0; font-size: 15px; line-height: 1.55; overflow-wrap: anywhere; white-space: pre-wrap; }
+.plx-forms__row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 14px 0; border-bottom: 1px solid var(--plx-border); }
+.plx-forms__row:last-child { border-bottom: 0; }
+.plx-forms__name { flex: 1 1 220px; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.plx-forms__name b { font-size: 15px; }
+.plx-forms__chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.plx-forms__more { flex: 1 1 100%; padding: 6px 0 4px; }

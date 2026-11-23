@@ -18,6 +18,9 @@ updates:
     ignore:
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+      # Stripe's library moves its API version with each release, and our code is pinned to one on purpose (payments, webhooks and refunds
+      # read from it). Upgrading it is planned work with testing, not an automatic bump. Remove this when that upgrade is scheduled.
+      - dependency-name: "stripe"
   - package-ecosystem: github-actions
     directory: /
     schedule:

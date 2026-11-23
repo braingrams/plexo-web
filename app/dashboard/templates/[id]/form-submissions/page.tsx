@@ -1,3 +1,4 @@
+import "@/app/dashboard/_v3/hub/hub.css";
 import { requireSiteLayoutAccess } from "@/lib/siteLayoutDynamo";
 import { FormSubmissionsClient } from "./FormSubmissionsClient";
 import { FormDestinationsClient } from "./FormDestinationsClient";
@@ -11,13 +12,9 @@ export default async function FormSubmissionsPage({ params }: { params: Promise<
     <div data-plexo-v3 className="plx-page">
       <SiteToolBack siteId={id} tab="settings" />
 
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h1 className="plx-h1">
-          Form Submissions
-        </h1>
-        <p className="plx-body" style={{ color: "var(--plx-muted)", margin: "4px 0 0" }}>
-          Messages sent through any form on this site, newest first.
-        </p>
+      <div>
+        <h1 className="plx-h1">Form messages</h1>
+        <p className="plx-body" style={{ margin: "4px 0 0" }}>Messages people sent through the forms on your site, newest first.</p>
       </div>
 
       <FormDestinationsClient templateId={id} />

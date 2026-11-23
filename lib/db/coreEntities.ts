@@ -912,7 +912,8 @@ export const NotificationPreferences = new Entity(
     attributes: {
       id: { type: "string", required: true },
       organizationId: { type: "string", required: true },
-      formSubmissions: { type: "boolean", default: false },
+      // On by default: a site owner expects to be told when someone writes to them, without finding a setting first.
+      formSubmissions: { type: "boolean", default: true },
       blogComments: { type: "boolean", default: true },
       payments: { type: "boolean", default: true },
       commentMentions: { type: "boolean", default: true },

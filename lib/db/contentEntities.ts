@@ -129,6 +129,9 @@ export const Template = new Entity(
       // header/footer code (lib/customCode/pageCode.ts). Checked on save and again when served, like the site-wide code.
       pageHeadCode: { type: "string" },
       pageFooterCode: { type: "string" },
+      // The "Hosted with Plexo" badge for this one site: true = hide it, false = show it, unset = follow the account setting
+      // (User.hideBranding). Only a plan that includes badge removal can hide it (lib/subscription.ts resolveSiteHideBranding).
+      hideBranding: { type: "boolean" },
       // Root sites only: paths of a migrated site's custom-plugin API endpoints that accepted
       // submissions on WordPress (e.g. "/blog/wp-json/my-plugin/v1/contact"). The serve route
       // captures POSTs to them into Form Submissions so anything still calling them keeps working.

@@ -377,6 +377,24 @@ export function resolveHideBranding(
 }
 
 /**
+ * The "Hosted with Plexo" badge for ONE site. The site's own choice wins over the account's: with the account set to hide it, a
+ * site set to show it still shows it, and the other way round. A site with no choice follows the account. Hiding at all still needs
+ * a plan that includes badge removal, whichever level asked for it.
+ */
+export function resolveSiteHideBranding(
+  plan: SubscriptionPlan | string | null | undefined,
+  accountFlag: boolean | null | undefined,
+  siteFlag: boolean | null | undefined,
+): boolean {
+  return canDo(plan, "brandingRemovalEnabled") && (siteFlag ?? !!accountFlag);
+}
+
+/** What the owner chose for one site, in the three words the dashboard uses. */
+export type SiteBadgeChoice = "account" | "show" | "hide";
+export const siteBadgeChoice = (siteFlag: boolean | null | undefined): SiteBadgeChoice => (siteFlag === true ? "hide" : siteFlag === false ? "show" : "account");
+export const siteFlagFromChoice = (choice: SiteBadgeChoice): boolean | null => (choice === "hide" ? true : choice === "show" ? false : null);
+
+/**
  * Whether an account on the given plan may white-label (set its own name/logo/color in
  * place of the Plexo brand). See TierFeatures.whiteLabelEnabled.
  */

@@ -11,7 +11,7 @@ import { hubTabHref, type HubTab, type HubTabId } from "@/lib/dashboardV3/hubTab
 import type { Experience } from "@/lib/dashboardV3/nav";
 import type { HubSite } from "@/lib/dashboardV3/hubData";
 
-export type HubFrameSite = Pick<HubSite, "id" | "name" | "kind" | "status" | "address" | "editHref" | "sourceType" | "designFormat"> & { deployed?: "server" | "static" | null };
+export type HubFrameSite = Pick<HubSite, "id" | "name" | "kind" | "status" | "address" | "editHref" | "sourceType" | "designFormat">& { deployed?: "server" | "static" | null };
 
 const HELP: Record<HubTabId, string> = {
   app: "How to update your app",

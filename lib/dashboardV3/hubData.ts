@@ -16,6 +16,8 @@ import { hubKindLabel, pagePath, type HubFeatures } from "./hubTabs";
 import type { SiteKindLabel } from "./sites";
 import { readSiteBrand, type SiteBrand } from "./brandLook";
 import { countryName } from "@/lib/countries";
+import { workspaceOwner, planFromOwner } from "@/lib/plan/workspacePlan";
+import { getTierFeatures, siteBadgeChoice, type SiteBadgeChoice } from "@/lib/subscription";
 
 export type HubContext = { userId: string; organizationId: string; experience: Experience; plan: PlanId; brand: Record<string, unknown> | null };
 
@@ -64,6 +66,8 @@ export type HubSite = {
   editHref: string;
   /** This site's own logo and colours (not the account default). */
   brand?: SiteBrand;
+  /** The "Hosted with Plexo" badge: this site's own choice, what the account does, and whether the plan can hide it at all. */
+  badge: { choice: SiteBadgeChoice; accountHides: boolean; planAllowsHiding: boolean };
 };
 
 const asSource = (s: unknown): HubSite["sourceType"] => (s === "RAW_UPLOAD" || s === "REACT_PROJECT" ? s : "BUILDER");
@@ -84,6 +88,7 @@ export async function loadHubSite(organizationId: string, id: string): Promise<H
     CommerceProduct.query.primary({ templateId: id }).go({ limit: 1 }),
     CommerceDonationCampaign.query.primary({ templateId: id }).go({ limit: 1 }),
   ]);
+  const owner = await workspaceOwner(organizationId);
   const sourceType = asSource(t.sourceType);
   const hasProducts = products.length > 0;
   const hasDonations = campaigns.length > 0 || Boolean(commerce?.donationsEnabled && !commerce?.enabled);
@@ -115,6 +120,7 @@ export async function loadHubSite(organizationId: string, id: string): Promise<H
     app: deployed ? { kind: deployed.type === "SSR" ? "server" : "static", isLive: deployed.type === "SSR" ? Boolean(deployed.functionUrl) : Boolean(deployed.s3Prefix), framework: deployed.framework ?? null } : null,
     editHref: editHrefFor(id, sourceType),
     brand: readSiteBrand(t.brand),
+    badge: { choice: siteBadgeChoice(t.hideBranding), accountHides: !!owner?.hideBranding, planAllowsHiding: getTierFeatures(planFromOwner(owner).subscriptionPlan).brandingRemovalEnabled },
   };
 }
 

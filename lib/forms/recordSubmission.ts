@@ -5,6 +5,7 @@ import { buildFormSubmissionEmail } from "@/lib/mail/templates";
 import { logEmailDelivery } from "@/lib/mail/logEmail";
 import { FormSubmission } from "@/lib/db/opsEntities";
 import { runFormActions } from "@/lib/forms/formActions";
+import { isTechnicalField, visibleFields } from "@/lib/forms/technicalFields";
 import { Template } from "@/lib/db/contentEntities";
 import { User } from "@/lib/db/coreEntities";
 
@@ -44,20 +45,24 @@ export async function recordFormSubmission(input: {
   /** The site's address, passed on to a webhook. */
   siteHost?: string | null;
 }): Promise<void> {
+  // Only what the visitor wrote: verification answers and spam-detector readings are not part of their message.
+  const fields = Object.fromEntries(Object.entries(input.fields).filter(([k]) => !isTechnicalField(k)));
   await FormSubmission.create({
     id: randomUUID(),
     templateId: input.templateId,
     organizationId: input.organizationId,
     formName: input.formName,
-    fields: input.fields,
+    fields,
     submitterIp: input.submitterIp ?? undefined,
   }).go();
 
-  void notifyFormSubmission(input.templateId, input.organizationId, input.formName, input.fields).catch((err) =>
+  // Awaited, not fired and forgotten: on a serverless server the work stops the moment the answer is sent, so an email started
+  // "in the background" was sometimes never sent. A mail problem is logged but never stops the visitor's message being received.
+  await notifyFormSubmission(input.templateId, input.organizationId, input.formName, fields).catch((err) =>
     console.error("[mail] form submission notification failed:", err),
   );
   // MailDrip list / webhook, when the owner set them up for this form (lib/forms/formActions.ts).
-  await runFormActions({ templateId: input.templateId, formName: input.formName, fields: input.fields, siteHost: input.siteHost });
+  await runFormActions({ templateId: input.templateId, formName: input.formName, fields, siteHost: input.siteHost });
 }
 
 async function notifyFormSubmission(
@@ -77,7 +82,7 @@ async function notifyFormSubmission(
   const html = buildFormSubmissionEmail({
     siteName: template.name,
     formName,
-    fieldsPreview: Object.entries(fields).slice(0, 8) as [string, string][],
+    fieldsPreview: visibleFields(fields).slice(0, 8),
     submissionsUrl: `${base}/dashboard/templates/${templateId}/form-submissions`,
   });
   const subject = `New ${formName} submission on ${template.name}`;

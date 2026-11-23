@@ -3,7 +3,7 @@ import { workspaceOwner } from "@/lib/plan/workspacePlan";
 import { effectivePlan } from "@/lib/plan/entitlement";
 import { NextRequest, NextResponse } from "next/server";
 import type { EntityItem } from "electrodb";
-import { resolveHideBranding, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
+import { resolveSiteHideBranding, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
 import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { resolveRedirectFull } from "@/lib/blog/redirectsDynamo";
@@ -714,7 +714,7 @@ async function serveSite(
     // Keyed on the page's own sourceType conceptually, not published.type (SUBDOMAIN vs
     // CUSTOM is an orthogonal distinction) — a FREE user's page should show this everywhere
     // it's served, custom domain or not.
-    if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
+    if (!resolveSiteHideBranding(published.user.subscriptionPlan, published.user.hideBranding, published.template.hideBranding)) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
       html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
     }
@@ -856,7 +856,7 @@ async function serveSite(
           if (commerceSettings.newsletterPopupEnabled && commerceSettings.maildripNewsletterGroupId) {
             html = injectNewsletterPopupScript(html);
           }
-          if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
+          if (!resolveSiteHideBranding(published.user.subscriptionPlan, published.user.hideBranding, published.template.hideBranding)) {
             const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
             html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
           }

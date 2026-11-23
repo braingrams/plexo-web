@@ -3,7 +3,7 @@ import { applySiteBrandToHtml } from "@/lib/brand/inject";
 import type { EntityItem } from "electrodb";
 import { Template } from "@/lib/db/contentEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
-import { resolveHideBranding } from "@/lib/subscription";
+import { resolveSiteHideBranding } from "@/lib/subscription";
 import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
 import { applyAnalyticsTag } from "@/lib/googleAnalytics/serveTag";
@@ -222,7 +222,7 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext, headers
   // anywhere in the app's pages. The runtime watches the page, so a card the app renders after
   // load is picked up. Only when the owner has turned Commerce on — otherwise it costs nothing.
   if (!ctx.isPreview && (await commerceEnabled(ctx.template.id))) html = injectCommerceScript(html, `/${DEFAULT_STOREFRONT_SLUG}`, null, null);
-  if (!resolveHideBranding(ctx.owner.subscriptionPlan, ctx.owner.hideBranding)) {
+  if (!resolveSiteHideBranding(ctx.owner.subscriptionPlan, ctx.owner.hideBranding, ctx.template.hideBranding)) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
     html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
   }

@@ -9,7 +9,7 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 // isEnabled fallback) so a GET before any row exists reflects the same "on unless it's
 // brand new" behavior the actual send-time gate uses — never a mismatch between what the
 // toggle shows and what would really happen.
-const DEFAULTS = { formSubmissions: false, blogComments: true, payments: true, commentMentions: true };
+const DEFAULTS = { formSubmissions: true, blogComments: true, payments: true, commentMentions: true };
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const resolved = await resolveUser(request);

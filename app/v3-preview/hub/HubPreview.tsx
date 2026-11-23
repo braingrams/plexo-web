@@ -159,7 +159,7 @@ export function HubPreview() {
   const kind = q.get("kind") ?? "store";
   const exp = parseExperience(q.get("exp")) ?? "beginner";
   const features: HubFeatures = { ...NO_FEATURES, store: kind === "store", blog: kind === "blog", course: kind === "course", app: kind === "app", migrated: kind === "moved", deployed: kind === "server" ? "server" : kind === "static" ? "static" : null };
-  const site: HubSite = { id: "s1", name: kind === "course" ? "Cooking with Ama" : "Ama's Kitchen", kind: hubKindLabel(features), status: kind === "blog" ? "draft" : "live", address: kind === "blog" ? null : "amaskitchen.plexopages.com", features, sourceType: kind === "app" ? "REACT_PROJECT" : "BUILDER", designFormat: "v2", domains: [], currency: "NGN", deployed: features.deployed ?? null, app: features.deployed ? { kind: features.deployed, isLive: true, framework: "Next.js" } : null, editHref: "#" };
+  const site: HubSite = { id: "s1", name: kind === "course" ? "Cooking with Ama" : "Ama's Kitchen", kind: hubKindLabel(features), status: kind === "blog" ? "draft" : "live", address: kind === "blog" ? null : "amaskitchen.plexopages.com", features, sourceType: kind === "app" ? "REACT_PROJECT" : "BUILDER", designFormat: "v2", domains: [], currency: "NGN", deployed: features.deployed ?? null, app: features.deployed ? { kind: features.deployed, isLive: true, framework: "Next.js" } : null, editHref: "#", badge: { choice: "account", accountHides: false, planAllowsHiding: true } };
   const ldg = q.get("ldg") as RouteLoadingShape | null;
   const navp = q.get("navp");
   // Preview only: see the loading skeletons (?ldg=hub|settings|list|cards) and the top bar (?navp=1).
