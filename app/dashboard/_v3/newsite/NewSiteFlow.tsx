@@ -13,9 +13,8 @@ import { type PickedBrand, type StrataPickerClient } from "../brand/StrataBrandP
 import { NO_SELECTION, selectionToChoice, type PickerSelection } from "@/lib/dashboardV3/strataPicker";
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import { CURRENT_SITE_COOKIE } from "@/lib/dashboardV3/sites";
-import { siteHubHref } from "@/lib/dashboardV3/hubPaths";
 import {
-  afterFork, appHref, paidDesignFrom, PAID_RETRY, PENDING_KEY, readPending, defaultSiteName, isAppGoal, limitNote, MORE_WAYS, NEW_SITE_GOALS, OTHER_EDITOR_HREF, STARTS,
+  afterCreateHref, afterFork, appHref, paidDesignFrom, PAID_RETRY, PENDING_KEY, readPending, defaultSiteName, isAppGoal, limitNote, MORE_WAYS, NEW_SITE_GOALS, OTHER_EDITOR_HREF, STARTS,
   type NewSiteGoal, type Start,
 } from "@/lib/dashboardV3/newSite";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
@@ -81,6 +80,8 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const [isContinuing, setIsContinuing] = useState(false);
   // The run number of the SOL Studio open over the preview (null: closed). A new number starts SOL afresh.
   const [studioRun, setStudioRun] = useState<number | null>(null);
+  const backTimer = useRef<number | null>(null);
+  useEffect(() => () => { if (backTimer.current) window.clearTimeout(backTimer.current); }, []);
   const [isPersonalized, setIsPersonalized] = useState(false);
   const [personalizedHtml, setPersonalizedHtml] = useState<string | null>(null);
   const [availableCredits, setAvailableCredits] = useState<number | null>(null);
@@ -248,6 +249,13 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     setPersonalizedHtml(result.html);
     setIsPersonalized(true);
     if (typeof result.creditsRemaining === "number") setAvailableCredits(result.creditsRemaining);
+    // Hand the owner straight back to the preview, now showing their words, once they have seen SOL say it is done.
+    // (Waiting for a "Back to design" press left them looking at a finished chat while the real result sat hidden.)
+    if (backTimer.current) window.clearTimeout(backTimer.current);
+    backTimer.current = window.setTimeout(() => {
+      setStudioRun(null);
+      toast.show({ title: "SOL personalized your design", description: "This is how it looks now. Not quite right? Press Re-personalize.", tone: "success" });
+    }, 1400);
   };
 
   /** Makes the site (from the kit design, or from a marketplace design) and opens it. */
@@ -276,7 +284,9 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
           else if (data.brand && !data.brand.ok && data.brand.message) toast.show({ title: "Your website is ready", description: data.brand.message, tone: "info" });
           try { document.cookie = `${CURRENT_SITE_COOKIE}=${encodeURIComponent(data.site.id)}; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax`; sessionStorage.removeItem(PENDING_KEY); } catch { /* the server set it too */ }
           onClose?.();
-          router.push(siteHubHref(data.site.id));
+          // A site SOL already personalized has its words, colours and details: there is nothing left to edit before it goes online,
+          // so the owner lands on the dashboard (where "Finish up" and Publish are waiting), not in the editing area.
+          router.push(afterCreateHref(data.site.id, Boolean(personalizedHtml)));
           router.refresh();
           return;
         }

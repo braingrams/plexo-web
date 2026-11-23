@@ -8,7 +8,7 @@ import { getOrganizationOwnerPlanDynamo } from "@/server/orgDynamo";
 import { getTierFeatures } from "@/lib/subscription";
 import { loadHubPages } from "./hubData";
 import type { AdvancedSectionId } from "./hubAdvanced";
-import type { RedirectSummary } from "@/app/dashboard/templates/[id]/redirects/RedirectsClient";
+import type { RedirectRow as RedirectSummary } from "@/app/dashboard/_v3/hub/advanced/RedirectsSection";
 import type { ContentTypeSummary } from "@/app/dashboard/templates/[id]/content-types/ContentTypesClient";
 import type { FeaturesData } from "@/app/dashboard/_v3/hub/advanced/FeaturesSection";
 
@@ -35,7 +35,7 @@ export async function loadAdvancedData(organizationId: string, siteId: string, s
     case "redirects": {
       const { data } = await BlogRedirect.query.primary({ templateId: siteId }).go({ pages: "all" });
       data.sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? ""));
-      return { redirects: data.map((r) => ({ fromPath: r.fromPath, toPath: r.toPath, createdAt: r.createdAt ?? new Date().toISOString() })) };
+      return { redirects: data.map((r) => ({ fromPath: r.fromPath, toPath: r.toPath, createdAt: r.createdAt ?? new Date().toISOString(), permanent: r.permanent !== false })) };
     }
     case "lists": {
       await requireCustomContentPageAccess(siteId, `/dashboard/sites/${siteId}?tab=advanced&section=lists`);

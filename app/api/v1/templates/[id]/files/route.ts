@@ -27,7 +27,22 @@ export type FileEntry = {
   // or not); absent only for the synthetic "index.html" entry, which has no TemplateAsset
   // row of its own (its content lives in Template.compiledHtml instead).
   url?: string;
+  // Large script/style files aren't sent with the list (a migrated site can have hundreds, and
+  // fetching them all made the editor sit on "Loading files…"). The editor asks for one when opened.
+  lazy?: boolean;
 };
+
+const EAGER_MAX_BYTES = 64 * 1024;
+const EAGER_TOTAL_BYTES = 1.5 * 1024 * 1024;
+const FETCH_CONCURRENCY = 12;
+
+/** Runs `fn` over `items` with at most `limit` in flight, so a big site doesn't open hundreds of connections at once. */
+async function inPool<T>(items: T[], limit: number, fn: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) await fn(items[next++]);
+  }));
+}
 
 /**
  * GET /api/v1/templates/:id/files
@@ -69,34 +84,39 @@ export async function GET(
     },
   ];
 
-  await Promise.all(
-    assets.map(async (asset) => {
-      if (isEditableExtension(asset.path)) {
-        const res = await fetch(asset.blobUrl);
-        const content = res.ok ? await res.text() : "";
-        files.push({
-          path: asset.path,
-          contentType: asset.contentType,
-          size: asset.size,
-          editable: true,
-          content,
-          // Also carried for editable files (not just binary ones) — buildPreviewHtml
-          // prefers this real URL over minting a client-side blob: URL whenever a file
-          // hasn't actually been edited, since that's the one guaranteed to load inside
-          // the Preview modal's sandboxed iframe.
-          url: asset.blobUrl,
-        });
-      } else {
-        files.push({
-          path: asset.path,
-          contentType: asset.contentType,
-          size: asset.size,
-          editable: false,
-          url: asset.blobUrl,
-        });
-      }
-    })
-  );
+  let eagerBudget = EAGER_TOTAL_BYTES;
+  const eager = new Set<string>();
+  // Pages (.html) always come with the list, since the preview is built from them; other text files only when small.
+  for (const asset of [...assets].sort((a, b) => a.size - b.size)) {
+    if (!isEditableExtension(asset.path)) continue;
+    const isPage = /\.html?$/i.test(asset.path);
+    if (isPage || (asset.size <= EAGER_MAX_BYTES && eagerBudget >= asset.size)) {
+      eager.add(asset.path);
+      if (!isPage) eagerBudget -= asset.size;
+    }
+  }
+
+  await inPool(assets, FETCH_CONCURRENCY, async (asset) => {
+    if (!isEditableExtension(asset.path)) {
+      files.push({ path: asset.path, contentType: asset.contentType, size: asset.size, editable: false, url: asset.blobUrl });
+      return;
+    }
+    if (!eager.has(asset.path)) {
+      files.push({ path: asset.path, contentType: asset.contentType, size: asset.size, editable: true, url: asset.blobUrl, lazy: true });
+      return;
+    }
+    const res = await fetch(asset.blobUrl).catch(() => null);
+    files.push({
+      path: asset.path,
+      contentType: asset.contentType,
+      size: asset.size,
+      editable: true,
+      content: res?.ok ? await res.text() : "",
+      // The real URL is also carried for editable files: buildPreviewHtml prefers it for any file that
+      // hasn't been edited, since it is the one that loads inside the Preview dialog's sandboxed frame.
+      url: asset.blobUrl,
+    });
+  });
 
   files.sort((a, b) => (a.path === "index.html" ? -1 : b.path === "index.html" ? 1 : a.path.localeCompare(b.path)));
 

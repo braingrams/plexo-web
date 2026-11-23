@@ -215,6 +215,59 @@ export const AdminAuditLog = new Entity(
 // across all admins) stays a documented gap, same "real but didn't earn the GSI slot"
 // discipline as elsewhere — actorId and target are the two patterns actually exercised.
 
+/**
+ * A short record of things that look like an attack or abuse (lib/security/events.ts). Expires after 90 days on its own, so it can
+ * never grow without bound. Partitioned by day so "what happened lately" is a handful of cheap queries, never a scan.
+ */
+export const SecurityEvent = new Entity(
+  {
+    model: { entity: "securityEvent", version: "1", service: "plexoOps" },
+    attributes: {
+      id: { type: "string", required: true },
+      // YYYY-MM-DD, set from createdAt so callers never pass it.
+      day: { type: "string", required: true, default: () => new Date().toISOString().slice(0, 10) },
+      type: { type: "string", required: true },
+      detail: { type: "string", required: true },
+      ip: { type: "string", required: true },
+      actorId: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      ttl: { type: "number", default: () => days(90) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["day"], template: "SECEVENT#${day}" },
+        sk: { field: "sk", composite: ["createdAt", "id"], template: "EVT#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+/**
+ * Addresses visitors asked for that don't exist on a site, with how many times (Redirects, "Pages people couldn't find").
+ * One row per site and address; a row expires 30 days after the last visit, so the list can never grow without bound.
+ */
+export const NotFoundHit = new Entity(
+  {
+    model: { entity: "notFoundHit", version: "1", service: "plexoOps" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      path: { type: "string", required: true },
+      count: { type: "number", default: 0 },
+      lastSeen: { type: "string", default: () => new Date().toISOString() },
+      referrer: { type: "string" },
+      ttl: { type: "number", default: () => days(30) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "NOTFOUND#${templateId}" },
+        sk: { field: "sk", composite: ["path"], template: "PATH#${path}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const FormSubmission = new Entity(
   {
     model: { entity: "formSubmission", version: "1", service: "plexoOps" },
@@ -311,9 +364,9 @@ export const EmailLog = new Entity(
       // lib/mail/logEmail.ts's EmailDeliveryContext for the full set.
       context: { type: "string", required: true },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      // No ttl attribute populated — see file header. A delivery log a support/debugging
-      // investigation might need weeks later shouldn't silently vanish, same discipline as
-      // AdminAuditLog/FormSubmission.
+      // Kept six months, then removed by DynamoDB itself, so the log can't grow without bound. (Rows written before
+      // this was added have no ttl and stay.)
+      ttl: { type: "number", default: () => days(180) },
     },
     indexes: {
       // id is the only attribute every row is guaranteed to have (organizationId isn't),
@@ -704,6 +757,7 @@ export const plexoOpsService = new Service(
     StockCache,
     AdminAuditLog,
     FormSubmission,
+    NotFoundHit,
     FormSettings,
     EmailLog,
     SolUsageEvent,

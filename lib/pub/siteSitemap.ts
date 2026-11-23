@@ -1,6 +1,8 @@
 import type { EntityItem } from "electrodb";
 import { BlogSite, Template } from "@/lib/db/contentEntities";
 import { listAllCategories, listAllPublishedSlugs, listAllTags } from "@/lib/blog/queriesDynamo";
+import { isPageNoindex } from "@/lib/seo/pageSeo";
+import { buildRobotsTxt, type RobotsConfig } from "@/lib/seo/robots";
 
 // /sitemap.xml and /robots.txt for every published site — previously a tenant site had
 // no sitemap except the blog's own (/blog/sitemap.xml), so a multi-page site's pages were
@@ -28,7 +30,7 @@ function encodeSegments(segments: string[]): string {
 /** Every publicly-served page of a site, depth-first, as absolute URLs on `host`. */
 export async function listSitePages(root: TemplateItem, host: string, homeOnly: boolean): Promise<{ loc: string; lastmod?: string; name?: string }[]> {
   const out: { loc: string; lastmod?: string; name?: string }[] = [];
-  if (!isNoindex(root.compiledHtml)) out.push({ loc: `https://${host}/`, lastmod: root.updatedAt, name: root.name });
+  if (!isNoindex(root.compiledHtml) && !isPageNoindex(root.designJson)) out.push({ loc: `https://${host}/`, lastmod: root.updatedAt, name: root.name });
   if (homeOnly) return out;
 
   const queue: { node: TemplateItem; segments: string[] }[] = [{ node: root, segments: [] }];
@@ -40,7 +42,7 @@ export async function listSitePages(root: TemplateItem, host: string, homeOnly: 
       if (!child.slug || child.isSiteLayoutFragment || child.isBlogLayout || child.isLmsPageDesign || child.isPublished === false) continue;
       const childSegments = [...segments, child.slug];
       queue.push({ node: child, segments: childSegments });
-      if (child.redirectTo || isNoindex(child.compiledHtml)) continue;
+      if (child.redirectTo || isNoindex(child.compiledHtml) || isPageNoindex(child.designJson)) continue;
       out.push({ loc: `https://${host}/${encodeSegments(childSegments)}${child.urlTrailingSlash ? "/" : ""}`, lastmod: child.updatedAt, name: child.name });
     }
   }
@@ -68,8 +70,6 @@ export async function buildSiteSitemap(root: TemplateItem, host: string, opts: {
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`;
 }
 
-export function buildSiteRobotsTxt(host: string, noindex: boolean, opts: { aiRules?: string } = {}): string {
-  if (noindex) return "User-agent: *\nDisallow: /\n";
-  const ai = opts.aiRules ? `${opts.aiRules.trimEnd()}\n\n` : "";
-  return `User-agent: *\nAllow: /\n\n${ai}Sitemap: https://${host}/sitemap.xml\n`;
+export function buildSiteRobotsTxt(host: string, noindex: boolean, opts: { aiRules?: string; config?: RobotsConfig } = {}): string {
+  return buildRobotsTxt(host, noindex, opts.config, { aiRules: opts.aiRules });
 }

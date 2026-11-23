@@ -6,6 +6,7 @@ import { docClient } from "@/lib/db/client";
 import { Organization, User } from "@/lib/db/coreEntities";
 import { CommerceWallet, CommerceWalletLedgerEntry, CommerceWithdrawalRequest } from "@/lib/db/commerceEntities";
 import { resolveCommerceAdmin } from "@/lib/commerce/adminAuthDynamo";
+import { canWithdrawMoney } from "@/lib/mcp/toolAuthorization";
 import { resolveCommerceWallet } from "@/lib/commerce/walletDynamo";
 import { encryptBankDetail } from "@/lib/crypto";
 import { sendCommerceWithdrawalRequestNotificationEmail } from "@/lib/email";
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ te
   const resolved = await resolveCommerceAdmin(request, templateId);
   if (resolved.error) return resolved.error;
   const { organizationId, userId } = resolved.context;
+  // Taking money out is for the owner and admins only (SOL's tool follows the same rule: lib/mcp/toolAuthorization.ts).
+  if (!canWithdrawMoney(resolved.context.role)) return NextResponse.json({ error: "Only the account owner or an admin can take money out of the shop." }, { status: 403 });
 
   const body = (await request.json().catch(() => ({}))) as {
     amountCents?: number;

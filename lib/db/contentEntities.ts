@@ -125,6 +125,10 @@ export const Template = new Entity(
       // "posts page" (e.g. /news/) whose job the live Plexo blog at /blog now does — a frozen
       // copy of the old post list would never show a new post.
       redirectTo: { type: "string" },
+      // Owner's own code for this one page (verification, a pixel for a single landing page), on top of the site-wide
+      // header/footer code (lib/customCode/pageCode.ts). Checked on save and again when served, like the site-wide code.
+      pageHeadCode: { type: "string" },
+      pageFooterCode: { type: "string" },
       // Root sites only: paths of a migrated site's custom-plugin API endpoints that accepted
       // submissions on WordPress (e.g. "/blog/wp-json/my-plugin/v1/contact"). The serve route
       // captures POSTs to them into Form Submissions so anything still calling them keeps working.
@@ -649,6 +653,8 @@ export const SiteLayout = new Entity(
       customCodeUpdatedAt: { type: "string" },
       // The owner chose to also run their code on cart, checkout and order pages (off by default: see lib/customCode/serve.ts).
       customCodeOnCheckout: { type: "boolean" },
+      // The owner's robots.txt choice as JSON (lib/seo/robots.ts parseRobotsConfig). Empty = Plexo's own default file.
+      robotsConfig: { type: "string" },
       // Set the first time a site was given its header/footer (new sites at creation, older sites on first visit to Site layout):
       // the lazy migration never runs twice, so an owner who removes them is never given them back (lib/siteLayoutBlank.ts).
       layoutProvisionedAt: { type: "string" },
@@ -1000,6 +1006,8 @@ export const BlogRedirect = new Entity(
       templateId: { type: "string", required: true },
       fromPath: { type: "string", required: true },
       toPath: { type: "string", required: true },
+      // 301 (true, the default: search engines move to the new address) or 302 (false: only for now).
+      permanent: { type: "boolean" },
       createdAt: {
         type: "string",
         default: () => new Date().toISOString(),

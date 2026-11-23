@@ -65,6 +65,7 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
     tpl?.compiledHtml?.includes('data-sol-personalized="true"') ||
     tpl?.draftHtml?.includes('data-sol-personalized="true"')
   );
+  const contactProvided = Boolean(tpl?.compiledHtml?.includes('data-sol-contact="true"') || tpl?.draftHtml?.includes('data-sol-contact="true"'));
   const facts: SiteFacts = {
     ...EMPTY_FACTS,
     hasSite: true,
@@ -84,6 +85,7 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
     published: isPublished(tpl) || (ownDesign && !!site.address),
     signInOn: edited,
     personalizedWithSol,
+    contactProvided,
   };
   return { variant, facts, commerceEnabled };
 }

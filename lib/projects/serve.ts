@@ -7,6 +7,8 @@ import { resolveHideBranding } from "@/lib/subscription";
 import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
 import { applyAnalyticsTag } from "@/lib/googleAnalytics/serveTag";
+import { applyOwnerCode } from "@/lib/customCode/serve";
+import { applyHealthSettings, healthSettingsFor, serveCtxFor } from "@/lib/siteHealth/serve";
 import { buildSitePrefix, getObject } from "./blobStore";
 import { ANALYTICS_BEACON_JS, previewRuntimeJs } from "./previewRuntime";
 import { latestSuccessfulBuild, recordLatestBuild } from "./builds";
@@ -31,6 +33,9 @@ export type ServeContext = {
   organization: { id: string; logo: string | null; whiteLabelEnabled: boolean };
   /** The owner's plan serves only the first screen (Free): other routes send visitors to "/". */
   homeOnly?: boolean;
+  /** Served from the owner's own domain (not the shared Plexo address): the owner's header/footer code runs only there. */
+  servedOnCustomDomain?: boolean;
+  secFetchDest?: string | null;
 };
 
 const MAX_CACHED_BYTES = 256 * 1024;
@@ -226,6 +231,16 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext, headers
   }
   html = injectAppSeo(html, seo, `https://${ctx.host}${url.pathname}`);
   if (!ctx.isPreview) {
+    // Site health's "Fix it for me" speed and search options (lib/siteHealth/serve.ts), like every other site.
+    try {
+      const view = await healthSettingsFor(ctx.template.id);
+      const canonicalUrl = `https://${ctx.host}${url.pathname}`;
+      html = applyHealthSettings(html, view, await serveCtxFor(html, view, { canonicalUrl, siteName: ctx.template.name || ctx.host }));
+    } catch (err) {
+      console.warn("[app-page] speed options skipped", err);
+    }
+    // The owner's header/footer code (verification, pixels), then Google's tag, so the same tag is never added twice.
+    html = await applyOwnerCode(html, { templateId: ctx.template.id, type: ctx.servedOnCustomDomain ? "CUSTOM" : "", plan: ctx.owner.subscriptionPlan, secFetchDest: ctx.secFetchDest });
     html = await applyAnalyticsTag(html, ctx.template.id, headers);
   }
   return new NextResponse(html, {

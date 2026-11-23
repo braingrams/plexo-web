@@ -14,6 +14,34 @@ import { scanPublishedDomain } from "@/lib/safeBrowsing";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
 
+/** GET /api/v1/templates/:id/files/*path: the text of one file, for files the list left out because they are large. */
+export async function GET(
+  request: NextRequest,
+  context: { params: Promise<{ id: string; path: string[] }> }
+): Promise<NextResponse> {
+  const resolved = await resolveUser(request);
+  if (!resolved) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+  const { id, path: pathSegments } = await context.params;
+  const filePath = decodeURIComponent(pathSegments.join("/"));
+  if (resolved.role !== null) {
+    const { data: member } = await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go();
+    const scopeError = requireTemplateScope(member, id);
+    if (scopeError) return scopeError;
+  }
+  const { data: template } = await Template.get({ id }).go();
+  if (!template || template.organizationId !== resolved.organizationId) {
+    return NextResponse.json({ error: "Template not found or unauthorized." }, { status: 404 });
+  }
+  if (template.sourceType !== "RAW_UPLOAD") return NextResponse.json({ error: "This template was not created via raw upload." }, { status: 400 });
+  if (filePath === "index.html") return NextResponse.json({ path: filePath, content: template.compiledHtml });
+  if (!isEditableExtension(filePath)) return NextResponse.json({ error: "This file type isn't text-editable." }, { status: 400 });
+  const { data: asset } = await TemplateAsset.get({ templateId: template.id, path: filePath }).go();
+  if (!asset) return NextResponse.json({ error: "File not found." }, { status: 404 });
+  const res = await fetch(asset.blobUrl);
+  if (!res.ok) return NextResponse.json({ error: "We couldn't read that file. Please try again." }, { status: 502 });
+  return NextResponse.json({ path: filePath, content: await res.text() });
+}
+
 /**
  * PUT /api/v1/templates/:id/files/*path
  *

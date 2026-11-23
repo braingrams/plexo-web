@@ -45,3 +45,20 @@ jobs:
 
       - name: Unit tests
         run: npm test
+
+  # Fails when a production dependency has a high or critical known vulnerability nobody has looked at (scripts/audit-gate.mjs).
+  # Needs only the lockfile, so no install. Accepted risks live in .audit-allowlist.json with a reason and an expiry date.
+  dependency-audit:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check production dependencies for known vulnerabilities
+        run: node scripts/audit-gate.mjs

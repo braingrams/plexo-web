@@ -3,30 +3,19 @@ import { BlogRedirect, Template } from "@/lib/db/contentEntities";
 import { resolveUser } from "@/lib/auth/resolveUser";
 import type { OrgRole } from "@/server/accessControl";
 
-/**
- * Canonical form BlogRedirect.fromPath/toPath are always stored and looked up in
- * (leading slash, no trailing slash) — used both when the WordPress importer writes a
- * redirect row and here when reading it back, so the two never drift out of sync.
- */
-export function normalizeRedirectPath(path: string): string {
-  return "/" + path.replace(/^\/+/, "").replace(/\/+$/, "");
-}
-
-/**
- * Same normalization as normalizeRedirectPath, but for a redirect's *target* (toPath),
- * which — unlike fromPath — is allowed to be an absolute URL (redirecting off-site). An
- * absolute http(s) URL is left untouched; anything else is treated as a relative path and
- * normalized the same way fromPath is.
- */
-export function normalizeRedirectTarget(path: string): string {
-  if (/^https?:\/\//i.test(path)) return path;
-  return normalizeRedirectPath(path);
-}
+import { normalizeRedirectPath, normalizeRedirectTarget } from "@/lib/redirects/paths";
+export { normalizeRedirectPath, normalizeRedirectTarget };
 
 /** fromPath is BlogRedirect's own sort key (see contentEntities.ts) — an O(1) .get(), not a scan. */
 export async function resolveBlogRedirect(templateId: string, path: string): Promise<string | null> {
   const { data } = await BlogRedirect.get({ templateId, fromPath: normalizeRedirectPath(path) }).go();
   return data?.toPath ?? null;
+}
+
+/** Like resolveBlogRedirect, with whether it is permanent (301, the default) or for now (302). */
+export async function resolveRedirectFull(templateId: string, path: string): Promise<{ toPath: string; status: 301 | 302 } | null> {
+  const { data } = await BlogRedirect.get({ templateId, fromPath: normalizeRedirectPath(path) }).go();
+  return data ? { toPath: data.toPath, status: data.permanent === false ? 302 : 301 } : null;
 }
 
 export type ResolvedRedirectAdmin = {

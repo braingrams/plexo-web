@@ -830,14 +830,18 @@ select {
 /* Blog post editor: content column + fixed sidebar, stacking to one column on narrow
    viewports. minmax(0, 1fr) lets the content column shrink below its intrinsic width
    (a plain 1fr track won't), so the rich text editor doesn't force horizontal overflow. */
-.blog-editor-grid {
+/* The editor's root also carries the dashboard's page class (a flex column); both have the same specificity, so the grid has to be
+   spelled out with both classes or whichever stylesheet loads last decides, and the sidebar drops under the editor. */
+.blog-editor-grid,
+.plx-page:where(:not([data-plx-canvas] *)).blog-editor-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 1.5rem;
 }
 
 @media (max-width: 860px) {
-  .blog-editor-grid {
+  .blog-editor-grid,
+  .plx-page:where(:not([data-plx-canvas] *)).blog-editor-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }

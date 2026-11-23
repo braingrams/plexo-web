@@ -114,6 +114,7 @@ html [data-plexo-v3] {
 .plx-card--interactive { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; cursor: pointer; text-decoration: none; color: inherit; display: block; }
 .plx-card--interactive:hover { border-color: var(--plx-border-strong); box-shadow: var(--plx-shadow-raised); transform: translateY(-1px); }
 .plx-card__header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 640px) { .plx-card__header { flex-wrap: wrap; } .plx-card__header > :first-child { flex: 1 1 100%; min-width: 0; } }
 .plx-card__title { margin: 0; font-size: 17px; font-weight: 800; }
 .plx-card__desc { margin: 4px 0 0; font-size: 14px; color: var(--plx-muted); line-height: 1.5; }
 
@@ -646,6 +647,8 @@ html[data-theme], html[data-theme] body { overflow-x: clip; }
 .plx-guide__step[aria-current="step"] { color: var(--plx-text); background: var(--plx-tint); border-color: var(--plx-border); font-weight: 700; }
 .plx-guide__step[aria-current="step"] span { background: var(--plx-brand); color: var(--plx-on-brand); }
 .plx-guide__pause { grid-column: 1 / -1; justify-self: start; }
+.plx-helpmedia__frame--guide { aspect-ratio: auto; max-width: none; overflow: visible; }
+.plx-helpmedia__frame--guide .plx-guide__pause { border: 1px solid var(--plx-border); background: var(--plx-surface); border-radius: 999px; padding: 6px 14px; text-decoration: none; font-weight: 700; }
 @keyframes plx-guide-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes plx-guide-type { 0%, 15% { width: 0; } 55%, 100% { width: 55%; } }
 @keyframes plx-guide-press { 0%, 52% { transform: scale(1); } 56% { transform: scale(.95); } 62%, 100% { transform: scale(1); } }
@@ -755,3 +758,16 @@ html[data-plx-nav="running"] [data-plexo-v3] main { opacity: .62; transition: op
 /* Older shared components (upgrade prompts, dialogs) use .btn-primary, which is the old purple outside the new dashboard. Inside it they take the brand colour. */
 [data-plexo-v3] .btn-primary { background: var(--plx-brand); color: var(--plx-on-brand); border-color: transparent; }
 [data-plexo-v3] .btn-primary:hover:not(:disabled) { background: var(--plx-brand-hover); }
+
+/* Header / footer / code page */
+.plx-layoutpart__head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px 16px; align-items: flex-start; }
+.plx-layoutpart__act { display: flex; flex-wrap: wrap; gap: 8px; }
+.plx-layoutpart__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px; align-items: start; }
+.plx-layoutpart__check { display: flex; gap: 12px; align-items: flex-start; font-size: 15px; cursor: pointer; }
+.plx-layoutpart__check input { margin-top: 4px; width: 18px; height: 18px; accent-color: var(--plx-brand); flex: none; }
+.plx-layoutpart__look { font: inherit; text-align: left; padding: 12px; border-radius: 12px; border: 1px solid var(--plx-border); background: var(--plx-surface); color: var(--plx-text); cursor: pointer; }
+.plx-layoutpart__look:hover:not(:disabled) { border-color: var(--plx-deep); background: var(--plx-tint); }
+.plx-code__examples { display: flex; flex-wrap: wrap; gap: 8px; }
+.plx-code__where { padding: 12px 14px; border-radius: 12px; background: var(--plx-sunken); border: 1px solid var(--plx-border); font-size: 14px; line-height: 1.55; color: var(--plx-muted); }
+.plx-code__where b { color: var(--plx-text); }
+.plx-code__list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; line-height: 1.45; }

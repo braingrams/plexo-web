@@ -170,8 +170,15 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     // visitors too). With minTtl=0, CloudFront honours no-store and never stores this.
     // Status 307 (not 301/308) avoids browsers permanently caching the redirect.
     const dest = new URL("/" + request.nextUrl.search, `https://www.${pagesDomain}`);
-    const res = NextResponse.redirect(dest.toString(), { status: 307 });
-    res.headers.set("Cache-Control", "no-store");
+    const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"/><meta name="facebook-domain-verification" content="e4tne2gkh4krjhyp11ybuucqkt9s9g"/><meta http-equiv="refresh" content="0;url=${dest.toString()}"/><title>Redirecting…</title></head><body>Redirecting to <a href="${dest.toString()}">${dest.toString()}</a></body></html>`;
+    const res = new NextResponse(html, {
+      status: 307,
+      headers: {
+        "Content-Type": "text/html; charset=utf-8",
+        Location: dest.toString(),
+        "Cache-Control": "no-store",
+      },
+    });
     return res;
   }
 

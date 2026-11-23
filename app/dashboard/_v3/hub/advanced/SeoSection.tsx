@@ -6,6 +6,9 @@ import { Globe, ImagePlus, FileText } from "lucide-react";
 import { Badge, Button, Card, CardHeader, Input, OptimisticLoader, Skeleton, Textarea, useToast } from "../../ui";
 import { seoGap, seoLengthHint, type SeoPageRow } from "@/lib/dashboardV3/hubAdvanced";
 import { errMsg, hubApi } from "../hubApi";
+import { checkCanonical } from "@/lib/seo/pageSeo";
+import { readSchemaSource, schemaValueFor, SeoSchemaEditor, type SchemaSource } from "./SeoSchemaEditor";
+import { SeoRobotsCard } from "./SeoRobotsCard";
 
 type Row = SeoPageRow & { isRoot: boolean };
 
@@ -15,7 +18,7 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
   const [pages, setPages] = useState<Row[] | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ title: string; description: string; image: string } | null>(null);
+  const [draft, setDraft] = useState<{ title: string; description: string; image: string; noindex: boolean; canonical: string; schema: SchemaSource } | null>(null);
   const [favicon, setFavicon] = useState<string>("");
   const [faviconDraft, setFaviconDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -44,7 +47,7 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
   const page = pages?.find((p) => p.id === picked) ?? null;
   useEffect(() => {
     if (page) {
-      setDraft({ title: page.title, description: page.description, image: page.image });
+      setDraft({ title: page.title, description: page.description, image: page.image, noindex: page.noindex, canonical: page.canonicalUrl, schema: readSchemaSource(page.schemaSource, page.schemaJson, { name: siteName, url: address ? `https://${address}` : "" }) });
       setFaviconDraft(null);
       setError(null);
     }
@@ -69,14 +72,20 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
     if (!page || !draft) return;
     setBusy(true);
     setError(null);
+    const canonical = checkCanonical(draft.canonical);
+    if (!canonical.ok) {
+      setBusy(false);
+      return setError(canonical.error);
+    }
+    const schema = schemaValueFor(draft.schema);
     try {
-      await hubApi(`/api/v1/templates/${siteId}/page-seo`, { method: "PUT", json: { pageId: page.id, htmlTitle: draft.title, metaDescription: draft.description, ogImageUrl: draft.image } }, "We couldn't save that. Please try again.");
+      await hubApi(`/api/v1/templates/${siteId}/page-seo`, { method: "PUT", json: { pageId: page.id, htmlTitle: draft.title, metaDescription: draft.description, ogImageUrl: draft.image, noindex: draft.noindex, canonicalUrl: canonical.value, schema } }, "We couldn't save that. Please try again.");
       if (page.isRoot && faviconDraft !== null) {
         await hubApi(`/api/v1/templates/${siteId}/site-meta`, { method: "PUT", json: { favicon: faviconDraft } }, "We couldn't save the small icon.");
         setFavicon(faviconDraft);
         setFaviconDraft(null);
       }
-      setPages((all) => all?.map((p) => (p.id === page.id ? { ...p, title: draft.title.trim(), description: draft.description.trim(), image: draft.image.trim() } : p)) ?? all);
+      setPages((all) => all?.map((p) => (p.id === page.id ? { ...p, title: draft.title.trim(), description: draft.description.trim(), image: draft.image.trim(), noindex: draft.noindex, canonicalUrl: canonical.value, schemaJson: schema.json, schemaSource: schema.source } : p)) ?? all);
       show({ title: "Saved", tone: "success" });
     } catch (e) {
       setError(errMsg(e));
@@ -86,7 +95,7 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
   }
 
   const host = address ? `https://${address}` : null;
-  const dirty = !!page && !!draft && (draft.title.trim() !== page.title || draft.description.trim() !== page.description || draft.image.trim() !== page.image || faviconDraft !== null);
+  const dirty = !!page && !!draft && (draft.title.trim() !== page.title || draft.description.trim() !== page.description || draft.image.trim() !== page.image || draft.noindex !== page.noindex || draft.canonical.trim() !== page.canonicalUrl || schemaValueFor(draft.schema).json !== page.schemaJson || faviconDraft !== null);
   const shownFavicon = faviconDraft ?? favicon;
 
   return (
@@ -117,6 +126,17 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
                       <Button variant="secondary" type="button" loading={uploading === "image"} onClick={() => imageRef.current?.click()}>{draft.image ? "Change picture" : "Add a picture"}</Button>
                       {draft.image ? <Button variant="ghost" type="button" onClick={() => setDraft({ ...draft, image: "" })}>Remove</Button> : null}
                     </div>
+                    <label className="plx-toggle">
+                      <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                        <b style={{ fontSize: 14 }}>Show this page on Google</b>
+                        <span className="plx-small">{draft.noindex ? "This page is hidden from Google and left out of your sitemap. Visitors with the link can still open it." : "Google may list this page in search results."}</span>
+                      </span>
+                      <input type="checkbox" className="plx-switch" role="switch" checked={!draft.noindex} aria-label="Show this page on Google" onChange={(e) => setDraft({ ...draft, noindex: !e.target.checked })} />
+                    </label>
+                    <details className="plx-adv__details" open={!!draft.canonical}>
+                      <summary>Main address (only if the same page lives somewhere else)</summary>
+                      <Input label="Main address" help="Every page already names its own address. Change it only if this page copies another one, so Google counts the original. Use a full https:// address, or a page of this site like /pricing." value={draft.canonical} maxLength={500} onChange={(e) => setDraft({ ...draft, canonical: e.target.value })} placeholder={`${host ?? "https://yoursite.com"}${page.path === "/" ? "" : page.path}`} />
+                    </details>
                     {page.isRoot ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
                         <span className="plx-hrow__thumb" style={{ width: 48, height: 48 }}>{shownFavicon ? <img src={shownFavicon} alt="" /> : <Globe size={20} aria-hidden />}</span>
@@ -141,6 +161,12 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
                 <span className="d">{draft.description.trim() || "No description yet. Google will pick some words from the page."}</span>
               </div>
             ) : null}
+            {page && draft && !page.isRaw ? (
+              <Card>
+                <CardHeader title="Rich results" description="Extra details Google can show with this page, like your address, opening hours or questions and answers. Saved with the button above." />
+                <SeoSchemaEditor value={draft.schema} onChange={(schema) => setDraft({ ...draft, schema })} />
+              </Card>
+            ) : null}
           </div>
           <Card padding="none">
             <div style={{ padding: "16px 16px 8px" }}><CardHeader title="Your pages" titleAs="h3" description="Pick one to change how it appears in search." /></div>
@@ -151,7 +177,7 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
                   <button key={p.id} type="button" className="plx-adv__page-btn" aria-pressed={p.id === picked} onClick={() => setPicked(p.id)}>
                     <FileText size={18} aria-hidden />
                     <span className="n"><b>{p.isRoot ? "Home" : p.name}</b><span>{p.isRaw ? `${p.path}, your own code` : gap || p.path}</span></span>
-                    {!p.isRaw && gap ? <Badge tone="warning">To do</Badge> : null}
+                    {!p.isRaw && p.noindex ? <Badge tone="neutral">Hidden</Badge> : !p.isRaw && gap ? <Badge tone="warning">To do</Badge> : null}
                   </button>
                 );
               })}
@@ -161,6 +187,8 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
         </div>
       )}
 
+ <SeoRobotsCard siteId={siteId} address={address} />
+
       <Card>
         <CardHeader title="Plexo already does this for you" description="You don't have to set any of it up." />
         <div className="plx-adv__facts">
@@ -168,7 +196,7 @@ export function SeoSection({ siteId, siteName, address }: { siteId: string; site
           <div className="plx-adv__fact"><b>Robots file</b>{host ? <a href={`${host}/robots.txt`} target="_blank" rel="noreferrer">{address}/robots.txt</a> : <span>Tells search engines what they may read.</span>}</div>
           <div className="plx-adv__fact"><b>Main address</b><span>Every page names its own address, so Google never counts the same page twice.</span></div>
           <div className="plx-adv__fact"><b>Business details for Google</b><span>A short description of your site is added to every page so Google understands what it is.</span></div>
-          <div className="plx-adv__fact"><b>Unfinished work stays hidden</b><span>Preview addresses are kept out of Google. A page you wrote yourself that says &quot;noindex&quot; is left out of the sitemap too.</span></div>
+          <div className="plx-adv__fact"><b>Unfinished work stays hidden</b><span>Preview addresses are kept out of Google. A page you hide, or wrote yourself with &quot;noindex&quot;, is left out of the sitemap too.</span></div>
         </div>
       </Card>
     </div>

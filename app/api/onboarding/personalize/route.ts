@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeBuildProfile } from "@/lib/dashboardV3/profile";
 import { describePlace } from "@/lib/onboarding/place";
-import { PlainError, extractTextNodes, finishDesign, planPersonalization, writeCopy, MAX_NODES } from "@/lib/onboarding/solPersonalize";
+import { PlainError, extractTextNodes, finishDesign, gaveContactDetails, planPersonalization, writeCopy, MAX_NODES } from "@/lib/onboarding/solPersonalize";
 
 export const maxDuration = 120;
 
@@ -99,7 +99,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         for (const [k, v] of Object.entries(body.replacements as Record<string, unknown>)) if (typeof v === "string") replacements[k] = v;
       }
       const domain = text(body.domain, 40) ?? "other";
-      const html = finishDesign({ html: templateHtml, replacements, name: brand.name, domain, design, brandColor: brandInfo?.colors?.[0], logoUrl: brandInfo?.logoUrl });
+      const finishAnswers = Array.isArray(body.answers)
+        ? (body.answers as Array<{ question?: unknown; answer?: unknown }>).map((a) => ({ question: text(a?.question, 200) ?? "", answer: text(a?.answer, 300) ?? "" })).slice(0, 6)
+        : [];
+      const html = finishDesign({ html: templateHtml, replacements, name: brand.name, domain, design, brandColor: brandInfo?.colors?.[0], logoUrl: brandInfo?.logoUrl, contactProvided: gaveContactDetails(finishAnswers) });
       const updated = await balanceOf();
       return NextResponse.json({ html, summary: `SOL wrote your headlines, cards and buttons for "${brand.name}".`, creditsRemaining: updated.available });
     }

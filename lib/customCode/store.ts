@@ -27,7 +27,7 @@ export type CustomCodeState = {
   footerSnippets: Snippet[];
 };
 
-async function gateFor(organizationId: string, templateId: string): Promise<{ block: CustomCodeBlock | null; domain: string | null }> {
+export async function gateFor(organizationId: string, templateId: string): Promise<{ block: CustomCodeBlock | null; domain: string | null }> {
   const [owner, { data: domains }] = await Promise.all([
     workspaceOwner(organizationId),
     PublishedDomain.query.primary({ templateId }).go({ pages: "all" }),

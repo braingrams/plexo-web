@@ -193,7 +193,7 @@ export function HubPreview() {
     const sections = advancedSections({ kind: advancedKind(features), experience: exp, ssrEnabled: true, server: kind === "server", ownCode: false });
     const section = resolveAdvancedSection(q.get("section"), sections);
     const data = {
-      redirects: [{ fromPath: "/old-menu", toPath: "/shop", createdAt: now }, { fromPath: "/classes-2023", toPath: "/classes", createdAt: now }],
+      redirects: [{ fromPath: "/old-menu", toPath: "/shop", createdAt: now, permanent: true }, { fromPath: "/classes-2023", toPath: "/classes", createdAt: now, permanent: false }],
       contentTypes: [{ id: "t1", name: "Events", slug: "events", fields: [{ id: "f1", name: "Title", key: "title", type: "text" as const, required: true }], entryCount: 3, createdAt: now }],
       layout: { enabled: true, header: { templateId: "h1", updatedAt: now }, footer: null },
       features: { layoutEnabled: true, pageCount: pages.length, submissionCount: 12, contentTypeCount: 1 },

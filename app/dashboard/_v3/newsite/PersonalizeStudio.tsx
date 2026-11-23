@@ -74,7 +74,7 @@ export function PersonalizeStudio({ profile, design, creditCost, onApplied, onCl
     const plan = (kept.current.plan ??= await api.step("studio_read_design", () => callStage<Plan>("plan", base, creditCost)));
     const answers = plan.questions.length ? await api.ask(plan.questions) : [];
     const replacements = (kept.current.replacements ??= await api.step("studio_write_words", () => writeWords(base, design.html, answers, creditCost)));
-    const finished = await api.step("studio_apply_brand", () => callStage<PersonalizeResult>("finish", { ...base, replacements, domain: plan.domain }, creditCost));
+    const finished = await api.step("studio_apply_brand", () => callStage<PersonalizeResult>("finish", { ...base, replacements, domain: plan.domain, answers }, creditCost));
     if (!finished.html) throw new Error("SOL couldn't put your design together this time. Please try again: nothing was changed.");
     api.say(finished.summary || `Your design is ready for ${profile.brand.name}.`);
     return finished;

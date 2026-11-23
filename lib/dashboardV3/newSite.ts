@@ -175,3 +175,12 @@ export function newSiteRedirect(opts: { newDashboard: boolean; classic?: string 
   const classic = Array.isArray(opts.classic) ? opts.classic[0] : opts.classic;
   return opts.newDashboard && classic !== "1" ? NEW_SITE_PATH : null;
 }
+
+/**
+ * Where the owner lands right after "Create my website". A site SOL already personalized has its words, colours and details, so there
+ * is nothing left to edit before it goes online: they go to the dashboard, where "Finish up" and Publish are waiting. Any other new
+ * site opens its own page, where the pages and the editor are.
+ */
+export function afterCreateHref(siteId: string, personalizedWithSol: boolean): string {
+  return personalizedWithSol ? "/dashboard" : `/dashboard/sites/${siteId}`;
+}

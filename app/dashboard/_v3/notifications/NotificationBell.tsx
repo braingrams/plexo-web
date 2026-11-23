@@ -19,7 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { Button, Modal, useToast } from "../ui";
-import { playNotificationSound, SOUND_OPTIONS, type SoundChoice } from "@/lib/notifications/audioSynthesizer";
+import { playNotificationSound, primeNotificationSound, SOUND_OPTIONS, type SoundChoice } from "@/lib/notifications/audioSynthesizer";
 import type { AppNotification } from "@/app/api/v1/notifications/route";
 
 const READ_STORAGE_KEY = "plx:readNotifications";
@@ -95,7 +95,19 @@ export function NotificationBell() {
       void loadNotifications(false);
     }, 30000);
 
-    return () => clearInterval(interval);
+    // Check straight away when the person comes back to the tab, and let the browser allow sound after the first touch.
+    const onVisible = () => { if (document.visibilityState === "visible") void loadNotifications(false); };
+    document.addEventListener("visibilitychange", onVisible);
+    const prime = () => { primeNotificationSound(); window.removeEventListener("pointerdown", prime); window.removeEventListener("keydown", prime); };
+    window.addEventListener("pointerdown", prime);
+    window.addEventListener("keydown", prime);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("pointerdown", prime);
+      window.removeEventListener("keydown", prime);
+    };
   }, []);
 
   // Close dropdown on outside click

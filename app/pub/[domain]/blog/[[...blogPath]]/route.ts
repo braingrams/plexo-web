@@ -4,6 +4,7 @@ import { DeployedApp } from "@/lib/db/appEntities";
 import { serveDeployedStatic } from "@/lib/pub/serveDeployedStatic";
 import { serveDeployedSsr } from "@/lib/pub/serveDeployedSsr";
 import { getTierFeatures } from "@/lib/subscription";
+import { withAppPageExtras } from "@/lib/customCode/appServe";
 
 // Single catch-all handler for all /blog/* paths. Sits at a lower specificity than
 // blog/feed.xml/route.ts and blog/sitemap.xml/route.ts, which keep their own handlers.
@@ -25,11 +26,12 @@ export async function GET(
     return new NextResponse(null, { status: 404 });
   }
 
+  const site = { templateId: siteResult.published.templateId, type: siteResult.published.type, plan: siteResult.published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest"), host: domain, path: request.nextUrl.pathname, siteName: siteResult.published.template.name || domain, headers: request.headers };
   const { data: deployedApp } = await DeployedApp.get({ templateId: siteResult.published.templateId }).go();
   if (deployedApp?.type === "STATIC") {
     // Deployed static app owns all routes. Serve directly from S3 — the URL stays at
     // /blog/... without any redirect, so the browser address bar never changes.
-    return serveDeployedStatic(request, deployedApp, ["blog", ...blogPath]);
+    return withAppPageExtras(await serveDeployedStatic(request, deployedApp, ["blog", ...blogPath]), site);
   }
 
   if (deployedApp?.type === "SSR") {
@@ -37,11 +39,14 @@ export async function GET(
     // as every other page of a server app.
     const features = getTierFeatures(siteResult.published.user.subscriptionPlan);
     if (!features.ssrEnabled) return new NextResponse(null, { status: 404 });
-    return serveDeployedSsr(request, deployedApp, ["blog", ...blogPath], {
-      templateId: siteResult.published.templateId,
-      dailyRequestLimit: features.deployedAppDailyRequestLimit,
-      onNotFound: () => new NextResponse(null, { status: 404 }),
-    });
+    return withAppPageExtras(
+      await serveDeployedSsr(request, deployedApp, ["blog", ...blogPath], {
+        templateId: siteResult.published.templateId,
+        dailyRequestLimit: features.deployedAppDailyRequestLimit,
+        onNotFound: () => new NextResponse(null, { status: 404 }),
+      }),
+      site,
+    );
   }
 
   // Regular Plexo blog site — proxy to the RSC pages that live under /_blog/.
@@ -61,5 +66,6 @@ export async function GET(
   const headers = new Headers(blogResponse.headers);
   headers.delete("content-encoding");
   headers.delete("content-length");
-  return new NextResponse(blogResponse.body, { status: blogResponse.status, headers });
+  // The blog's pages are made by Plexo and relayed from here, so the owner's header/footer code is added on the way out.
+  return withAppPageExtras(new NextResponse(blogResponse.body, { status: blogResponse.status, headers }), site);
 }

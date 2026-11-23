@@ -121,13 +121,29 @@ export function injectBrandingBar(html: string, ctaHref: string): string {
 // WordPress carries Yoast's, an uploaded site may carry its own) is authoritative — adding
 // ours on top would give search engines two conflicting canonicals, and pointing it at the
 // Plexo preview host would hand the original site's rankings to the preview.
-export function injectSeoTags(html: string, opts: { canonicalUrl: string; noindex: boolean; siteName: string }): string {
+export function injectSeoTags(
+  html: string,
+  opts: {
+    canonicalUrl: string;
+    noindex: boolean;
+    siteName: string;
+    /** This page only: keep it out of search. */
+    pageNoindex?: boolean;
+    /** The owner chose this page's main address. It wins over the page's own and over the self-address. */
+    canonicalOverride?: string;
+    /** Structured data the owner added to this page (already checked: lib/seo/pageSeo schemaItemsToPublish). Added on top of anything the page has. */
+    extraJsonLd?: Record<string, unknown>[];
+  },
+): string {
   const headEnd = html.search(/<\/head\s*>/i);
   const head = headEnd === -1 ? html.slice(0, 20000) : html.slice(0, headEnd);
   const hasOwnCanonical = /<link\b[^>]*\brel=["']?canonical["']?/i.test(head);
   const hasOwnSchema = /<script\b[^>]*application\/ld\+json/i.test(html);
-  let tags = hasOwnCanonical ? "" : `<link rel="canonical" href="${escapeHtmlAttr(opts.canonicalUrl)}">`;
-  if (opts.noindex) {
+  // An address the owner chose replaces whatever the page carried; otherwise a page's own is respected.
+  if (opts.canonicalOverride) html = html.replace(/<link\b[^>]*\brel=["']?canonical["']?[^>]*>/gi, "");
+  const canonical = opts.canonicalOverride || opts.canonicalUrl;
+  let tags = hasOwnCanonical && !opts.canonicalOverride ? "" : `<link rel="canonical" href="${escapeHtmlAttr(canonical)}">`;
+  if (opts.noindex || opts.pageNoindex) {
     tags += `<meta name="robots" content="noindex,nofollow">`;
   }
   if (!hasOwnSchema) {
@@ -138,6 +154,7 @@ export function injectSeoTags(html: string, opts: { canonicalUrl: string; noinde
       url: opts.canonicalUrl,
     })}</script>`;
   }
+  for (const item of opts.extraJsonLd ?? []) tags += `<script type="application/ld+json">${safeJsonLd(item)}</script>`;
   if (!tags) return html;
   const headMatch = html.match(/<head[^>]*>/i);
   if (headMatch && headMatch.index !== undefined) {

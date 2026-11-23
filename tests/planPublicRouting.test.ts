@@ -51,7 +51,8 @@ vi.mock("@/lib/projects/blobStore", () => ({
 }));
 vi.mock("@/lib/projects/builds", () => ({ latestSuccessfulBuild: async () => null, recordLatestBuild: async () => {} }));
 vi.mock("@/lib/projects/previewHost", () => ({ resolvePreviewHost: async () => null }));
-vi.mock("@/lib/blog/redirectsDynamo", () => ({ resolveBlogRedirect: async () => null }));
+vi.mock("@/lib/blog/redirectsDynamo", () => ({ resolveBlogRedirect: async () => null, resolveRedirectFull: async () => null }));
+vi.mock("@/lib/redirects/notFound", () => ({ recordNotFound: () => {} }));
 vi.mock("@/lib/customContent/render", () => ({ renderContentBlocks: async (html: string) => html }));
 vi.mock("@/lib/pub/livePostQueries", () => ({ fillLatestPostLists: async (html: string) => html }));
 vi.mock("@/lib/blog/queriesDynamo", () => ({ listAllPublishedSlugs: async () => [], listAllCategories: async () => [], listAllTags: async () => [] }));

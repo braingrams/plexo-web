@@ -3,7 +3,7 @@
 import "./hub.css";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ChevronDown, ExternalLink, Eye, Upload } from "lucide-react";
+import { ArrowLeft, ChevronDown, ExternalLink, Eye, Pencil, Upload } from "lucide-react";
 import { Badge, Button, ButtonLink, HelpMedia, ScrollRail, StatusPill, TabLinks } from "../ui";
 import { EditWebsiteButton } from "./EditWebsiteButton";
 import { liveHref, previewHref } from "@/lib/dashboardV3/siteLinks";
@@ -111,8 +111,8 @@ export function HubFrame({ site, tabs, current, experience, children }: { site: 
         <div className="plx-hub__actions" data-tour="hub-actions">
           <FoldedSiteActions site={site} />
           {site.deployed ? (
-            <ButtonLink href={hubTabHref(site.id, "app")} leftIcon={<Upload size={16} aria-hidden />}>
-              Update app
+            <ButtonLink href={site.editHref.startsWith("/dashboard/apps/") ? site.editHref : hubTabHref(site.id, "app")} leftIcon={site.editHref.startsWith("/dashboard/apps/") ? <Pencil size={16} aria-hidden /> : <Upload size={16} aria-hidden />}>
+              {site.editHref.startsWith("/dashboard/apps/") ? "Edit app" : "Update app"}
             </ButtonLink>
           ) : (
             <EditWebsiteButton siteId={site.id} fallbackHref={site.editHref} />

@@ -28,6 +28,22 @@ const PLACE_RULE = `- The owner is in the place given under "Where the owner is"
 export type DesignBrief = { name?: string; description?: string };
 export type OwnerAnswer = { question: string; answer: string };
 
+const SKIPPED_ANSWER = /^(skip|you choose|i'll add it later|i will add it later)/i;
+const CONTACT_QUESTION = /phone|whatsapp|call|email|e-mail|address|contact|reach|where.*(located|based|find)|location|area|city/i;
+const LOOKS_LIKE_CONTACT = /@|\+?\d[\d\s().-]{6,}/;
+
+/**
+ * True when the owner told SOL how to reach them (a phone number, an email or an address). The dashboard checklist then counts "Add your
+ * contact details" as done instead of asking again for what was just given. Skipped answers ("I'll add it later") never count.
+ */
+export function gaveContactDetails(answers: OwnerAnswer[] | undefined): boolean {
+  return (answers ?? []).some((a) => {
+    const answer = (a.answer ?? "").trim();
+    if (!answer || SKIPPED_ANSWER.test(answer)) return false;
+    return LOOKS_LIKE_CONTACT.test(answer) || CONTACT_QUESTION.test(a.question ?? "");
+  });
+}
+
 const KNOWN_DOMAINS = Object.keys(DOMAIN_STOCK_PHOTOS);
 
 /** One request to SOL, charged for what it actually used (Plexo's AI only; see solEngine.chargeFor). */
@@ -195,6 +211,8 @@ export function finishDesign(input: {
   design: DesignBrief;
   brandColor?: string;
   logoUrl?: string;
+  /** The owner gave SOL their phone, email or address while it asked its questions (see gaveContactDetails). */
+  contactProvided?: boolean;
 }): string {
   let html = applyTextNodes(input.html, input.replacements);
 
@@ -224,7 +242,8 @@ export function finishDesign(input: {
     else if (asText.test(html)) html = html.replace(asText, `$1${img}$3`);
   }
 
-  if (/<body\b/i.test(html)) html = html.replace(/<body\b([^>]*)>/i, (m, attrs: string) => (attrs.includes("data-sol-personalized") ? m : `<body${attrs} data-sol-personalized="true">`));
-  else html = `<div data-sol-personalized="true">${html}</div>`;
+  const marks = `data-sol-personalized="true"${input.contactProvided ? ' data-sol-contact="true"' : ""}`;
+  if (/<body\b/i.test(html)) html = html.replace(/<body\b([^>]*)>/i, (m, attrs: string) => (attrs.includes("data-sol-personalized") ? m : `<body${attrs} ${marks}>`));
+  else html = `<div ${marks}>${html}</div>`;
   return html;
 }

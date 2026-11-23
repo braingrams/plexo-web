@@ -1,4 +1,5 @@
 import { RateLimit } from "@/lib/db/opsEntities";
+import { recordSecurityEvent } from "@/lib/security/events";
 
 const DEFAULT_WINDOW_MS = 5 * 60_000;
 
@@ -18,6 +19,12 @@ function isConditionalCheckFailure(err: unknown): boolean {
  * require (where the failure mode is an actual oversold unit or double-booked slot, not
  * a slightly generous rate-limit window).
  */
+/** Someone hit a limit: leave a short trail (one row per source per 10 minutes, no secrets). The key looks like "forgot-password:203.0.113.4". */
+function reportBlocked(key: string): void {
+  const ip = /(\d{1,3}(?:\.\d{1,3}){3})$/.exec(key)?.[1];
+  void recordSecurityEvent({ type: "rate_limited", detail: `Too many requests to "${key.split(":")[0]}"`, ip, dedupeKey: key });
+}
+
 export async function checkCommerceRateLimit(key: string, limit: number, windowMs: number = DEFAULT_WINDOW_MS): Promise<boolean> {
   const now = Date.now();
   const { data: existing } = await RateLimit.get({ key }).go();
@@ -32,6 +39,7 @@ export async function checkCommerceRateLimit(key: string, limit: number, windowM
       // Fall through to the increment path against whatever it just wrote.
     }
   } else if (existing.count >= limit) {
+    reportBlocked(key);
     return false;
   } else {
     await RateLimit.patch({ key }).set({ count: existing.count + 1 }).go();

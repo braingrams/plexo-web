@@ -31,16 +31,18 @@ export function isEmbeddedRequest(secFetchDest: string | null | undefined): bool
 export async function applyOwnerCode(
   html: string,
   site: { templateId: string; type: string; plan: string | null | undefined; secFetchDest?: string | null },
+  page?: { head?: string | null; footer?: string | null },
 ): Promise<string> {
   if (!customCodeRunsOnServe({ plan: site.plan, servedOnCustomDomain: site.type === "CUSTOM" })) return html;
   if (isEmbeddedRequest(site.secFetchDest)) return html;
   try {
     const { data } = await SiteLayout.get({ templateId: site.templateId }).go();
-    if (!data?.customHeadCode && !data?.customFooterCode) return html;
-    if (!data.customCodeOnCheckout && isPaymentPage(html)) return html;
-    const head = sanitizeCustomCode(data.customHeadCode);
-    const footer = sanitizeCustomCode(data.customFooterCode);
-    return injectCustomCode(html, { head: head.ok ? head.html : "", footer: footer.ok ? footer.html : "" });
+    if (!data?.customHeadCode && !data?.customFooterCode && !page?.head && !page?.footer) return html;
+    if (!data?.customCodeOnCheckout && isPaymentPage(html)) return html;
+    // The site-wide code first, then this page's own.
+    const head = [sanitizeCustomCode(data?.customHeadCode), sanitizeCustomCode(page?.head)].map((r) => (r.ok ? r.html : "")).filter(Boolean).join("\n");
+    const footer = [sanitizeCustomCode(data?.customFooterCode), sanitizeCustomCode(page?.footer)].map((r) => (r.ok ? r.html : "")).filter(Boolean).join("\n");
+    return injectCustomCode(html, { head, footer });
   } catch {
     return html; // never take a page down over the owner's extras
   }
