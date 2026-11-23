@@ -17,9 +17,15 @@ const templateId = { type: "string", description: "The site's home page id (see 
 
 export const ANALYTICS_MCP_TOOLS = [
   {
+    name: "get_analytics",
+    description:
+      "Plexo's own visit records, the \"Plexo records\" view of the Visits tab. Without templateId: every site side by side (visits in the last 7 days, address, live or draft), best first, so it answers \"which site performs best\". With templateId (a site's home page id): that site's visits per day, countries, devices, browsers, operating systems and its most recent visits. days is 7, 14 or 28 (default 14, used with templateId). Needs Starter or above. This is separate from get_site_visits (Google Analytics).",
+    inputSchema: { type: "object", properties: { templateId: { type: "string", description: "Optional. A site's home page id (see list_landing_pages). Leave out to compare all sites." }, days: { type: "number", enum: [7, 14, 28] } } },
+  },
+  {
     name: "get_site_visits",
     description:
-      "Detailed visitor numbers for a site from its Google Analytics (visitors, pages looked at, top pages, where people came from, countries, devices) with plain-language takeaways. Needs a paid plan and the numbers switched on (turn_on_visitor_numbers). Data usually appears a few hours after switching on. For simple counts on any plan use get_analytics.",
+      "Detailed visitor numbers for a site from its Google Analytics (visitors, pages looked at, top pages, where people came from, countries, devices) with plain-language takeaways. Works for numbers Plexo runs and for a Google account the owner connected themselves. Needs a paid plan and the numbers connected (turn_on_visitor_numbers for Plexo's); a site with none returns connected:false, not an error. Data usually appears a few hours after switching on. For simple counts on any plan use get_analytics.",
     inputSchema: { type: "object", properties: { templateId, days: { type: "number", enum: [7, 28, 90], description: "Default 28." } }, required: ["templateId"] },
   },
   {
@@ -60,7 +66,46 @@ export const ANALYTICS_MCP_TOOLS = [
 
 export const ANALYTICS_TOOL_NAMES = new Set(ANALYTICS_MCP_TOOLS.map((t) => t.name));
 
+async function handlePlexoRecords(args: any, resolved: ResolvedUser): Promise<any> {
+  // Loaded only when the tool runs, so the rest of this module stays light to import.
+  const [{ getTierFeatures }, { loadHubSiteCards, loadHubVisits }] = await Promise.all([import("@/lib/subscription"), import("@/lib/dashboardV3/hubData")]);
+  if (!getTierFeatures(resolved.subscriptionPlan).analyticsEnabled) throw new Error("Visitor numbers come with the Starter plan and above. Upgrade to see who visits your sites.");
+  const id = typeof args?.templateId === "string" ? args.templateId.trim() : "";
+  const days = [7, 14, 28].includes(Number(args?.days)) ? Number(args.days) : 14;
+  const sites = await loadHubSiteCards(resolved.organizationId, resolved.userId);
+  if (id) {
+    const site = sites.find((s) => s.id === id);
+    if (!site) throw new Error(`No site found with id "${id}" in this account. Use a site's home page id from list_landing_pages.`);
+    const v = await loadHubVisits(site.id, days);
+    return {
+      site: site.name,
+      address: site.address,
+      source: "Plexo records",
+      totalVisits: v.total,
+      perDay: v.days,
+      countries: v.countries,
+      devices: v.devices,
+      browsers: v.browsers,
+      operatingSystems: v.os,
+      recentVisits: (v.recent ?? []).slice(0, 10).map((r) => ({ when: r.createdAt, where: [r.city, r.country].filter(Boolean).join(", ") || null, device: r.deviceType, browser: r.browser })),
+    };
+  }
+  const ranked = (
+    await Promise.all(
+      sites.map(async (s) => {
+        const base = { siteId: s.id, name: s.name, address: s.address, status: s.status, visitsLast7Days: s.visits7d };
+        if (!s.visits7d) return base;
+        const v = await loadHubVisits(s.id, 7).catch(() => null);
+        const top = (r?: { name: string; value: number }[]) => (r?.[0] ? `${r[0].name} (${r[0].value})` : null);
+        return { ...base, topCountries: (v?.countries ?? []).slice(0, 3), topDevice: top(v?.devices), topBrowser: top(v?.browsers), topOperatingSystem: top(v?.os) };
+      }),
+    )
+  ).sort((a, b) => b.visitsLast7Days - a.visitsLast7Days);
+  return { source: "Plexo records", sites: ranked, best: ranked[0]?.visitsLast7Days ? ranked[0].name : null, note: "Pass a site's id as templateId for its full countries, devices, browsers and systems." };
+}
+
 export async function handleAnalyticsTool(toolName: string, args: any, resolved: ResolvedUser): Promise<any> {
+  if (toolName === "get_analytics") return handlePlexoRecords(args, resolved);
   const id = typeof args?.templateId === "string" ? args.templateId.trim() : "";
   if (!id) throw new Error("templateId is required — pass the site's home page id (see list_landing_pages).");
   const { data: site } = await Template.get({ id }).go();
@@ -114,7 +159,8 @@ export async function handleAnalyticsTool(toolName: string, args: any, resolved:
   }
 
   // get_site_visits
-  if (!conn || !conn.measurementId) throw new Error("Detailed visitor numbers aren't on for this site yet. Switch them on with turn_on_visitor_numbers. Simple visit counts are in get_analytics.");
+  // Not being connected is an answer, not a failure: a result (not an error) keeps it from showing as a red "didn't work" step when SOL checks several sites.
+  if (!conn || !conn.measurementId) return { connected: false, site: site.name, note: "Detailed visitor numbers (Plexo's or the owner's own Google account) aren't connected for this site. turn_on_visitor_numbers switches on Plexo's. Simple visit counts are in get_analytics." };
   const days = ([7, 28, 90].includes(Number(args?.days)) ? Number(args.days) : 28) as RangeDays;
   try {
     const report = await reportForSite(conn, site.id, days);

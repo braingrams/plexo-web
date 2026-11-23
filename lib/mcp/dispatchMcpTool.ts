@@ -738,21 +738,6 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
     },
   },
   {
-    name: "get_analytics",
-    title: "Get Analytics",
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    description: "Fetches visitor analytics, total page views, unique visitor counts, and daily timeline metrics.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        templateId: {
-          type: "string",
-          description: "Optional template ID to filter analytics",
-        },
-      },
-    },
-  },
-  {
     name: "get_user_profile",
     title: "Get User Profile",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },

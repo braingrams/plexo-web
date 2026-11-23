@@ -22,6 +22,17 @@ describe("SOL's prompt: plan-first and creative", () => {
     expect(prompt).toMatch(/Never ask for things you can default/);
   });
 
+  it("asks which visitor numbers the owner means before reading any, and reads them cheaply", () => {
+    expect(prompt).toMatch(/## Visitor numbers/);
+    expect(prompt).toMatch(/ask ONE ask_user_question first/);
+    expect(prompt).toMatch(/Don't call any visitor tool before they answer/);
+    expect(prompt).toMatch(/get_analytics ONCE with no templateId/);
+    expect(prompt).toMatch(/two sources/);
+    expect(prompt).toMatch(/mark Plexo records as recommended/);
+    expect(prompt).toMatch(/connected:false just isn't connected: skip it silently/);
+    expect(prompt).toMatch(/offer once .* to switch on Google Analytics/);
+  });
+
   it("builds whole sites with site_create and knows the new tools", () => {
     for (const tool of ["site_create", "list_site_templates", "create_site_from_template", "find_page", "page_create_from_template", "page_edit", "page_publish", "sell_product_on_page"]) expect(prompt).toContain(tool);
     expect(prompt).toMatch(/several connected pages, not one landing page/);
