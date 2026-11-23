@@ -23,7 +23,7 @@ import { redact } from "@/lib/privacy/redact";
 //
 //   void recordSolUsageEvent({ ... }).catch((err) => console.error("Failed to record SOL usage:", err));
 
-const PREVIEW_MAX_CHARS = 500;
+const PREVIEW_MAX_CHARS = 8000;
 
 export interface SolToolCallRecord {
   name: string;

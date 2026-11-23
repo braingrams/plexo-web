@@ -471,8 +471,8 @@ export const SolUsageEventContent = new Entity(
       id: { type: "string", required: true }, // same id as the matching SolUsageEvent row
       conversationId: { type: "string", required: true },
       createdAt: { type: "string", required: true },
-      promptPreview: { type: "string" }, // redacted, truncated to ~500 chars
-      responsePreview: { type: "string" }, // redacted, truncated to ~500 chars
+      promptPreview: { type: "string" }, // redacted, truncated to 8000 chars
+      responsePreview: { type: "string" }, // redacted, truncated to 8000 chars
       // 30 days — short-lived by design, unlike SolUsageEvent's permanent metadata row.
       ttl: { type: "number", default: () => days(30) },
     },
