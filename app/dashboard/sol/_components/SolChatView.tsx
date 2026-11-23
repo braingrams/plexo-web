@@ -1,3 +1,4 @@
+import { trackEvent } from "@/lib/analytics";
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -466,6 +467,8 @@ export function SolChatView({
     // credits and then resent from the top-up card otherwise stayed in it after sending.
     setComposerRestoreText("");
     const target = await ensureConversation();
+    // sol_prompt_submit (spec 6.5). Embedded chats (the app editor) are tracked by their host, so only the dashboard counts here.
+    if (!embedded) trackEvent({ event: "sol_prompt_submit", sol_context: "dashboard" });
 
     const mediaBlocks: MediaBlock[] = attachments.map((a) => ({ type: a.type === "pdf" ? "document" : a.type, url: a.url, filename: a.filename }));
     const optimisticId = `local-user-${randomId()}`;

@@ -903,6 +903,7 @@ export function DomainsClient({ initialDomains, landingPages, plan, onTrial = fa
           baseDomain={baseDomain}
           routingTarget={dnsCnameTarget}
           atLimit={limit > 0 && count >= limit}
+          plan={plan}
           onChanged={refreshDomains}
           renderBuy={(templateId) => (
             <BuyDomainFlow templateId={templateId} resumedPurchase={resumedPurchase} onPurchased={() => void refreshDomains()} />
