@@ -47,6 +47,7 @@ const NOW = Date.parse("2026-11-19T08:00:00Z");
 const DAY = 86_400_000;
 
 beforeEach(() => {
+  process.env.PLEXO_ENV = "production";
   process.env.AUTH_SECRET = "test-auth-secret";
   process.env.NEXT_PUBLIC_APP_URL = "https://app.test";
   h.settings.clear(); h.templates.clear(); h.users.clear(); h.status.clear(); h.sent.length = 0; h.domains = []; h.failFor = null;
@@ -112,6 +113,21 @@ describe("who gets it, and when", () => {
     expect(digestDue({ ...base, lastCheckAt: new Date(NOW - 10 * DAY).toISOString() })).toBe(false);
     expect(digestDue({ ...base, lastSentAt: new Date(NOW - 2 * DAY).toISOString() })).toBe(false);
     expect(digestDue({ ...base, lastSentAt: new Date(NOW - DIGEST_MIN_GAP_MS - 1000).toISOString() })).toBe(true);
+  });
+
+  it("sends nothing outside production: staging, previews and local development share the mail keys but must never mail owners", async () => {
+    addSite("a", { phone: 38 });
+    for (const env of ["staging", undefined, "development"]) {
+      if (env === undefined) delete process.env.PLEXO_ENV;
+      else process.env.PLEXO_ENV = env;
+      const out = await sendWeeklyDigests({ now: NOW });
+      expect(out).toMatchObject({ looked: 0, sent: 0, failed: 0 });
+      expect(out.reason).toMatch(/only sent from production/);
+    }
+    expect(h.sent).toHaveLength(0);
+    expect(h.settings.get("a")?.digestSentAt).toBeUndefined();
+    process.env.PLEXO_ENV = "production";
+    expect(await sendWeeklyDigests({ now: NOW })).toMatchObject({ sent: 1 });
   });
 
   it("emails each owner once, records what was sent, and does not email again the next day", async () => {
