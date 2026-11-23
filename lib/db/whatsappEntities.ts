@@ -18,6 +18,9 @@ export const WhatsAppLink = new Entity(
       userId: { type: "string", required: true },
       organizationId: { type: "string", required: true },
       conversationId: { type: "string", required: true },
+      // Set after a thumbs-down reaction: the next message they send is kept as what they expected instead.
+      feedbackMessageId: { type: "string" },
+      feedbackUntil: { type: "string" },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
     },
     indexes: {

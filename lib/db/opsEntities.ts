@@ -749,6 +749,45 @@ export const SiteHealthCheck = new Entity(
   { table, client: docClient },
 );
 
+// SolFeedback: one row per rated SOL answer (thumbs up or down, from the dashboard or a
+// WhatsApp reaction), holding the full question and answer so plexo-admin can show what
+// was asked, what SOL said, and (for a thumbs down) what the owner expected instead. Kept
+// 180 days. Text is passed through lib/privacy/redact.ts before it is written. The real
+// transcript stays in SolMessage (plexoSol table).
+export const SolFeedback = new Entity(
+  {
+    model: { entity: "solFeedback", version: "1", service: "plexoOps" },
+    attributes: {
+      id: { type: "string", required: true }, // the rated assistant message's id
+      conversationId: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      rating: { type: ["UP", "DOWN"] as const, required: true },
+      // "What did you expect instead?" for a thumbs down; optional for a thumbs up.
+      comment: { type: "string" },
+      question: { type: "string" },
+      answer: { type: "string" },
+      // Names of the tools SOL used for that answer (e.g. get_analytics), for spotting wrong choices.
+      tools: { type: "string" },
+      source: { type: ["dashboard", "whatsapp"] as const, default: "dashboard" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      ttl: { type: "number", default: () => days(180) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["conversationId"], template: "SOLFEEDBACK#${conversationId}" },
+        sk: { field: "sk", composite: ["id"], template: "MSG#${id}" },
+      },
+      // Newest first, per rating: one partition each, which is fine at feedback volumes.
+      byRating: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["rating"], template: "SOLFEEDBACKRATING#${rating}" },
+        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoOpsService = new Service(
   {
     PageView,
@@ -762,6 +801,7 @@ export const plexoOpsService = new Service(
     EmailLog,
     SolUsageEvent,
     SolUsageEventContent,
+    SolFeedback,
     SolDailyStat,
     ExperienceDailyStat,
     SiteGoogleAnalytics,

@@ -24,13 +24,20 @@ describe("SOL's prompt: plan-first and creative", () => {
 
   it("asks which visitor numbers the owner means before reading any, and reads them cheaply", () => {
     expect(prompt).toMatch(/## Visitor numbers/);
-    expect(prompt).toMatch(/ask ONE ask_user_question first/);
-    expect(prompt).toMatch(/Don't call any visitor tool before they answer/);
+    expect(prompt).toMatch(/required question, an exception to "decide, don't ask"/);
+    expect(prompt).toMatch(/VERY FIRST action is one ask_user_question/);
+    expect(prompt).toMatch(/Call no visitor tool and write no analysis before they answer/);
     expect(prompt).toMatch(/get_analytics ONCE with no templateId/);
     expect(prompt).toMatch(/two sources/);
-    expect(prompt).toMatch(/mark Plexo records as recommended/);
+    expect(prompt).toMatch(/"Plexo records" first as the recommended choice/);
     expect(prompt).toMatch(/connected:false just isn't connected: skip it silently/);
     expect(prompt).toMatch(/offer once .* to switch on Google Analytics/);
+  });
+
+  it("has one general test for when to ask, not a rule per prompt", () => {
+    expect(prompt).toMatch(/The test for asking: could their words reasonably mean more than one thing/);
+    expect(prompt).toMatch(/BEFORE calling any tool or writing any analysis, even when one option seems the obvious pick/);
+    expect(prompt).toMatch(/If only one reasonable reading exists/);
   });
 
   it("builds whole sites with site_create and knows the new tools", () => {

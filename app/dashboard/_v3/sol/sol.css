@@ -380,3 +380,11 @@
 .sol3-ask--docked .sol3-ask__body { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 14px; overscroll-behavior: contain; }
 .sol3-ask--docked .sol3-ask__foot { position: static; flex-shrink: 0; margin: 0 -20px; padding: 12px 20px 14px; }
 .sol3-ask--docked textarea { scroll-margin-bottom: 8px; }
+
+/* rating prompt: a small card under the answer when SOL finishes a piece of work */
+.sol3-rate { position: relative; margin-left: 46px; width: min(360px, calc(100% - 46px)); display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 16px; background: var(--plx-elevated, var(--plx-surface)); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-card); }
+.sol3-rate__title { margin: 0; font-weight: 600; color: var(--plx-text); padding-right: 28px; }
+.sol3-rate__sub { margin: 0; color: var(--plx-muted); }
+.sol3-rate__row { display: flex; flex-wrap: wrap; gap: 8px; }
+.sol3-rate__close { position: absolute; top: 8px; right: 8px; }
+@media (max-width: 640px) { .sol3-rate { margin-left: 0; width: 100%; } }

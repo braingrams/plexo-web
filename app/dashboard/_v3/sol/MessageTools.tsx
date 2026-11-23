@@ -90,7 +90,7 @@ export function MessageTools({ text, messageId, conversationId, initialFeedback 
       </div>
       {asking ? (
         <div className="sol3-card" style={{ padding: 14, gap: 10, maxWidth: 420 }}>
-          <textarea className="plx-input" rows={2} placeholder="What went wrong? (optional)" value={comment} onChange={(e) => setComment(e.target.value)} style={{ minHeight: 64, padding: 10, resize: "none" }} />
+          <textarea className="plx-input" rows={2} placeholder="What did you expect instead? (optional)" value={comment} onChange={(e) => setComment(e.target.value)} style={{ minHeight: 64, padding: 10, resize: "none" }} />
           <div className="sol3-actions" style={{ justifyContent: "flex-end" }}>
             <Button size="sm" variant="ghost" onClick={() => setAsking(false)}>Skip</Button>
             <Button size="sm" onClick={() => { void rate("DOWN", comment); setAsking(false); }}>Send</Button>

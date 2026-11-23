@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { resolveUser } from "@/lib/auth/resolveUser";
-import { SolMessage } from "@/lib/db/solEntities";
-import { recordSolFeedback } from "@/lib/solAnalytics";
+import { saveSolFeedback } from "@/lib/sol/feedback";
 
 /**
  * POST /api/v1/sol/feedback
@@ -47,31 +46,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "`comment` must be 2000 characters or fewer." }, { status: 400 });
   }
 
-  // SolMessage's primary key embeds createdAt (see solEntities.ts) — no by-id index, so
-  // this finds the row the same "scoped list, find by id" way every other by-id SOL lookup
-  // in this task does. The conversation-scoped query itself is already the ownership
-  // boundary's first half; message.userId (denormalized on every SolMessage row
-  // specifically for checks like this, per that attribute's own doc comment) is the second.
-  const { data: messages } = await SolMessage.query.primary({ conversationId: threadId }).go({ pages: "all" });
-  const message = messages.find((m) => m.id === messageId);
-  if (!message || message.userId !== resolved.userId) {
+  // saveSolFeedback checks the message belongs to this user, saves the rating and note on it,
+  // and keeps a copy with the full question and answer for plexo-admin.
+  const saved = await saveSolFeedback({ userId: resolved.userId, conversationId: threadId, messageId, rating, comment, source: "dashboard" });
+  if (!saved) {
     return NextResponse.json({ error: "Message not found." }, { status: 404 });
   }
-
-  await SolMessage.patch({ conversationId: threadId, createdAt: message.createdAt, id: message.id })
-    .set({ feedback: rating, feedbackComment: comment?.trim() || undefined })
-    .go();
-
-  // lib/solAnalytics.ts's recordSolUsageEvent (called from lambda/sol-chat/index.ts once a
-  // turn completes) deliberately pins its SolUsageEvent row's {id, createdAt} to this same
-  // final assistant SolMessage's own {id, createdAt} — see that function's own comment —
-  // specifically so this patch can target the matching analytics row with no extra lookup.
-  // Fire-and-forget per lib/solAnalytics.ts's own documented convention: a failed/missing
-  // analytics row (e.g. feedback on a message from before this wiring existed) must never
-  // fail the user-visible feedback submission itself, which already succeeded above.
-  void recordSolFeedback(message.id, threadId, message.createdAt, rating).catch((err) =>
-    console.error("Failed to record SOL feedback analytics:", err),
-  );
 
   return NextResponse.json({ success: true });
 }

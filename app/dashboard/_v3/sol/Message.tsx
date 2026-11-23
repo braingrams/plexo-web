@@ -95,7 +95,7 @@ export function Message({ message, conversationId, onConfirmToolCall, confirmBus
       <SolMark />
       <div className="sol3-msg__body">
         {rows}
-        {!message.pending && plain ? <MessageTools text={plain} messageId={message.id} conversationId={conversationId} initialFeedback={message.feedback} /> : null}
+        {!message.pending && plain ? <MessageTools key={`${message.id}-${message.feedback ?? ""}`} text={plain} messageId={message.id} conversationId={conversationId} initialFeedback={message.feedback} /> : null}
       </div>
     </div>
   );
