@@ -108,6 +108,9 @@ jobs:
           PLEXO_CONTENT_TABLE: plexo-content-staging-plexo
           PLEXO_OPS_TABLE: plexo-ops-staging-plexo
           PLEXO_IMPORT_TABLE: plexo-import-staging-plexo
+          # The Next build holds the whole app in memory; Node's default heap (about 2 GB) is no longer enough and the build
+          # was killed with 'JavaScript heap out of memory'. The runner has more RAM than that.
+          NODE_OPTIONS: --max-old-space-size=5120
         run: npx open-next build
 
       - name: Install & build CDK project
