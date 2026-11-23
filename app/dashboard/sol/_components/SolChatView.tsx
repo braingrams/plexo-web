@@ -1,5 +1,5 @@
-import { trackEvent } from "@/lib/analytics";
 "use client";
+import { trackEvent } from "@/lib/analytics";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SolHeader } from "./SolHeader";
