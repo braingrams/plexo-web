@@ -17,6 +17,13 @@ export type Connector = (database: string, user: string) => Promise<Connection>;
 const LOGIN_SUFFIX = { api: "api", owner: "owner", system: "system" } as const;
 export const SAFE_DB = /^a_[a-z0-9]{32}_(dev|live)$/;
 
+// The only helpers Plexo installs in the `plexo` schema (lib/appData/provision.ts). Apps that call
+// anything else, such as plexo.current_workspace_id(), get this list back as the hint.
+export const PLEXO_HELPERS_HINT =
+  "Plexo provides plexo.uid() (the signed-in visitor's id), plexo.role() and plexo.email(), and nothing else in the plexo schema. Accounts are plexo.users; there are no workspaces or teams, so model a team with a membership table in public and policies that check it.";
+
+const isMissingPlexoFunction = (err: any, message: string) => err?.code === "42883" && /function plexo\./.test(message);
+
 export function toError(err: any, statementIndex?: number): DbError {
   const message = String(err?.message ?? err);
   if (/timeout expired|Connection terminated due to connection timeout/i.test(message)) {
@@ -27,7 +34,7 @@ export function toError(err: any, statementIndex?: number): DbError {
     message,
     code: err?.code,
     detail: err?.detail,
-    hint: err?.hint,
+    hint: err?.hint ?? (isMissingPlexoFunction(err, message) ? PLEXO_HELPERS_HINT : undefined),
     position: err?.position ? Number(err.position) : undefined,
     statementIndex,
     kind: err?.code ? "query" : "connection",
