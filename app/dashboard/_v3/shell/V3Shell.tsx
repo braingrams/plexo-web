@@ -26,6 +26,7 @@ import {
   PanelLeftOpen,
   Search,
   Settings,
+  MessageCircle,
   ShoppingBag,
   SlidersHorizontal,
   UserRound,
@@ -454,6 +455,10 @@ function HelpMenu() {
           <a role="menuitem" className="plx-menu__item" href="mailto:support@plexopages.com">
             <LifeBuoy size={18} aria-hidden />
             Email our team
+          </a>
+          <a role="menuitem" className="plx-menu__item" href="http://wa.me/2349014415631" target="_blank" rel="noopener noreferrer" onClick={() => menu.close(false)}>
+            <MessageCircle size={18} aria-hidden />
+            Chat on WhatsApp
           </a>
           <div className="plx-menu__sep" />
           <Link role="menuitem" className="plx-menu__item" href="/dashboard/testimonial/submit" onClick={() => menu.close(false)}>
