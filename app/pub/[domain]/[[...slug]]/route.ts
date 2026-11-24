@@ -23,7 +23,7 @@ import { applyActiveNav } from "@/lib/pub/activeNav";
 import { applyOwnerCode } from "@/lib/customCode/serve";
 import { withAppPageExtras } from "@/lib/customCode/appServe";
 import { applySiteBrandToCss, applySiteBrandToHtml } from "@/lib/brand/inject";
-import { CONTENT_MARKER_ATTR, safeJsonLd, escapeHtmlAttr, injectBrandingBar, injectCustomJs, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
+import { BADGE_UTM, CONTENT_MARKER_ATTR, safeJsonLd, escapeHtmlAttr, injectBrandingBar, injectCustomJs, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
 import { needsPageBase } from "@/lib/pub/pageBase";
 import { serveProject } from "@/lib/projects/serve";
 import { resolvePreviewHost } from "@/lib/projects/previewHost";
@@ -718,7 +718,7 @@ async function serveSite(
     // it's served, custom domain or not.
     if (!resolveSiteHideBranding(published.user.subscriptionPlan, published.user.hideBranding, published.template.hideBranding)) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-      html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
+      html = injectBrandingBar(html, `${appUrl}/?${BADGE_UTM}#pricing`);
     }
 
     // White-label favicon — only for orgs entitled to custom branding (Enterprise owner
@@ -860,7 +860,7 @@ async function serveSite(
           }
           if (!resolveSiteHideBranding(published.user.subscriptionPlan, published.user.hideBranding, published.template.hideBranding)) {
             const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-            html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
+            html = injectBrandingBar(html, `${appUrl}/?${BADGE_UTM}#pricing`);
           }
           html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") }, { head: cursor.pageHeadCode, footer: cursor.pageFooterCode });
     html = await applyAnalyticsTag(html, published.templateId, request.headers);

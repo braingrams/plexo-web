@@ -104,6 +104,9 @@ function logoUrl(ctaHref: string): string {
   return `${origin}/api/brand/logo/wordmark-on-dark`;
 }
 
+/** Campaign tags on the bar's "Host yours now" link, so sign ups from customer sites can be measured (spec §10). */
+export const BADGE_UTM = "utm_source=plexo_badge&utm_medium=referral&utm_campaign=hosted_badge";
+
 /**
  * The "Hosted with Plexo" bar. The word Plexo shows straight away and is swapped for the logo once the logo has loaded,
  * so the bar never looks empty or jumps; if the logo can't load, the word simply stays.
