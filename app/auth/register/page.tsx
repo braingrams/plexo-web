@@ -10,6 +10,7 @@ import { AuthShell } from "@/app/auth/_kit/AuthShell";
 import { Alert, Button, Divider, PageHead } from "@/app/auth/_kit/ui";
 import { PasswordField, TextField } from "@/app/auth/_kit/fields";
 import { emailProblem } from "@/app/auth/_kit/passwordRules";
+import { rememberPendingEmail } from "@/app/auth/_kit/pendingEmail";
 import { GoogleAuthButton } from "@/app/auth/GoogleAuthButton";
 import { CountrySelect } from "@/app/_components/country/CountrySelect";
 import { usePricing } from "@/app/dashboard/_components/usePricing";
@@ -91,7 +92,8 @@ function RegisterForm() {
       const newUserId = (result as { data?: { id?: string } } | undefined)?.data?.id;
       trackEvent({ event: "sign_up", method: "email", ...(newUserId ? { user_id: newUserId } : {}) });
       if (newUserId) trackUserIdentifiedOnce({ user_id: newUserId, plan_name: "free", plan_status: "free" });
-      router.push(`/auth/confirm?email=${encodeURIComponent(email)}`);
+      rememberPendingEmail(email);
+      router.push("/auth/confirm");
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : "Registration failed.";
       trackEvent({ event: "sign_up_error", method: "email", error_type: submitError instanceof TypeError ? "network_error" : "server_error" });

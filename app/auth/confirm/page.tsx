@@ -20,7 +20,7 @@ export default async function ConfirmPage({
 
   return (
     <AuthShell>
-      <ConfirmView email={email} />
+      <ConfirmView />
     </AuthShell>
   );
 }

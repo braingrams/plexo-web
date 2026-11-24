@@ -18,7 +18,7 @@ export default async function Preview({ params }: { params: Promise<{ state: str
   if (process.env.NODE_ENV !== "development") notFound();
   const { state } = await params;
 
-  if (state === "confirm") return <AuthShell><ConfirmView email="alex@example.com" /></AuthShell>;
+  if (state === "confirm") return <AuthShell><ConfirmView /></AuthShell>;
   if (state === "choose-org")
     return (
       <AuthShell layout="center">
