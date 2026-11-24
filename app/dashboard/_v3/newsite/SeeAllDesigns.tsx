@@ -19,7 +19,7 @@ export type SeeAllDesignsProps = {
   mock?: boolean;
   onUse: (design: PickerDesign) => Promise<void> | void;
   /** What the owner described (and what SOL understood from it), so the designs fit them. */
-  extra?: { about?: string; industry?: string; tone?: string };
+  extra?: { about?: string; industry?: string; tone?: string; businessType?: string };
 };
 
 export function SeeAllDesigns({ goal, name, brand, extra, busy, mock, onUse }: SeeAllDesignsProps) {

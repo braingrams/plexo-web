@@ -3,6 +3,8 @@ import { resolveOrgContext } from "@/app/api/org/_context";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { removeMember, updateMemberRole } from "@/server/orgDynamo";
 import { roles, type OrgRole } from "@/server/accessControl";
+import { validateSiteAccess } from "@/lib/access/siteAccessStore";
+import type { SiteAccess } from "@/lib/access/siteAccess";
 
 const VALID_ROLES = new Set(Object.keys(roles));
 
@@ -38,7 +40,14 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ u
     return NextResponse.json({ error: "Only the editor role can be scoped to specific pages." }, { status: 400 });
   }
 
-  await updateMemberRole(ctx.organizationId, userId, role as OrgRole, scopedTemplateIds);
+  let siteAccess: SiteAccess | undefined;
+  if (role === "guest") {
+    const checked = await validateSiteAccess(ctx.organizationId, body.siteAccess);
+    if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+    siteAccess = checked.access;
+  }
+
+  await updateMemberRole(ctx.organizationId, userId, role as OrgRole, scopedTemplateIds, siteAccess);
   return NextResponse.json({ ok: true });
 }
 

@@ -5,9 +5,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 // Every transactional email renders with the new Plexo brand: PNG logo, one lime call to action, no old purple,
 // and dark-mode support. Set EMAIL_PREVIEW_DIR to also write each one out as an .html file to look at.
 const sent: { subject: string; html: string }[] = [];
-vi.mock("nodemailer", () => ({
-  default: { createTransport: () => ({ sendMail: async (m: { subject: string; html: string }) => void sent.push(m) }) },
-}));
+vi.mock("@/lib/admin/alertRecipients", () => ({ adminAlertRecipients: async () => ["team@example.com"] }));
 vi.mock("@/lib/mail/logEmail", () => ({ logEmailDelivery: () => {} }));
 vi.mock("@/lib/mail/maildrip", async (orig) => ({
   ...(await orig<typeof import("@/lib/mail/maildrip")>()),
@@ -24,8 +22,6 @@ const PURPLE = /#(8b5cf6|7c3aed|6d28d9|a78bfa|6b3bf9|5b2be6|c084fc|ede9fe|818cf8
 const brand = { name: "Acme Studio", color: "#E11D48", logoUrl: "https://cdn.example.com/acme.png" };
 
 beforeAll(async () => {
-  process.env.SMTP_HOST = "smtp.test";
-  process.env.SMTP_USER = "u";
   add("verification", T.buildVerificationEmail(U));
   add("password-reset", T.buildPasswordResetEmail(U));
   add("lms-magic-link", T.buildLmsMagicLinkEmail("Course", U));

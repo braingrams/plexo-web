@@ -4,9 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AppWindow, BookOpen, ChevronRight, CornerUpRight, Database, Download, GraduationCap, Landmark, LayoutTemplate, MessageSquare, PanelTop, ShoppingBag, SlidersHorizontal, type LucideIcon } from "lucide-react";
-import { Button, Card, Input, useToast } from "../ui";
+import { Button, Card, Input, SegmentedControl, useToast } from "../ui";
+import { GateOrError } from "@/app/dashboard/_components/UpgradePrompt";
+import type { SiteBadgeChoice } from "@/lib/subscription";
 import { builderLabel } from "./HubFrame";
 import type { HubFrameSite } from "./HubFrame";
+import type { HubSite } from "@/lib/dashboardV3/hubData";
 import type { HubFeatures } from "@/lib/dashboardV3/hubTabs";
 import { TabBar } from "./HubFrame";
 import { LinkPending } from "../ui/LinkPending";
@@ -17,7 +20,7 @@ import { shopHref } from "@/lib/dashboardV3/shopSections";
 import { advancedHref, advancedKind } from "@/lib/dashboardV3/hubAdvanced";
 import { MigrationHistory } from "../settings/MigrationHistory";
 
-export function SettingsTab({ site, features, experience }: { site: HubFrameSite; features: HubFeatures; experience: string }) {
+export function SettingsTab({ site, features, experience }: { site: HubFrameSite & Pick<HubSite, "badge">; features: HubFeatures; experience: string }) {
   const router = useRouter();
   const { show } = useToast();
   const [name, setName] = useState(site.name);
@@ -41,6 +44,22 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
       setBusy(null);
     }
   }
+  const [badge, setBadge] = useState<SiteBadgeChoice>(site.badge.choice);
+  const [badgeError, setBadgeError] = useState<string | null>(null);
+  async function chooseBadge(next: SiteBadgeChoice) {
+    const before = badge;
+    setBadge(next);
+    setBadgeError(null);
+    try {
+      await hubApi(`/api/v1/templates/${site.id}/badge`, { method: "PUT", json: { choice: next } }, "We couldn't save that. Please try again.");
+      show({ title: next === "hide" ? "The Plexo badge is hidden on this site" : next === "show" ? "The Plexo badge shows on this site" : "This site now follows your account setting", tone: "success" });
+      router.refresh();
+    } catch (e) {
+      setBadge(before);
+      setBadgeError(errMsg(e));
+    }
+  }
+  const accountWord = site.badge.accountHides ? "hides" : "shows";
   const pro = experience === "pro";
   const nameChanged = name.trim() !== site.name && name.trim() !== "";
   const shopLinks: Row[] = [
@@ -111,6 +130,25 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
             <section id="set-advanced" className="plx-hs__sec" data-tour="hub-set-advanced">
               <h3 className="plx-hs__h">Advanced</h3>
               <LinkTiles rows={advancedLinks} />
+            </section>
+          ) : null}
+
+          {!site.deployed ? (
+            <section id="set-badge" className="plx-hs__sec" data-tour="hub-set-badge">
+              <h3 className="plx-hs__h">Plexo badge</h3>
+              <Card padding="none">
+                <div className="plx-hs__row" data-testid="badge-row">
+                  <div className="plx-hs__lab">
+                    <b>&ldquo;Hosted with Plexo&rdquo; badge</b>
+                    <span>The small bar at the bottom of this site. Your choice here wins over your account setting, which currently {accountWord} it on your sites.</span>
+                  </div>
+                  <div className="plx-hs__ctl plx-hs__ctl--end" style={{ flexDirection: "column", alignItems: "flex-end" }}>
+                    <SegmentedControl label="Plexo badge on this site" value={badge} onChange={(v) => void chooseBadge(v)} options={[{ value: "account", label: "Like my account" }, { value: "show", label: "Show" }, { value: "hide", label: "Hide" }]} />
+                    {badgeError ? <GateOrError error={badgeError}><p className="plx-field__error" role="alert">{badgeError}</p></GateOrError> : null}
+                    {!site.badge.planAllowsHiding && !badgeError ? <span className="plx-small">Hiding the badge comes with the Starter plan and above.</span> : null}
+                  </div>
+                </div>
+              </Card>
             </section>
           ) : null}
 

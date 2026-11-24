@@ -33,6 +33,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   const body = await request.json().catch(() => ({}));
   const { fromPath: rawFromPath, toPath: rawToPath } = body;
+  const permanent = body.permanent !== false;
 
   if (typeof rawFromPath !== "string" || !rawFromPath.trim().startsWith("/")) {
     return NextResponse.json({ error: "fromPath is required and must start with /." }, { status: 400 });
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
   }
 
   const id = randomUUID();
-  await BlogRedirect.create({ id, templateId, fromPath, toPath }).go();
+  await BlogRedirect.create({ id, templateId, fromPath, toPath, permanent }).go();
   const { data: redirect } = await BlogRedirect.get({ templateId, fromPath }).go();
 
   return NextResponse.json({ redirect }, { status: 201 });

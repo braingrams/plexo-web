@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  afterFork, appHref, createArgs, defaultSiteName, designPicks, limitNote, MORE_WAYS, MOVE_PATH, NEW_SITE_GOALS, newSiteRedirect, parseCreateRequest, STARTS,
+  afterCreateHref, afterFork, appHref, createArgs, defaultSiteName, designPicks, limitNote, MORE_WAYS, MOVE_PATH, NEW_SITE_GOALS, newSiteRedirect, parseCreateRequest, STARTS,
 } from "../lib/dashboardV3/newSite";
 
 describe("fork", () => {
@@ -88,5 +88,14 @@ describe("marketplace designs in the new flow", () => {
     expect(readPending(JSON.stringify({ goal: "blog", name: " My  notes " }))).toEqual({ goal: "blog", name: "My notes" });
     expect(readPending(JSON.stringify({ goal: "app", name: "x" }))).toBeNull();
     expect(readPending("nope")).toBeNull();
+  });
+});
+
+describe("where the owner lands after creating the site", () => {
+  it("a site SOL personalized goes to the dashboard, where Finish up and Publish are waiting", () => {
+    expect(afterCreateHref("abc", true)).toBe("/dashboard");
+  });
+  it("any other new site opens its own page, where the pages and the editor are", () => {
+    expect(afterCreateHref("abc", false)).toBe("/dashboard/sites/abc");
   });
 });

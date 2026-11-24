@@ -8,6 +8,7 @@ import { compileTemplateWithSiteLayout } from "@/lib/siteLayoutDynamo";
 import { designFormatOf, isV2Design } from "@/lib/v2/design";
 import { Template } from "@/lib/db/contentEntities";
 import { Member } from "@/lib/db/coreEntities";
+import { checkCanonical, checkSchemaJson, readPageSeoExtras } from "@/lib/seo/pageSeo";
 
 /**
  * GET/PUT /api/v1/templates/[id]/page-seo   ([id] is the site's home page)
@@ -19,7 +20,7 @@ import { Member } from "@/lib/db/coreEntities";
  */
 const MAX_PAGES = 200;
 
-type Row = { id: string; name: string; path: string; isRaw: boolean; isRoot: boolean; title: string; description: string; image: string };
+type Row = { id: string; name: string; path: string; isRaw: boolean; isRoot: boolean; title: string; description: string; image: string; noindex: boolean; canonicalUrl: string; schemaJson: string; schemaSource: string };
 
 const styleOf = (t: { designJson: unknown }): Record<string, string> => (isV2Design(t.designJson) ? (t.designJson.meta ?? {}) : ((t.designJson as { body?: { style?: Record<string, string> } } | null)?.body?.style ?? {})) as Record<string, string>;
 
@@ -36,10 +37,10 @@ export async function GET(request: NextRequest, context: { params: Promise<{ id:
       const isRoot = p.id === tree.rootId;
       const path = isRoot ? "/" : `/${pathForPage(p.id, tree.pages)}`.replace(/\/+/g, "/");
       const isRaw = p.sourceType === "RAW_UPLOAD";
-      if (isRaw) return { id: p.id, name: p.name, path, isRaw, isRoot, title: "", description: "", image: "" };
+      if (isRaw) return { id: p.id, name: p.name, path, isRaw, isRoot, title: "", description: "", image: "", noindex: false, canonicalUrl: "", schemaJson: "", schemaSource: "" };
       const { data: t } = await Template.get({ id: p.id }).go();
       const s = t ? styleOf(t) : {};
-      return { id: p.id, name: p.name, path, isRaw, isRoot, title: s.htmlTitle ?? "", description: s.metaDescription ?? "", image: s.ogImageUrl ?? "" };
+      return { id: p.id, name: p.name, path, isRaw, isRoot, title: s.htmlTitle ?? "", description: s.metaDescription ?? "", image: s.ogImageUrl ?? "", ...readPageSeoExtras(t?.designJson) };
     }),
   );
   rows.sort((a, b) => (a.isRoot === b.isRoot ? a.path.localeCompare(b.path) : a.isRoot ? -1 : 1));
@@ -58,7 +59,7 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
     if (scopeError) return scopeError;
   }
 
-  const body = (await request.json().catch(() => ({}))) as { pageId?: string; htmlTitle?: string; metaDescription?: string; ogImageUrl?: string };
+  const body = (await request.json().catch(() => ({}))) as { pageId?: string; htmlTitle?: string; metaDescription?: string; ogImageUrl?: string; noindex?: boolean; canonicalUrl?: string; schema?: { source?: string; json?: string } };
   if (!body.pageId) return NextResponse.json({ error: "Choose which page to change." }, { status: 400 });
   const tree = await getPageTree(resolved.organizationId, id);
   if (!tree || tree.rootId !== id || !tree.pages.some((p) => p.id === body.pageId)) return NextResponse.json({ error: "That page is not part of this site." }, { status: 404 });
@@ -82,6 +83,19 @@ export async function PUT(request: NextRequest, context: { params: Promise<{ id:
   const t = text(body.htmlTitle, 200);
   const d = text(body.metaDescription, 300);
   const img = text(body.ogImageUrl, 2000);
+  // The page's visibility, main address and structured data: checked here with the same rules the dashboard showed.
+  if (typeof body.noindex === "boolean") target.noindex = body.noindex ? "1" : "";
+  if (body.canonicalUrl !== undefined) {
+    const c = checkCanonical(body.canonicalUrl);
+    if (!c.ok) return NextResponse.json({ error: c.error }, { status: 400 });
+    target.canonicalUrl = c.value;
+  }
+  if (body.schema !== undefined) {
+    const c = checkSchemaJson(typeof body.schema.json === "string" ? body.schema.json : "");
+    if (!c.ok) return NextResponse.json({ error: c.problems[0] }, { status: 400 });
+    target.schemaJson = c.json;
+    target.schemaSource = typeof body.schema.source === "string" ? body.schema.source.slice(0, 20_000) : "";
+  }
   if (t !== undefined) target.htmlTitle = t;
   if (d !== undefined) target.metaDescription = d;
   if (img !== undefined) target.ogImageUrl = img;

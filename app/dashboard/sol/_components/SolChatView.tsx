@@ -1,4 +1,5 @@
 "use client";
+import { ratingForEmojiMessage } from "@/lib/sol/ratingEmoji";
 import { trackEvent } from "@/lib/analytics";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -455,6 +456,17 @@ export function SolChatView({
   }
 
   async function handleSend(typed: string, attachments: ChatAttachment[], tierOverride?: ModelTier) {
+    // Just a thumbs-up / heart / thumbs-down after an answer is a rating on it, not a new request.
+    const emojiRating = attachments.length === 0 && !embedded ? ratingForEmojiMessage(typed) : null;
+    const rated = emojiRating && conversation?.id ? [...messages].reverse().find((m) => m.role === "assistant" && !m.pending && !m.id.startsWith("local-")) : null;
+    if (emojiRating && rated && conversation?.id) {
+      setComposerRestoreText("");
+      setMessages((prev) => prev.map((m) => (m.id === rated.id ? { ...m, feedback: emojiRating } : m)));
+      void fetch("/api/v1/sol/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId: rated.id, threadId: conversation.id, rating: emojiRating }) }).catch(() => undefined);
+      // A thumbs-down asks what they expected instead, same as the thumbs-down button.
+      if (emojiRating === "DOWN") window.dispatchEvent(new CustomEvent("sol:expect", { detail: { messageId: rated.id } }));
+      return;
+    }
     // A host can pick the tier for this message (the app wizard's Standard / Advanced choice); a locked plan stays locked.
     const tier = lockedModelTier ? lockedModelTier.tier : (tierOverride ?? modelTier);
     if (tier !== modelTier) handleModelTierChange(tier);

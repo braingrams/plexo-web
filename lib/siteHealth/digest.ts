@@ -80,7 +80,14 @@ export async function setDigestEnabled(site: { id: string; organizationId: strin
   forgetHealthSettings(site.id);
 }
 
-export type DigestSummary = { looked: number; sent: number; skipped: number; failed: number };
+export type DigestSummary = { looked: number; sent: number; skipped: number; failed: number; /** Why nothing was done, when the whole run was refused. */ reason?: string };
+
+/**
+ * The email goes to real owners through the mail service, so only the production app may send it. Staging and previews share the same
+ * mail keys and have real-looking sites in their own data, and must never mail anyone. PLEXO_ENV is set on every deployed app
+ * ("production" or "staging"); it is unset in local development, which also sends nothing.
+ */
+export const digestsAllowedHere = (): boolean => process.env.PLEXO_ENV === "production";
 
 /** Pure: should this site get an email now? */
 export function digestDue(input: { enabled: boolean; lastCheckAt: string | null; lastSentAt: string | null; now: number }): boolean {
@@ -110,6 +117,7 @@ export async function sendWeeklyDigests(opts: { now?: number; budgetMs?: number;
   const budget = opts.budgetMs ?? 45_000;
   const max = opts.max ?? Number(process.env.SITE_HEALTH_DIGESTS_PER_RUN ?? 200);
   const summary: DigestSummary = { looked: 0, sent: 0, skipped: 0, failed: 0 };
+  if (!digestsAllowedHere()) return { ...summary, reason: "The weekly site health email is only sent from production." };
   for (const id of await liveSiteIds()) {
     if (summary.sent >= max || Date.now() - started > budget) break;
     summary.looked++;

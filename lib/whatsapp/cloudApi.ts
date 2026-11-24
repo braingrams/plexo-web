@@ -33,6 +33,8 @@ export interface InboundWhatsAppMessage {
   text: string | null;
   /** A photo, document or voice note attached to the message. */
   media: InboundMedia | null;
+  /** The emoji of a reaction to one of our messages (null when the reaction was taken off, or it isn't a reaction). */
+  reactionEmoji?: string | null;
   profileName: string | null;
 }
 
@@ -59,6 +61,7 @@ export function parseInboundMessages(payload: unknown): InboundWhatsAppMessage[]
           audio?: { id?: string; mime_type?: string };
           interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
           button?: { text?: string };
+          reaction?: { emoji?: string };
         };
         if (!m.id || !m.from) continue;
         const contact = value.contacts?.find((c) => c.wa_id === m.from);
@@ -68,7 +71,8 @@ export function parseInboundMessages(payload: unknown): InboundWhatsAppMessage[]
         else if (m.type === "audio" && m.audio?.id) media = { kind: "audio", id: m.audio.id, mimeType: m.audio.mime_type ?? "audio/ogg", filename: null };
         // Quick-reply and button taps arrive as their own message types; their label is what the person "said".
         const text = m.text?.body ?? m.image?.caption ?? m.document?.caption ?? m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title ?? m.button?.text ?? null;
-        out.push({ id: m.id, from: m.from.replace(/\D/g, ""), type: m.type ?? "unknown", text, media, profileName: contact?.profile?.name ?? null });
+        const reactionEmoji = m.type === "reaction" ? (m.reaction?.emoji?.trim() || null) : undefined;
+        out.push({ id: m.id, from: m.from.replace(/\D/g, ""), type: m.type ?? "unknown", text, media, ...(reactionEmoji !== undefined ? { reactionEmoji } : {}), profileName: contact?.profile?.name ?? null });
       }
     }
   }

@@ -28,7 +28,7 @@ const ALL: Record<AdvancedSectionId, AdvancedSection> = {
   seo: { id: "seo", label: "Search and sharing", help: "How your site shows up on Google and when someone shares a link, for the whole site and for each page." },
   code: { id: "code", label: "Code", help: "See the code behind each page. Pages you wrote yourself can be edited here." },
   features: { id: "features", label: "What is switched on", help: "Shop, blog, header and footer and your own lists: what this site uses and where to change it." },
-  layout: { id: "layout", label: "Header and footer", help: "One header and footer, shared by every page." },
+  layout: { id: "layout", label: "Header, footer and code", help: "One header and footer shared by every page, and the tracking or verification code from services like Google and Meta." },
   lists: { id: "lists", label: "Your own lists", help: "Lists like videos, stories, events or team members that you show on pages." },
   forms: { id: "forms", label: "Forms", help: "What visitors send you, and where each form's messages go." },
   redirects: { id: "redirects", label: "Old links", help: "Send an old web address to a new page so nobody lands on a dead end." },
@@ -36,7 +36,7 @@ const ALL: Record<AdvancedSectionId, AdvancedSection> = {
   deploy: { id: "deploy", label: "Deploy and server", help: "Upload a new version, watch it build, and keep it always on." },
   variables: { id: "variables", label: "Variables and secrets", help: "Settings and passwords your app reads, like an API key." },
   github: { id: "github", label: "GitHub", help: "Keep your code in GitHub and update your app when you push." },
-  versions: { id: "versions", label: "Versions", help: "Every saved version of a page, and going back to one." },
+  versions: { id: "versions", label: "Restore points", help: "Put your whole site back to an earlier day, or go back to one version of one page." },
   copy: { id: "copy", label: "Copy, move or bring in", help: "Make a copy of this site, give it to another account, or bring in pages from another site." },
   appsettings: { id: "appsettings", label: "App name and address", help: "Your app's name and where people find it." },
   appseo: { id: "appseo", label: "Search and sharing", help: "How your app shows up on Google and when someone shares a link to it." },
@@ -76,9 +76,9 @@ export type AdvancedInput = {
 export function advancedSections(i: AdvancedInput): AdvancedSection[] {
   if (i.experience !== "pro") return [];
   const pick = (ids: AdvancedSectionId[]) => ids.map((id) => ALL[id]);
-  if (i.kind === "app") return pick(["appsettings", "appseo", "appsignin", "appfiles", "appcode", "data", "functions", "secrets", "users", "history", "publish", "appgithub", "danger"]);
+  if (i.kind === "app") return pick(["appsettings", "appseo", "appsignin", "appfiles", "appcode", "layout", "data", "functions", "secrets", "users", "history", "publish", "appgithub", "danger"]);
   if (i.kind === "hosted") {
-    const ids: AdvancedSectionId[] = ["deploy"];
+    const ids: AdvancedSectionId[] = ["deploy", "layout"];
     if (i.server) {
       if (i.ssrEnabled !== false) ids.push("variables");
       ids.push("github");
@@ -109,7 +109,7 @@ export function advancedHref(siteId: string, section?: AdvancedSectionId): strin
   return `/dashboard/sites/${siteId}?tab=advanced${section ? `&section=${section}` : ""}`;
 }
 
-export type SeoPageRow = { id: string; name: string; path: string; isRaw: boolean; title: string; description: string; image: string };
+export type SeoPageRow = { id: string; name: string; path: string; isRaw: boolean; title: string; description: string; image: string; noindex: boolean; canonicalUrl: string; schemaJson: string; schemaSource: string };
 
 /** What a page still needs for search, in one plain sentence (empty when it is fine). */
 export function seoGap(p: Pick<SeoPageRow, "title" | "description" | "image" | "isRaw">): string {

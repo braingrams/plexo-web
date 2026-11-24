@@ -35,7 +35,7 @@ export default async function NotificationsPage() {
         <V3Notifications
           accountEmail={v3.email}
           initial={{
-            formSubmissions: notificationPreferences?.formSubmissions ?? false,
+            formSubmissions: notificationPreferences?.formSubmissions ?? true,
             blogComments: notificationPreferences?.blogComments ?? true,
             payments: notificationPreferences?.payments ?? true,
             commentMentions: notificationPreferences?.commentMentions ?? true,
@@ -51,7 +51,7 @@ export default async function NotificationsPage() {
       <PageHeader eyebrow="Account" title="Notifications" subtitle="Which activity across your sites emails you, and where." />
       <NotificationsSection
         initial={{
-          formSubmissions: notificationPreferences?.formSubmissions ?? false,
+          formSubmissions: notificationPreferences?.formSubmissions ?? true,
           blogComments: notificationPreferences?.blogComments ?? true,
           payments: notificationPreferences?.payments ?? true,
           commentMentions: notificationPreferences?.commentMentions ?? true,

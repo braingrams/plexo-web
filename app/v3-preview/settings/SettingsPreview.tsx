@@ -72,11 +72,13 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
           currentUserId="u1"
           currentRole="owner"
           organizationName="Ama's Kitchen"
+          sites={[{ id: "s1", name: "Ama's Kitchen" }, { id: "s2", name: "Cooking with Ama" }, { id: "s3", name: "Ama's Catering" }]}
           seatLimit={bigTeam ? 5 : 2}
           members={[
             ...(bigTeam ? [{ id: "u3", userId: "u3", role: "admin", scopedTemplateIds: [], name: "Adwoa Boateng", email: "adwoa@amaskitchen.com" }, { id: "u4", userId: "u4", role: "blogger", scopedTemplateIds: [], name: "Yaw Asante", email: "yaw@amaskitchen.com" }, { id: "u5", userId: "u5", role: "viewer", scopedTemplateIds: [], name: "Efua Darko", email: "efua@amaskitchen.com" }] : []),
             { id: "u1", userId: "u1", role: "owner", scopedTemplateIds: [], name: "Ama Owusu", email: "ama@amaskitchen.com" },
             { id: "u2", userId: "u2", role: "editor", scopedTemplateIds: [], name: "Kofi Mensah", email: "kofi@amaskitchen.com" },
+            { id: "u9", userId: "u9", role: "guest", scopedTemplateIds: [], siteAccess: { s2: "editor", s3: "viewer" }, name: "Efua Darko", email: "efua@example.com" },
           ]}
           invitations={[{ id: "i1", email: "esi@example.com", role: "blogger", scopedTemplateIds: [], createdAt: daysAgo(2) }]}
         />

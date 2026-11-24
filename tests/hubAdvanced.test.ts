@@ -27,12 +27,12 @@ describe("Advanced area: sections per kind", () => {
   });
   it("an app-builder app gets its own set and none of the website ones", () => {
     const got = ids({ kind: "app", experience: "pro" });
-    expect(got).toEqual(["appsettings", "appseo", "appsignin", "appfiles", "appcode", "data", "functions", "secrets", "users", "history", "publish", "appgithub", "danger"]);
-    for (const site of ["seo", "forms", "redirects", "layout", "lists"]) expect(got).not.toContain(site);
+    expect(got).toEqual(["appsettings", "appseo", "appsignin", "appfiles", "appcode", "layout", "data", "functions", "secrets", "users", "history", "publish", "appgithub", "danger"]);
+    for (const site of ["seo", "forms", "redirects", "lists"]) expect(got).not.toContain(site);
   });
   it("a hosted server app gets deploy, variables and GitHub; a static one only deploy", () => {
-    expect(ids({ kind: "hosted", experience: "pro", server: true })).toEqual(["deploy", "variables", "github", "danger"]);
-    expect(ids({ kind: "hosted", experience: "pro", server: false })).toEqual(["deploy", "danger"]);
+    expect(ids({ kind: "hosted", experience: "pro", server: true })).toEqual(["deploy", "layout", "variables", "github", "danger"]);
+    expect(ids({ kind: "hosted", experience: "pro", server: false })).toEqual(["deploy", "layout", "danger"]);
   });
   it("every section has a plain label and a one-line help", () => {
     for (const kind of ["site", "app", "hosted"] as const) for (const s of advancedSections({ kind, experience: "pro", server: true, ssrEnabled: true })) {

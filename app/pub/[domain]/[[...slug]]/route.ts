@@ -3,10 +3,11 @@ import { workspaceOwner } from "@/lib/plan/workspacePlan";
 import { effectivePlan } from "@/lib/plan/entitlement";
 import { NextRequest, NextResponse } from "next/server";
 import type { EntityItem } from "electrodb";
-import { resolveHideBranding, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
+import { resolveSiteHideBranding, isHomePageOnlyPlan, getTierFeatures } from "@/lib/subscription";
 import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
-import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
+import { resolveRedirectFull } from "@/lib/blog/redirectsDynamo";
+import { recordNotFound } from "@/lib/redirects/notFound";
 import { fillLatestPostLists } from "@/lib/pub/livePostQueries";
 import { Template, TemplateAsset, BlogSite, PublishedDomain } from "@/lib/db/contentEntities";
 import { DeployedApp } from "@/lib/db/appEntities";
@@ -20,6 +21,7 @@ import { FormSettings } from "@/lib/db/opsEntities";
 import { renderContentBlocks } from "@/lib/customContent/render";
 import { applyActiveNav } from "@/lib/pub/activeNav";
 import { applyOwnerCode } from "@/lib/customCode/serve";
+import { withAppPageExtras } from "@/lib/customCode/appServe";
 import { applySiteBrandToCss, applySiteBrandToHtml } from "@/lib/brand/inject";
 import { CONTENT_MARKER_ATTR, safeJsonLd, escapeHtmlAttr, injectBrandingBar, injectCustomJs, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags } from "@/lib/pub/htmlInject";
 import { needsPageBase } from "@/lib/pub/pageBase";
@@ -27,6 +29,8 @@ import { serveProject } from "@/lib/projects/serve";
 import { resolvePreviewHost } from "@/lib/projects/previewHost";
 import { User, Organization } from "@/lib/db/coreEntities";
 import { buildSiteRobotsTxt, buildSiteSitemap, listSitePages } from "@/lib/pub/siteSitemap";
+import { readPageSeoExtras, resolveCanonical, schemaItemsToPublish } from "@/lib/seo/pageSeo";
+import { readRobotsConfig } from "@/lib/seo/robotsStore";
 import { PAGE_CACHE_CONTROL, injectVisitBeacon } from "@/lib/pub/visitBeacon";
 import { applyHealthSettings, buildLlmsTxt, healthSettingsFor, serveCtxFor } from "@/lib/siteHealth/serve";
 import { productJsonLd } from "@/lib/siteHealth/businessMarkup";
@@ -34,9 +38,16 @@ import { applyAnalyticsTag } from "@/lib/googleAnalytics/serveTag";
 import { aiRobotsRules } from "@/lib/siteHealth/speedFixes";
 import { cleanPathFor, mountedSegments, normalizeMountPrefix, unmountLocation, unmountText } from "@/lib/pub/mountPrefix";
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
+import { looksLikeBrowserPost, machineSource } from "@/lib/forms/trafficGuards";
+import { HUMAN_CHECK_FIELD, verifyHumanCheck } from "@/lib/forms/humanCheck";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 
 type TemplateItem = EntityItem<typeof Template>;
+
+/** What the owner's header/footer code needs to know about a page being served. */
+function ownerCodeSite(published: { templateId: string; type: string; template: { name?: string | null }; user: { subscriptionPlan: string | null | undefined } }, request: NextRequest, host: string) {
+  return { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest"), host, path: new URL(request.url).pathname, siteName: published.template.name || host, headers: request.headers };
+}
 
 function notFoundResponse(): NextResponse {
   return new NextResponse(
@@ -472,6 +483,8 @@ async function serveSite(
       owner: published.user,
       organization: published.organization,
       homeOnly,
+      servedOnCustomDomain: published.type === "CUSTOM",
+      secFetchDest: request.headers.get("sec-fetch-dest"),
     });
   }
   const slugSegments = params.slug ?? [];
@@ -499,21 +512,27 @@ async function serveSite(
   console.log("[pub-debug] deployed", rawDomain, "type", deployedApp?.type ?? "none", "plan", published.user.subscriptionPlan, "url", deployedApp?.functionUrl ? "set" : "none");
   if (deployedApp?.type === "STATIC") {
     const { deployedAppDailyRequestLimit } = getTierFeatures(published.user.subscriptionPlan);
-    return serveDeployedStatic(request, deployedApp, slugSegments, {
-      onNotFound: notFoundResponse,
-      templateId: published.templateId,
-      dailyRequestLimit: deployedAppDailyRequestLimit,
-    });
+    return withAppPageExtras(
+      await serveDeployedStatic(request, deployedApp, slugSegments, {
+        onNotFound: notFoundResponse,
+        templateId: published.templateId,
+        dailyRequestLimit: deployedAppDailyRequestLimit,
+      }),
+      ownerCodeSite(published, request, rawDomain),
+    );
   }
   if (deployedApp?.type === "SSR") {
     // Server apps are Pro and above: a downgraded or ineligible owner's app stops serving.
     const features = getTierFeatures(published.user.subscriptionPlan);
     if (!features.ssrEnabled) return notFoundResponse();
-    return serveDeployedSsr(request, deployedApp, slugSegments, {
-      onNotFound: notFoundResponse,
-      templateId: published.templateId,
-      dailyRequestLimit: features.deployedAppDailyRequestLimit,
-    });
+    return withAppPageExtras(
+      await serveDeployedSsr(request, deployedApp, slugSegments, {
+        onNotFound: notFoundResponse,
+        templateId: published.templateId,
+        dailyRequestLimit: features.deployedAppDailyRequestLimit,
+      }),
+      ownerCodeSite(published, request, rawDomain),
+    );
   }
 
   // WordPress's "Reading Settings: your homepage displays" toggle — when a site has
@@ -536,7 +555,7 @@ async function serveSite(
       const headers = new Headers(blogResponse.headers);
       headers.delete("content-encoding");
       headers.delete("content-length");
-      return new NextResponse(blogResponse.body, { status: blogResponse.status, headers });
+      return withAppPageExtras(new NextResponse(blogResponse.body, { status: blogResponse.status, headers }), ownerCodeSite(published, request, rawDomain));
     }
 
     // WordPress's default "ugly" permalink/shortlink (/?p=123) is a root-path request
@@ -545,9 +564,9 @@ async function serveSite(
     // here. The WordPress importer writes exactly this form to BlogRedirect.fromPath.
     const wpPostId = new URL(request.url).searchParams.get("p");
     if (wpPostId) {
-      const redirectTo = await resolveBlogRedirect(published.templateId, `/?p=${wpPostId}`);
-      if (redirectTo) {
-        return NextResponse.redirect(new URL(redirectTo, request.url), 301);
+      const hit = await resolveRedirectFull(published.templateId, `/?p=${wpPostId}`);
+      if (hit) {
+        return NextResponse.redirect(new URL(hit.toPath, request.url), hit.status);
       }
     }
   }
@@ -622,8 +641,8 @@ async function serveSite(
     for (const param of ["p", "page_id"]) {
       const id = requestUrl.searchParams.get(param);
       if (!id || !/^\d+$/.test(id) || (param === "p" && matchedSegments === 0)) continue; // root ?p= is handled above
-      const redirectTo = await resolveBlogRedirect(published.templateId, `${pagePathForRedirects}/?${param}=${id}`);
-      if (redirectTo) return NextResponse.redirect(new URL(redirectTo, request.url), 301);
+      const hit = await resolveRedirectFull(published.templateId, `${pagePathForRedirects}/?${param}=${id}`);
+      if (hit) return NextResponse.redirect(new URL(hit.toPath, request.url), hit.status);
     }
 
     // One canonical form per page URL. Plexo's default is no trailing slash; a page migrated
@@ -666,10 +685,14 @@ async function serveSite(
     html = await fillLatestPostLists(html, published.templateId);
 
     const canonicalUrl = `https://${rawDomain}/${pageSegments.join("/")}${cursor.urlTrailingSlash && pageSegments.length > 0 ? "/" : ""}`;
+    const pageSeo = readPageSeoExtras(cursor.designJson);
     html = injectSeoTags(html, {
       canonicalUrl,
       noindex: published.noindex ?? false,
       siteName: published.template.name || rawDomain,
+      pageNoindex: pageSeo.noindex,
+      canonicalOverride: resolveCanonical(pageSeo.canonicalUrl, rawDomain) || undefined,
+      extraJsonLd: schemaItemsToPublish(pageSeo.schemaJson),
     });
     html = optimizeImages(html);
     // Site health's "Fix it for me" options (lib/siteHealth/serve.ts), applied as the page is served so turning one off
@@ -693,7 +716,7 @@ async function serveSite(
     // Keyed on the page's own sourceType conceptually, not published.type (SUBDOMAIN vs
     // CUSTOM is an orthogonal distinction) — a FREE user's page should show this everywhere
     // it's served, custom domain or not.
-    if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
+    if (!resolveSiteHideBranding(published.user.subscriptionPlan, published.user.hideBranding, published.template.hideBranding)) {
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
       html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
     }
@@ -749,7 +772,7 @@ async function serveSite(
     }
 
     // The owner's own header/footer code (verification, pixels) — custom domain + Starter and above only.
-    html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") });
+    html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") }, { head: cursor.pageHeadCode, footer: cursor.pageFooterCode });
     html = await applyAnalyticsTag(html, published.templateId, request.headers);
 
     // Visits are counted by the page's own counting script, not here: this response is cached at the edge, so most
@@ -835,11 +858,11 @@ async function serveSite(
           if (commerceSettings.newsletterPopupEnabled && commerceSettings.maildripNewsletterGroupId) {
             html = injectNewsletterPopupScript(html);
           }
-          if (!resolveHideBranding(published.user.subscriptionPlan, published.user.hideBranding)) {
+          if (!resolveSiteHideBranding(published.user.subscriptionPlan, published.user.hideBranding, published.template.hideBranding)) {
             const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
             html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
           }
-          html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") });
+          html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") }, { head: cursor.pageHeadCode, footer: cursor.pageFooterCode });
     html = await applyAnalyticsTag(html, published.templateId, request.headers);
           return new NextResponse(html, {
             headers: { "Content-Type": "text/html; charset=utf-8", "X-Content-Type-Options": "nosniff" },
@@ -857,13 +880,13 @@ async function serveSite(
   // since that route takes precedence over this catch-all and never reaches here.
   const fullRequestedPath = "/" + slugSegments.join("/");
   const decodedFullPath = "/" + slugSegments.map(safeDecode).join("/");
-  const redirectTo =
-    (await resolveBlogRedirect(published.templateId, fullRequestedPath)) ??
-    (decodedFullPath !== fullRequestedPath ? await resolveBlogRedirect(published.templateId, decodedFullPath) : null);
-  if (redirectTo) {
+  const redirectHit =
+    (await resolveRedirectFull(published.templateId, fullRequestedPath)) ??
+    (decodedFullPath !== fullRequestedPath ? await resolveRedirectFull(published.templateId, decodedFullPath) : null);
+  if (redirectHit) {
     // On Free the new home of an old link isn't served either — send the visitor home.
     if (homeOnly) return homePageRedirect(request);
-    return NextResponse.redirect(new URL(redirectTo, request.url), 301);
+    return NextResponse.redirect(new URL(redirectHit.toPath, request.url), redirectHit.status);
   }
 
   // /sitemap.xml and /robots.txt for every site — generated from the page tree and blog,
@@ -883,7 +906,7 @@ async function serveSite(
               description: healthSettings?.fallbackDescription ?? published.template.compiledHtml.match(/<meta\b[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] ?? null,
               pages: await listSitePages(published.template, rawDomain, homeOnly),
             })
-          : buildSiteRobotsTxt(rawDomain, published.noindex ?? false, { aiRules: healthSettings?.extras.ai_robots ? aiRobotsRules() : undefined });
+          : buildSiteRobotsTxt(rawDomain, published.noindex ?? false, { aiRules: healthSettings?.extras.ai_robots ? aiRobotsRules() : undefined, config: await readRobotsConfig(published.templateId) });
       return new NextResponse(body, {
         headers: {
           "Content-Type": remainingSegments[0] === "sitemap.xml" ? "application/xml; charset=utf-8" : "text/plain; charset=utf-8",
@@ -895,8 +918,13 @@ async function serveSite(
 
   // Leftover segments after the walk are an asset path under whichever page the walk
   // stopped at. Only RAW_UPLOAD pages have TemplateAsset files hanging off them.
-  if (cursor.sourceType !== "RAW_UPLOAD") {
+  // Counted for the owner's "Pages people couldn't find" list (Advanced, Redirects).
+  const missingPage = () => {
+    recordNotFound(published.templateId, fullRequestedPath, request.headers.get("referer"));
     return notFoundResponse();
+  };
+  if (cursor.sourceType !== "RAW_UPLOAD") {
+    return missingPage();
   }
 
   // Asset paths are stored decoded (a migrated WordPress upload like "Our Team.jpg"), the
@@ -936,7 +964,7 @@ async function serveSite(
     }
   }
   if (!asset) {
-    return notFoundResponse();
+    return missingPage();
   }
   // no-store: an edit (e.g. a Text Content color change) overwrites this exact blob URL in
   // place rather than minting a new one, so a cached `fetch()` result here would keep
@@ -968,7 +996,7 @@ async function serveSite(
     if (/<form[\s>]/i.test(html) || html.includes("data-plexo-form")) {
       html = injectFormsScript(html, published.templateId, { auto: true });
     }
-    html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") });
+    html = await applyOwnerCode(html, { templateId: published.templateId, type: published.type, plan: published.user.subscriptionPlan, secFetchDest: request.headers.get("sec-fetch-dest") }, { head: cursor.pageHeadCode, footer: cursor.pageFooterCode });
     html = await applyAnalyticsTag(html, published.templateId, request.headers);
     headers.set("Cache-Control", "public, max-age=0, s-maxage=30, must-revalidate");
     return new NextResponse(html, { headers });
@@ -1073,7 +1101,15 @@ async function handlePageFormPost(
   if (!(await checkCommerceRateLimit(`forms:page:${templateId}:${clientIp(request)}`, 10))) {
     return NextResponse.json({ error: "Too many submissions. Please try again shortly." }, { status: 429 });
   }
+  // A post with no sign of a browser on this site is a machine (a scanner, or a WordPress service still calling the old site): drop it quietly.
+  if (!looksLikeBrowserPost(request.headers, host)) return wordPressAjaxStub();
   const fields = await readSubmittedFields(request);
+  // Calls from WordPress plugins and services (MalCare, backups, monitoring) are never a visitor's message.
+  if (machineSource(fields)) return wordPressAjaxStub();
+  // Plexo's own check (lib/forms/humanCheck.ts): a form on a page of this site carries a ticket the page asked for when it loaded.
+  const humanCheck = verifyHumanCheck(fields[HUMAN_CHECK_FIELD], templateId);
+  delete fields[HUMAN_CHECK_FIELD];
+  if (humanCheck !== "ok") return back(`${path}${path.includes("?") ? "&" : "?"}plexo_form_error=${humanCheck === "too-fast" ? "fast" : "check"}`);
   // Spam trap: a filled-in hidden field means a bot — answer as if it worked.
   if (fields["_hp_field"]) return back(samePage);
   delete fields["_hp_field"];
@@ -1124,7 +1160,10 @@ export async function POST(
   if (!isAjax && !isCaptureRoute) return NextResponse.json({ error: "Method not allowed." }, { status: 405 });
   if (!root.migratedFrom) return isAjax ? wordPressAjaxStub() : NextResponse.json({ error: "Method not allowed." }, { status: 405 });
 
+  // (A route a migrated widget or app posts to on purpose can come from a server, so only pages and admin-ajax need to look like a browser.)
+  if (!isCaptureRoute && !looksLikeBrowserPost(request.headers, decodeURIComponent(domain))) return wordPressAjaxStub();
   const fields = await readSubmittedFields(request);
+  if (machineSource(fields)) return wordPressAjaxStub();
   if (isAjax && !looksLikeFormSubmission(fields)) return wordPressAjaxStub();
   if (Object.keys(fields).length === 0) return NextResponse.json({ success: false, message: "Nothing was submitted." }, { status: 400 });
 

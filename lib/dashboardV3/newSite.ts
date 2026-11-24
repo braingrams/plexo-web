@@ -82,7 +82,7 @@ function nameNotTaken(name: string, taken: Set<string>): string {
 }
 
 /** What the designs and the site are made from: the owner's brand with this site's name on it. */
-export function profileFor(goal: NewSiteGoal, name: string, brand: SolBuildProfile["brand"] | undefined, extra?: { about?: string; industry?: string; tone?: string }): SolBuildProfile {
+export function profileFor(goal: NewSiteGoal, name: string, brand: SolBuildProfile["brand"] | undefined, extra?: { about?: string; industry?: string; tone?: string; businessType?: string }): SolBuildProfile {
   const about = extra?.about ? clean(extra.about).slice(0, 500) : "";
   return {
     goal,
@@ -93,11 +93,12 @@ export function profileFor(goal: NewSiteGoal, name: string, brand: SolBuildProfi
       // What SOL understood from the description (see lib/onboarding/understand.ts): steers which designs fit best.
       ...(extra?.industry ? { industry: extra.industry } : {}),
       ...(extra?.tone ? { tone: extra.tone } : {}),
+      ...(extra?.businessType ? { businessType: extra.businessType } : {}),
     },
   };
 }
 
-export function designPicks(goal: NewSiteGoal, name: string, brand?: SolBuildProfile["brand"], extra?: { about?: string; industry?: string; tone?: string }): { top: DesignChoice[]; total: number } {
+export function designPicks(goal: NewSiteGoal, name: string, brand?: SolBuildProfile["brand"], extra?: { about?: string; industry?: string; tone?: string; businessType?: string }): { top: DesignChoice[]; total: number } {
   const { top, others } = pickDesigns(profileFor(goal, name, brand, extra));
   return { top, total: top.length + others.length };
 }
@@ -173,4 +174,13 @@ export function limitNote(plan: string, liveSiteNames: string[], opts: { trial?:
 export function newSiteRedirect(opts: { newDashboard: boolean; classic?: string | string[] | null }): string | null {
   const classic = Array.isArray(opts.classic) ? opts.classic[0] : opts.classic;
   return opts.newDashboard && classic !== "1" ? NEW_SITE_PATH : null;
+}
+
+/**
+ * Where the owner lands right after "Create my website". A site SOL already personalized has its words, colours and details, so there
+ * is nothing left to edit before it goes online: they go to the dashboard, where "Finish up" and Publish are waiting. Any other new
+ * site opens its own page, where the pages and the editor are.
+ */
+export function afterCreateHref(siteId: string, personalizedWithSol: boolean): string {
+  return personalizedWithSol ? "/dashboard" : `/dashboard/sites/${siteId}`;
 }

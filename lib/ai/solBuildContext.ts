@@ -13,6 +13,8 @@ export type SolBuildProfile = {
     name?: string;
     about?: string;
     industry?: string;
+    /** The kind of business, one of lib/onboarding/businessType.ts: chosen by the owner when set. */
+    businessType?: string;
     tone?: string;
     colors?: string[];
     logoUrl?: string;

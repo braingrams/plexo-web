@@ -6,6 +6,7 @@ import { activityMark, lastBlockShowsActivity, mergeToolResults } from "../../so
 import type { ContentBlock, SolMessage } from "../../sol/_components/types";
 import { Button } from "../ui/Button";
 import { Message } from "./Message";
+import { RatePrompt } from "./RatePrompt";
 
 /** After a long quiet spell, say so: dots alone for minutes look frozen. */
 function QuietNote({ activity }: { activity: string }) {
@@ -91,6 +92,7 @@ export function Messages({
             </div>
           ) : null}
           {below}
+          <RatePrompt messages={messages} conversationId={conversationId} streaming={streaming} waiting={Boolean(below)} />
           <div ref={bottom} />
         </div>
       </div>

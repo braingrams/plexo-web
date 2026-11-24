@@ -43,6 +43,14 @@ export async function requireBlogSiteAccess(
     notFound();
   }
 
+  // A member invited to specific sites acts here with the role they were given on THIS site; any other site is not theirs.
+  let role: OrgRole = orgResolution.role;
+  if (role === "guest") {
+    const siteRole = orgResolution.siteAccess[template.id];
+    if (!siteRole) notFound();
+    role = siteRole;
+  }
+
   const { data: user } = await User.get({ id: session.user.id }).go();
 
   return {
@@ -52,7 +60,7 @@ export async function requireBlogSiteAccess(
     userId: session.user.id,
     userName: session.user.name ?? "",
     userEmail: session.user.email ?? "",
-    role: orgResolution.role,
+    role,
     subscriptionPlan: effectivePlan(user),
   };
 }

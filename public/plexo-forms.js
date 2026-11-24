@@ -32,8 +32,41 @@
   if (!TEMPLATE_ID) return;
 
   var HONEYPOT = "_hp_field"; // must match lib/v2/forms.ts V2_FORM_HONEYPOT_FIELD_NAME
-  var DEFAULT_SUCCESS = "Thank you! Your message has been sent.";
+  var DEFAULT_SUCCESS = "Thank you! We've received your message and someone will reach out to you soon.";
   var ERROR_TEXT = "Sorry, that didn't send. Please check your details and try again.";
+
+  // Plexo's own "are you a person?" check, on every form. The page asks for a small signed ticket when it loads; the form carries it
+  // along when it is sent (lib/forms/humanCheck.ts). Nothing for the visitor to tick.
+  var CHECK_FIELD = "_plx_check";
+  var checkToken = null, checkPending = null;
+  function fetchCheck() {
+    if (checkToken) return Promise.resolve(checkToken);
+    if (!checkPending) {
+      checkPending = Promise.resolve()
+        .then(function () { return fetch("/api/public/forms/" + TEMPLATE_ID + "/check", { credentials: "same-origin", cache: "no-store" }); })
+        .then(function (r) { return r && r.ok ? r.json() : {}; })
+        .then(function (d) { checkToken = d && d.token ? d.token : null; checkPending = null; return checkToken; })
+        .catch(function () { checkPending = null; return null; });
+    }
+    return checkPending;
+  }
+  function putCheck(form) {
+    if (!checkToken || !form || !form.tagName || form.tagName !== "FORM") return;
+    var input = form.querySelector('input[name="' + CHECK_FIELD + '"]');
+    if (!input) {
+      input = document.createElement("input");
+      input.type = "hidden";
+      input.name = CHECK_FIELD;
+      form.appendChild(input);
+    }
+    input.value = checkToken;
+  }
+  // As soon as the page is up (so the ticket is a few seconds old by the time anyone has filled in a form), and again when a form is touched.
+  function warmCheck() { if (!document.querySelector("form")) return; fetchCheck().then(function () { var f = document.querySelectorAll("form"); for (var i = 0; i < f.length; i++) putCheck(f[i]); }); }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", warmCheck); else warmCheck();
+  document.addEventListener("focusin", function (e) { var f = e.target && e.target.closest ? e.target.closest("form") : null; if (f) { if (checkToken) putCheck(f); else warmCheck(); } }, true);
+  // Whatever way the form is sent (this script's own fetch, or the form's own post), the ticket goes with it.
+  document.addEventListener("submit", function (e) { var f = e.target; if (f && f.tagName === "FORM") putCheck(f); }, true);
 
   function marker(form) {
     var v = form.getAttribute("data-plexo-form");
@@ -123,6 +156,65 @@
     form.appendChild(hp);
   }
 
+  // A clear "we got it" card in the middle of the screen. A form inside a pop-up, a menu or a long page is often out of sight
+  // by the time the answer comes back, so the confirmation can never depend on where the form is. Plain, neutral colours: this is
+  // the owner's page, not ours.
+  function showCard(text, isError) {
+    var old = document.querySelector("[data-plexo-thanks]");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var wrap = document.createElement("div");
+    wrap.setAttribute("data-plexo-thanks", "");
+    wrap.setAttribute("role", isError ? "alert" : "status");
+    wrap.style.cssText = "position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(15,15,20,.5);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif";
+    var card = document.createElement("div");
+    card.style.cssText = "width:100%;max-width:420px;box-sizing:border-box;padding:30px 26px 24px;border-radius:18px;background:#fff;color:#16161a;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.3)";
+    var icon = document.createElement("div");
+    var color = isError ? "#b91c1c" : "#15803d";
+    icon.style.cssText = "width:56px;height:56px;margin:0 auto 14px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:" + (isError ? "#fee2e2" : "#dcfce7");
+    icon.innerHTML = isError
+      ? '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M12 7v6m0 4h.01"/></svg>'
+      : '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="' + color + '" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+    var h = document.createElement("div");
+    h.style.cssText = "font-size:20px;font-weight:700;line-height:1.3;margin-bottom:8px";
+    h.textContent = isError ? "Please try again" : "Message received";
+    var p = document.createElement("p");
+    p.style.cssText = "margin:0 0 20px;font-size:15.5px;line-height:1.55;color:#3f3f46";
+    p.textContent = text;
+    var b = document.createElement("button");
+    b.type = "button";
+    b.textContent = "Close";
+    b.style.cssText = "min-width:120px;padding:11px 22px;border:0;border-radius:10px;background:#16161a;color:#fff;font:600 15px system-ui,sans-serif;cursor:pointer";
+    card.appendChild(icon); card.appendChild(h); card.appendChild(p); card.appendChild(b);
+    wrap.appendChild(card);
+    function close() {
+      document.removeEventListener("keydown", onKey);
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+    }
+    function onKey(e) { if (e.key === "Escape") close(); }
+    b.addEventListener("click", close);
+    wrap.addEventListener("click", function (e) { if (e.target === wrap) close(); });
+    document.addEventListener("keydown", onKey);
+    document.body.appendChild(wrap);
+    try { b.focus(); } catch (err) { /* old browsers */ }
+  }
+
+  // Forms moved over from WordPress carry their own small "thank you" note next to the form, which is out of sight for a pop-up. Replace it.
+  function removeOldThanks() {
+    var notes = document.querySelectorAll('[role="status"]');
+    for (var i = 0; i < notes.length; i++) {
+      if (/^Thank you — your submission has been received/.test(notes[i].textContent || "") && notes[i].parentNode) notes[i].parentNode.removeChild(notes[i]);
+    }
+  }
+
+  // Back from a migrated form: the form address sends the visitor to "<page>?plexo_form=<form>". Say thank you, once.
+  function showMigratedReturn() {
+    var m = location.search.match(/[?&]plexo_form=([^&#]*)/);
+    if (!m) return;
+    removeOldThanks();
+    showCard(DEFAULT_SUCCESS, false);
+    try { history.replaceState(null, "", location.pathname + location.search.replace(/([?&])plexo_form=[^&#]*(&|$)/, function (_, a, b) { return b ? a : ""; }).replace(/\?$/, "") + location.hash); } catch (err) { /* old browsers */ }
+  }
+
   function showMessage(form, text, isError) {
     var box = form.querySelector("[data-plexo-form-message]");
     if (!box) {
@@ -149,13 +241,21 @@
     for (var i = 0; i < forms.length; i++) {
       if (isClaimed(forms[i]) || forms[i].querySelector("[data-plexo-form-message]")) {
         showMessage(forms[i], forms[i].getAttribute("data-plexo-success") || DEFAULT_SUCCESS, false);
-        try { forms[i].scrollIntoView({ block: "center" }); } catch (err) { /* old browsers */ }
+        showCard(forms[i].getAttribute("data-plexo-success") || DEFAULT_SUCCESS, false);
         return;
       }
     }
   }
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", showReturnThanks);
-  else showReturnThanks();
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { showReturnThanks(); showMigratedReturn(); showCheckError(); });
+  else { showReturnThanks(); showMigratedReturn(); showCheckError(); }
+
+  // Back from a post Plexo's own check turned away (no ticket, or sent too fast): say what to do.
+  function showCheckError() {
+    var m = location.search.match(/[?&]plexo_form_error=(check|fast)(&|$)/);
+    if (!m) return;
+    showCard(m[1] === "fast" ? "That was very quick. Please wait a moment and send it again." : "We couldn't confirm you're a person. Please reload the page and send it again.", true);
+    try { history.replaceState(null, "", location.pathname + location.search.replace(/([?&])plexo_form_error=[^&#]*(&|$)/, function (_, a, b) { return b ? a : ""; }).replace(/\?$/, "") + location.hash); } catch (err) { /* old browsers */ }
+  }
 
   // Back from a plain form post that the captcha turned away: say what to do, next to the form.
   function showReturnError() {
@@ -164,7 +264,7 @@
     for (var i = 0; i < forms.length; i++) {
       if (nativeFormName(forms[i]) !== null || isClaimed(forms[i])) {
         showMessage(forms[i], "Please complete the verification box, then send again.", true);
-        try { forms[i].scrollIntoView({ block: "center" }); } catch (err) { /* old browsers */ }
+        showCard("Please complete the verification box, then send your message again.", true);
         return;
       }
     }
@@ -274,6 +374,7 @@
         if (go) { location.assign(go); return; }
         form.reset();
         showMessage(form, form.getAttribute("data-plexo-success") || DEFAULT_SUCCESS, false);
+        showCard(form.getAttribute("data-plexo-success") || DEFAULT_SUCCESS, false);
         try { form.dispatchEvent(new CustomEvent("plexo:form-sent", { bubbles: true })); } catch (err) { /* old browsers */ }
       })
       .catch(function (err) {

@@ -3,10 +3,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { resolveSite } from "@/lib/pub/resolveSiteDynamo";
 import { checkCommerceRateLimit, clientIp } from "@/lib/commerceRateLimitDynamo";
 import { collectFormFields, recordFormSubmission } from "@/lib/forms/recordSubmission";
+import { HUMAN_CHECK_FIELD, humanCheckMessage, verifyHumanCheck } from "@/lib/forms/humanCheck";
 import { FormSettings } from "@/lib/db/opsEntities";
 import { Template } from "@/lib/db/contentEntities";
 import { ALL_CAPTCHA_RESPONSE_FIELDS, CAPTCHA_RESPONSE_FIELDS, verifyCaptcha } from "@/lib/forms/captcha";
 import { decryptSecret } from "@/lib/crypto";
+import { recordSecurityEvent } from "@/lib/security/events";
 import { designFormatOf } from "@/lib/v2/design";
 import { V2_FORM_HONEYPOT_FIELD_NAME, findV2Form, relabelV2Fields } from "@/lib/v2/forms";
 
@@ -68,6 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     if (originHost && originHost !== hostname) {
       console.info(`[forms] origin mismatch: templateId=${templateId} origin=${originHost} expected=${hostname}`);
+      void recordSecurityEvent({ type: "form_bot_blocked", detail: `A form post to site ${templateId} came from another website (${originHost})`, ip: clientIp(request), dedupeKey: `origin:${templateId}:${originHost}` });
       if (wantsJson) return NextResponse.json({ ok: true, redirect: null });
       const redirectParam = new URL(request.url).searchParams.get("redirect") || "/";
       const redirectPath = redirectParam.startsWith("/") ? redirectParam : "/";
@@ -80,6 +83,19 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     formData = await request.formData();
   } catch {
     return NextResponse.json({ error: "Invalid form submission." }, { status: 400 });
+  }
+
+  // Plexo's own check on every form (lib/forms/humanCheck.ts): the page asked for a ticket when it loaded, and a person takes a few
+  // seconds to fill the form in. A post without a genuine, aged ticket is a script, not a visitor.
+  const humanCheck = verifyHumanCheck(formData.get(HUMAN_CHECK_FIELD), templateId);
+  if (humanCheck !== "ok") {
+    void recordSecurityEvent({ type: "form_bot_blocked", detail: `A form post to site ${templateId} had no valid human check (${humanCheck})`, ip: clientIp(request), dedupeKey: `check:${templateId}:${clientIp(request)}` });
+    const message = humanCheckMessage(humanCheck);
+    if (wantsJson) return NextResponse.json({ error: message }, { status: 400 });
+    const wanted = new URL(request.url).searchParams.get("redirect") ?? "/";
+    const back = new URL(wanted.startsWith("/") && !wanted.startsWith("//") ? wanted : "/", request.url);
+    back.searchParams.set("plexo_form_error", humanCheck === "too-fast" ? "fast" : "check");
+    return NextResponse.redirect(back, { status: 303 });
   }
 
   let fields = collectFormFields(formData.entries());
@@ -128,6 +144,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const honeypotValue = formData.get(HONEYPOT_FIELD_NAME);
   if (typeof honeypotValue === "string" && honeypotValue.trim()) {
     console.info(`[forms] honeypot catch: templateId=${templateId} at=${new Date().toISOString()}`);
+    void recordSecurityEvent({ type: "form_bot_blocked", detail: `A bot filled the hidden field on a form of site ${templateId}`, ip: clientIp(request), dedupeKey: `honeypot:${templateId}:${clientIp(request)}` });
     if (wantsJson) return NextResponse.json({ ok: true, redirect: null });
     return NextResponse.redirect(new URL(redirectPath, request.url), { status: 303 });
   }
@@ -149,6 +166,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       const answer = formData.get(CAPTCHA_RESPONSE_FIELDS[formSettings.captchaProvider]);
       const result = await verifyCaptcha({ provider: formSettings.captchaProvider, secret, token: typeof answer === "string" ? answer : null, ip: clientIp(request) });
       if (result === "failed") {
+        void recordSecurityEvent({ type: "form_bot_blocked", detail: `A form post to site ${templateId} failed the verification box`, ip: clientIp(request), dedupeKey: `captcha:${templateId}:${clientIp(request)}` });
         const message = "Please complete the verification box, then send again.";
         if (wantsJson) return NextResponse.json({ error: message }, { status: 400 });
         const back = new URL(redirectPath, request.url);

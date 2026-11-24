@@ -3,14 +3,16 @@
 import { UpgradePrompt } from "@/app/dashboard/_components/UpgradePrompt";
 import { useState } from "react";
 import { Check, Mail, Send, ShieldCheck, UserMinus, Users } from "lucide-react";
-import { Avatar, Badge, Button, ButtonLink, Input, Select, useToast } from "../ui";
+import { Avatar, Badge, Button, ButtonLink, Input, Modal, SegmentedControl, Select, useToast } from "../ui";
+import { SITE_ROLE_INFO, type SiteAccess } from "@/lib/access/siteAccess";
+import { SiteAccessPicker, type PickableSite } from "./SiteAccessPicker";
 import { usageMeter } from "@/lib/dashboardV3/settingsUsage";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { AsideCard, Notice, Panel, SettingsPageShell, UsageMeter } from "./bits";
 import { GateOrError } from "../../_components/UpgradePrompt";
 
-export type TeamMember = { id: string; userId: string; role: string; scopedTemplateIds: string[]; name: string; email: string };
-export type TeamInvite = { id: string; email: string; role: string; scopedTemplateIds: string[]; createdAt: string };
+export type TeamMember = { id: string; userId: string; role: string; scopedTemplateIds: string[]; siteAccess?: SiteAccess; name: string; email: string };
+export type TeamInvite = { id: string; email: string; role: string; scopedTemplateIds: string[]; siteAccess?: SiteAccess; createdAt: string };
 
 /** Roles in plain words (the same roles the server knows). */
 export const TEAM_ROLES: { value: string; label: string; body: string }[] = [
@@ -20,14 +22,18 @@ export const TEAM_ROLES: { value: string; label: string; body: string }[] = [
   { value: "commenter", label: "Reviewer", body: "Can look at your sites and leave comments." },
   { value: "viewer", label: "Viewer", body: "Can look, but not change anything." },
 ];
-const roleLabel = (r: string) => (r === "owner" ? "Owner" : (TEAM_ROLES.find((x) => x.value === r)?.label ?? r));
+const roleLabel = (r: string) => (r === "owner" ? "Owner" : r === "guest" ? "Some sites only" : (TEAM_ROLES.find((x) => x.value === r)?.label ?? r));
 
-export function TeamSection({ currentUserId, currentRole, organizationName, members: m0, invitations: i0, seatLimit = null, mock = false }: { seatLimit?: number | null; currentUserId: string; currentRole: string; organizationName: string; members: TeamMember[]; invitations: TeamInvite[]; mock?: boolean }) {
+export function TeamSection({ currentUserId, currentRole, organizationName, members: m0, invitations: i0, sites = [], seatLimit = null, mock = false }: { sites?: PickableSite[]; seatLimit?: number | null; currentUserId: string; currentRole: string; organizationName: string; members: TeamMember[]; invitations: TeamInvite[]; mock?: boolean }) {
   const { show } = useToast();
   const [members, setMembers] = useState(m0);
   const [invites, setInvites] = useState(i0);
   const [email, setEmail] = useState("");
   const [role, setRole] = useState("editor");
+  const [scope, setScope] = useState<"all" | "sites">("all");
+  const [inviteSites, setInviteSites] = useState<SiteAccess>({});
+  const [editing, setEditing] = useState<{ member: TeamMember; access: SiteAccess } | null>(null);
+  const siteName = (id: string) => sites.find((x) => x.id === id)?.name ?? "A site";
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const canManage = currentRole === "owner" || currentRole === "admin";
@@ -48,11 +54,28 @@ export function TeamSection({ currentUserId, currentRole, organizationName, memb
   const invite = async () => {
     const to = email.trim();
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(to)) return setError("That doesn't look like an email address. Please check it and try again.");
-    const r = await call("invite", async () => (mock ? { invitation: { id: `i${Date.now()}` } } : hubApi<{ invitation?: { id: string } }>("/api/org/invite", { method: "POST", json: { email: to, role, scopedTemplateIds: [] } }, "We couldn't send that invite. Please try again.")));
+    const siteOnly = scope === "sites";
+    if (siteOnly && Object.keys(inviteSites).length === 0) return setError("Tick at least one site they should be able to open.");
+    const sentRole = siteOnly ? "guest" : role;
+    const sentAccess = siteOnly ? inviteSites : undefined;
+    const r = await call("invite", async () => (mock ? { invitation: { id: `i${Date.now()}` } } : hubApi<{ invitation?: { id: string } }>("/api/org/invite", { method: "POST", json: { email: to, role: sentRole, scopedTemplateIds: [], ...(sentAccess ? { siteAccess: sentAccess } : {}) } }, "We couldn't send that invite. Please try again.")));
     if (r?.invitation?.id) {
-      setInvites((p) => [{ id: r.invitation!.id, email: to, role, scopedTemplateIds: [], createdAt: new Date().toISOString() }, ...p]);
+      setInvites((p) => [{ id: r.invitation!.id, email: to, role: sentRole, scopedTemplateIds: [], siteAccess: sentAccess, createdAt: new Date().toISOString() }, ...p]);
       setEmail("");
+      setInviteSites({});
       show({ title: "Invite sent", description: `${to} will get an email with a link to join.`, tone: "success" });
+    }
+  };
+
+  const saveSites = async () => {
+    if (!editing) return;
+    if (Object.keys(editing.access).length === 0) return setError("Tick at least one site, or remove this person from your team.");
+    const { member, access } = editing;
+    const ok = await call(`sites-${member.id}`, async () => (mock ? true : hubApi(`/api/org/members/${member.userId}`, { method: "PATCH", json: { role: "guest", siteAccess: access } }, "We couldn't save that. Please try again.")));
+    if (ok) {
+      setMembers((all) => all.map((x) => (x.id === member.id ? { ...x, siteAccess: access } : x)));
+      setEditing(null);
+      show({ title: "Access saved", tone: "success" });
     }
   };
 
@@ -91,9 +114,23 @@ export function TeamSection({ currentUserId, currentRole, organizationName, memb
               <div className="plx-person__main">
                 <b>{p.name || p.email}{you ? " (you)" : ""}</b>
                 <span>{p.email}</span>
+                {p.role === "guest" ? (
+                  <span className="plx-siteaccess__chips" style={{ marginTop: 6 }}>
+                    {Object.entries(p.siteAccess ?? {}).map(([id, r]) => <Badge key={id} tone="neutral">{siteName(id)}: {SITE_ROLE_INFO[r].label}</Badge>)}
+                  </span>
+                ) : null}
               </div>
               <div className="plx-person__end">
-                {editable ? (
+                {editable && p.role === "guest" ? (
+                  <>
+                    <Button variant="secondary" size="sm" onClick={() => setEditing({ member: p, access: { ...(p.siteAccess ?? {}) } })}>Change sites</Button>
+                    <Button variant="ghost" size="sm" leftIcon={<UserMinus size={16} aria-hidden />} loading={busy === `rm-${p.id}`} onClick={async () => {
+                      if (!window.confirm(`Take ${p.name || p.email} off your team? They'll lose access straight away.`)) return;
+                      const ok = await call(`rm-${p.id}`, async () => (mock ? true : hubApi(`/api/org/members/${p.userId}`, { method: "DELETE" }, "We couldn't remove them. Please try again.")));
+                      if (ok) setMembers((all) => all.filter((x) => x.id !== p.id));
+                    }}>Remove</Button>
+                  </>
+                ) : editable ? (
                   <>
                     <Select label={`Role for ${p.name || p.email}`} hideLabel value={p.role} disabled={busy === p.id} onChange={async (e) => {
                       const next = e.target.value;
@@ -121,10 +158,14 @@ export function TeamSection({ currentUserId, currentRole, organizationName, memb
       {canManage ? (
         <Panel title="Invite someone" description="They get an email. Nothing changes until they say yes." data-tour="team-invite">
           <div className="plx-sform plx-sform--wide">
+            {sites.length > 0 ? (
+              <SegmentedControl label="What can they open?" value={scope} onChange={setScope} options={[{ value: "all", label: "The whole workspace" }, { value: "sites", label: "Only some sites" }]} />
+            ) : null}
             <div className="plx-sform__two">
               <Input label="Their email" type="email" inputMode="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@example.com" onKeyDown={(e) => e.key === "Enter" && void invite()} />
-              <Select label="What can they do?" value={role} onChange={(e) => setRole(e.target.value)} options={TEAM_ROLES.map((r) => ({ value: r.value, label: r.label }))} help={TEAM_ROLES.find((r) => r.value === role)?.body} />
+              {scope === "all" ? <Select label="What can they do?" value={role} onChange={(e) => setRole(e.target.value)} options={TEAM_ROLES.map((r) => ({ value: r.value, label: r.label }))} help={TEAM_ROLES.find((r) => r.value === role)?.body} /> : null}
             </div>
+            {scope === "sites" ? <SiteAccessPicker sites={sites} value={inviteSites} onChange={setInviteSites} /> : null}
             <div>
               <Button loading={busy === "invite"} leftIcon={<Send size={16} aria-hidden />} onClick={invite}>Send invite</Button>
             </div>
@@ -139,7 +180,7 @@ export function TeamSection({ currentUserId, currentRole, organizationName, memb
               <span className="plx-tile" style={{ borderRadius: 999 }}><Mail size={18} aria-hidden /></span>
               <div className="plx-person__main">
                 <b>{v.email}</b>
-                <span>Invited as {roleLabel(v.role)}</span>
+                <span>{v.role === "guest" ? `Invited to ${Object.keys(v.siteAccess ?? {}).length} ${Object.keys(v.siteAccess ?? {}).length === 1 ? "site" : "sites"}` : `Invited as ${roleLabel(v.role)}`}</span>
               </div>
               <div className="plx-person__end">
                 <Badge tone="warning">Waiting</Badge>
@@ -154,6 +195,9 @@ export function TeamSection({ currentUserId, currentRole, organizationName, memb
           ))}
         </Panel>
       ) : null}
+      <Modal open={editing !== null} onClose={() => busy === null && setEditing(null)} title={editing ? `Sites for ${editing.member.name || editing.member.email}` : ""} width={620} footer={<><Button variant="secondary" disabled={busy !== null} onClick={() => setEditing(null)}>Cancel</Button><Button loading={busy?.startsWith("sites-") ?? false} onClick={() => void saveSites()}>Save</Button></>}>
+        {editing ? <SiteAccessPicker sites={sites} value={editing.access} onChange={(access) => setEditing({ ...editing, access })} /> : null}
+      </Modal>
     </SettingsPageShell>
   );
 }

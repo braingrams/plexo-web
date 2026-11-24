@@ -86,8 +86,12 @@ export function SolStudio({ engine, title = "SOL", doneActions, onClose, closeLa
         streaming={working}
         onConfirmToolCall={engine.confirm}
         confirmBusy={engine.confirmBusy}
-        below={engine.question ? <AskCard key={engine.question.id} block={engine.question} onSubmit={engine.answer} /> : null}
       />
+      {engine.question ? (
+        <div className="sol3-studio__ask">
+          <AskCard key={engine.question.id} docked block={engine.question} onSubmit={engine.answer} />
+        </div>
+      ) : null}
 
       <div className="sol3-studio__foot" data-empty={footerEmpty}>
         {engine.state === "error" ? (

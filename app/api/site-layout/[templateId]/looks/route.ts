@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/server/requirePermissionDynamo";
 import { resolveSiteLayoutAdmin } from "@/lib/siteLayoutDynamo";
 import { SiteLayout, Template } from "@/lib/db/contentEntities";
+import { DeployedApp } from "@/lib/db/appEntities";
 import { adoptLook, ensureBlankSiteLayout, fragmentIsBlank, looksFor, pagesWithOwnChrome, removeOwnChrome, siteKindForLayout, unsupportedLayoutMessage } from "@/lib/siteLayoutBlank";
 
 /**
@@ -17,6 +18,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ tem
   if ("error" in resolved) return resolved.error;
 
   const { data: root } = await Template.get({ id: templateId }).go();
+  // An app deployed from its own code is served as-is, so a shared header/footer and site-wide code never reach it.
+  const { data: deployed } = await DeployedApp.get({ templateId }).go();
+  if (deployed) {
+    return NextResponse.json({ siteKind: "app", supported: false, message: "This site is an app you deployed with its own code, so its header, footer and tracking snippets live inside the app itself. Add them in the app's files and publish it again, or ask Plexo's assistant to do it for you." });
+  }
   const kind = siteKindForLayout(root ?? {});
   const unsupported = unsupportedLayoutMessage(kind);
   if (unsupported) return NextResponse.json({ siteKind: kind, supported: false, message: unsupported });

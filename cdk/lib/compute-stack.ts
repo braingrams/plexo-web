@@ -11,6 +11,10 @@ import * as acm from "aws-cdk-lib/aws-certificatemanager";
 import * as lambdaEventSources from "aws-cdk-lib/aws-lambda-event-sources";
 import * as cr from "aws-cdk-lib/custom-resources";
 import * as iam from "aws-cdk-lib/aws-iam";
+import * as cloudwatch from "aws-cdk-lib/aws-cloudwatch";
+import * as cwActions from "aws-cdk-lib/aws-cloudwatch-actions";
+import * as sns from "aws-cdk-lib/aws-sns";
+import * as snsSubscriptions from "aws-cdk-lib/aws-sns-subscriptions";
 import { NodejsFunction } from "aws-cdk-lib/aws-lambda-nodejs";
 import * as path from "node:path";
 import * as fs from "node:fs";
@@ -1019,7 +1023,16 @@ export class ComputeStack extends cdk.Stack {
     // origin the app actually loads, and getting that wrong from static reading alone risks
     // silently breaking real functionality (Stripe.js, MailDrip embeds, uploaded assets,
     // etc.) with no way to verify here. Follow-up: audit real network requests in a running
-    // session, then add a real CSP separately. Separate from mcpResponseHeadersPolicy above
+    // session, then add a script-src CSP separately.
+    //
+    // What IS enforced now is a CSP limited to directives that cannot break a page: frame-ancestors (nothing may
+    // frame the app, matching X-Frame-Options), base-uri (a smuggled <base> tag cannot redirect relative links) and
+    // object-src (no plugin content). form-action is deliberately left out: browsers also apply it to the redirect
+    // that follows a form post, which would break sign-in and payment hand-offs. override:false, so a route that sets
+    // its own CSP (project previews, draft previews) keeps it. Permissions-Policy: camera, microphone and location are
+    // limited to this origin (so a third-party frame cannot ask for them while same-origin previews still can), and
+    // hardware APIs nobody here uses are switched off. Not applied to customer sites (they run the owner's own code).
+    // Separate from mcpResponseHeadersPolicy above
     // (which stays scoped to api/v1/mcp* only, for the WWW-Authenticate reason explained
     // there) — a CloudFront behavior accepts only one responseHeadersPolicy, so this is a
     // second, independent policy applied to the other behaviors below.
@@ -1031,6 +1044,16 @@ export class ComputeStack extends cdk.Stack {
             frameOptions: { frameOption: cloudfront.HeadersFrameOption.SAMEORIGIN, override: true },
             referrerPolicy: { referrerPolicy: cloudfront.HeadersReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN, override: true },
             strictTransportSecurity: { accessControlMaxAge: cdk.Duration.days(365), includeSubdomains: true, preload: true, override: true },
+            contentSecurityPolicy: { contentSecurityPolicy: "frame-ancestors 'self'; base-uri 'self'; object-src 'none'", override: false },
+          },
+          customHeadersBehavior: {
+            customHeaders: [
+              {
+                header: "Permissions-Policy",
+                value: "camera=(self), microphone=(self), geolocation=(self), usb=(), serial=(), bluetooth=(), hid=(), midi=(), interest-cohort=(), browsing-topics=()",
+                override: false,
+              },
+            ],
           },
         })
       : undefined;
@@ -1079,6 +1102,28 @@ export class ComputeStack extends cdk.Stack {
       queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
       headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
         "cloudfront-viewer-country",
+        "x-forwarded-host",
+        "accept",
+        "accept-language",
+        "content-type",
+        "origin",
+        "referer",
+        "user-agent",
+      ),
+    });
+
+    // SOL personalizing a design in onboarding suggests cities, phone formats and prices that fit where the owner is
+    // (app/api/onboarding/personalize). Same reasoning as billing above: the location headers only reach the app when a
+    // policy names them, and the managed policies that do also forward Host, which a Lambda Function URL rejects.
+    const onboardingOriginRequestPolicy = new cloudfront.OriginRequestPolicy(this, "OnboardingOriginRequestPolicy", {
+      originRequestPolicyName: `${this.stackName}-onboarding`,
+      comment: "SOL onboarding: forwards the viewer's country and city plus the usual request headers, never Host",
+      cookieBehavior: cloudfront.OriginRequestCookieBehavior.all(),
+      queryStringBehavior: cloudfront.OriginRequestQueryStringBehavior.all(),
+      headerBehavior: cloudfront.OriginRequestHeaderBehavior.allowList(
+        "cloudfront-viewer-country",
+        "cloudfront-viewer-country-name",
+        "cloudfront-viewer-city",
         "x-forwarded-host",
         "accept",
         "accept-language",
@@ -1163,6 +1208,18 @@ export class ComputeStack extends cdk.Stack {
           functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
           responseHeadersPolicy: securityHeadersPolicy,
         },
+        "api/onboarding/personalize": {
+          origin: new origins.FunctionUrlOrigin(serverFnUrl, {
+            customHeaders: { "x-origin-verify": originVerifySecret! },
+            readTimeout: cdk.Duration.seconds(60),
+          }),
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          originRequestPolicy: onboardingOriginRequestPolicy,
+          functionAssociations: [{ function: forwardHostFn, eventType: cloudfront.FunctionEventType.VIEWER_REQUEST }],
+          responseHeadersPolicy: securityHeadersPolicy,
+        },
         "api/v1/mcp*": {
           // Same readTimeout bump as the default behavior above — an MCP tool call can
           // reach the exact same generate_layout-style code path (dispatchMcpTool ->
@@ -1244,6 +1301,32 @@ export class ComputeStack extends cdk.Stack {
       action: "lambda:InvokeFunction",
       sourceArn: `arn:aws:cloudfront::${this.account}:distribution/${distribution.distributionId}`,
     });
+
+    // --- Alerts: "is the app unhealthy right now?" Production only, and deliberately small. CloudWatch gives 10 standard alarms free
+    // each month; this stack uses 5 (count them below before adding one), the topic is free, and email notifications through it are
+    // free for the first 1,000 a month. Nothing here collects extra data or runs on a schedule.
+    // The topic only gets an email subscriber when ALERT_EMAIL is set in the deploy environment (confirmation email, then alerts);
+    // without it the alarms still show their state in the CloudWatch console. Missing data is treated as fine so a quiet night
+    // does not page anyone.
+    if (isProd) {
+      const alertTopic = new sns.Topic(this, "AlertTopic", { displayName: "Plexo production alerts" });
+      const alertEmail = process.env.ALERT_EMAIL?.trim();
+      if (alertEmail) alertTopic.addSubscription(new snsSubscriptions.EmailSubscription(alertEmail));
+      const raise = (alarm: cloudwatch.Alarm): void => {
+        alarm.addAlarmAction(new cwActions.SnsAction(alertTopic));
+        alarm.addOkAction(new cwActions.SnsAction(alertTopic));
+      };
+      const base = { treatMissingData: cloudwatch.TreatMissingData.NOT_BREACHING, comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD } as const;
+      // 1 and 2: the app's own server function is failing or being refused.
+      raise(new cloudwatch.Alarm(this, "ServerFnErrorsAlarm", { ...base, alarmDescription: "The Plexo app function is failing requests (5 or more errors in 5 minutes, twice in a row).", metric: serverFn.metricErrors({ period: cdk.Duration.minutes(5), statistic: "Sum" }), threshold: 5, evaluationPeriods: 2, datapointsToAlarm: 2 }));
+      raise(new cloudwatch.Alarm(this, "ServerFnThrottlesAlarm", { ...base, alarmDescription: "The Plexo app function is being throttled: visitors are being turned away.", metric: serverFn.metricThrottles({ period: cdk.Duration.minutes(5), statistic: "Sum" }), threshold: 1, evaluationPeriods: 1 }));
+      // 3: visitors are seeing server errors from the edge.
+      raise(new cloudwatch.Alarm(this, "Edge5xxAlarm", { ...base, alarmDescription: "More than 5% of requests to the Plexo app are failing with a server error.", metric: distribution.metric5xxErrorRate({ period: cdk.Duration.minutes(5), statistic: "Average" }), threshold: 5, evaluationPeriods: 2, datapointsToAlarm: 2 }));
+      // 4 and 5: the main databases are refusing work.
+      for (const [id, table] of [["Core", "plexo-core"], ["Content", "plexo-content"]] as const) {
+        raise(new cloudwatch.Alarm(this, `${id}TableThrottlesAlarm`, { ...base, alarmDescription: `The ${table} database is throttling requests.`, metric: new cloudwatch.Metric({ namespace: "AWS/DynamoDB", metricName: "ThrottledRequests", dimensionsMap: { TableName: table }, period: cdk.Duration.minutes(5), statistic: "Sum" }), threshold: 5, evaluationPeriods: 2, datapointsToAlarm: 2 }));
+      }
+    }
 
     new cdk.CfnOutput(this, "DistributionDomainName", { value: distribution.distributionDomainName });
     if (appCert) {

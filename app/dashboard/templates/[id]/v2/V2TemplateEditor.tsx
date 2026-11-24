@@ -48,6 +48,8 @@ type Props = {
   stockKeys: { unsplash?: string; pexels?: string; pixabay?: string };
   /** The page's own Comments / Publish buttons (the parent owns publishing). */
   headerRight: ReactNode;
+  /** The host's own Design | Code | Text switch is in headerRight, so the editor's smaller Design | Code beside it would double up. */
+  hostModeSwitch?: boolean;
   /** Show the simple screen (new dashboard, owner chose "beginner"). Pages and emails only. */
   beginner?: boolean;
   /** Puts the page live (saves what is on the canvas first). Rejects when it fails, so the editor's Save menu can say so. */
@@ -439,7 +441,7 @@ export const V2TemplateEditor = forwardRef<V2TemplateEditorHandle, Props>(functi
             shell={{ onExit: props.onBack, exitLabel: props.kind === "EMAIL" ? "Back to emails" : "Back to site" }}
             // The page picker (left) and the Design | Code switch (middle) are part of editing a site's pages; an email is one page of
             // table markup, so it has neither.
-            features={{ pageSwitcher: props.kind !== "EMAIL", viewSwitch: props.kind !== "EMAIL", codeView: props.kind !== "EMAIL", headerSol: false }}
+            features={{ pageSwitcher: props.kind !== "EMAIL", viewSwitch: props.kind !== "EMAIL" && !props.hostModeSwitch, codeView: props.kind !== "EMAIL", headerSol: false }}
             // SOL lives in the left rail (and on the element toolbar), so the top bar doesn't repeat it (headerSol: false).
             // SOL in the editor answers right here: the reply streams into the panel and each change it writes is made on the
             // page as it arrives (one Undo takes the whole answer back). Emails are edited by hand, so no SOL there.

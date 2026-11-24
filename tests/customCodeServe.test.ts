@@ -106,3 +106,27 @@ describe("when it runs", () => {
     expect(await applyOwnerCode(PAGE, site)).toBe(PAGE);
   });
 });
+
+describe("code for one page", () => {
+  const PAGE_HEAD = '<meta name="facebook-domain-verification" content="zzz">';
+  it("adds the page's own code after the site-wide code, on that page only", async () => {
+    const out = await applyOwnerCode(PAGE, site, { head: PAGE_HEAD, footer: null });
+    expect(out.indexOf(PAGE_HEAD)).toBeGreaterThan(out.indexOf(HEAD));
+    expect(count(out, PAGE_HEAD)).toBe(1);
+    expect(await applyOwnerCode(PAGE, site, undefined)).not.toContain(PAGE_HEAD);
+  });
+  it("works with no site-wide code at all", async () => {
+    state.row = null;
+    expect(await applyOwnerCode(PAGE, site, { head: PAGE_HEAD })).toContain(PAGE_HEAD);
+  });
+  it("still stays off payment pages and the free address", async () => {
+    state.row = null;
+    const pay = PAGE.replace("<h1>Hi</h1>", '<div data-plexo-commerce-checkoutflow></div>');
+    expect(await applyOwnerCode(pay, site, { head: PAGE_HEAD })).not.toContain(PAGE_HEAD);
+    expect(await applyOwnerCode(PAGE, { ...site, type: "SUBDOMAIN" }, { head: PAGE_HEAD })).not.toContain(PAGE_HEAD);
+  });
+  it("re-checks the saved page code when serving, so unsafe code never goes out", async () => {
+    state.row = null;
+    expect(await applyOwnerCode(PAGE, site, { head: '<meta http-equiv="refresh" content="0;url=https://evil.example">' })).not.toContain("evil.example");
+  });
+});

@@ -14,7 +14,7 @@ async function loadPreferences(
   const { data } = await NotificationPreferences.get({ organizationId }).go();
   if (!data) return null;
   return {
-    formSubmissions: data.formSubmissions ?? false,
+    formSubmissions: data.formSubmissions ?? true,
     blogComments: data.blogComments ?? true,
     payments: data.payments ?? true,
     commentMentions: data.commentMentions ?? true,
@@ -25,7 +25,7 @@ async function loadPreferences(
 /** A missing NotificationPreferences row (the common case; most orgs never visit the
  * settings toggle) means every type's own schema default applies, not "notifications off." */
 function isEnabled(prefs: Awaited<ReturnType<typeof loadPreferences>>, type: NotificationType): boolean {
-  return prefs ? prefs[type] : type !== "formSubmissions"; // mirrors each field's own default in coreEntities.ts
+  return prefs ? prefs[type] : true; // every kind is on until the owner switches it off, mirroring each field's own default in coreEntities.ts
 }
 
 /**

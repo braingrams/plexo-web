@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { Organization, Member, User } from "@/lib/db/coreEntities";
 import type { OrgRole } from "@/server/accessControl";
+import { cleanSiteAccess, type SiteAccess } from "@/lib/access/siteAccess";
 
 // Split out of server/orgDynamo.ts so this file has NO `next/headers` import — everything
 // here is pure DynamoDB I/O with no dependency on a live Next.js request context, unlike
@@ -24,12 +25,12 @@ function isConditionalCheckFailure(err: unknown): boolean {
 // httpOnly cookie instead — same "last org you were in" semantics, one fewer moving part.
 export const ACTIVE_ORG_COOKIE = "plexo_active_org";
 
-export async function membershipsForUser(userId: string): Promise<{ organizationId: string; role: OrgRole; organization: { id: string; name: string } }[]> {
+export async function membershipsForUser(userId: string): Promise<{ organizationId: string; role: OrgRole; siteAccess: SiteAccess; organization: { id: string; name: string } }[]> {
   const { data: memberships } = await Member.query.byUser({ userId }).go();
   const orgs = await Promise.all(
     memberships.map(async (m) => {
       const { data: org } = await Organization.get({ id: m.organizationId }).go();
-      return org ? { organizationId: m.organizationId, role: m.role as OrgRole, organization: { id: org.id, name: org.name } } : null;
+      return org ? { organizationId: m.organizationId, role: m.role as OrgRole, siteAccess: cleanSiteAccess(m.siteAccess), organization: { id: org.id, name: org.name } } : null;
     }),
   );
   return orgs.filter((o): o is NonNullable<typeof o> => o !== null);

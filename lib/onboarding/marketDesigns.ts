@@ -5,6 +5,7 @@
  * Marketplace prices are stored and charged in US dollars (see the purchase route), so that is what is shown.
  */
 import type { SolBuildGoal } from "@/lib/ai/solBuildContext";
+import { inferBusinessType, typeFit } from "@/lib/onboarding/businessType";
 
 /** The slice of a marketplace listing this logic needs. */
 export type MarketListing = {
@@ -18,7 +19,13 @@ export type MarketListing = {
   publishedAt: string | null;
 };
 
-export type OwnerHints = { name?: string; about?: string; industry?: string };
+export type OwnerHints = {
+  name?: string;
+  about?: string;
+  industry?: string;
+  /** The kind of business (lib/onboarding/businessType.ts): chosen by the owner or read by SOL. Guessed from the words when missing. */
+  type?: string;
+};
 
 /** Words that mark a design as a good fit for each goal (matched against its category, name and description). */
 const GOAL_WORDS: Record<string, string[]> = {
@@ -40,13 +47,21 @@ const STOP = new Set([
   "sell", "make", "have", "i", "a", "an", "of", "in", "to", "my",
   "want", "wants", "like", "users", "what", "them", "they", "need", "needs",
   "look", "looks", "good", "best", "some", "also", "just", "into", "onto",
-  "help", "about", "their", "site", "website", "would", "could", "should"
+  "help", "about", "their", "site", "website", "would", "could", "should",
+  "very", "easy", "clean", "simple", "shows", "show", "allow", "allows", "people", "reach", "service", "services", "does", "what", "when", "where", "which", "make", "makes", "using", "used", "want", "wants", "modern", "nice", "beautiful", "professional", "looking", "something", "everything", "anything", "business", "company", "online", "page", "pages", "built", "build", "create", "creating", "customers", "clients", "visitors", "user", "users"
 ]);
 
 /** Meaningful words from what the owner told us about their business (name excluded: it matches nothing useful). */
 export function ownerWords(h: OwnerHints): string[] {
   const text = `${h.industry ?? ""} ${h.about ?? ""}`.toLowerCase();
-  return Array.from(new Set(text.split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !STOP.has(w)))).slice(0, 16);
+  // Four letters or more, plus the short words that name a kind of business ("gym", "spa", "dj").
+  return Array.from(new Set(text.split(/[^a-z0-9]+/).filter((w) => !STOP.has(w) && (w.length >= 4 || DOMAIN_WORDS.has(w))))).slice(0, 16);
+}
+
+/** True when `word` appears as a whole word (or its plural) in `text`: "app" is not found in "happy", "ai" not in "main". */
+export function hasWord(text: string, word: string): boolean {
+  const w = word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9])${w}(s|es)?($|[^a-z0-9])`).test(text);
 }
 
 /** Domain ontology clusters for deep semantic matching and cross-domain penalty */
@@ -71,13 +86,22 @@ export const DOMAIN_CLUSTERS: Record<string, { keywords: string[]; penaltyKeywor
       "album", "spotify", "concert", "gig", "track", "vocalist"
     ],
   },
-  wellness: {
+  health: {
     keywords: [
-      "wellness", "clinic", "health", "doctor", "dental", "therapy", "counselling",
-      "care", "yoga", "fitness", "gym", "trainer", "mental", "hospital", "patient", "medical"
+      "wellness", "clinic", "health", "healthcare", "doctor", "dental", "dentist", "therapy", "therapist", "counselling",
+      "care", "nursing", "nurse", "carer", "carers", "patient", "medical", "hospital", "mental", "physio", "physiotherapy"
     ],
     penaltyKeywords: [
-      "recipe", "recipes", "concert", "album"
+      "recipe", "recipes", "concert", "album", "gym", "workout", "crossfit", "strength"
+    ],
+  },
+  fitness: {
+    keywords: [
+      "fitness", "gym", "gyms", "trainer", "personal trainer", "workout", "workouts", "crossfit", "pilates", "yoga",
+      "boxing", "bootcamp", "strength", "athlete", "exercise", "weights", "powerlifting", "martial arts"
+    ],
+    penaltyKeywords: [
+      "nursing", "carer", "carers", "patient", "dental", "recipe", "recipes", "concert", "album"
     ],
   },
   creative: {
@@ -115,6 +139,9 @@ export const DOMAIN_CLUSTERS: Record<string, { keywords: string[]; penaltyKeywor
   },
 };
 
+/** Every single word the domain clusters know (so a three-letter one like "gym" is kept as an owner word). */
+const DOMAIN_WORDS = new Set(Object.values(DOMAIN_CLUSTERS).flatMap((c) => c.keywords.filter((k) => !k.includes(" "))));
+
 /** Higher is a better fit. Category counts most (it is what the seller chose), then name, then description. */
 export function fitScore(l: MarketListing, goal: SolBuildGoal | string | undefined, hints: OwnerHints = {}): number {
   const cat = (l.category ?? "").toLowerCase();
@@ -124,6 +151,12 @@ export function fitScore(l: MarketListing, goal: SolBuildGoal | string | undefin
   const ownerText = `${hints.industry ?? ""} ${hints.about ?? ""}`.toLowerCase();
 
   let s = 0;
+
+  // 0. The kind of business: the same type as the design is by far the strongest signal, then a related one.
+  // With no type given, a strong word in the name or description ("gym", "dental", "church") is enough to know.
+  const guess = hints.type ? null : inferBusinessType(hints.name, hints.industry, hints.about);
+  const ownerType = hints.type ?? (guess && (guess.score >= 5 || (guess.score >= 3 && guess.margin >= 1.5)) ? guess.id : undefined);
+  s += typeFit(ownerType, l, typeof goal === "string" ? goal : undefined);
 
   // 1. Goal words matching (capped at 8 so generic "link in bio creator" terms don't overpower domain fit)
   let goalScore = 0;
@@ -136,29 +169,30 @@ export function fitScore(l: MarketListing, goal: SolBuildGoal | string | undefin
 
   // 2. Direct owner words matching
   for (const w of ownerWords(hints)) {
-    if (cat.includes(w)) s += 4;
-    if (name.includes(w)) s += 3;
-    if (desc.includes(w)) s += 2;
+    if (hasWord(cat, w)) s += 4;
+    if (hasWord(name, w)) s += 3;
+    if (hasWord(desc, w)) s += 2;
   }
 
   // 3. Deep semantic domain affinity & cross-domain mismatch detection
-  for (const [domain, cluster] of Object.entries(DOMAIN_CLUSTERS)) {
-    const ownerMatchesDomain = cluster.keywords.some((k) => ownerText.includes(k));
-    const listingMatchesDomain = cluster.keywords.some((k) => listingText.includes(k));
+  // The older word clusters only step in when the kind of business could not be told: otherwise they double-count generic words.
+  for (const [domain, cluster] of ownerType ? [] : Object.entries(DOMAIN_CLUSTERS)) {
+    const ownerMatchesDomain = cluster.keywords.some((k) => hasWord(ownerText, k));
+    const listingMatchesDomain = cluster.keywords.some((k) => hasWord(listingText, k));
 
     if (ownerMatchesDomain && listingMatchesDomain) {
       // Direct strong domain affinity boost (e.g. music artist -> musician template)
       s += 30;
       // Extra affinity if category or name matches
-      if (cluster.keywords.some((k) => cat.includes(k) || name.includes(k))) {
+      if (cluster.keywords.some((k) => hasWord(cat, k) || hasWord(name, k))) {
         s += 16;
       }
       // Extra affinity when multiple domain keywords match between owner and listing
-      const sharedMatches = cluster.keywords.filter((k) => ownerText.includes(k) && listingText.includes(k)).length;
+      const sharedMatches = cluster.keywords.filter((k) => hasWord(ownerText, k) && hasWord(listingText, k)).length;
       s += sharedMatches * 10;
     } else if (ownerMatchesDomain && !listingMatchesDomain) {
       // Listing belongs to a conflicting/mismatched domain with penalty keywords
-      const hasPenalty = cluster.penaltyKeywords.some((pk) => listingText.includes(pk));
+      const hasPenalty = cluster.penaltyKeywords.some((pk) => hasWord(listingText, pk));
       if (hasPenalty) {
         s -= 30; // Heavy penalty: food/recipe template when owner is an artist/musician
       }

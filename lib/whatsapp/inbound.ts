@@ -10,6 +10,8 @@ import { WhatsAppLink, WhatsAppLinkCode, WhatsAppMessage, WhatsAppUserLink } fro
 import { sendTypingIndicator, sendWhatsAppText, type InboundWhatsAppMessage } from "./cloudApi";
 import { appBaseUrl, SOL_SETTINGS_PATH } from "./config";
 import { markdownToWhatsApp, splitForWhatsApp } from "./format";
+import { ratingForEmojiMessage } from "@/lib/sol/ratingEmoji";
+import { FEEDBACK_FOLLOW_UP, followUpDeadline, ratingForReaction, rateLatestAnswer, saveExpectation } from "./reactions";
 import { prepareMedia, UNSUPPORTED_MEDIA_TEXT, type PreparedMedia } from "./media";
 
 // One inbound WhatsApp message, start to finish: who is this → what are they asking → run it through the
@@ -202,6 +204,11 @@ async function runTurn(msg: InboundWhatsAppMessage, link: { userId: string; orga
     return;
   }
 
+  if (resolved.role === "guest") {
+    await reply(msg.from, "SOL isn't available with site-only access yet. Ask the account owner if you need something done.");
+    return;
+  }
+
   const pending = await findPending(link.conversationId);
   let prepared;
   if (pending?.questions?.length) {
@@ -263,6 +270,21 @@ export async function processInboundMessage(msg: InboundWhatsAppMessage): Promis
 
   try {
     const text = msg.text?.trim() ?? "";
+    // A reaction, or a message that is only a thumbs-up / heart / thumbs-down, is a rating on the last answer,
+    // never a request: no reply from SOL, no credits.
+    const rating = msg.type === "reaction" ? ratingForReaction(msg.reactionEmoji) : !msg.media ? ratingForEmojiMessage(text) : null;
+    if (msg.type === "reaction" || rating) {
+      if (!rating) return;
+      const { data: link } = await WhatsAppLink.get({ phone: msg.from }).go();
+      if (!link) return;
+      const ratedId = await rateLatestAnswer(link.userId, link.conversationId, rating);
+      if (rating === "DOWN" && ratedId) {
+        // Ask what they expected; their next message is kept with the rating (and still answered as usual).
+        await WhatsAppLink.patch({ phone: msg.from }).set({ feedbackMessageId: ratedId, feedbackUntil: followUpDeadline() }).go();
+        await reply(msg.from, FEEDBACK_FOLLOW_UP);
+      }
+      return;
+    }
     if (!text && !msg.media) {
       await reply(msg.from, UNSUPPORTED_MEDIA_TEXT);
       return;
@@ -289,6 +311,12 @@ export async function processInboundMessage(msg: InboundWhatsAppMessage): Promis
       const conversationId = await createConversation(link.userId, link.organizationId);
       await WhatsAppLink.patch({ phone: msg.from }).set({ conversationId }).go();
       return await reply(msg.from, "Fresh start ✨ What would you like to do?");
+    }
+
+    if (link.feedbackMessageId) {
+      const open = link.feedbackUntil && new Date(link.feedbackUntil).getTime() > Date.now();
+      if (open && text) await saveExpectation(link.userId, link.conversationId, link.feedbackMessageId, text).catch((err) => console.error("Saving WhatsApp feedback note failed:", err));
+      await WhatsAppLink.patch({ phone: msg.from }).remove(["feedbackMessageId", "feedbackUntil"]).go().catch(() => undefined);
     }
 
     let turnText = text;

@@ -19,8 +19,16 @@ export type RawTextContentSaveStatus = {
   savedFlash: boolean;
 };
 
+/** A thumbnail address that works from the dashboard: pages moved from WordPress point at "/wp-content/…", which only exists on the site's own address. */
+function thumbSrc(src: string, base?: string | null): string {
+  if (!base || !src || /^(https?:|data:|blob:|\/\/)/i.test(src)) return src;
+  try { return new URL(src, base).toString(); } catch { return src; }
+}
+
 type Props = {
   templateId: string;
+  /** The page's live address, for showing images that are saved as relative paths. */
+  previewBaseHref?: string | null;
   /** Reports dirty/saving/error/savedFlash whenever any of them change, so the parent's
    * single top-level Save button (raw-file-editor.tsx) can reflect this tab's state instead
    * of this component rendering its own — save() below is what that button actually calls. */
@@ -316,7 +324,7 @@ function findPreviewElements(doc: Document, kind: "text" | "img" | "background",
 }
 
 export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props>(function RawTextContentEditor(
-  { templateId, onStatusChange, onSaved, initialField },
+  { templateId, previewBaseHref, onStatusChange, onSaved, initialField },
   ref,
 ) {
   const [nodes, setNodes] = useState<ExtractedTextNode[] | null>(null);
@@ -937,7 +945,7 @@ export const RawTextContentEditor = forwardRef<RawTextContentEditorHandle, Props
                         >
                           {/* eslint-disable-next-line @next/next/no-img-element */}
                           <img
-                            src={draft.src}
+                            src={thumbSrc(draft.src, previewBaseHref)}
                             alt={node.alt || "preview"}
                             style={{ width: 48, height: 48, objectFit: "cover", borderRadius: 6, flexShrink: 0, background: "var(--ed-w-050)" }}
                           />

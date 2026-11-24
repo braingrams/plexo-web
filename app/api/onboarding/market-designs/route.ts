@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeBuildProfile } from "@/lib/dashboardV3/profile";
 import { briefFromProfile } from "@/lib/onboarding/designs";
+import { businessTypeById, inferBusinessType } from "@/lib/onboarding/businessType";
 import { filterListings, paginate, rankListings, topCategories, type PickerFilters } from "@/lib/onboarding/marketDesigns";
 
 const PAGE_SIZE = 12;
@@ -33,6 +34,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   let listings;
   let owned = new Set<string>();
+  let userId: string | null = null;
   if (mock) {
     listings = (await import("@/lib/onboarding/marketDesignsFixture")).FIXTURE_DESIGNS;
   } else {
@@ -43,9 +45,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     listings = await listPublishedPageDesigns();
     const { data } = await TemplatePurchase.query.primary({ userId: resolved.userId }).go({ pages: "all" });
     owned = new Set(data.map((p) => p.templateId));
+    userId = resolved.userId;
   }
 
-  const ranked = rankListings(listings, parsed.value.goal, { name: brief.name, about: brief.about, industry: brief.industry });
+  // The kind of business decides which designs fit: what the owner picked, else what SOL reads from their words, else a keyword reading.
+  const { type, source } = await resolveBusinessType({ picked: parsed.value.brand?.businessType, name: parsed.value.brand?.name ?? "", about: parsed.value.brand?.about ?? "", goal: parsed.value.goal, userId });
+  const ranked = rankListings(listings, parsed.value.goal, { name: brief.name, about: brief.about, industry: brief.industry, type });
   const categories = topCategories(ranked);
   const filtered = filterListings(ranked, filters);
   const pageOf = paginate(filtered, Number(body.page) || 1, PAGE_SIZE);
@@ -64,5 +69,28 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     page: pageOf.page,
     pageCount: pageOf.pageCount,
     categories,
+    ...(type ? { businessType: { id: type, label: businessTypeById(type)?.label ?? type, source } } : {}),
   });
+}
+
+/** Picked by the owner > read by SOL from the name and description (free for them, rate limited) > keyword reading > none. Never throws. */
+async function resolveBusinessType(i: { picked?: string; name: string; about: string; goal?: string; userId: string | null }): Promise<{ type: string | undefined; source: "picked" | "sol" | "guess" | "none" }> {
+  if (i.picked && businessTypeById(i.picked)) return { type: i.picked, source: "picked" };
+  const guess = inferBusinessType(i.name, i.about);
+  const strong = guess && guess.confident ? guess.id : undefined;
+  // SOL reads it when the words alone do not settle it, so a vague description still lands on the right kind of design.
+  if (!strong && i.userId && process.env.NODE_ENV !== "development") {
+    try {
+      const { checkCommerceRateLimit } = await import("@/lib/commerceRateLimitDynamo");
+      if (await checkCommerceRateLimit(`onboarding-business-type:${i.userId}`, 40, 60 * 60 * 1000)) {
+        const { understandBusinessType } = await import("@/lib/onboarding/understand");
+        const id = await understandBusinessType(i.name, i.about, i.goal);
+        if (id) return { type: id, source: "sol" };
+      }
+    } catch (err) {
+      console.error("market-designs: could not ask SOL for the kind of business, using the keyword reading:", err);
+    }
+  }
+  if (guess && (guess.score >= 5 || (guess.score >= 3 && guess.margin >= 1.5))) return { type: guess.id, source: "guess" };
+  return { type: undefined, source: "none" };
 }

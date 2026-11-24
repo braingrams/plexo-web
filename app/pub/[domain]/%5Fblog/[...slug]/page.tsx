@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
-import { notFound, redirect } from "next/navigation";
+import { notFound, permanentRedirect, redirect } from "next/navigation";
 import { resolveBlogSite } from "@/lib/pub/resolveSiteDynamo";
-import { resolveBlogRedirect } from "@/lib/blog/redirectsDynamo";
+import { resolveRedirectFull } from "@/lib/blog/redirectsDynamo";
+import { recordNotFound } from "@/lib/redirects/notFound";
 import { getPublishedPostBySlug, getRelatedPosts, listApprovedComments } from "@/lib/blog/queriesDynamo";
 import { Template } from "@/lib/db/contentEntities";
 import { postMetadata, postJsonLd } from "@/lib/blog/seo";
@@ -40,8 +41,9 @@ export default async function BlogPostPage({ params }: { params: Promise<Params>
   if (site.status !== "ok") notFound();
 
   if (!post) {
-    const redirectTo = await resolveBlogRedirect(site.published.templateId, "/blog/" + slug.join("/"));
-    if (redirectTo) redirect(redirectTo);
+    const hit = await resolveRedirectFull(site.published.templateId, "/blog/" + slug.join("/"));
+    if (hit) (hit.status === 301 ? permanentRedirect : redirect)(hit.toPath);
+    recordNotFound(site.published.templateId, "/blog/" + slug.join("/"));
     notFound();
   }
 

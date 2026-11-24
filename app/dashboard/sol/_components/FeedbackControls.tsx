@@ -91,7 +91,7 @@ export function FeedbackControls({
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="What went wrong? (optional)"
+            placeholder="What did you expect instead? (optional)"
             rows={2}
             style={{
               width: "100%",

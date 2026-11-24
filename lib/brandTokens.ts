@@ -230,11 +230,18 @@ export function brandTokensCss(tokens: BrandTokens = DEFAULT_BRAND_TOKENS): stri
     .map(([alias, target]) => `--${alias}:var(--${target});`)
     .join("");
   const all = ["light", "dark", "system"] as const;
+  // Plexo's own colours, fonts and shapes must never reach a customer's page inside the editor. The tokens above use the same
+  // names as a customer's design system (--color-action-primary-bg, --font-family-body, ...), so anything the page reads but
+  // the editor did not define would silently pick up Plexo's value (a Plexo-lime button on a green site). Inside the editor's
+  // canvas every one of them is cleared; the customer's own values, set closer to the page, still apply.
+  const names = new Set([...Object.keys(light), ...Object.keys(dark), ...Object.keys(SEMANTIC_ALIASES)].filter((n) => SAFE_NAME.test(n)));
+  const canvasReset = block(["[data-plx-canvas]"], [...names].map((n) => `--${n}:initial;`).join(""));
   return [
     block(all.flatMap(themeSelectors), aliases),
     block([...themeSelectors("light"), ...themeSelectors("system")], `color-scheme:light;${declarations(light)}`),
     block(themeSelectors("dark"), `color-scheme:dark;${declarations(dark)}`),
     `@media (prefers-color-scheme: dark){${block(themeSelectors("system"), `color-scheme:dark;${declarations(dark)}`)}}`,
+    canvasReset,
   ].join("\n");
 }
 

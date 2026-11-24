@@ -610,7 +610,11 @@ export class PublishedSitesStack extends cdk.Stack {
     scheduledRoute("SiteHealthSweep", "/api/internal/site-health/sweep", events.Schedule.rate(cdk.Duration.hours(1)));
     // The weekly "Your site health" email (lib/siteHealth/digest.ts). Daily at 08:00 UTC: each site is emailed at most once every 6 days and
     // only when it has a check from the last 9 days, so a run only reaches the sites that are due. Locked against EventBridge retries.
-    scheduledRoute("SiteHealthDigest", "/api/internal/site-health/digest", events.Schedule.cron({ minute: "0", hour: "8" }));
+    // PRODUCTION ONLY: it emails real owners through the mail service, and staging deploys this same stack with the same mail keys.
+    // (The sending code refuses to run outside production too, so a manual call can't send from staging either.)
+    if ((process.env.PLEXO_ENV || "development") === "production") {
+      scheduledRoute("SiteHealthDigest", "/api/internal/site-health/digest", events.Schedule.cron({ minute: "0", hour: "8" }));
+    }
 
     new cdk.CfnOutput(this, "ConnectionGroupRoutingEndpoint", { value: connectionGroup.attrRoutingEndpoint });
     new cdk.CfnOutput(this, "PrimaryDistributionId", { value: primaryDistribution.attrId, exportName: `${this.stackName}-PrimaryDistributionId` });

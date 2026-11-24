@@ -4,6 +4,7 @@
  */
 import type { SolBuildProfile, SolBuildGoal } from "@/lib/ai/solBuildContext";
 import { parseExperience, type Experience } from "./nav";
+import { parseBusinessType } from "@/lib/onboarding/businessType";
 
 export const BUILD_GOALS: readonly SolBuildGoal[] = ["store", "business-site", "blog", "course", "link-in-bio", "landing", "app", "explore"] as const;
 
@@ -49,6 +50,8 @@ export function sanitizeBuildProfile(input: unknown): Result<SolBuildProfile> {
       if (!r.ok) return r;
       if (r.value) (brand as Record<string, string>)[key] = r.value;
     }
+    const bt = parseBusinessType(b.businessType);
+    if (bt) brand.businessType = bt;
     if (brand.logoUrl && !/^https:\/\//i.test(brand.logoUrl)) return { ok: false, error: "Your logo needs to be uploaded again. Please pick the file once more." };
     if (b.colors !== undefined && b.colors !== null) {
       if (!Array.isArray(b.colors)) return { ok: false, error: "We couldn't read your colours. Please pick them again." };

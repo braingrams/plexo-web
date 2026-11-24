@@ -1,89 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Inbox, Mail, Trash2 } from "lucide-react";
+import { Badge, Button, ButtonLink, Card, EmptyState, Modal, Notice, Skeleton } from "@/app/dashboard/_v3/ui";
 import { Pagination } from "../../../_components/Pagination";
+import { fieldLabel, submitterOf, visibleFields } from "@/lib/forms/technicalFields";
 
-type Submission = {
-  id: string;
-  formName: string;
-  fields: Record<string, string>;
-  createdAt: string;
-  likelySpam: boolean;
-};
+type Submission = { id: string; formName: string; fields: Record<string, string>; createdAt: string; likelySpam: boolean };
 
-function IconInbox() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 12h-6l-2 3h-4l-2-3H2" />
-      <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z" />
-    </svg>
-  );
+const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+
+/** The one line that says what the message is about: the message itself if there is one, else the first answers. */
+function previewOf(fields: Array<[string, string]>, skip: Set<string>): string {
+  const message = fields.find(([k]) => /message|comment|enquiry|inquiry|details|tell us|need/i.test(k));
+  const value = message ? message[1] : fields.filter(([, v]) => !skip.has(v)).map(([, v]) => v).join(" · ");
+  return value.length > 150 ? `${value.slice(0, 150)}…` : value;
 }
 
-function IconMail() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="2" y="4" width="20" height="16" rx="3" />
-      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-    </svg>
-  );
-}
+const initialOf = (s: string) => (s.trim().charAt(0) || "?").toUpperCase();
 
-function IconClose() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M18 6 6 18M6 6l12 12" />
-    </svg>
-  );
-}
-
-function IconTrash() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6" />
-    </svg>
-  );
-}
-
-function formatDateTime(date: string): string {
-  return new Date(date).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
-}
-
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-/** Forms have no fixed schema — every field a site owner adds becomes its own key in
- * `fields`. Finding "the" email/name to act on means scanning for a key that looks like
- * one (case-insensitive "email"/"name") whose value is actually shaped like that, rather
- * than assuming a fixed field name every form happens to use. */
-function findFieldByKeyword(fields: [string, string][], keyword: string): string | null {
-  const match = fields.find(([key]) => key.toLowerCase().includes(keyword));
-  return match ? match[1] : null;
-}
-
-function findSubmissionEmail(fields: [string, string][]): string | null {
-  const byKey = findFieldByKeyword(fields, "email");
-  if (byKey && EMAIL_PATTERN.test(byKey.trim())) return byKey.trim();
-  const byShape = fields.find(([, value]) => EMAIL_PATTERN.test(value.trim()));
-  return byShape ? byShape[1].trim() : null;
-}
-
-function buildMailtoHref(email: string, formName: string, senderName: string | null): string {
-  const subject = `Re: your ${formName} submission`;
-  const body = senderName ? `Hi ${senderName},\n\n` : "";
-  return `mailto:${email}?subject=${encodeURIComponent(subject)}${body ? `&body=${encodeURIComponent(body)}` : ""}`;
-}
-
-function messagePreview(fields: Record<string, string>): string {
-  const entries = Object.entries(fields);
-  const messageField = entries.find(([key]) => /message|comment|enquiry|inquiry/i.test(key));
-  const value = messageField ? messageField[1] : entries.map(([, v]) => v).join(" · ");
-  return value.length > 140 ? `${value.slice(0, 140)}…` : value;
-}
-
+/** Messages people sent through the site's forms: who, what about, when. Opens one to read it all; the technical extras forms send along are never shown. */
 export function FormSubmissionsClient({ templateId }: { templateId: string }) {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState(false);
   const [viewing, setViewing] = useState<Submission | null>(null);
@@ -97,226 +38,115 @@ export function FormSubmissionsClient({ templateId }: { templateId: string }) {
     fetch(`/api/v1/templates/${templateId}/form-submissions?page=${next.page}&pageSize=${next.pageSize}`)
       .then(async (res) => {
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? "Failed to load submissions.");
+        if (!res.ok) throw new Error(data.error ?? "We couldn't load your messages.");
         setSubmissions(data.submissions);
         setTotal(data.total);
         setLikelySpamIds(data.likelySpamIds ?? []);
-        // The server brings a page past the end back to the last one (e.g. after deleting its last message).
         setPaging({ page: data.page, pageSize: data.pageSize });
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load submissions."))
+      .catch((err) => setError(err instanceof Error ? err.message : "We couldn't load your messages."))
       .finally(() => setLoading(false));
   }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [templateId]);
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [templateId]);
+  const rows = useMemo(
+    () => submissions.map((s) => {
+      const fields = visibleFields(s.fields);
+      const who = submitterOf(fields);
+      return { s, fields, who, title: who.name || who.email || "Someone", preview: previewOf(fields, new Set([who.name ?? "", who.email ?? ""])) };
+    }),
+    [submissions],
+  );
 
-  function changePage(next: { page: number; pageSize: number }) {
-    setPaging(next);
-    load(next);
-  }
-
-  function toggleOne(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  // "Select all" is the messages on this page; a selection made on other pages is kept.
-  const allOnPageSelected = submissions.length > 0 && submissions.every((s) => selected.has(s.id));
-  function toggleAll() {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (allOnPageSelected) submissions.forEach((s) => next.delete(s.id));
-      else submissions.forEach((s) => next.add(s.id));
-      return next;
-    });
-  }
-
-  function selectLikelySpam() {
-    setSelected(new Set(likelySpamIds));
-  }
+  const toggle = (id: string) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const stopSelecting = () => { setSelecting(false); setSelected(new Set()); };
 
   async function deleteSelected() {
-    if (selected.size === 0) return;
-    if (!confirm(`Delete ${selected.size} message${selected.size === 1 ? "" : "s"}? This can't be undone.`)) return;
+    if (!selected.size || !confirm(`Delete ${selected.size} message${selected.size === 1 ? "" : "s"}? This can't be undone.`)) return;
     setDeleting(true);
     try {
-      const res = await fetch(`/api/v1/templates/${templateId}/form-submissions`, {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: [...selected] }),
-      });
+      const res = await fetch(`/api/v1/templates/${templateId}/form-submissions`, { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ids: [...selected] }) });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to delete.");
-      setSelected(new Set());
+      if (!res.ok) throw new Error(data.error ?? "We couldn't delete those.");
+      stopSelecting();
       load();
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete.");
+      alert(err instanceof Error ? err.message : "We couldn't delete those.");
     } finally {
       setDeleting(false);
     }
   }
 
-  if (loading && submissions.length === 0) return <p style={{ color: "var(--plx-muted)", fontSize: "0.85rem" }}>Loading…</p>;
-  if (error) {
-    return (
-      <div style={{ padding: "2rem", textAlign: "center", borderRadius: 14, border: "1px solid color-mix(in srgb, var(--plx-danger) 25%, transparent)", background: "color-mix(in srgb, var(--plx-danger) 6%, transparent)", color: "var(--plx-danger)", fontSize: "0.85rem" }}>
-        {error}
-      </div>
-    );
-  }
-
+  if (loading && submissions.length === 0) return <Card><Skeleton height={64} /></Card>;
+  if (error) return <Notice kind="error" title="We couldn't load your messages">{error}</Notice>;
   if (submissions.length === 0) {
     return (
-      <div style={{ padding: "3.5rem 2rem", textAlign: "center", borderRadius: 14, border: "1px solid var(--plx-border)", background: "var(--plx-surface)" }}>
-        <div style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 56, height: 56, borderRadius: 14, background: "var(--plx-tint)", color: "var(--plx-muted)", marginBottom: "1rem" }}>
-          <IconInbox />
-        </div>
-        <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--plx-text)" }}>No submissions yet</p>
-        <p style={{ fontSize: "0.8rem", color: "var(--plx-muted)", marginTop: "0.3rem" }}>
-          Messages sent through a form on this site will show up here.
-        </p>
-      </div>
+      <Card>
+        <EmptyState compact title="No messages yet" body="When someone fills in a form on your site, their message shows up here and is emailed to you." illustration={<Inbox size={40} aria-hidden />} />
+      </Card>
     );
   }
 
-  const viewingFields = viewing ? Object.entries(viewing.fields) : [];
-  const viewingEmail = viewing ? findSubmissionEmail(viewingFields) : null;
-  const viewingName = viewing ? findFieldByKeyword(viewingFields, "name") : null;
+  const detail = viewing ? (() => { const fields = visibleFields(viewing.fields); return { fields, who: submitterOf(fields) }; })() : null;
 
   return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem", marginBottom: "1rem" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.8rem", color: "var(--plx-muted)", cursor: "pointer" }}>
-            <input type="checkbox" checked={allOnPageSelected} onChange={toggleAll} />
-            {selected.size > 0 ? `${selected.size} selected` : "Select all"}
-          </label>
-          {likelySpamIds.length > 0 && (
-            <button
-              type="button"
-              onClick={selectLikelySpam}
-              style={{ padding: "0.35rem 0.7rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--plx-warning) 30%, transparent)", background: "color-mix(in srgb, var(--plx-warning) 8%, transparent)", color: "var(--plx-warning)", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer" }}
-            >
-              Select {likelySpamIds.length} likely spam
-            </button>
+    <div className="plx-adv__stack" data-testid="form-inbox">
+      {likelySpamIds.length > 0 && !selecting ? (
+        <Notice kind="warning" title={`${likelySpamIds.length} ${likelySpamIds.length === 1 ? "message looks" : "messages look"} like spam`}>
+          <Button size="sm" variant="secondary" onClick={() => { setSelecting(true); setSelected(new Set(likelySpamIds)); }}>Review and delete</Button>
+        </Notice>
+      ) : null}
+
+      <Card padding="none">
+        <div className="plx-inbox__bar">
+          <b>{total} {total === 1 ? "message" : "messages"}</b>
+          {selecting ? (
+            <div className="plx-inbox__actions">
+              <span className="plx-small">{selected.size} selected</span>
+              <Button size="sm" variant="secondary" leftIcon={<Trash2 size={15} aria-hidden />} loading={deleting} disabled={!selected.size} onClick={() => void deleteSelected()}>Delete</Button>
+              <Button size="sm" variant="secondary" onClick={stopSelecting}>Done</Button>
+            </div>
+          ) : (
+            <Button size="sm" variant="secondary" onClick={() => setSelecting(true)}>Select</Button>
           )}
         </div>
-        {selected.size > 0 && (
-          <button
-            type="button"
-            onClick={deleteSelected}
-            disabled={deleting}
-            style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", padding: "0.45rem 0.9rem", borderRadius: 8, border: "1px solid color-mix(in srgb, var(--plx-danger) 30%, transparent)", background: "color-mix(in srgb, var(--plx-danger) 10%, transparent)", color: "var(--plx-danger)", fontSize: "0.8rem", fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer", opacity: deleting ? 0.6 : 1 }}
-          >
-            <IconTrash /> {deleting ? "Deleting…" : `Delete selected (${selected.size})`}
-          </button>
-        )}
-      </div>
-
-      <div style={{ display: "flex", flexDirection: "column", borderRadius: 14, border: "1px solid var(--plx-border)", overflow: "hidden" }}>
-        {submissions.map((s, i) => {
-          const fields = Object.entries(s.fields);
-          const email = findSubmissionEmail(fields);
-          const senderName = findFieldByKeyword(fields, "name");
-          return (
-            <div
-              key={s.id}
-              style={{
-                display: "flex", alignItems: "center", gap: "1rem", padding: "0.9rem 1rem",
-                borderTop: i === 0 ? "none" : "1px solid var(--plx-border)",
-                background: selected.has(s.id) ? "var(--plx-tint)" : "transparent",
-              }}
-            >
-              <input type="checkbox" checked={selected.has(s.id)} onChange={() => toggleOne(s.id)} />
-              <div style={{ flex: "0 0 130px" }}>
-                <span style={{ display: "inline-flex", padding: "0.2rem 0.55rem", borderRadius: 999, fontSize: "0.65rem", fontWeight: 700, letterSpacing: "0.05em", textTransform: "uppercase", background: "var(--plx-tint)", color: "var(--plx-brand)", border: "1px solid var(--plx-border)" }}>
-                  {s.formName}
-                </span>
-              </div>
-              <div style={{ flex: "0 0 170px", fontSize: "0.78rem", color: "var(--plx-text)" }}>{senderName || email || "—"}</div>
-              <div style={{ flex: "1", minWidth: 0, fontSize: "0.8rem", color: "var(--plx-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {messagePreview(s.fields)}
-              </div>
-              {s.likelySpam && (
-                <span style={{ flex: "0 0 auto", fontSize: "0.68rem", fontWeight: 700, color: "var(--plx-warning)", background: "color-mix(in srgb, var(--plx-warning) 10%, transparent)", padding: "0.2rem 0.5rem", borderRadius: 999 }}>
-                  Likely spam
-                </span>
-              )}
-              <div style={{ flex: "0 0 130px", fontSize: "0.75rem", color: "var(--plx-muted)", textAlign: "right" }}>{formatDateTime(s.createdAt)}</div>
-              <button
-                type="button"
-                onClick={() => setViewing(s)}
-                style={{ flex: "0 0 auto", padding: "0.4rem 0.8rem", borderRadius: 8, border: "1px solid var(--plx-border)", background: "var(--plx-surface)", color: "var(--plx-text)", fontSize: "0.76rem", fontWeight: 600, cursor: "pointer" }}
-              >
-                View
-              </button>
-            </div>
-          );
-        })}
-      </div>
-
-      <Pagination page={paging.page} pageSize={paging.pageSize} total={total} onChange={changePage} noun="messages" disabled={loading} />
-
-      {viewing && (
-        <>
-          <div
-            onClick={() => setViewing(null)}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)", zIndex: 9998 }}
-          />
-          <div
-            style={{
-              position: "fixed", top: 0, right: 0, bottom: 0, width: "100%", maxWidth: "560px",
-              background: "var(--plx-surface)", backdropFilter: "blur(20px)",
-              borderLeft: "1px solid var(--plx-border)", boxShadow: "-10px 0 40px rgba(0,0,0,0.5)",
-              zIndex: 9999, padding: "2.2rem 2rem", overflowY: "auto",
-              display: "flex", flexDirection: "column", gap: "1.5rem",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: "1px solid var(--plx-border)", paddingBottom: "1rem" }}>
-              <div>
-                <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--plx-text)", margin: 0 }}>{viewing.formName}</h3>
-                <p style={{ fontSize: "0.78rem", color: "var(--plx-muted)", margin: "0.25rem 0 0" }}>{formatDateTime(viewing.createdAt)}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewing(null)}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "var(--plx-muted)", padding: "0.25rem", lineHeight: 1 }}
-              >
-                <IconClose />
-              </button>
-            </div>
-
-            {viewingEmail && (
-              <a
-                href={buildMailtoHref(viewingEmail, viewing.formName, viewingName)}
-                style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem", width: "fit-content", padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid var(--plx-border)", background: "var(--plx-tint)", color: "var(--plx-brand)", fontSize: "0.8rem", fontWeight: 700, textDecoration: "none" }}
-              >
-                <IconMail /> Reply by email
-              </a>
-            )}
-
-            <div style={{ display: "flex", flexDirection: "column", gap: "1.1rem" }}>
-              {viewingFields.map(([key, value]) => (
-                <div key={key}>
-                  <div style={{ fontSize: "0.68rem", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--plx-muted)", marginBottom: "0.3rem" }}>
-                    {key}
-                  </div>
-                  <div style={{ fontSize: "0.85rem", color: "var(--plx-text)", lineHeight: 1.5, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-                    {value}
-                  </div>
-                </div>
-              ))}
-            </div>
+        {rows.map(({ s, who, title, preview }) => (
+          <div key={s.id} className="plx-inbox__row">
+            {selecting ? <input type="checkbox" className="plx-inbox__check" aria-label={`Select the message from ${title}`} checked={selected.has(s.id)} onChange={() => toggle(s.id)} /> : null}
+            <button type="button" className="plx-inbox__open" onClick={() => (selecting ? toggle(s.id) : setViewing(s))}>
+              <span className="plx-inbox__avatar" aria-hidden>{initialOf(title)}</span>
+              <span className="plx-inbox__text">
+                <span className="plx-inbox__top"><b>{title}</b>{s.likelySpam ? <Badge tone="warning">Likely spam</Badge> : null}</span>
+                <span className="plx-inbox__preview">{preview || "No message"}</span>
+                <span className="plx-small">{s.formName} · {when(s.createdAt)}{who.email && who.name ? ` · ${who.email}` : ""}</span>
+              </span>
+            </button>
           </div>
-        </>
-      )}
+        ))}
+      </Card>
+
+      <Pagination page={paging.page} pageSize={paging.pageSize} total={total} noun="messages" onChange={(n) => { setPaging(n); load(n); }} disabled={loading} />
+
+      <Modal open={!!viewing} onClose={() => setViewing(null)} title={detail?.who.name || detail?.who.email || "Message"} footer={
+        detail?.who.email ? <ButtonLink href={`mailto:${detail.who.email}?subject=${encodeURIComponent(`Re: your ${viewing?.formName ?? ""} message`)}`} leftIcon={<Mail size={16} aria-hidden />}>Reply by email</ButtonLink> : <Button variant="secondary" onClick={() => setViewing(null)}>Close</Button>
+      }>
+        {viewing && detail ? (
+          <div className="plx-adv__stack">
+            <p className="plx-small" style={{ margin: 0 }}>{viewing.formName} · {when(viewing.createdAt)}</p>
+            {detail.fields.length === 0 ? <p className="plx-body">This message came through empty.</p> : (
+              <dl className="plx-inbox__fields">
+                {detail.fields.map(([k, v]) => (
+                  <div key={k}>
+                    <dt>{fieldLabel(k)}</dt>
+                    <dd>{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        ) : null}
+      </Modal>
     </div>
   );
 }

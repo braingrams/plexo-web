@@ -4,6 +4,28 @@ import { ensureActiveOrganization, getOrganizationOwnerPlanDynamo } from "@/serv
 import { isValidUuid } from "@/server/slugDynamo";
 import { computeTransferWarnings, executeSiteTransfer, findTransferById } from "@/lib/siteTransferDynamo";
 import { SiteTransferRequest } from "@/lib/db/importEntities";
+import { Notification } from "@/lib/db/coreEntities";
+import { Template } from "@/lib/db/contentEntities";
+
+/** Tells the person who offered the site what happened, in their bell (and with its sound), so they never have to go and check. */
+async function tellSender(transfer: { id: string; templateId: string; fromUserId: string; fromOrganizationId: string }, accepted: boolean, responderEmail: string): Promise<void> {
+  try {
+    const { data: site } = await Template.get({ id: transfer.templateId }).go();
+    const name = site?.name || "your site";
+    await Notification.create({
+      id: crypto.randomUUID(),
+      organizationId: transfer.fromOrganizationId,
+      userId: transfer.fromUserId,
+      type: "TRANSFER_ACCEPTED",
+      title: accepted ? `${responderEmail} accepted "${name}"` : `${responderEmail} said no to "${name}"`,
+      message: accepted ? "The site is now theirs. You can find it in their account." : "The site is still yours. You can offer it again any time.",
+      link: "/dashboard/settings/moving",
+      actionLabel: "View status",
+    }).go();
+  } catch (err) {
+    console.error("Couldn't tell the sender about their transfer:", err);
+  }
+}
 
 /**
  * body: { action: "accept" | "decline", token?: string, acknowledgeWarnings?: boolean }
@@ -41,11 +63,17 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
 
   if (action === "decline") {
     await SiteTransferRequest.patch({ templateId: transfer.templateId, id: transfer.id }).set({ status: "DECLINED", respondedAt: new Date().toISOString() }).go();
+    await tellSender(transfer, false, session.user.email);
     return NextResponse.json({ ok: true, status: "DECLINED" });
   }
 
   // action === "accept"
   const orgResolution = await ensureActiveOrganization(session.user.id);
+  // Receiving a site puts it into the workspace you are working in. A member invited to specific sites must not do that to the
+  // owner's workspace: switch to your own workspace first.
+  if (orgResolution.status === "resolved" && orgResolution.role === "guest") {
+    return NextResponse.json({ error: "Switch to your own workspace to accept a site.", needsOrgChoice: true }, { status: 409 });
+  }
   if (orgResolution.status === "needs-choice") {
     return NextResponse.json({ error: "Choose which of your organizations should receive this site first, then try again.", needsOrgChoice: true }, { status: 409 });
   }
@@ -67,5 +95,6 @@ export async function POST(request: NextRequest, context: { params: Promise<{ id
     .set({ status: "ACCEPTED", toUserId: session.user.id, respondedAt: new Date().toISOString() })
     .go();
 
+  await tellSender(transfer, true, session.user.email);
   return NextResponse.json({ ok: true, status: "ACCEPTED", templateId: transfer.templateId });
 }

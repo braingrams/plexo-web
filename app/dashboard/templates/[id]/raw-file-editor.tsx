@@ -303,7 +303,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
         setFiles(data.files);
         const initial: Record<string, string> = {};
         for (const f of data.files) {
-          if (f.editable) initial[f.path] = f.content ?? "";
+          if (f.editable && !f.lazy) initial[f.path] = f.content ?? "";
         }
         setEdits(initial);
         setSavedContent(initial);
@@ -330,6 +330,25 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
   }, []);
 
   const activeFile = files.find((f) => f.path === activePath) ?? null;
+  // Large files come without their text; fetch it the moment the file is opened.
+  const [fileLoadError, setFileLoadError] = useState<string | null>(null);
+  const waitingForText = !!activeFile?.lazy;
+  useEffect(() => {
+    if (!activeFile?.lazy) return;
+    const path = activeFile.path;
+    let cancelled = false;
+    setFileLoadError(null);
+    fetch(`/api/v1/templates/${templateId}/files/${path.split("/").map(encodeURIComponent).join("/")}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("We couldn't open that file. Please try again."))))
+      .then((d: { content: string }) => {
+        if (cancelled) return;
+        setFiles((prev) => prev.map((f) => (f.path === path ? { ...f, content: d.content, lazy: false } : f)));
+        setEdits((prev) => ({ ...prev, [path]: d.content }));
+        setSavedContent((prev) => ({ ...prev, [path]: d.content }));
+      })
+      .catch((e) => { if (!cancelled) setFileLoadError(e instanceof Error ? e.message : "We couldn't open that file."); });
+    return () => { cancelled = true; };
+  }, [activeFile?.path, activeFile?.lazy, templateId]);
   const languageExtension = useMemo(
     () => (activeFile ? getLanguageExtension(activeFile.path) : html()),
     [activeFile]
@@ -955,7 +974,10 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                     )}
                   </div>
                 )}
-                <CodeMirror
+                {waitingForText ? (
+                  <div style={{ padding: "2rem", color: "var(--ed-t-500)" }}>{fileLoadError ?? "Opening this file…"}</div>
+                ) : null}
+                {!waitingForText ? <CodeMirror
                   value={edits[activeFile.path] ?? ""}
                   onChange={(value) => setEdits((prev) => ({ ...prev, [activeFile.path]: value }))}
                   onCreateEditor={(view) => {
@@ -973,7 +995,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
                   indentWithTab
                   height="100%"
                   style={{ flex: 1, minWidth: 0, minHeight: 0, overflow: "auto" }}
-                />
+                /> : null}
               </div>
               <div className="raw-editor-livepane" style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
                 <div style={{ padding: "0.4rem 0.75rem", borderBottom: "1px solid var(--ed-w-060)", fontSize: "0.72rem", color: "var(--ed-t-400)", flexShrink: 0 }}>Live preview. Updates as you type.</div>
@@ -1001,6 +1023,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
           key={textKey}
           ref={textContentRef}
           templateId={templateId}
+          previewBaseHref={previewBaseHref}
           initialField={initialField}
           onStatusChange={setTextContentStatus}
           onSaved={() => {

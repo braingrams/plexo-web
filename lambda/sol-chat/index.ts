@@ -189,6 +189,11 @@ export const handler = awslambda.streamifyResponse(async (event: APIGatewayProxy
     sendJson(responseStream, 401, { error: "Unauthorized" });
     return;
   }
+  // Site-only members (invited to specific sites) don't get SOL yet: it works across the whole workspace.
+  if (resolved.role === "guest") {
+    sendJson(responseStream, 403, { error: "SOL isn't available with site-only access yet. Ask the account owner if you need something done." });
+    return;
+  }
 
   try {
     const prepared = confirmMatch

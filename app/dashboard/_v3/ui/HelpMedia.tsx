@@ -34,7 +34,7 @@ export function HelpMediaPlayer({ src, title, poster }: { src?: string | null; t
     }
   };
   return (
-    <div className="plx-helpmedia__frame">
+    <div className={`plx-helpmedia__frame${src ? "" : " plx-helpmedia__frame--guide"}`}>
       {src && isVideo(src) ? (
         <>
           <video ref={video} src={src} poster={poster} autoPlay loop muted playsInline aria-label={title} />

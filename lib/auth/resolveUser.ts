@@ -9,6 +9,8 @@ import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { ApiKey, User } from "@/lib/db/coreEntities";
 import { describeActivity } from "@/lib/activity";
 import type { OrgRole } from "@/server/accessControl";
+import { classifyGuestApi, type SiteAccess } from "@/lib/access/siteAccess";
+import { guestRoleForSite } from "@/lib/access/siteAccessStore";
 import type { EntityItem } from "electrodb";
 
 // "Last activity" for the admin console — see User.lastActiveAt's doc comment in
@@ -77,6 +79,8 @@ export async function resolveUser(
   onTrial: boolean;
   customDomainLimit: number | null;
   manageLandingPagePublishing: boolean;
+  /** For a site-only member: the sites they can reach and their role on each. `null` for everyone else, who can reach every site. */
+  siteAccess?: SiteAccess | null;
 } | null> {
   // 1. Try session-based auth first
   const session = await auth();
@@ -89,11 +93,27 @@ export async function resolveUser(
 
       touchUserActivity(user, request.nextUrl.pathname);
 
+      let role: OrgRole | null = orgResolution.role;
+      // A member who was invited to specific sites only. Closed by default: they get through only to the site named in the address, and
+      // there they act with the role they were given for it. Settings that need extra care, and every call that is not about one of
+      // their sites, are refused here once, for every route. (lib/access/siteAccess.ts has the rules.)
+      if (role === "guest") {
+        const decision = classifyGuestApi(request.nextUrl.pathname, request.method, request.nextUrl.search);
+        if (decision.kind === "denied") return null;
+        if (decision.kind === "site") {
+          const granted = await guestRoleForSite(orgResolution.siteAccess, decision.siteId, orgResolution.organizationId);
+          if (!granted) return null;
+          if (decision.wholeSite && granted.root === decision.siteId) return null; // taking the whole site away is never theirs to do
+          role = granted.role;
+        }
+      }
+
       return {
         userId: user.id,
         organizationId: orgResolution.organizationId,
-        role: orgResolution.role,
+        role,
         ...(await workspacePlan(orgResolution.organizationId, user, orgResolution.role)),
+        siteAccess: orgResolution.role === "guest" ? orgResolution.siteAccess : null,
       };
     }
   }
@@ -127,5 +147,6 @@ export async function resolveUser(
     role: null,
     // An API key acts in its workspace, so it gets the workspace owner's plan too.
     ...(await workspacePlan(apiKey.organizationId, user, null)),
+    siteAccess: null,
   };
 }

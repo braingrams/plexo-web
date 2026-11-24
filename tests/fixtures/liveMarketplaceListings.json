@@ -1,0 +1,502 @@
+[
+ {
+  "id": "fc92c099-b8b8-5344-b64b-bfd5fa15da17",
+  "name": "Ada Okonkwo: product engineer portfolio",
+  "kind": "LANDING_PAGE",
+  "category": "Portfolio",
+  "description": "A dark, code-adjacent portfolio for an engineer or technical freelancer: a bespoke editor and terminal hero, featured projects with stack chips and outcome numbers, writing and talks, an experience timeline, open-source stats, engagement prices and an enquiry form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "5e677033-326b-51b2-9f8f-af0bcbd859c8",
+  "name": "Still: calm yoga and wellness studio",
+  "kind": "LANDING_PAGE",
+  "category": "Health & Wellness",
+  "description": "A soft, airy page for a yoga, pilates or wellness studio: arch-framed hero, class styles, a clear weekly timetable, teachers, membership pricing and a free-first-week sign-up form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "73769538-6024-57e2-be5b-19a7156e8e77",
+  "name": "Summit Mastermind: founder cohort sales page",
+  "kind": "LANDING_PAGE",
+  "category": "Coaching & Courses",
+  "description": "A bold, dark sales page for a 12-week founder cohort or business mastermind: outcomes, a week-by-week curriculum, coach bios, cohort dates with a live seat counter, tiered pricing with a payment plan, alumni numbers and an application form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "4403c50c-6d25-5e2e-8886-775a1c07f5f5",
+  "name": "Willowmere: residential care and nursing home",
+  "kind": "LANDING_PAGE",
+  "category": "Nursing & Care Homes",
+  "description": "A warm, photography-led page for a residential and nursing care home: garden and house, daily life, care levels with weekly fees, family visiting, team and a book-a-tour form. Cream and sage with a soft serif.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "2e0e6427-aba4-58d8-bcc5-dfc861fd91cd",
+  "name": "Chef Tomi: food creator link in bio",
+  "kind": "LANDING_PAGE",
+  "category": "Link in bio",
+  "description": "A bento-grid link hub for a food creator or home cook: mixed-size photo tiles linking to videos, recipes, a cookbook, a newsletter and a shop, then a recipe strip, a book feature and a Sunday email list. Warm cream and tomato.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "3f39b7a3-22ba-5a1e-8c49-5c4999bc4e72",
+  "name": "Northfold: bold design studio portfolio",
+  "kind": "LANDING_PAGE",
+  "category": "Agency",
+  "description": "A confident, type-led portfolio for a design, branding or creative studio: oversized headline, photography-first selected work grid, numbered services, process, client quotes and a project brief form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "0c4ec775-1a7d-5907-8466-846d7ece56ec",
+  "name": "Brightside Growth: loud performance marketing agency",
+  "kind": "LANDING_PAGE",
+  "category": "Agency",
+  "description": "A loud, neo-brutalist site for a performance-marketing and SEO agency: results dashboard, three case studies with metrics, services, process, team, retainer pricing, client wordmarks and a free audit request form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "21c8644b-339f-51b9-a76a-c59a34db78db",
+  "name": "Kito Mori: illustrator link in bio",
+  "kind": "LANDING_PAGE",
+  "category": "Link in bio",
+  "description": "A loud, playful brutalist link hub for an illustrator or streetwear artist: thick outlines, hard offset shadows, drawn-in sticker mascots, a sticker-pack shop strip, a sketchbook gallery and a commission request form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "1f71d545-2c77-5b54-bc9e-de0145c0503e",
+  "name": "Relay: bright AI customer-support platform",
+  "kind": "LANDING_PAGE",
+  "category": "SaaS",
+  "description": "A light, friendly SaaS landing page for an AI customer-support product: inbox mockup hero, agent and shared-inbox features, resolution stats, security band, three-plan pricing, FAQ and a free-trial signup form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "5ced4ff1-ab11-5799-8a34-276e521076fc",
+  "name": "Nolan & Pike: brand-identity case study",
+  "kind": "LANDING_PAGE",
+  "category": "Portfolio",
+  "description": "An editorial case-study page for a design studio's flagship project: huge type, project facts, challenge, process, a varied photo gallery, before and after, results with numbers, a client quote, a next-project teaser and an enquiry form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "aa5269a9-3251-537a-be41-2a07fcdc31e6",
+  "name": "Stride Lab: performance running shoe store",
+  "kind": "LANDING_PAGE",
+  "category": "Ecommerce",
+  "description": "A bold, high-energy brand storefront for a running shoe or sportswear brand: photo hero with a buy card, spec-first product lineup, technology bento, athlete stories, size guide and fit promise, compare table, reviews and a drop-list signup.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "99773e28-e0b5-576d-b7da-2366acd2134c",
+  "name": "Foundry & Form: modern furniture and homeware store",
+  "kind": "LANDING_PAGE",
+  "category": "Ecommerce",
+  "description": "A quiet, photography-led storefront for a furniture or homeware maker: split hero, staggered collections, product grid with prices, materials, made-to-order lead times, delivery and assembly, a room mosaic, showroom visit form and newsletter.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "46cf8721-3a73-50a4-b06a-f3248fa9509e",
+  "name": "Stackhouse Bootcamp: career-change coding bootcamp",
+  "kind": "LANDING_PAGE",
+  "category": "Coaching & Courses",
+  "description": "A bright, energetic site for a coding bootcamp: cohort dates, a 16-week curriculum timeline, outcome numbers, hiring partners, instructors, a day in the life, tuition with a deferred option, FAQ and an application form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "f473e4da-48b5-58cb-86dc-a8bf04db6be8",
+  "name": "Bramble & Tooth: modern dental practice",
+  "kind": "LANDING_PAGE",
+  "category": "Healthcare",
+  "description": "An editorial dental practice page: arched hero portrait, a priced treatment index, aligners and whitening, a smile photo mosaic, a nervous-patient promise, team, questions and a booking form. Blush and deep ink with a serif display.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "188fedb1-b6b2-51dc-bfb7-70063f31c365",
+  "name": "Salgado: editorial restaurant page",
+  "kind": "LANDING_PAGE",
+  "category": "Restaurant",
+  "description": "A warm, photography-led page for a restaurant, bistro or wine bar: full-bleed hero, chef's story, a menu showcase, gallery, press quote, private dining and table requests. Serif display type on warm paper.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "c68e8530-983e-5cf6-869b-c4094204b713",
+  "name": "Atlas Coffee Roasters: coffee subscription and shop",
+  "kind": "LANDING_PAGE",
+  "category": "Ecommerce",
+  "description": "A bold coffee roaster storefront with this month's coffees and tasting notes, a three-tier subscribe-and-save picker, roast-to-door timeline, brew guides, a wholesale request form, reviews and FAQ. Cream paper, espresso and tomato red.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "6ebfaf92-2dfb-50e4-af62-c2b759848e07",
+  "name": "Little Sprouts Paediatrics: children's clinic",
+  "kind": "LANDING_PAGE",
+  "category": "Healthcare",
+  "description": "A playful but polished children's clinic page: blob-shaped photos, vaccination timeline, play-room waiting area, parents' guides, paediatrician profiles, evening opening hours, FAQ and a booking form. Cream with sunshine yellow and coral.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "cb8b7092-2bcb-55af-b4cc-aa661c132fdb",
+  "name": "Allegro Music Academy: music school website",
+  "kind": "LANDING_PAGE",
+  "category": "Schools & Academies",
+  "description": "A complete website for a music school: instruments, lessons for children and adults, teachers, recitals, pricing by lesson length, practice-room hire, a trial lesson offer and an enrol form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "2249079b-20ce-54e3-8f14-47fd1cc959e9",
+  "name": "Ledgerline: payments platform landing page",
+  "kind": "LANDING_PAGE",
+  "category": "Fintech",
+  "description": "A light, airy payments landing page: dashboard hero, product cards, a developer band with a live API call, customer photography, big numbers, pricing and a sign-up form. For fintech, billing and commerce-infrastructure products.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "a16090a1-609e-5083-b3df-aac1c2f3e641",
+  "name": "Lengua Viva: language school website",
+  "kind": "LANDING_PAGE",
+  "category": "Schools & Academies",
+  "description": "A sunny, complete website for a language school: immersion and evening courses A1 to C1, a level ladder, schedule and price table, teachers, student stories, a free level test and an enrol form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "beab57b7-d3b5-50a6-b845-bc0f8f7e5c95",
+  "name": "Verdant Lab: clean skincare storefront",
+  "kind": "LANDING_PAGE",
+  "category": "Ecommerce",
+  "description": "A refined skincare brand page with a three-step routine builder, bestsellers with prices, ingredients explained, study results, reviews, bundles, FAQ and a signup form. Pale sage, cream and fern green.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "dc61ce3c-8575-565d-8660-d7a733b653e3",
+  "name": "Haven Realty: premium estate agency",
+  "kind": "LANDING_PAGE",
+  "category": "Real estate",
+  "description": "A premium estate agency page with a search-bar hero, featured property cards, neighbourhood guide, agent profiles, a client story and a property valuation request form. Pine green and warm white.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "5453a690-29c4-563b-8a7c-93eaa3153b73",
+  "name": "Crestmoor Wealth: independent financial adviser",
+  "kind": "LANDING_PAGE",
+  "category": "Finance",
+  "description": "A trustworthy page for an independent financial adviser or accountancy: centred hero with panorama, services, process, a published fee table, adviser credentials and a book-a-call form. Claret and cream.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "48722829-a3f9-5c6b-9b65-4ea8687cfc53",
+  "name": "Atelier Oak: architecture and interiors portfolio",
+  "kind": "LANDING_PAGE",
+  "category": "Architecture",
+  "description": "A calm, photography-led portfolio for an architecture or interiors practice: full-bleed hero, philosophy, asymmetric project grid, project index, studio story, awards and a project enquiry form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "864525de-53bb-587f-a232-dc2436fa7897",
+  "name": "Solène: skincare brand launch page",
+  "kind": "LANDING_PAGE",
+  "category": "Beauty & Skincare",
+  "description": "A luxe, product-led page for a skincare or beauty brand: hero with product photography, collection cards, ingredient story, routine steps, verified reviews, bundle pricing and newsletter capture.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "f43322b0-66c0-5ee0-b8f4-cb1b7ef15f9a",
+  "name": "Oakridge International School: private school website",
+  "kind": "LANDING_PAGE",
+  "category": "Schools & Academies",
+  "description": "A complete website for a private K-12 school: campus-led hero, programmes by age, class sizes, campus life, results and university destinations, admissions steps, fees and term dates, FAQ and a campus tour booking form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "09819a16-0357-56fa-bc73-f70035fef51d",
+  "name": "Forge: AI code editor landing page",
+  "kind": "LANDING_PAGE",
+  "category": "Developer tools",
+  "description": "A dark, terminal-first landing page for an AI-assisted coding tool: blueprint-grid hero with a live diff, keyboard shortcut grid, changelog, pricing, FAQ and a download form. Graphite and acid lime with monospace details.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "7b1b705e-e548-5a1f-827a-a449c0dbb024",
+  "name": "Aperture: photographer and filmmaker portfolio",
+  "kind": "LANDING_PAGE",
+  "category": "Photography & Video",
+  "description": "A dark, gallery-first portfolio for a photographer or videographer: full-bleed hero, mosaic gallery, film band, packages with pricing, about, kind words and a booking enquiry form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "9a746010-c11e-5c67-a2db-78a4964f1c2e",
+  "name": "Kiln: software and product design studio",
+  "kind": "LANDING_PAGE",
+  "category": "Agency",
+  "description": "A refined dark-slate site for a software development and product design studio: commit-log hero, engagement models with prices, shipped products, project timeline, engineering principles, tech stack, testimonials and a project brief form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "ae9a4bc8-e639-57a5-8709-364fd1c8a815",
+  "name": "Maison Verre: editorial fashion lookbook",
+  "kind": "LANDING_PAGE",
+  "category": "Fashion & Apparel",
+  "description": "A stark, editorial page for a fashion label or boutique: campaign hero, collection grid, full-bleed lookbook, press quote, store locator and a list sign-up. Didone display type with sharp corners.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "94ea9f2f-3872-540e-95fc-b4cd7bed8506",
+  "name": "Hearth & Compass: executive and life coach",
+  "kind": "LANDING_PAGE",
+  "category": "Coaching & Courses",
+  "description": "A warm, editorial site for an executive or life coach: free discovery call, programmes with prices and inclusions, a four-step method, client stories, credentials, podcast and press, FAQ and a booking form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "734bab6c-e9c4-51d4-a4eb-4cd215d2b865",
+  "name": "Careline Home Nursing: home care agency",
+  "kind": "LANDING_PAGE",
+  "category": "Nursing & Care Homes",
+  "description": "A complete site for a home-care and visiting-nursing agency: care packages by the hour, live-in care, carer profiles, a three-step care plan, area covered, a full pricing guide, a free assessment form and a recruit-carers strip. Coral on deep navy and cream.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "ebde68f7-b49e-56f4-b418-1ec537e4b8e6",
+  "name": "Tidepool: mindfulness app landing page",
+  "kind": "LANDING_PAGE",
+  "category": "Mobile app",
+  "description": "A warm, friendly landing page for a consumer habit or wellness app: phone mockups with real photography, feature storytelling, reviews, pricing and app-store download buttons with an email-me-the-link form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "76601c55-1adf-5dc4-adbd-16bebe8df27e",
+  "name": "Quill Academy: cohort course sales page",
+  "kind": "LANDING_PAGE",
+  "category": "Education",
+  "description": "A high-converting sales page for a creator's cohort course or online academy: instructor hero, outcomes, a week-by-week curriculum, student results, three-tier pricing with a guarantee, FAQ and a free-lesson opt-in.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "893fa4be-e334-569a-a309-52197bcf28f3",
+  "name": "Amara Reyes: founder and consultant link in bio",
+  "kind": "LANDING_PAGE",
+  "category": "Link in bio",
+  "description": "A premium editorial link hub for a founder, consultant or advisor: oversized serif type, links laid out as a numbered table of contents, one featured-offer card, a single testimonial and a call-booking form. Ink black with one gold accent.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "ce2301f4-b9d7-5ad7-82c9-94b3a3529da1",
+  "name": "Ember & Oak: candles and home fragrance store",
+  "kind": "LANDING_PAGE",
+  "category": "Ecommerce",
+  "description": "A warm, moody brand storefront for a candle or home-fragrance maker: photo hero with a buy card, bestsellers with prices, a scent finder, how it is made, gift sets, reviews, a subscription club, shipping and returns answers and a newsletter signup.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "2876f93d-efe6-5ba3-a804-a1284df75197",
+  "name": "Lumen Summit: two-day conference landing page",
+  "kind": "LANDING_PAGE",
+  "category": "Events & Conferences",
+  "description": "A bold, date-forward landing page for a conference or summit: hero with dates and venue, speaker grid, two-day agenda, ticket tiers, venue details, sponsors, FAQ and a registration form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "cb0673eb-d78d-5d24-b072-4673bf37ff94",
+  "name": "Larch: mountain hotel and retreat",
+  "kind": "LANDING_PAGE",
+  "category": "Hotel & Travel",
+  "description": "An immersive, photography-led page for a boutique mountain hotel, lodge or retreat: full-bleed hero, rooms with rates, an experiences gallery, seasons, directions and a booking enquiry form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "1582ac5c-e10e-5f62-8dff-ed0f68d63ccc",
+  "name": "Brightwater Family Clinic: GP and family practice",
+  "kind": "LANDING_PAGE",
+  "category": "Healthcare",
+  "description": "A bright, friendly family clinic page: same-day appointment hero, service cards, doctors, membership plans with prices, insurance and payment, opening hours, FAQ and a booking form. Fresh teal on white.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "7e776655-1b7c-5b54-be3e-66d9ca9e6cbb",
+  "name": "Cedar Court: memory care and dementia home",
+  "kind": "LANDING_PAGE",
+  "category": "Nursing & Care Homes",
+  "description": "A high-readability page for a dementia and memory care home: small households, staffing ratios, daily routine, family support and an enquiry form with callback. Warm dusk blue-grey with amber and large Lexend type.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "375e646b-b84e-5f71-9862-00faa210950e",
+  "name": "Noor Vale: musician link in bio",
+  "kind": "LANDING_PAGE",
+  "category": "Link in bio",
+  "description": "A full-bleed stage-photo link hub for a singer or band: smoked-glass link buttons, a now-playing card, tour dates with ticket buttons, merch tiles and a presale email list. Built to wow on a phone and fill a wide desktop screen.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "6a27c857-db33-5db4-b025-f1cfe486de54",
+  "name": "Terrace Studio: interior and product design gallery",
+  "kind": "LANDING_PAGE",
+  "category": "Portfolio",
+  "description": "A warm, minimal project gallery for an interior or product design studio: tall photography, a six-project index with jump-to filters, a featured project spotlight, approach, priced services, press and an enquiry form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "7f8dc9ae-1371-590a-8aba-cc69ebf79ebd",
+  "name": "Ember: specialty coffee roaster shop",
+  "kind": "LANDING_PAGE",
+  "category": "Food & Drink",
+  "description": "A shop-style page for a specialty coffee roaster: product cards with tasting notes and roast levels, a subscription builder, roasting steps, origin story, reviews and a wholesale enquiry form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "68afca41-6110-52ca-8536-7c9105125d50",
+  "name": "Marlowe Law: modern law firm",
+  "kind": "LANDING_PAGE",
+  "category": "Professional services",
+  "description": "An authoritative but approachable page for a law firm or consultancy: split navy hero, practice areas, fixed-fee approach, results, partner profiles, client quotes, FAQ and a consultation request form.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "74dc24cb-e8fe-5cb9-bbc6-cffc43d2c7de",
+  "name": "Fieldnote: dark SaaS landing page",
+  "kind": "LANDING_PAGE",
+  "category": "SaaS",
+  "description": "A dark, glowing product landing page with a live-looking dashboard hero, bento features, social proof, three-tier pricing and an FAQ. Built for analytics, dev-tool and B2B software launches.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "df2f6c69-7d3e-5cd1-91f8-8fbacf28811c",
+  "name": "Vaultline: enterprise compliance-automation site",
+  "kind": "LANDING_PAGE",
+  "category": "SaaS",
+  "description": "A deep green-black enterprise software page for compliance automation: a live audit-readiness tracker, framework coverage grid, three-step audit process, customer wordmarks, ROI numbers, a security promise, FAQ and a demo-request form instead of self-serve pricing.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "fd20e535-a282-50da-977b-520679104741",
+  "name": "Iron & Grain: strength gym and coaching",
+  "kind": "LANDING_PAGE",
+  "category": "Fitness",
+  "description": "A dark, photography-led site for a strength gym or personal-training studio: today's class timetable in the hero, coached classes, coach profiles, member milestones, three membership tiers, a free-week form and opening hours.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "8dc29e6a-3e19-537f-adcf-6cdb79d013ae",
+  "name": "Harvest Hands: charity and campaign page",
+  "kind": "LANDING_PAGE",
+  "category": "Nonprofit",
+  "description": "A credible, emotive page for a charity or campaign: portrait hero with a donate call, impact numbers, how donations are used, field stories, a donate section with amounts, volunteer sign-up and a transparency report.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "d1310612-a3a5-5d6d-8994-912775e9a93e",
+  "name": "Meridian: multi-specialty private hospital",
+  "kind": "LANDING_PAGE",
+  "category": "Healthcare",
+  "description": "A crisp page for a private multi-specialty hospital: departments, find-a-doctor cards, same-week diagnostics, a five-step patient journey, international patient services and an appointment request form. Navy and teal with a modern grotesk.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ },
+ {
+  "id": "dd0c4879-d630-5f19-b708-a02f0f6bdb69",
+  "name": "Harbour Mind Therapy: counselling practice",
+  "kind": "LANDING_PAGE",
+  "category": "Healthcare",
+  "description": "A calm, complete site for a counselling and psychotherapy practice: therapist profiles, specialities, what to expect in a first session, fees with a sliding scale, online and in-person details, a confidentiality promise and an enquiry form. Dusk teal with sea-glass light.",
+  "priceCents": 0,
+  "purchaseCount": 0,
+  "publishedAt": null
+ }
+]

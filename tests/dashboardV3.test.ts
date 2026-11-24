@@ -14,6 +14,8 @@ describe("brand tokens css", () => {
     expect(selectors.length).toBeGreaterThan(0);
     for (const s of selectors) {
       const list = s.replace(/^}/, "").replace(/\{$/, "").split(",");
+      // The one exception: the editor canvas clears Plexo's tokens so a customer's page never inherits them (customerPageIsolation.test.ts).
+      if (list.length === 1 && list[0].trim() === "[data-plx-canvas]") continue;
       for (const sel of list) expect(sel.trim()).toMatch(/\[data-theme="(light|dark|system)"\]$/);
     }
   });

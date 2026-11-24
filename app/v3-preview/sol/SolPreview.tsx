@@ -116,7 +116,7 @@ export function SolPreview() {
   const streaming = state === "streaming";
   const showArtifact = state === "canvas";
   const conversation: ConversationSummary | null = empty ? null : { ...THREADS[0], title: "Build my bakery website" };
-  const messages: SolMessage[] = empty ? [] : state === "streaming" ? CONVERSATION.slice(0, 3) : state === "ask" ? CONVERSATION.slice(0, 1) : state === "intake" ? [msg("i1", "user", [text("build me a landing page")], 1), msg("i2", "assistant", [text("Happy to. I'll make it yours, so a few quick questions first. Tap an answer, type your own, or skip any and I'll choose.")], 0.9)] : CONVERSATION;
+  const messages: SolMessage[] = empty ? [] : state === "streaming" ? CONVERSATION.slice(0, 3) : state === "ask" ? CONVERSATION.slice(0, 1) : state === "intake" ? [msg("i1", "user", [text("build me a landing page")], 1), msg("i2", "assistant", [text("Happy to. I'll make it yours, so a few quick questions first. Tap an answer, type your own, or skip any and I'll choose.")], 0.9)] : state === "rate" ? [...CONVERSATION.slice(0, 3), msg("m4", "assistant", [tool("page_edit", "success", { name: "Home" }), text("Done. Your buttons are now green across the site. Want me to **publish** it now?")], 2.4)] : CONVERSATION;
   const pendingBlocks: ContentBlock[] | null = streaming ? [text("Great choice. I'm adding the order form to the page now, so people can pick a cake, a size and a date"), tool("page_edit", "running")] : null;
   const pendingQuestion = state === "ask" ? ASK : state === "intake" ? INTAKE : null;
 

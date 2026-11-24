@@ -7,6 +7,7 @@ import { summarizeSites } from "./siteList";
 import { resolveThemePreference, THEME_COOKIE, type ThemePreference } from "./theme";
 import { membershipsForUser } from "@/server/orgMemberships";
 import { readTourState, type TourState } from "./tour";
+import { guestAccessFor } from "@/lib/access/siteAccessStore";
 
 export type V3ShellData = {
   experience: Experience;
@@ -37,6 +38,13 @@ const SITE_ATTRIBUTES = ["id", "name", "kind", "parentId", "marketplaceStatus", 
  * the sites the person owns.
  */
 export async function loadV3Sites(organizationId: string, userId: string): Promise<SiteSummary[]> {
+  // Someone invited to specific sites sees only those, wherever the list is drawn (menu, Sites, Home, the site picker).
+  const access = await guestAccessFor(userId, organizationId).catch(() => null);
+  const all = await loadAllV3Sites(organizationId, userId);
+  return access ? all.filter((s) => s.id in access) : all;
+}
+
+async function loadAllV3Sites(organizationId: string, userId: string): Promise<SiteSummary[]> {
   const [{ data: templates }, domains] = await Promise.all([
     Template.query.byOrg({ organizationId }).go({ pages: "all", attributes: [...SITE_ATTRIBUTES] }),
     PublishedDomain.query
@@ -69,6 +77,7 @@ export async function loadV3ShellData(user: ShellUser, organizationId: string): 
     console.error("v3 shell: loading sites failed", err);
     return [] as SiteSummary[];
   });
+  const guest = (await guestAccessFor(user.id, organizationId).catch(() => null)) !== null;
   const currentSite = pickCurrentSite(sites, jar.get(CURRENT_SITE_COOKIE)?.value);
   const workspaces = await membershipsForUser(user.id)
     .then((ms) => ms.map((m) => ({ id: m.organizationId, name: m.organization.name, role: m.role as string })))
@@ -80,7 +89,7 @@ export async function loadV3ShellData(user: ShellUser, organizationId: string): 
   return {
     workspaces,
     experience,
-    nav: buildV3Nav({ experience, goal, siteCount: sites.length, sells: sites.some((s) => s.kind === "Online store"), teaches: sites.some((s) => s.kind === "Course") }),
+    nav: buildV3Nav({ experience, guest, goal, siteCount: sites.length, sells: sites.some((s) => s.kind === "Online store"), teaches: sites.some((s) => s.kind === "Course") }),
     sites,
     currentSite,
     themePreference: resolveThemePreference({ user: user.themePreference, cookie: jar.get(THEME_COOKIE)?.value }),

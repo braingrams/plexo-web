@@ -1,11 +1,11 @@
 "use client";
 
-import { Card, OptimisticLoader, Skeleton } from "../../ui";
+import { ButtonLink, Card, CardHeader, OptimisticLoader, Skeleton } from "../../ui";
 import { advancedKind, type AdvancedSection, type AdvancedSectionId } from "@/lib/dashboardV3/hubAdvanced";
 import type { AdvancedData } from "@/lib/dashboardV3/hubAdvancedData";
 import type { HubFeatures } from "@/lib/dashboardV3/hubTabs";
 import { ContentTypesClient } from "@/app/dashboard/templates/[id]/content-types/ContentTypesClient";
-import { RedirectsClient } from "@/app/dashboard/templates/[id]/redirects/RedirectsClient";
+import { RedirectsSection } from "./RedirectsSection";
 import { SiteLayoutClient } from "@/app/dashboard/templates/[id]/site-layout/SiteLayoutClient";
 import { FormDestinationsClient } from "@/app/dashboard/templates/[id]/form-submissions/FormDestinationsClient";
 import { FormSubmissionsClient } from "@/app/dashboard/templates/[id]/form-submissions/FormSubmissionsClient";
@@ -58,9 +58,9 @@ function Body({ kind, section, site, data }: { kind: ReturnType<typeof advancedK
     case "lists":
       return data.contentTypes ? <Embed><ContentTypesClient templateId={id} templateName={site.name} initialContentTypes={data.contentTypes} /></Embed> : null;
     case "forms":
-      return <Embed><FormDestinationsClient templateId={id} /><FormSubmissionsClient templateId={id} /></Embed>;
+      return <><Embed><FormDestinationsClient templateId={id} /><FormSubmissionsClient templateId={id} /></Embed><Card><CardHeader title="Did the emails go out?" description="See every email Plexo sent for you lately, like form replies and receipts, and which ones didn't get through." action={<ButtonLink href="/dashboard/settings/email-log" variant="secondary">See sent emails</ButtonLink>} /></Card></>;
     case "redirects":
-      return data.redirects ? <Embed><RedirectsClient templateId={id} initialRedirects={data.redirects} /></Embed> : null;
+      return data.redirects ? <RedirectsSection siteId={id} initial={data.redirects} /> : null;
     case "scripts":
       return <ScriptsSection siteId={id} ownCode={site.features.ownCode} />;
     case "versions":

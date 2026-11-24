@@ -5,6 +5,8 @@ import { requirePermission } from "@/server/requirePermissionDynamo";
 import { SeatLimitError, assertSeatAvailable, createInvitation, listPendingInvitations, seatUsage } from "@/server/orgDynamo";
 import { User, Organization } from "@/lib/db/coreEntities";
 import { roles, type OrgRole } from "@/server/accessControl";
+import { validateSiteAccess } from "@/lib/access/siteAccessStore";
+import type { SiteAccess } from "@/lib/access/siteAccess";
 
 const VALID_ROLES = new Set(Object.keys(roles));
 
@@ -45,6 +47,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "Only the editor role can be scoped to specific pages." }, { status: 400 });
   }
 
+  // A site-only invitation names the sites and a role on each. Only that, never the whole workspace.
+  let siteAccess: SiteAccess | undefined;
+  if (role === "guest") {
+    const checked = await validateSiteAccess(ctx.organizationId, body.siteAccess);
+    if (!checked.ok) return NextResponse.json({ error: checked.error }, { status: 400 });
+    siteAccess = checked.access;
+  } else if (body.siteAccess !== undefined && body.siteAccess !== null && Object.keys(body.siteAccess as object).length > 0) {
+    return NextResponse.json({ error: "Choose sites only for someone who should see just those sites." }, { status: 400 });
+  }
+
   const [{ data: inviter }, { data: org }] = await Promise.all([
     User.get({ id: ctx.userId }).go(),
     Organization.get({ id: ctx.organizationId }).go(),
@@ -71,6 +83,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     ctx.userId,
     inviter.name ?? "A teammate",
     scopedTemplateIds,
+    siteAccess,
   );
   return NextResponse.json({ invitation });
 }

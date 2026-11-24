@@ -1,6 +1,6 @@
 // Server only: asks one tiny, platform-paid model call what kind of business a description is about and what feel suits it
 // (the allowed words and the reply reader live in understandWords.ts, which is safe in the browser). Never throws.
-import { MIN_ABOUT, buildUnderstandPrompt, parseUnderstood, type Understood } from "@/lib/onboarding/understandWords";
+import { MIN_ABOUT, buildBusinessTypePrompt, buildUnderstandPrompt, parseBusinessTypeReply, parseUnderstood, type Understood } from "@/lib/onboarding/understandWords";
 
 export type { Understood };
 export { MIN_ABOUT };
@@ -22,6 +22,26 @@ export async function understandDescription(about: string, goal: string | undefi
     return parseUnderstood(result.text ?? "");
   } catch (err) {
     console.error("understandDescription: model call failed, using the keyword reading:", err);
+    return null;
+  }
+}
+
+/** Server only. Which kind of business (lib/onboarding/businessType.ts) the name and description describe, or null when it is unclear or the model is unavailable. */
+export async function understandBusinessType(name: string, about: string, goal: string | undefined): Promise<string | null> {
+  if (name.trim().length < 2 && about.trim().length < MIN_ABOUT) return null;
+  try {
+    const { generate } = await import("@/lib/ai/providers/bedrockClaude");
+    const { resolveModel } = await import("@/lib/ai/modelRegistry");
+    const result = await generate({
+      model: resolveModel("bedrock_claude", "BASIC"),
+      apiKey: "",
+      systemPrompt: "You sort websites by the kind of business. Reply with ONLY the JSON asked for.",
+      userPrompt: buildBusinessTypePrompt(name.trim(), about.trim(), goal),
+      maxTokens: 30,
+    });
+    return parseBusinessTypeReply(result.text ?? "");
+  } catch (err) {
+    console.error("understandBusinessType: model call failed, using the keyword reading:", err);
     return null;
   }
 }

@@ -5,6 +5,7 @@
 // answer, the keyword reading of the description in lib/onboarding/designs.ts still applies.
 
 import type { SiteIndustry, SiteStyle } from "@charisol/plexo-sdk/v2/compile";
+import { BUSINESS_TYPES, parseBusinessType } from "@/lib/onboarding/businessType";
 
 export const INDUSTRIES = ["restaurant", "beauty", "fitness", "health", "tech", "creative", "professional", "retail", "education", "nonprofit", "realestate", "events", "travel", "homeservices", "general"] as const satisfies readonly SiteIndustry[];
 export const STYLES = ["bold", "elegant", "playful", "minimal", "warm", "corporate", "dark", "editorial"] as const satisfies readonly SiteStyle[];
@@ -29,6 +30,24 @@ export function parseUnderstood(text: string): Understood | null {
     const style = STYLES.find((s) => s === String(raw.style ?? "").toLowerCase().trim());
     if (!industry || !style) return null;
     return { industry, style };
+  } catch {
+    return null;
+  }
+}
+
+/** Asks which kind of business this is, from the fixed list the designs are sorted by. Works from the name alone when that is all there is. */
+export function buildBusinessTypePrompt(name: string, about: string, goal: string | undefined): string {
+  const list = BUSINESS_TYPES.map((t) => `${t.id} (${t.covers})`).join("\n");
+  return `Someone is making a website${goal ? ` (type: ${goal})` : ""}.\nBusiness name: "${name.slice(0, 100)}"\nWhat they said about it: "${about.slice(0, MAX_ABOUT) || "(nothing)"}"\n\nWhich kind of business or purpose is it? Choose exactly one id:\n${list}\nIf it is genuinely unclear, answer "unknown". Do not guess from a single vague word.\nReply with ONLY JSON like {"type":"fitness"}.`;
+}
+
+/** Reads the reply defensively: only a known id counts. */
+export function parseBusinessTypeReply(text: string): string | null {
+  const a = text.indexOf("{");
+  const b = text.lastIndexOf("}");
+  if (a < 0 || b <= a) return null;
+  try {
+    return parseBusinessType(String((JSON.parse(text.slice(a, b + 1)) as { type?: unknown }).type ?? "").toLowerCase().trim()) ?? null;
   } catch {
     return null;
   }

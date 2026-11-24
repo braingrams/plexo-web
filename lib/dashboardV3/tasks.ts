@@ -34,6 +34,8 @@ export type SiteFacts = {
   ownDesign: boolean;
   /** Personalized directly with SOL AI (words, cards, images tailored). */
   personalizedWithSol: boolean;
+  /** The owner gave SOL their phone, email or address while it personalized the site. */
+  contactProvided: boolean;
 };
 
 /**
@@ -60,6 +62,7 @@ export const EMPTY_FACTS: SiteFacts = {
   signInOn: false,
   ownDesign: false,
   personalizedWithSol: false,
+  contactProvided: false,
 };
 
 export type TaskId = "design" | "brand" | "product" | "pay" | "words" | "contact" | "post" | "lesson" | "price" | "links" | "describe" | "signin" | "finish" | "live";
@@ -94,7 +97,7 @@ const VARIANTS: Record<TaskVariant, TaskDef[]> = {
     design,
     brand,
     { id: "words", title: "Check the words on your pages", description: "Make sure it says what you want, the way you'd say it.", kind: "link", help: "Editing the words on your site", done: (f) => f.edited || f.personalizedWithSol },
-    { id: "contact", title: "Add your contact details", description: "Phone, email and where to find you.", kind: "link", help: "Adding contact details", done: (f) => f.edited },
+    { id: "contact", title: "Add your contact details", description: "Phone, email and where to find you.", kind: "link", help: "Adding contact details", done: (f) => f.edited || f.contactProvided },
     finish,
   ],
   blog: [
@@ -154,6 +157,8 @@ export function computeTasks(variant: TaskVariant, facts: SiteFacts): TaskProgre
       if (d.id === "words") {
         title = "Personalized with SOL";
         description = "SOL tailored your page words, story, and photos to your brand. Tap to review or tweak anything.";
+      } else if (d.id === "contact" && facts.contactProvided) {
+        description = "SOL added the phone, email or address you gave it. Tap to check or change them.";
       } else if (d.id === "links") {
         title = "Links personalized with SOL";
         description = "SOL set up your initial profile and links. Tap to review or add more.";

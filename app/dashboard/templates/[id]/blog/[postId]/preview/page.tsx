@@ -2,9 +2,10 @@ import { notFound } from "next/navigation";
 import { BlogPost, BlogSite, Template } from "@/lib/db/contentEntities";
 import { requireBlogSiteAccess } from "@/lib/blog/pageAuthDynamo";
 import { hydratePostDetail } from "@/lib/blog/queriesDynamo";
-import { BlogStyles, SiteHeader, PostMeta, CategoryChips } from "@/lib/pub/blogTheme";
+import { BlogStyles, SiteHeader, PostMeta, CategoryChips, blogStylesHead } from "@/lib/pub/blogTheme";
 import { hasBlogMarker, substituteBlogMarkers, extractMarkerPrefix } from "@/lib/pub/blogLayoutRender";
 import { buildPostFragments } from "@/lib/pub/blogLayoutFragments";
+import { IsolatedPage } from "@/app/dashboard/_components/IsolatedPage";
 
 const PREVIEW_BANNER = (status: string) => (
   <div style={{ background: "var(--ed-amber)", color: "var(--ed-on-brand)", textAlign: "center", padding: "0.5rem", fontSize: "0.8rem", fontWeight: 700 }}>
@@ -47,9 +48,8 @@ export default async function BlogPostPreviewPage({ params }: { params: Promise<
     return (
       <>
         {PREVIEW_BANNER(post.status)}
-        <BlogStyles appearance={blogSite ?? undefined} />
-        {/* eslint-disable-next-line react/no-danger */}
-        <div dangerouslySetInnerHTML={{ __html: html }} />
+        {/* The visitor's page, in its own frame: none of the dashboard's styles may reach it. */}
+        <IsolatedPage html={html} head={blogStylesHead(blogSite ?? undefined)} title="Preview of your blog post" />
       </>
     );
   }

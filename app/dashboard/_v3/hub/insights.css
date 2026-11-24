@@ -1,6 +1,6 @@
 /* Site health and Google Analytics (Visits tab). Tokens only (tests/v3NoColorLiterals.test.ts). */
 .plx-health__empty { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; color: var(--plx-muted); }
-.plx-health__empty .plx-body { max-width: 62ch; }
+.plx-health__empty .plx-body:where(:not([data-plx-canvas] *)) { max-width: 62ch; }
 .plx-health__headline { margin: 0 0 20px; font-size: 22px; font-weight: 800; letter-spacing: -0.01em; }
 .plx-health__when { margin: 14px 0 0; color: var(--plx-muted); font-size: 13px; }
 .plx-hrings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 24px; justify-items: center; }
@@ -36,7 +36,7 @@
 /* Google Analytics */
 .plx-hga { display: flex; flex-direction: column; gap: 20px; }
 .plx-hga__connect { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; }
-.plx-hga__connect .plx-body { max-width: 62ch; }
+.plx-hga__connect .plx-body:where(:not([data-plx-canvas] *)) { max-width: 62ch; }
 .plx-hga__bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .plx-hga__range { display: inline-flex; gap: 6px; }
 .plx-hga__cols { display: flex; flex-wrap: wrap; gap: 20px; }

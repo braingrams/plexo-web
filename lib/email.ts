@@ -1,8 +1,9 @@
 import { EMAIL_COLORS } from "@/lib/theme";
-import nodemailer from "nodemailer";
 import { createHmac } from "node:crypto";
 
-import { emailShell } from "@/lib/mail/maildrip";
+import { emailShell, sendMaildripEmail } from "@/lib/mail/maildrip";
+import { adminAlertRecipients } from "@/lib/admin/alertRecipients";
+import type { AdminAlertTopic } from "@/lib/admin/alertTopics";
 import { CTA_BUTTON } from "@/lib/mail/templates";
 import { formatMoney } from "@/lib/commerce/formatMoney";
 import { logEmailDelivery, type EmailDeliveryContext } from "@/lib/mail/logEmail";
@@ -13,7 +14,7 @@ import { logEmailDelivery, type EmailDeliveryContext } from "@/lib/mail/logEmail
  * etc.) instead of each function carrying its own hand-rolled <!DOCTYPE html>/<style> block.
  * Previously these used a separate dark theme with no logo at all, so an admin's inbox had
  * two visually unrelated "kinds" of Plexo email — this puts everything on the one shared
- * template. No `brand` override is ever passed here: these go to ADMIN_EMAIL (Charisol
+ * template. No `brand` override is ever passed here: these go to the team members who chose them (Charisol
  * staff), never a customer, so there's no white-labeling concept to apply — always the
  * real Plexo mark.
  */
@@ -79,51 +80,21 @@ function twoButtonRow(
   </table>`;
 }
 
-async function deliver(params: { to: string; subject: string; html: string; logLabel: string; logLines: string[]; context: EmailDeliveryContext }): Promise<void> {
-  if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      },
-    });
-
-    try {
-      await transporter.sendMail({
-        from: process.env.SMTP_FROM || `"Plexo Notifications" <noreply@plexopages.com>`,
-        to: params.to,
-        subject: params.subject,
-        html: params.html,
-      });
-      logEmailDelivery({ kind: "smtp", to: params.to, subject: params.subject, status: "sent", context: params.context });
-    } catch (err) {
-      // Previously uncaught entirely — a SMTP failure here propagated as an unhandled
-      // rejection to whichever caller awaited deliver(). Behavior is unchanged (still
-      // rethrown); this only adds a queryable record of the failure before it does.
-      logEmailDelivery({
-        kind: "smtp", to: params.to, subject: params.subject, status: "failed",
-        errorMessage: err instanceof Error ? err.message : String(err), context: params.context,
-      });
-      throw err;
-    }
-  } else {
-    console.log("--------------------------------------------------");
-    console.log(`[${params.logLabel}]`);
-    console.log(`To: ${params.to}`);
-    for (const line of params.logLines) console.log(line);
-    console.log("--------------------------------------------------");
-    // SMTP isn't configured, so nothing was actually sent — logged as "failed" (not
-    // skipped entirely) since that's the true answer to "did this email actually send,"
-    // the whole point of this log.
-    logEmailDelivery({
-      kind: "smtp", to: params.to, subject: params.subject, status: "failed",
-      errorMessage: "SMTP not configured — no-op fallback, email was only logged to the console.",
-      context: params.context,
-    });
-  }
+/** Sends one team email to every address chosen for it (one message each, so nobody sees who else got it). Fails only if none could be sent. */
+async function deliver(params: { to: string[]; subject: string; html: string; context: EmailDeliveryContext }): Promise<void> {
+  const results = await Promise.allSettled(
+    params.to.map(async (to) => {
+      try {
+        await sendMaildripEmail({ to, subject: params.subject, html: params.html });
+        logEmailDelivery({ kind: "maildrip", to, subject: params.subject, status: "sent", context: params.context });
+      } catch (err) {
+        logEmailDelivery({ kind: "maildrip", to, subject: params.subject, status: "failed", errorMessage: err instanceof Error ? err.message : String(err), context: params.context });
+        throw err;
+      }
+    }),
+  );
+  const failed = results.filter((r): r is PromiseRejectedResult => r.status === "rejected");
+  if (failed.length && failed.length === results.length) throw failed[0].reason;
 }
 
 export type SendTestimonialEmailParams = {
@@ -137,10 +108,10 @@ export type SendTestimonialEmailParams = {
 };
 
 /**
- * Sends a notification email to ADMIN_EMAIL with 1-click Approval & Rejection links.
+ * Sends a notification email to the admins who switched on testimonials with 1-click Approval & Rejection links.
  */
 export async function sendTestimonialNotificationEmail(testimonial: SendTestimonialEmailParams) {
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
+  const adminEmail = await adminAlertRecipients("testimonial");
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   const approveToken = generateModerationToken(testimonial.id, "approve");
@@ -170,8 +141,6 @@ export async function sendTestimonialNotificationEmail(testimonial: SendTestimon
     to: adminEmail,
     subject: `[Plexo Review] New Testimonial from ${testimonial.name}`,
     html,
-    logLabel: "TESTIMONIAL EMAIL NOTIFICATION LOG",
-    logLines: [`Approve Link: ${approveUrl}`, `Reject Link: ${rejectUrl}`],
     context: "testimonial_notification",
   });
 }
@@ -187,12 +156,12 @@ export type SendFeedbackEmailParams = {
 };
 
 /**
- * Notifies ADMIN_EMAIL that new product feedback was submitted. No 1-click links — there's
+ * Notifies the admins who chose it that new product feedback was submitted. No 1-click links — there's
  * no action to take from the email, just a heads-up; triage happens in plexo-admin's
  * Feedback queue.
  */
 export async function sendFeedbackNotificationEmail(feedback: SendFeedbackEmailParams) {
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
+  const adminEmail = await adminAlertRecipients("feedback");
 
   const html = emailShell({
     title: "New Feedback",
@@ -213,8 +182,6 @@ export async function sendFeedbackNotificationEmail(feedback: SendFeedbackEmailP
     to: adminEmail,
     subject: `[Plexo Feedback] New feedback from ${feedback.userName}`,
     html,
-    logLabel: "FEEDBACK EMAIL NOTIFICATION LOG",
-    logLines: [`From: ${feedback.userName} (${feedback.userEmail})`, `Message: ${feedback.message}`],
     context: "feedback_notification",
   });
 }
@@ -228,13 +195,13 @@ export type SendWithdrawalRequestEmailParams = {
 };
 
 /**
- * Notifies ADMIN_EMAIL that a new withdrawal request needs review. Unlike
+ * Notifies the admins who chose it that a new withdrawal request needs review. Unlike
  * sendTestimonialNotificationEmail, there's no 1-click approve/reject link — processing a
  * payout requires typing a reason on rejection, so it has to go through plexo-admin's own
  * review UI, not a single GET request.
  */
 export async function sendWithdrawalRequestNotificationEmail(withdrawal: SendWithdrawalRequestEmailParams) {
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
+  const adminEmail = await adminAlertRecipients("withdrawal");
   const adminAppUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
   const reviewUrl = `${adminAppUrl}/withdrawals`;
   const amount = (withdrawal.amountCents / 100).toFixed(2);
@@ -257,8 +224,6 @@ export async function sendWithdrawalRequestNotificationEmail(withdrawal: SendWit
     to: adminEmail,
     subject: `[Plexo Payout] Withdrawal requested by ${withdrawal.userName}`,
     html,
-    logLabel: "WITHDRAWAL REQUEST EMAIL NOTIFICATION LOG",
-    logLines: [`Requested by: ${withdrawal.userName} (${withdrawal.userEmail})`, `Amount: $${amount}`, `Review: ${reviewUrl}`],
     context: "withdrawal_request_notification",
   });
 }
@@ -273,12 +238,12 @@ export type SendScriptAccessRequestEmailParams = {
 };
 
 /**
- * Notifies ADMIN_EMAIL that a user wants full-script (unsandboxed) preview access for a
+ * Notifies the admins who chose it that a user wants full-script (unsandboxed) preview access for a
  * RAW_UPLOAD template's Text Content tab. Like withdrawals, there's no 1-click link —
  * approving requires staff to pick a duration, so it goes through plexo-admin's review UI.
  */
 export async function sendScriptAccessRequestNotificationEmail(req: SendScriptAccessRequestEmailParams) {
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
+  const adminEmail = await adminAlertRecipients("access");
   const adminAppUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
   const reviewUrl = `${adminAppUrl}/script-access-requests`;
 
@@ -300,13 +265,6 @@ export async function sendScriptAccessRequestNotificationEmail(req: SendScriptAc
     to: adminEmail,
     subject: `[Plexo] Full script preview requested — ${req.templateName}`,
     html,
-    logLabel: "SCRIPT ACCESS REQUEST EMAIL NOTIFICATION LOG",
-    logLines: [
-      `Requested by: ${req.userName} (${req.userEmail})`,
-      `Template: ${req.templateName} (${req.templateId})`,
-      ...(req.reason ? [`Reason: ${req.reason}`] : []),
-      `Review: ${reviewUrl}`,
-    ],
     context: "script_access_request_notification",
   });
 }
@@ -320,11 +278,11 @@ export type SendCommerceStripeAccessRequestEmailParams = {
   expectedVolume?: string | null;
 };
 
-/** Notifies ADMIN_EMAIL that an org wants platform-hosted Stripe unlocked for Commerce —
+/** Notifies the admins who chose it that an org wants platform-hosted Stripe unlocked for Commerce —
  * same "no 1-click link, goes through plexo-admin's own review UI" shape as
  * sendScriptAccessRequestNotificationEmail/sendWithdrawalRequestNotificationEmail above. */
 export async function sendCommerceStripeAccessRequestNotificationEmail(req: SendCommerceStripeAccessRequestEmailParams) {
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
+  const adminEmail = await adminAlertRecipients("access");
   const adminAppUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
   const reviewUrl = `${adminAppUrl}/commerce-stripe-access-requests`;
 
@@ -347,13 +305,6 @@ export async function sendCommerceStripeAccessRequestNotificationEmail(req: Send
     to: adminEmail,
     subject: `[Plexo Commerce] Platform Stripe requested — ${req.organizationName}`,
     html,
-    logLabel: "COMMERCE STRIPE ACCESS REQUEST EMAIL NOTIFICATION LOG",
-    logLines: [
-      `Organization: ${req.organizationName}`,
-      `Requested by: ${req.userName} (${req.userEmail})`,
-      ...(req.reason ? [`Reason: ${req.reason}`] : []),
-      `Review: ${reviewUrl}`,
-    ],
     context: "commerce_stripe_access_request_notification",
   });
 }
@@ -368,11 +319,11 @@ export type SendCommerceWithdrawalRequestEmailParams = {
   bankName: string;
 };
 
-/** Notifies ADMIN_EMAIL that a Commerce wallet withdrawal needs review — same shape as
+/** Notifies the admins who chose it that a Commerce wallet withdrawal needs review — same shape as
  * sendWithdrawalRequestNotificationEmail above (the marketplace's own equivalent), just
  * against CommerceWithdrawalRequest instead of WithdrawalRequest. */
 export async function sendCommerceWithdrawalRequestNotificationEmail(req: SendCommerceWithdrawalRequestEmailParams) {
-  const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_FROM || "admin@plexopages.com";
+  const adminEmail = await adminAlertRecipients("withdrawal");
   const adminAppUrl = process.env.ADMIN_APP_URL || "http://localhost:3001";
   const reviewUrl = `${adminAppUrl}/commerce-withdrawals`;
   const amount = formatMoney(req.amountCents, req.currency);
@@ -396,13 +347,6 @@ export async function sendCommerceWithdrawalRequestNotificationEmail(req: SendCo
     to: adminEmail,
     subject: `[Plexo Commerce] Withdrawal requested by ${req.organizationName}`,
     html,
-    logLabel: "COMMERCE WITHDRAWAL REQUEST EMAIL NOTIFICATION LOG",
-    logLines: [
-      `Organization: ${req.organizationName}`,
-      `Requested by: ${req.userName} (${req.userEmail})`,
-      `Amount: ${amount}`,
-      `Review: ${reviewUrl}`,
-    ],
     context: "commerce_withdrawal_request_notification",
   });
 }

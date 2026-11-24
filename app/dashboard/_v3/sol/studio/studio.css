@@ -18,3 +18,4 @@
 .sol3-studio__follow { display: flex; gap: 10px; align-items: center; }
 .sol3-studio__follow .plx-input { flex: 1; min-width: 0; }
 .sol3-studio__err { margin: 0; font-size: 14px; line-height: 1.45; color: var(--plx-text); }
+.sol3-studio__ask { flex: 0 1 auto; min-height: 0; max-height: 82%; display: flex; flex-direction: column; width: 100%; max-width: calc(720px + 2 * clamp(16px, 3vw, 24px)); margin: 0 auto; padding: 0 clamp(16px, 3vw, 24px) clamp(12px, 2vw, 16px); }

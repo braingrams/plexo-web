@@ -46,7 +46,7 @@ export async function PATCH(
     return NextResponse.json({ error: "A redirect can't point to itself." }, { status: 400 });
   }
 
-  await BlogRedirect.patch({ templateId, fromPath }).set({ toPath }).go();
+  await BlogRedirect.patch({ templateId, fromPath }).set({ toPath, ...(typeof body.permanent === "boolean" ? { permanent: body.permanent } : {}) }).go();
   const { data: redirect } = await BlogRedirect.get({ templateId, fromPath }).go();
 
   return NextResponse.json({ redirect });

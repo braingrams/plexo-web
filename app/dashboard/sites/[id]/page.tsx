@@ -15,9 +15,12 @@ import { SettingsTab } from "../../_v3/hub/SettingsTab";
 import { AddMoreCards } from "../../_v3/hub/AddMore";
 import { MoreTab } from "../../_v3/hub/MoreTab";
 import { AdvancedArea } from "../../_v3/hub/advanced/AdvancedArea";
+import { notFound } from "next/navigation";
 import { hubTabs, resolveHubTab } from "@/lib/dashboardV3/hubTabs";
 import { advancedKind, advancedSections, resolveAdvancedSection } from "@/lib/dashboardV3/hubAdvanced";
 import { loadAdvancedData, loadServerPlan } from "@/lib/dashboardV3/hubAdvancedData";
+import { guestAccessFor } from "@/lib/access/siteAccessStore";
+import { guestFirstTab, guestHubTabAllowed } from "@/lib/access/siteAccess";
 import { loadHubPages, loadHubProducts, loadHubSite, loadHubVisits, requireHubContext } from "@/lib/dashboardV3/hubData";
 
 export const dynamic = "force-dynamic";
@@ -30,8 +33,15 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
   const query = await searchParams;
   const ctx = await requireHubContext(`/dashboard/sites/${id}`);
   const site = await loadHubSite(ctx.organizationId, id);
-  const tab = resolveHubTab(Array.isArray(query.tab) ? query.tab[0] : query.tab, site.features, ctx.experience);
-  const tabs = hubTabs(site.features, ctx.experience);
+  // A member invited to this site only gets the tabs their role allows. Settings, Advanced, Web address and More (domains, code,
+  // transfer, delete, money) are never among them, whatever the role.
+  const access = await guestAccessFor(ctx.userId, ctx.organizationId);
+  const guestRole = access ? access[id] : undefined;
+  if (access && !guestRole) notFound();
+  const allTabs = hubTabs(site.features, ctx.experience);
+  const tabs = guestRole ? allTabs.filter((t) => guestHubTabAllowed(guestRole, t.id)) : allTabs;
+  const wanted = resolveHubTab(Array.isArray(query.tab) ? query.tab[0] : query.tab, site.features, ctx.experience);
+  const tab = guestRole ? (tabs.find((t) => t.id === wanted)?.id ?? (tabs[0]?.id ?? guestFirstTab(guestRole)) as typeof wanted) : wanted;
 
   let content: React.ReactNode;
   switch (tab) {
@@ -89,14 +99,14 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       content = (
         <>
           <PagesTab site={site} pages={pages} experience={ctx.experience} plan={ctx.plan} />
-          <AddMoreCards siteId={id} siteName={site.name} features={site.features} pages={examplePages(pages)} />
+          {guestRole ? null : <AddMoreCards siteId={id} siteName={site.name} features={site.features} pages={examplePages(pages)} />}
         </>
       );
     }
   }
 
   return (
-    <HubFrame site={site} tabs={tabs} current={tab} experience={ctx.experience}>
+    <HubFrame site={site} tabs={tabs} current={tab} experience={ctx.experience} readOnly={guestRole !== undefined && guestRole !== "editor"} guest={guestRole !== undefined}>
       {content}
     </HubFrame>
   );

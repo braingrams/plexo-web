@@ -17,7 +17,11 @@ function questionsOf(block: ToolUseBlock): AskUserQuestionSpec[] {
  * "Skip, you choose" (SOL decides that one). With several questions, "Just build it" skips the
  * rest and lets SOL decide.
  */
-export function AskCard({ block, onSubmit, busy }: { block: ToolUseBlock; onSubmit: (answers: AskUserAnswer[]) => void; busy?: boolean }) {
+/**
+ * `docked`: the card sits in its own space under the message list (SOL Studio): its choices scroll inside it and the
+ * buttons are a fixed row at its bottom, so Next / Send is always visible however many choices or lines of text there are.
+ */
+export function AskCard({ block, onSubmit, busy, docked }: { block: ToolUseBlock; onSubmit: (answers: AskUserAnswer[]) => void; busy?: boolean; docked?: boolean }) {
   const questions = useMemo(() => questionsOf(block), [block]);
   const ref = useRef<HTMLDivElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
@@ -113,40 +117,42 @@ export function AskCard({ block, onSubmit, busy }: { block: ToolUseBlock; onSubm
   }
 
   return (
-    <div className="sol3-card sol3-ask" ref={ref} tabIndex={-1} onKeyDown={onKey} role="group" aria-label="A question from SOL">
-      <div className="sol3-ask__top">
-        <span className="sol3-ask__eyebrow">{q.header || "A quick question"}</span>
-        {questions.length > 1 ? (
-          <span className="sol3-ask__progress">
-            <span className="sol3-ask__count">Question {step + 1} of {questions.length}</span>
-            <span className="sol3-ask__dots" aria-hidden>
-              {questions.map((_, i) => (
-                <i key={i} data-on={i <= step} />
-              ))}
+    <div className={docked ? "sol3-card sol3-ask sol3-ask--docked" : "sol3-card sol3-ask"} ref={ref} tabIndex={-1} onKeyDown={onKey} role="group" aria-label="A question from SOL">
+      <div className="sol3-ask__body">
+        <div className="sol3-ask__top">
+          <span className="sol3-ask__eyebrow">{q.header || "A quick question"}</span>
+          {questions.length > 1 ? (
+            <span className="sol3-ask__progress">
+              <span className="sol3-ask__count">Question {step + 1} of {questions.length}</span>
+              <span className="sol3-ask__dots" aria-hidden>
+                {questions.map((_, i) => (
+                  <i key={i} data-on={i <= step} />
+                ))}
+              </span>
             </span>
-          </span>
-        ) : null}
-      </div>
-      <h4>{q.question}</h4>
-      {q.multiSelect ? <p className="sol3-ask__hint">Pick as many as you like.</p> : null}
-      <div className="sol3-opts" role={q.multiSelect ? "group" : "radiogroup"} aria-label={q.question}>
-        {q.options.map((o, i) => (
-          <button key={o.label} type="button" role={q.multiSelect ? "checkbox" : "radio"} aria-checked={sel.has(o.label)} data-multi={!!q.multiSelect} data-focus={focus === i} disabled={busy} className="sol3-opt" onClick={() => { setFocus(i); toggle(o.label); }}>
-            <span className="sol3-opt__mark">{sel.has(o.label) ? <Check size={15} strokeWidth={3} aria-hidden /> : null}</span>
-            <span>
-              <span className="sol3-opt__label">{o.label}</span>
-              {o.description ? <span className="sol3-opt__desc">{o.description}</span> : null}
+          ) : null}
+        </div>
+        <h4>{q.question}</h4>
+        {q.multiSelect ? <p className="sol3-ask__hint">Pick as many as you like.</p> : null}
+        <div className="sol3-opts" role={q.multiSelect ? "group" : "radiogroup"} aria-label={q.question}>
+          {q.options.map((o, i) => (
+            <button key={o.label} type="button" role={q.multiSelect ? "checkbox" : "radio"} aria-checked={sel.has(o.label)} data-multi={!!q.multiSelect} data-focus={focus === i} disabled={busy} className="sol3-opt" onClick={() => { setFocus(i); toggle(o.label); }}>
+              <span className="sol3-opt__mark">{sel.has(o.label) ? <Check size={15} strokeWidth={3} aria-hidden /> : null}</span>
+              <span>
+                <span className="sol3-opt__label">{o.label}</span>
+                {o.description ? <span className="sol3-opt__desc">{o.description}</span> : null}
+              </span>
+            </button>
+          ))}
+          <button type="button" role={q.multiSelect ? "checkbox" : "radio"} aria-checked={customOpen[step]} data-multi={!!q.multiSelect} data-focus={focus === rows - 1} disabled={busy} className="sol3-opt" onClick={openCustom}>
+            <span className="sol3-opt__mark">{customOpen[step] ? <Check size={15} strokeWidth={3} aria-hidden /> : null}</span>
+            <span className="sol3-opt__label" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+              <PencilLine size={17} aria-hidden /> Something else
             </span>
           </button>
-        ))}
-        <button type="button" role={q.multiSelect ? "checkbox" : "radio"} aria-checked={customOpen[step]} data-multi={!!q.multiSelect} data-focus={focus === rows - 1} disabled={busy} className="sol3-opt" onClick={openCustom}>
-          <span className="sol3-opt__mark">{customOpen[step] ? <Check size={15} strokeWidth={3} aria-hidden /> : null}</span>
-          <span className="sol3-opt__label" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-            <PencilLine size={17} aria-hidden /> Something else
-          </span>
-        </button>
+        </div>
+        {customOpen[step] ? <textarea ref={areaRef} autoFocus aria-label="Your own answer" placeholder="Type your answer…" value={custom[step]} onChange={(e) => put<string>(setCustom, e.target.value)} disabled={busy} /> : null}
       </div>
-      {customOpen[step] ? <textarea ref={areaRef} autoFocus aria-label="Your own answer" placeholder="Type your answer…" value={custom[step]} onChange={(e) => put<string>(setCustom, e.target.value)} disabled={busy} /> : null}
       <div className="sol3-ask__foot">
         <span className="sol3-ask__aside">
           {step > 0 ? (

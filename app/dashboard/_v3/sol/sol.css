@@ -199,7 +199,7 @@
 .sol3-ask__foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; position: sticky; bottom: 0; z-index: 2; margin: 0 -20px -18px; padding: 12px 20px 18px; background: var(--plx-surface); border-top: 1px solid var(--plx-border); border-radius: 0 0 20px 20px; }
 .sol3-ask textarea { scroll-margin-bottom: 110px; scroll-margin-top: 16px; }
 .sol3-scroll { scroll-padding-bottom: 110px; }
-@media (max-width: 600px) { .sol3-ask__foot { flex-wrap: nowrap; gap: 8px; padding: 10px 16px 12px; margin: 0 -20px -18px; } .sol3-ask__aside { flex: 1 1 auto; min-width: 0; } .sol3-ask__foot > .plx-btn { flex-shrink: 0; padding-inline: 14px; font-size: 14px; } .sol3-ask__aside .plx-btn { padding-inline: 8px; font-size: 14px; white-space: nowrap; } }
+@media (max-width: 600px) { .sol3-ask__foot { flex-wrap: nowrap; gap: 8px; padding: 10px 16px 12px; margin: 0 -20px -18px; } .sol3-ask__aside { flex: 1 1 auto; min-width: 0; } .sol3-ask__foot > .plx-btn:where(:not([data-plx-canvas] *)) { flex-shrink: 0; padding-inline: 14px; font-size: 14px; } .sol3-ask__aside .plx-btn:where(:not([data-plx-canvas] *)) { padding-inline: 8px; font-size: 14px; white-space: nowrap; } }
 .sol3-recap { display: flex; flex-direction: column; gap: 4px; padding: 10px 14px; border-radius: 14px; background: var(--plx-elevated); max-width: 100%; }
 .sol3-recap button { font: inherit; display: flex; justify-content: space-between; gap: 12px; align-items: center; background: none; border: none; padding: 0; min-height: 28px; font-size: 14px; font-weight: 700; color: var(--plx-muted); cursor: pointer; }
 .sol3-recap__a { font-size: 14.5px; line-height: 1.5; }
@@ -373,3 +373,18 @@
 .sol3-wa__pair b { color: var(--plx-text); }
 .sol3-wa__qr { width: 132px; height: 132px; border-radius: 12px; background: white; padding: 6px; flex-shrink: 0; }
 .sol3-sub .plx-sp__side { top: 0; max-height: none; }
+
+/* Docked question (SOL Studio): choices scroll inside the card, the buttons are a fixed row under them. */
+.sol3-ask__body { display: contents; }
+.sol3-ask--docked { max-height: 100%; min-height: 0; overflow: hidden; padding-bottom: 0; gap: 0; }
+.sol3-ask--docked .sol3-ask__body { display: flex; flex-direction: column; gap: 14px; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 14px; overscroll-behavior: contain; }
+.sol3-ask--docked .sol3-ask__foot { position: static; flex-shrink: 0; margin: 0 -20px; padding: 12px 20px 14px; }
+.sol3-ask--docked textarea { scroll-margin-bottom: 8px; }
+
+/* rating prompt: a small card under the answer when SOL finishes a piece of work */
+.sol3-rate { position: relative; margin-left: 46px; width: min(360px, calc(100% - 46px)); display: flex; flex-direction: column; gap: 8px; padding: 16px 18px; border-radius: 16px; background: var(--plx-elevated, var(--plx-surface)); border: 1px solid var(--plx-border); box-shadow: var(--plx-shadow-card); }
+.sol3-rate__title { margin: 0; font-weight: 600; color: var(--plx-text); padding-right: 28px; }
+.sol3-rate__sub { margin: 0; color: var(--plx-muted); }
+.sol3-rate__row { display: flex; flex-wrap: wrap; gap: 8px; }
+.sol3-rate__close { position: absolute; top: 8px; right: 8px; }
+@media (max-width: 640px) { .sol3-rate { margin-left: 0; width: 100%; } }

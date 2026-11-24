@@ -84,7 +84,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // list with a second, non-editable-in-the-same-way copy of the same content.
   const { data: all } = await Template.query.byOrg({ organizationId: resolved.organizationId }).go({ pages: "all" });
   const roots = all.filter(
-    (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout,
+    (t) => !t.parentId && !t.marketplaceStatus && !t.isBlogLayout && !t.isSiteLayoutFragment && !t.isCommerceLayout && (!resolved.siteAccess || t.id in resolved.siteAccess),
   );
   // Tie-break on createdAt — see app/dashboard/templates/page.tsx's identical comment:
   // the org-backfill migration bumped every template's updatedAt to the same instant, so

@@ -504,7 +504,9 @@ export function PlanSection(props: PlanSectionProps) {
           </div>
         </div>
         <div className="plx-meters" data-tour="plan-usage" aria-label="What you're using">
-          <UsageMeter label="Live websites" meter={siteMeter} hint={siteMeter.tone === "full" ? "All used. Upgrade to put more sites live." : siteMeter.tone === "near" ? "Nearly all used." : undefined} />
+          {siteMeter.limit ? (
+            <UsageMeter label="Live websites" meter={siteMeter} hint={siteMeter.tone === "full" ? "All used. Upgrade to put more sites live." : siteMeter.tone === "near" ? "Nearly all used." : undefined} />
+          ) : null}
           <UsageMeter label="AI credits" meter={creditsMeter} hint={credits.low || credits.negative ? "Running low. Top up below." : `Refill in ${credits.resetsInDays} day${credits.resetsInDays === 1 ? "" : "s"}`} />
           <UsageMeter label="Products" meter={productMeter} hint={features.maxCommerceProducts === 0 ? "Selling products comes with Starter." : productMeter.tone !== "ok" ? "Nearly full." : undefined} />
           <UsageMeter label="Teammates" meter={seatMeter} hint={features.teamSeats === 0 ? "Inviting people comes with Starter." : seatMeter.tone === "full" ? "All seats used." : undefined} />

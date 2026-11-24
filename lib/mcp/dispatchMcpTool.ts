@@ -40,7 +40,8 @@ import { coerceToolArgs } from "./coerceArgs";
 import { deleteTemplateAndContents } from "@/lib/sites/deleteTemplate";
 import { linkDomainToTemplate, SUBDOMAIN_REGEX, DOMAIN_REGEX, RESERVED_SUBDOMAINS } from "@/lib/sites/linkDomain";
 import { Template, TemplateAsset, PublishedDomain } from "@/lib/db/contentEntities";
-import { User } from "@/lib/db/coreEntities";
+import { Member, User } from "@/lib/db/coreEntities";
+import { authorizeToolCall } from "./toolAuthorization";
 import { countsAsSite } from "@/lib/plan/countsAsSite";
 
 // Split out of lib/mcp/mcpServer.ts so dispatchMcpTool (and everything it needs) has NO
@@ -737,21 +738,6 @@ To edit a page's CONTENT (designJson), use update_template with the same templat
     },
   },
   {
-    name: "get_analytics",
-    title: "Get Analytics",
-    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-    description: "Fetches visitor analytics, total page views, unique visitor counts, and daily timeline metrics.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        templateId: {
-          type: "string",
-          description: "Optional template ID to filter analytics",
-        },
-      },
-    },
-  },
-  {
     name: "get_user_profile",
     title: "Get User Profile",
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
@@ -864,6 +850,11 @@ async function createV2FromClassicInput(resolved: ResolvedUser, args: any) {
 export async function dispatchMcpTool(toolName: string, rawArgs: any, resolved: ResolvedUser, revalidateBlogPost?: RevalidateFn): Promise<any> {
   // Lists/objects sent as JSON text are unwrapped against the tool's own schema first.
   const args: any = coerceToolArgs(rawArgs, PLEXO_MCP_TOOLS.find((t) => t.name === toolName)?.inputSchema as never);
+  // The signed-in person's ROLE, before anything runs (each tool below separately checks the record belongs to their account).
+  // A view-only or blog-only teammate cannot use SOL to do what the dashboard itself would refuse them.
+  const member = resolved.role === "editor" ? (await Member.get({ organizationId: resolved.organizationId, userId: resolved.userId }).go()).data : null;
+  const denied = authorizeToolCall({ role: resolved.role, toolName, args, member, groups: { blog: BLOG_TOOL_NAMES, commerce: new Set([...COMMERCE_TOOL_NAMES, ...DONATION_TOOL_NAMES]), lms: LMS_TOOL_NAMES } });
+  if (denied) throw new Error(denied);
   let toolResult: any;
   switch (toolName) {
     case "publish_landing_page": {

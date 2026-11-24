@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { issueHumanCheck } from "@/lib/forms/humanCheck";
 import { NextRequest } from "next/server";
 
 // The REAL public serve route (app/pub/[domain]/[[...slug]]) and app server
@@ -51,7 +52,8 @@ vi.mock("@/lib/projects/blobStore", () => ({
 }));
 vi.mock("@/lib/projects/builds", () => ({ latestSuccessfulBuild: async () => null, recordLatestBuild: async () => {} }));
 vi.mock("@/lib/projects/previewHost", () => ({ resolvePreviewHost: async () => null }));
-vi.mock("@/lib/blog/redirectsDynamo", () => ({ resolveBlogRedirect: async () => null }));
+vi.mock("@/lib/blog/redirectsDynamo", () => ({ resolveBlogRedirect: async () => null, resolveRedirectFull: async () => null }));
+vi.mock("@/lib/redirects/notFound", () => ({ recordNotFound: () => {} }));
 vi.mock("@/lib/customContent/render", () => ({ renderContentBlocks: async (html: string) => html }));
 vi.mock("@/lib/pub/livePostQueries", () => ({ fillLatestPostLists: async (html: string) => html }));
 vi.mock("@/lib/blog/queriesDynamo", () => ({ listAllPublishedSlugs: async () => [], listAllCategories: async () => [], listAllTags: async () => [] }));
@@ -229,10 +231,11 @@ describe("an app on Free answers its first screen only", () => {
 });
 
 describe("a form on an uploaded site that posts to its own page", () => {
-  const post = (path: string, fields: Record<string, string>, headers: Record<string, string> = {}) => {
+  // A real page's form carries the ticket the page asked for when it loaded (lib/forms/humanCheck.ts), a few seconds old by the time it is sent.
+  const post = (path: string, fields: Record<string, string>, headers: Record<string, string> = {}, ticket: string | null = issueHumanCheck("home", Date.now() - 10_000)) => {
     const slug = path.split("/").filter(Boolean);
     return POST(
-      new NextRequest(`https://${HOST}${path}`, { method: "POST", body: new URLSearchParams(fields), headers: { "content-type": "application/x-www-form-urlencoded", ...headers } }),
+      new NextRequest(`https://${HOST}${path}`, { method: "POST", body: new URLSearchParams(ticket ? { ...fields, _plx_check: ticket } : fields), headers: { "content-type": "application/x-www-form-urlencoded", ...headers } }),
       { params: Promise.resolve({ domain: HOST, slug }) },
     );
   };
@@ -249,15 +252,35 @@ describe("a form on an uploaded site that posts to its own page", () => {
   });
 
   it("drops a bot (filled hidden field) and a post from another site without recording anything, answering as if it worked", async () => {
-    expect((await post("/contact", { name: "x", _hp_field: "spam" })).status).toBe(303);
+    expect((await post("/contact", { name: "x", _hp_field: "spam" }, { origin: `https://${HOST}` })).status).toBe(303);
     expect((await post("/contact", { name: "x" }, { origin: "https://evil.example" })).status).toBe(303);
     expect(db.submissions).toEqual([]);
   });
 
   it("asks for something to be filled in when the form was empty", async () => {
-    const res = await post("/contact", {});
+    const res = await post("/contact", {}, { origin: `https://${HOST}` });
     expect(res.status).toBe(400);
     expect((await res.json()).error).toMatch(/fill in the form/i);
+  });
+
+  it("never records a call from a WordPress service (MalCare) or a post with no sign of a browser", async () => {
+    const malcare = { BvMethod: "getdata", Bvplugname: "malcare", Apipage: "blogvault", Sig: "x", Pubkey: "y" };
+    expect((await post("/contact", malcare, { origin: `https://${HOST}` })).status).toBe(200);
+    expect((await post("/contact", { name: "Ada", email: "ada@example.com", message: "Hello" })).status).toBe(200);
+    expect(db.submissions).toEqual([]);
+  });
+
+  it("asks a person to try again when there is no genuine ticket, or it was sent too fast, and records nothing", async () => {
+    const withheld = await post("/contact", { name: "Ada", email: "ada@example.com", message: "Hello" }, { origin: `https://${HOST}` }, null);
+    expect(withheld.status).toBe(303);
+    expect(new URL(withheld.headers.get("location")!).search).toBe("?plexo_form_error=check");
+    const tooFast = await post("/contact", { name: "Ada", email: "ada@example.com", message: "Hello" }, { origin: `https://${HOST}` }, issueHumanCheck("home", Date.now()));
+    expect(new URL(tooFast.headers.get("location")!).search).toBe("?plexo_form_error=fast");
+    const forged = await post("/contact", { name: "Ada", email: "ada@example.com", message: "Hello" }, { origin: `https://${HOST}` }, "v1.eyJzIjoiaG9tZSIsInQiOjF9.bad");
+    expect(new URL(forged.headers.get("location")!).search).toBe("?plexo_form_error=check");
+    const otherSite = await post("/contact", { name: "Ada", email: "ada@example.com", message: "Hello" }, { origin: `https://${HOST}` }, issueHumanCheck("another-site", Date.now() - 10_000));
+    expect(new URL(otherSite.headers.get("location")!).search).toBe("?plexo_form_error=check");
+    expect(db.submissions).toEqual([]);
   });
 
   it("other POSTs to the site are still refused", async () => {

@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Settings2 } from "lucide-react";
+import { Badge, Button, ButtonLink, Card, CardHeader, Input, Notice, Select, Skeleton } from "@/app/dashboard/_v3/ui";
 
-// "Where submissions go": besides this inbox and the owner's email, each form can add the
-// person to a MailDrip list and/or send the submission to a webhook (Zapier, Make, a CRM).
-// A migrated WordPress form arrives already set up the way it worked on WordPress.
+// "Where messages go": every message lands in the inbox and is emailed to the owner. Each form can also add the sender to a MailDrip list
+// and/or send the message to a webhook (Zapier, Make, a CRM), and carry a verification box. All of that is tucked behind "Settings" per
+// form, so the page stays calm for the many owners who never need it.
 
 type Form = {
   formName: string;
@@ -21,64 +22,59 @@ type Form = {
 };
 type Overview = { forms: Form[]; maildrip: { connected: boolean; groups: { id: string; title: string; totalContacts: number }[]; error: string | null } };
 
-const muted: React.CSSProperties = { fontSize: "0.8rem", color: "var(--plx-muted)", margin: 0, lineHeight: 1.5 };
-const input: React.CSSProperties = {
-  width: "100%", padding: "0.5rem 0.65rem", borderRadius: 8, border: "1px solid var(--plx-border)",
-  background: "var(--plx-surface)", color: "var(--plx-text)", fontSize: "0.8rem", fontFamily: "inherit",
-};
+/** How many forms show before "Show all": a site can have ten or more, and they should never push the messages off the screen. */
+export const FORMS_SHOWN_FIRST = 3;
 
 export function FormDestinationsClient({ templateId }: { templateId: string }) {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   function load() {
     fetch(`/api/v1/templates/${templateId}/form-settings`)
       .then(async (res) => {
         const body = await res.json();
-        if (!res.ok) throw new Error(body.error ?? "Couldn't load your forms.");
+        if (!res.ok) throw new Error(body.error ?? "We couldn't load your forms.");
         setData(body);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Couldn't load your forms."));
+      .catch((err) => setError(err instanceof Error ? err.message : "We couldn't load your forms."));
   }
   useEffect(load, [templateId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (error) return <p style={{ ...muted, color: "var(--plx-danger)", marginBottom: "1.5rem" }}>{error}</p>;
-  if (!data || data.forms.length === 0) return null;
+  if (error) return <Notice kind="error" title="We couldn't load your forms">{error}</Notice>;
+  if (!data) return <Card><Skeleton height={56} /></Card>;
+  if (data.forms.length === 0) return null;
 
   return (
-    <section style={{ marginBottom: "2rem", padding: "1.25rem", borderRadius: 14, border: "1px solid var(--plx-border)", background: "var(--plx-surface)" }}>
-      <h2 style={{ fontSize: "1rem", fontWeight: 800, color: "var(--plx-text)", margin: "0 0 0.3rem" }}>Where submissions go</h2>
-      <p style={muted}>
-        Every submission lands here and in your email. You can also add each form&rsquo;s sign-ups to a MailDrip list, or send them to a webhook (Zapier, Make, your CRM).
-      </p>
-      {!data.maildrip.connected && (
-        <p style={{ ...muted, marginTop: "0.6rem" }}>
-          <Link href={`/dashboard/commerce/${templateId}/settings/notifications`} style={{ color: "var(--plx-brand)", fontWeight: 700 }}>Connect MailDrip</Link>{" "}
-          to add sign-ups straight to your lists.
-        </p>
-      )}
-      {data.maildrip.error && <p style={{ ...muted, color: "var(--plx-warning)", marginTop: "0.6rem" }}>{data.maildrip.error}</p>}
-      <div style={{ display: "flex", flexDirection: "column", gap: "0.9rem", marginTop: "1rem" }}>
-        {data.forms.map((form) => (
-          <FormRow key={form.formName} templateId={templateId} form={form} overview={data} onSaved={load} />
-        ))}
+    <Card data-testid="form-destinations">
+      <CardHeader title="Where messages go" description="Every message shows up in the inbox below and is emailed to you. Plexo checks every form for spam and bots, with nothing for visitors to tick. Open a form's settings to add a verification box, add senders to a list or pass messages on to another tool." action={<ButtonLink href="/dashboard/settings/notifications" variant="secondary" size="sm">Change where emails go</ButtonLink>} />
+      {data.maildrip.error ? <Notice kind="warning" title="MailDrip isn't responding">{data.maildrip.error}</Notice> : null}
+      <div>
+        {(showAll ? data.forms : data.forms.slice(0, FORMS_SHOWN_FIRST)).map((form) => <FormRow key={form.formName} templateId={templateId} form={form} overview={data} onSaved={load} />)}
       </div>
-    </section>
+      {data.forms.length > FORMS_SHOWN_FIRST ? (
+        <div style={{ marginTop: 12 }}>
+          <Button variant="secondary" size="sm" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)}>
+            {showAll ? "Show fewer forms" : `Show all ${data.forms.length} forms`}
+          </Button>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
 function FormRow({ templateId, form, overview, onSaved }: { templateId: string; form: Form; overview: Overview; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
   const [groupId, setGroupId] = useState(form.maildripGroupId ?? "");
   const [webhook, setWebhook] = useState(form.webhookUrl ?? "");
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ tone: "ok" | "error"; text: string } | null>(null);
+  const [message, setMessage] = useState<{ tone: "success" | "error"; text: string } | null>(null);
   const [captchaOpen, setCaptchaOpen] = useState(Boolean(form.captcha));
   const [provider, setProvider] = useState<string>(form.captcha?.provider ?? "turnstile");
   const [siteKey, setSiteKey] = useState(form.captcha?.siteKey ?? "");
   const [secretKey, setSecretKey] = useState("");
   const captchaDirty = captchaOpen && (secretKey.trim() !== "" || provider !== (form.captcha?.provider ?? "turnstile") || siteKey.trim() !== (form.captcha?.siteKey ?? ""));
   const dirty = groupId !== (form.maildripGroupId ?? "") || webhook !== (form.webhookUrl ?? "") || captchaDirty;
-  // A list chosen on WordPress (or before MailDrip was disconnected) that this account doesn't list.
   const unknownGroup = form.maildripGroupId && !overview.maildrip.groups.some((g) => g.id === form.maildripGroupId);
 
   async function save() {
@@ -91,88 +87,75 @@ function FormRow({ templateId, form, overview, onSaved }: { templateId: string; 
         body: JSON.stringify({ formName: form.formName, maildripGroupId: groupId || null, webhookUrl: webhook.trim() || null, ...(captchaDirty ? { captcha: { provider, siteKey: siteKey.trim(), secretKey: secretKey.trim() || undefined } } : {}) }),
       });
       const body = await res.json();
-      if (!res.ok) throw new Error(body.error ?? "Couldn't save.");
+      if (!res.ok) throw new Error(body.error ?? "We couldn't save that.");
       setSecretKey("");
-      setMessage({ tone: "ok", text: "Saved — new submissions go here from now on." });
+      setMessage({ tone: "success", text: "Saved. New messages follow this from now on." });
       onSaved();
     } catch (err) {
-      setMessage({ tone: "error", text: err instanceof Error ? err.message : "Couldn't save." });
+      setMessage({ tone: "error", text: err instanceof Error ? err.message : "We couldn't save that." });
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div style={{ padding: "0.9rem", borderRadius: 10, border: "1px solid var(--plx-border)", background: "var(--plx-tint)" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.6rem" }}>
-        <strong style={{ fontSize: "0.85rem", color: "var(--plx-text)" }}>{form.formName}</strong>
-        {form.source === "wordpress" && (
-          <span style={{ fontSize: "0.65rem", fontWeight: 700, padding: "0.15rem 0.5rem", borderRadius: 999, background: "var(--plx-surface)", color: "var(--plx-brand)", border: "1px solid var(--plx-border)" }}>Set up from WordPress</span>
-        )}
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "0.6rem" }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.72rem", color: "var(--plx-muted)" }}>
-          Add sign-ups to a MailDrip list
-          <select value={groupId} onChange={(e) => setGroupId(e.target.value)} disabled={!overview.maildrip.connected && !groupId} style={input}>
-            <option value="">{overview.maildrip.connected ? "Don't add to a list" : "Connect MailDrip first"}</option>
-            {unknownGroup && <option value={form.maildripGroupId!}>{form.maildripGroupTitle ?? "List from WordPress"} (not found — pick again)</option>}
-            {overview.maildrip.groups.map((g) => (
-              <option key={g.id} value={g.id}>{g.title} ({g.totalContacts.toLocaleString()})</option>
-            ))}
-          </select>
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.72rem", color: "var(--plx-muted)" }}>
-          Also send each submission to a webhook
-          <input value={webhook} onChange={(e) => setWebhook(e.target.value)} placeholder="https://hooks.zapier.com/…" style={input} />
-        </label>
-      </div>
-      {form.captcha && !form.captcha.active && (
-        <p style={{ ...muted, color: "var(--plx-warning)", marginTop: "0.6rem" }}>
-          This form had a verification box on WordPress. Paste your secret key below to switch it back on — until then it&rsquo;s protected by Plexo&rsquo;s built-in spam filter.
-        </p>
-      )}
-      {captchaOpen ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "0.6rem", marginTop: "0.6rem" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.72rem", color: "var(--plx-muted)" }}>
-            Verification box
-            <select value={provider} onChange={(e) => setProvider(e.target.value)} style={input}>
-              <option value="turnstile">Cloudflare Turnstile</option>
-              <option value="recaptcha">Google reCAPTCHA</option>
-              <option value="hcaptcha">hCaptcha</option>
-            </select>
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.72rem", color: "var(--plx-muted)" }}>
-            Site key (public)
-            <input value={siteKey} onChange={(e) => setSiteKey(e.target.value)} style={input} />
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: "0.3rem", fontSize: "0.72rem", color: "var(--plx-muted)" }}>
-            Secret key {form.captcha?.active ? "(saved — leave empty to keep it)" : ""}
-            <input type="password" autoComplete="off" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} placeholder={form.captcha?.active ? "••••••••" : "Paste your secret key"} style={input} />
-          </label>
+    <div className="plx-forms__row">
+      <div className="plx-forms__name">
+        <b>{form.formName}</b>
+        <div className="plx-forms__chips">
+          <Badge tone="success">Emailed to you</Badge>
+          <Badge tone="neutral">Spam check on</Badge>
+          {form.maildripGroupId ? <Badge tone="info">Added to your mailing list</Badge> : null}
+          {form.webhookUrl ? <Badge tone="info">Sent to another tool</Badge> : null}
+          {form.captcha?.active ? <Badge tone="neutral">Verification box on</Badge> : null}
+          {form.lastDeliveryError ? <Badge tone="warning">A delivery needs attention</Badge> : null}
         </div>
-      ) : (
-        <button type="button" onClick={() => setCaptchaOpen(true)} style={{ background: "none", border: "none", padding: 0, marginTop: "0.6rem", fontSize: "0.74rem", color: "var(--plx-brand)", cursor: "pointer" }}>
-          Add a verification box (Turnstile, reCAPTCHA or hCaptcha)
-        </button>
-      )}
-      {form.redirectUrl && <p style={{ ...muted, marginTop: "0.6rem" }}>After submitting, visitors go to <code>{form.redirectUrl}</code>.</p>}
-      {form.note && <p style={{ ...muted, marginTop: "0.6rem" }}>{form.note}</p>}
-      {form.lastDeliveryError ? (
-        <p style={{ ...muted, color: "var(--plx-warning)", marginTop: "0.5rem" }}>Last delivery problem: {form.lastDeliveryError}</p>
-      ) : form.lastDeliveredAt ? (
-        <p style={{ ...muted, marginTop: "0.5rem" }}>Last delivered {new Date(form.lastDeliveredAt).toLocaleString()}.</p>
-      ) : null}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginTop: "0.7rem" }}>
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={!dirty || saving}
-          style={{ padding: "0.45rem 0.9rem", borderRadius: 8, border: "1px solid var(--plx-border)", fontSize: "0.78rem", fontWeight: 700, cursor: dirty && !saving ? "pointer" : "not-allowed", background: dirty ? "var(--plx-brand)" : "var(--plx-tint)", color: dirty ? "var(--plx-on-brand)" : "var(--plx-muted)" }}
-        >
-          {saving ? "Saving…" : "Save"}
-        </button>
-        {message && <span style={{ fontSize: "0.76rem", color: message.tone === "ok" ? "var(--plx-success)" : "var(--plx-danger)" }}>{message.text}</span>}
       </div>
+      <Button variant="secondary" size="sm" leftIcon={<Settings2 size={15} aria-hidden />} aria-expanded={open} onClick={() => setOpen((o) => !o)}>{open ? "Hide settings" : "Settings"}</Button>
+
+      {open ? (
+        <div className="plx-forms__more plx-adv__stack">
+          <div className="plx-adv__grid2">
+            <Select
+              label="Add senders to your mailing list"
+              value={groupId}
+              disabled={!overview.maildrip.connected && !groupId}
+              onChange={(e) => setGroupId(e.target.value)}
+              help={overview.maildrip.connected ? "Each person who fills in this form is added to the list you choose in MailDrip." : "Your mailing lists live in MailDrip. Connect your MailDrip account to choose one."}
+              options={[
+                { value: "", label: overview.maildrip.connected ? "Don't add to a list" : "No mailing list connected" },
+                ...(unknownGroup ? [{ value: form.maildripGroupId!, label: `${form.maildripGroupTitle ?? "List from WordPress"} (not found, pick again)` }] : []),
+                ...overview.maildrip.groups.map((g) => ({ value: g.id, label: `${g.title} (${g.totalContacts.toLocaleString()})` })),
+              ]}
+            />
+            <Input label="Also send each message to another tool" optional help="A web address from Zapier, Make or your CRM" value={webhook} onChange={(e) => setWebhook(e.target.value)} placeholder="https://hooks.zapier.com/…" />
+          </div>
+          {!overview.maildrip.connected ? <div><ButtonLink href={`/dashboard/commerce/${templateId}/settings/notifications`} variant="secondary" size="sm">Connect my MailDrip account</ButtonLink></div> : null}
+
+          {form.captcha && !form.captcha.active ? (
+            <Notice kind="warning" title="Switch the verification box back on">
+              This form had a verification box before. Paste your secret key below to turn it on again. Until then Plexo&rsquo;s built-in spam filter protects it.
+            </Notice>
+          ) : null}
+          {captchaOpen ? (
+            <div className="plx-adv__stack">
+              <div className="plx-adv__grid2">
+                <Select label="Verification box" value={provider} onChange={(e) => setProvider(e.target.value)} options={[{ value: "turnstile", label: "Cloudflare Turnstile" }, { value: "recaptcha", label: "Google reCAPTCHA" }, { value: "hcaptcha", label: "hCaptcha" }]} />
+                <Input label="Site key" help="The public key from that service" value={siteKey} onChange={(e) => setSiteKey(e.target.value)} />
+                <Input fieldClassName="plx-adv__span2" label="Secret key" help={form.captcha?.active ? "Saved. Leave empty to keep it." : "The private key from that service"} type="password" autoComplete="off" value={secretKey} onChange={(e) => setSecretKey(e.target.value)} placeholder={form.captcha?.active ? "••••••••" : "Paste your secret key"} />
+              </div>
+            </div>
+          ) : (
+            <div><Button variant="secondary" size="sm" onClick={() => setCaptchaOpen(true)}>Add a verification box for extra protection</Button></div>
+          )}
+
+          {form.redirectUrl ? <p className="plx-small" style={{ margin: 0 }}>After sending, visitors go to <b>{form.redirectUrl}</b>.</p> : null}
+          {form.note ? <p className="plx-small" style={{ margin: 0 }}>{form.note}</p> : null}
+          {form.lastDeliveryError ? <Notice kind="warning" title="The last delivery had a problem">{form.lastDeliveryError}</Notice> : form.lastDeliveredAt ? <p className="plx-small" style={{ margin: 0 }}>Last passed on {new Date(form.lastDeliveredAt).toLocaleString()}.</p> : null}
+          {message ? <Notice kind={message.tone} title={message.text} /> : null}
+          <div className="plx-adv__actions"><Button loading={saving} disabled={!dirty} onClick={() => void save()}>Save</Button></div>
+        </div>
+      ) : null}
     </div>
   );
 }

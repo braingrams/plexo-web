@@ -6,6 +6,7 @@ import { Button, Card, CardHeader, OptimisticLoader, Skeleton } from "../../ui";
 import { EmbedCodeModal } from "@/app/dashboard/templates/[id]/EmbedCodeModal";
 import { ScriptAccessControl } from "@/app/dashboard/templates/[id]/ScriptAccessControl";
 import { Embed } from "./Embed";
+import { PageCodeCard } from "./PageCodeCard";
 import { PagePicker, usePages } from "./PagePicker";
 
 /** Ready-made blocks to paste into your own code, and the permission to run scripts while you preview your own pages. */
@@ -38,9 +39,7 @@ export function ScriptsSection({ siteId, ownCode }: { siteId: string; ownCode: b
           )}
         </Card>
       )}
-      <Card>
-        <CardHeader title="Your own script on one page" description="A page made with the visual editor can run your own script. Open that page in the editor and look under Page settings." />
-      </Card>
+      {pages?.length ? <PageCodeCard siteId={siteId} pages={pages} /> : null}
       {open && pages?.length ? <Embed><EmbedCodeModal siteId={siteId} pageId={(pageId ?? pages[0].id)} canAddForMe={false} onClose={() => setOpen(false)} /></Embed> : null}
     </div>
   );

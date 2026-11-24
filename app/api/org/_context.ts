@@ -21,5 +21,10 @@ export async function resolveOrgContext(): Promise<Resolved> {
     return { error: NextResponse.json({ error: "No active organization selected." }, { status: 409 }) };
   }
 
+  // Team, invitations and API keys are the workspace's own business: a member who was invited to specific sites never reaches them.
+  if (resolution.role === "guest") {
+    return { error: NextResponse.json({ error: "You don't have access to this." }, { status: 403 }) };
+  }
+
   return { error: null, userId: session.user.id, organizationId: resolution.organizationId, role: resolution.role };
 }

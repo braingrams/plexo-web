@@ -123,8 +123,10 @@ const ROLE_LABELS: Record<string, string> = {
   owner: "Owner",
   admin: "Admin",
   editor: "Editor",
-  commenter: "Commenter",
+  commenter: "Reviewer",
   viewer: "Viewer",
+  blogger: "Writer",
+  guest: "Access to selected sites",
 };
 
 export function buildInviteEmail(input: {
@@ -610,7 +612,7 @@ export function buildDigitalAccessGrantedEmail(input: {
 
 // Commerce's own admin-notification emails (Stripe access requests, wallet withdrawals)
 // live in lib/email.ts instead, alongside sendScriptAccessRequestNotificationEmail /
-// sendWithdrawalRequestNotificationEmail — those go through nodemailer/SMTP to ADMIN_EMAIL,
+// sendWithdrawalRequestNotificationEmail — those go through MailDrip to the admins who chose them (lib/admin/alertRecipients.ts),
 // a different delivery mechanism from every other builder in this file (which render into
 // sendMaildripEmail, for real customers). Keeping the two admin-only senders together with
 // their siblings there, rather than splitting the pattern across two files.

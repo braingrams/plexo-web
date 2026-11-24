@@ -8,6 +8,8 @@ import ipaddr from "ipaddr.js";
 // by the importing user or harvested from the crawled site's own HTML, so this file is the one
 // place that boundary gets enforced before any of that ever reaches Node's real fetch().
 
+import { recordSecurityEvent } from "@/lib/security/events";
+
 export class SsrfBlockedError extends Error {
   constructor(
     public readonly url: string,
@@ -15,6 +17,14 @@ export class SsrfBlockedError extends Error {
   ) {
     super(`Blocked outbound request to ${url}: ${reason}`);
     this.name = "SsrfBlockedError";
+    // Only the host is kept (a full URL can carry tokens in its query string).
+    let host = "unknown host";
+    try {
+      host = new URL(url.includes("://") ? url : `https://${url}`).hostname || host;
+    } catch {
+      /* a malformed value: keep the placeholder */
+    }
+    void recordSecurityEvent({ type: "ssrf_blocked", detail: `A request to ${host} was blocked: ${reason.replace(/\(.*\)/, "").trim()}`, dedupeKey: host });
   }
 }
 

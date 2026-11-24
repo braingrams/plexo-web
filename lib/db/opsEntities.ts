@@ -215,6 +215,59 @@ export const AdminAuditLog = new Entity(
 // across all admins) stays a documented gap, same "real but didn't earn the GSI slot"
 // discipline as elsewhere — actorId and target are the two patterns actually exercised.
 
+/**
+ * A short record of things that look like an attack or abuse (lib/security/events.ts). Expires after 90 days on its own, so it can
+ * never grow without bound. Partitioned by day so "what happened lately" is a handful of cheap queries, never a scan.
+ */
+export const SecurityEvent = new Entity(
+  {
+    model: { entity: "securityEvent", version: "1", service: "plexoOps" },
+    attributes: {
+      id: { type: "string", required: true },
+      // YYYY-MM-DD, set from createdAt so callers never pass it.
+      day: { type: "string", required: true, default: () => new Date().toISOString().slice(0, 10) },
+      type: { type: "string", required: true },
+      detail: { type: "string", required: true },
+      ip: { type: "string", required: true },
+      actorId: { type: "string" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      ttl: { type: "number", default: () => days(90) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["day"], template: "SECEVENT#${day}" },
+        sk: { field: "sk", composite: ["createdAt", "id"], template: "EVT#${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
+/**
+ * Addresses visitors asked for that don't exist on a site, with how many times (Redirects, "Pages people couldn't find").
+ * One row per site and address; a row expires 30 days after the last visit, so the list can never grow without bound.
+ */
+export const NotFoundHit = new Entity(
+  {
+    model: { entity: "notFoundHit", version: "1", service: "plexoOps" },
+    attributes: {
+      templateId: { type: "string", required: true },
+      path: { type: "string", required: true },
+      count: { type: "number", default: 0 },
+      lastSeen: { type: "string", default: () => new Date().toISOString() },
+      referrer: { type: "string" },
+      ttl: { type: "number", default: () => days(30) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["templateId"], template: "NOTFOUND#${templateId}" },
+        sk: { field: "sk", composite: ["path"], template: "PATH#${path}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const FormSubmission = new Entity(
   {
     model: { entity: "formSubmission", version: "1", service: "plexoOps" },
@@ -291,7 +344,7 @@ export const FormSettings = new Entity(
 // Queryable record of every transactional/notification email send attempt — replaces the
 // previous state of scattered, inconsistent console.error/console.info calls with no way
 // to answer "did this email actually send." Covers both send paths: MailDrip (HTTP API)
-// and direct SMTP (nodemailer) — see lib/mail/logEmail.ts, the one writer.
+// and direct SMTP (no longer used; kept so old rows still read) — see lib/mail/logEmail.ts, the one writer.
 export const EmailLog = new Entity(
   {
     model: { entity: "emailLog", version: "1", service: "plexoOps" },
@@ -311,9 +364,9 @@ export const EmailLog = new Entity(
       // lib/mail/logEmail.ts's EmailDeliveryContext for the full set.
       context: { type: "string", required: true },
       createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
-      // No ttl attribute populated — see file header. A delivery log a support/debugging
-      // investigation might need weeks later shouldn't silently vanish, same discipline as
-      // AdminAuditLog/FormSubmission.
+      // Kept six months, then removed by DynamoDB itself, so the log can't grow without bound. (Rows written before
+      // this was added have no ttl and stay.)
+      ttl: { type: "number", default: () => days(180) },
     },
     indexes: {
       // id is the only attribute every row is guaranteed to have (organizationId isn't),
@@ -418,8 +471,8 @@ export const SolUsageEventContent = new Entity(
       id: { type: "string", required: true }, // same id as the matching SolUsageEvent row
       conversationId: { type: "string", required: true },
       createdAt: { type: "string", required: true },
-      promptPreview: { type: "string" }, // redacted, truncated to ~500 chars
-      responsePreview: { type: "string" }, // redacted, truncated to ~500 chars
+      promptPreview: { type: "string" }, // redacted, truncated to 8000 chars
+      responsePreview: { type: "string" }, // redacted, truncated to 8000 chars
       // 30 days — short-lived by design, unlike SolUsageEvent's permanent metadata row.
       ttl: { type: "number", default: () => days(30) },
     },
@@ -696,6 +749,45 @@ export const SiteHealthCheck = new Entity(
   { table, client: docClient },
 );
 
+// SolFeedback: one row per rated SOL answer (thumbs up or down, from the dashboard or a
+// WhatsApp reaction), holding the full question and answer so plexo-admin can show what
+// was asked, what SOL said, and (for a thumbs down) what the owner expected instead. Kept
+// 180 days. Text is passed through lib/privacy/redact.ts before it is written. The real
+// transcript stays in SolMessage (plexoSol table).
+export const SolFeedback = new Entity(
+  {
+    model: { entity: "solFeedback", version: "1", service: "plexoOps" },
+    attributes: {
+      id: { type: "string", required: true }, // the rated assistant message's id
+      conversationId: { type: "string", required: true },
+      userId: { type: "string", required: true },
+      rating: { type: ["UP", "DOWN"] as const, required: true },
+      // "What did you expect instead?" for a thumbs down; optional for a thumbs up.
+      comment: { type: "string" },
+      question: { type: "string" },
+      answer: { type: "string" },
+      // Names of the tools SOL used for that answer (e.g. get_analytics), for spotting wrong choices.
+      tools: { type: "string" },
+      source: { type: ["dashboard", "whatsapp"] as const, default: "dashboard" },
+      createdAt: { type: "string", default: () => new Date().toISOString(), readOnly: true },
+      ttl: { type: "number", default: () => days(180) },
+    },
+    indexes: {
+      primary: {
+        pk: { field: "pk", composite: ["conversationId"], template: "SOLFEEDBACK#${conversationId}" },
+        sk: { field: "sk", composite: ["id"], template: "MSG#${id}" },
+      },
+      // Newest first, per rating: one partition each, which is fine at feedback volumes.
+      byRating: {
+        index: "GSI1",
+        pk: { field: "GSI1PK", composite: ["rating"], template: "SOLFEEDBACKRATING#${rating}" },
+        sk: { field: "GSI1SK", composite: ["createdAt", "id"], template: "${createdAt}#${id}" },
+      },
+    },
+  },
+  { table, client: docClient },
+);
+
 export const plexoOpsService = new Service(
   {
     PageView,
@@ -704,10 +796,12 @@ export const plexoOpsService = new Service(
     StockCache,
     AdminAuditLog,
     FormSubmission,
+    NotFoundHit,
     FormSettings,
     EmailLog,
     SolUsageEvent,
     SolUsageEventContent,
+    SolFeedback,
     SolDailyStat,
     ExperienceDailyStat,
     SiteGoogleAnalytics,

@@ -267,3 +267,19 @@ describe("personalizeTemplateHtml", () => {
     expect(result.html).toContain("© 2026 Musti");
   });
 });
+
+describe("a gym is not matched to a nursing-home design", () => {
+  const mk = (name: string, description: string) => ({ id: name, name, kind: "LANDING_PAGE" as const, category: "business-site", description, priceCents: 0, purchaseCount: 0, publishedAt: null });
+  it("puts the gym design first for a gym owner, even with filler words", () => {
+    const about = "I want a gym website that is clean and very easy to use that shows what i do and allow people reach me for my service";
+    const ranked = rankListings(
+      [
+        mk("Careline Home Nursing: home care agency", "A complete site for a home-care and visiting-nursing agency: care packages by the hour, live-in care, carer profiles, a free assessment form and a recruit-carers strip."),
+        mk("Iron & Grain: strength gym and coaching", "A dark, photography-led site for a strength gym or personal-training studio: class timetable, coach profiles, membership tiers and a free-week form."),
+      ],
+      "business-site",
+      { name: "Aria", about },
+    );
+    expect(ranked[0].name).toContain("Iron & Grain");
+  });
+});

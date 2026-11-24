@@ -26,6 +26,18 @@ function getAudioContext(): AudioContext | null {
 }
 
 /**
+ * Browsers keep sound switched off until the person has touched the page once. Call this from the first tap or key
+ * press so a notification that arrives later (from the 30-second check) is actually heard.
+ */
+export function primeNotificationSound(): void {
+  try {
+    getAudioContext();
+  } catch {
+    /* no sound support: nothing to prime */
+  }
+}
+
+/**
  * Synthesizes a clean, high-quality modern notification sound in real time using the Web Audio API.
  * Guaranteed to work on all modern browsers without external audio assets or latency.
  */
