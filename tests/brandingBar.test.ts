@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { injectBrandingBar } from "@/lib/pub/htmlInject";
+import { BADGE_UTM, injectBrandingBar } from "@/lib/pub/htmlInject";
 
 describe("the Hosted with Plexo bar", () => {
   const out = injectBrandingBar("<html><body><p>x</p></body></html>", "https://plexo.charisol.io/?utm_source=branding_bar#pricing");
@@ -11,6 +11,11 @@ describe("the Hosted with Plexo bar", () => {
     expect(out).toMatch(/<strong>Plexo<\/strong><img [^>]*style="display:none/);
     expect(out).toContain("onload=");
     expect(out.indexOf("Host yours now")).toBeLessThan(out.indexOf("</body>"));
+  });
+
+  it("keeps the badge campaign tags on the link the caller passes in", () => {
+    expect(BADGE_UTM).toBe("utm_source=plexo_badge&utm_medium=referral&utm_campaign=hosted_badge");
+    expect(injectBrandingBar("<body></body>", `https://plexo.charisol.io/?${BADGE_UTM}#pricing`)).toContain(`href="https://plexo.charisol.io/?${BADGE_UTM}#pricing"`);
   });
 
   it("falls back to Plexo's own address when the link is local", () => {

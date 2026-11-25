@@ -5,7 +5,7 @@ import { Template } from "@/lib/db/contentEntities";
 import { ProjectBuild } from "@/lib/db/projectEntities";
 import { resolveSiteHideBranding } from "@/lib/subscription";
 import { orgCanWhiteLabelDynamo } from "@/server/orgDynamo";
-import { injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
+import { BADGE_UTM, injectBrandingBar, injectCommerceScript, injectContentScript, injectFavicon, injectFormsScript, injectSeoTags, insertBeforeBodyEnd } from "@/lib/pub/htmlInject";
 import { applyAnalyticsTag } from "@/lib/googleAnalytics/serveTag";
 import { applyOwnerCode } from "@/lib/customCode/serve";
 import { applyHealthSettings, healthSettingsFor, serveCtxFor } from "@/lib/siteHealth/serve";
@@ -224,7 +224,7 @@ async function htmlResponse(source: string, url: URL, ctx: ServeContext, headers
   if (!ctx.isPreview && (await commerceEnabled(ctx.template.id))) html = injectCommerceScript(html, `/${DEFAULT_STOREFRONT_SLUG}`, null, null);
   if (!resolveSiteHideBranding(ctx.owner.subscriptionPlan, ctx.owner.hideBranding, ctx.template.hideBranding)) {
     const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-    html = injectBrandingBar(html, `${appUrl}/?utm_source=branding_bar#pricing`);
+    html = injectBrandingBar(html, `${appUrl}/?${BADGE_UTM}#pricing`);
   }
   if (!seo?.faviconUrl && ctx.organization.logo && ctx.organization.whiteLabelEnabled && (await orgCanWhiteLabelDynamo(ctx.organization.id))) {
     html = injectFavicon(html, ctx.organization.logo);

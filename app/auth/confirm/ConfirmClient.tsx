@@ -3,10 +3,16 @@
 import Link from "next/link";
 import { MailCheck } from "lucide-react";
 import { InboxLinks } from "@/app/auth/_kit/InboxLinks";
+import { useEffect, useState } from "react";
 import { PageHead } from "@/app/auth/_kit/ui";
+import { readPendingEmail } from "@/app/auth/_kit/pendingEmail";
 
-/** "Check your inbox" after sign-up. `email` is the address the link went to, when we know it. */
-export function ConfirmView({ email }: { email?: string }) {
+/** "Check your inbox" after sign-up. The address comes from sessionStorage, set by the register page, never from the URL. */
+export function ConfirmView() {
+  const [email, setEmail] = useState<string | null>(null);
+  // Read after mount: sessionStorage isn't available during server rendering.
+  useEffect(() => setEmail(readPendingEmail()), []);
+
   return (
     <div className="ax-center-text">
       <div className="ax-badge-icon ax-lime"><MailCheck size={30} aria-hidden="true" /></div>
