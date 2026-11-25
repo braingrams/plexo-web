@@ -19,9 +19,11 @@ import { notFound } from "next/navigation";
 import { hubTabs, resolveHubTab } from "@/lib/dashboardV3/hubTabs";
 import { advancedKind, advancedSections, resolveAdvancedSection } from "@/lib/dashboardV3/hubAdvanced";
 import { loadAdvancedData, loadServerPlan } from "@/lib/dashboardV3/hubAdvancedData";
+import { loadV3Sites } from "@/lib/dashboardV3/loadShell";
 import { guestAccessFor } from "@/lib/access/siteAccessStore";
 import { guestFirstTab, guestHubTabAllowed } from "@/lib/access/siteAccess";
-import { loadHubPages, loadHubProducts, loadHubSite, loadHubVisits, requireHubContext } from "@/lib/dashboardV3/hubData";
+import { TourAnchorAbsent } from "../../_v3/tour/TourAnchorAbsent";
+import { loadHubPages, loadHubProducts, loadHubSite, loadHubStartFacts, loadHubVisits, requireHubContext } from "@/lib/dashboardV3/hubData";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +44,11 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
   const tabs = guestRole ? allTabs.filter((t) => guestHubTabAllowed(guestRole, t.id)) : allTabs;
   const wanted = resolveHubTab(Array.isArray(query.tab) ? query.tab[0] : query.tab, site.features, ctx.experience);
   const tab = guestRole ? (tabs.find((t) => t.id === wanted)?.id ?? (tabs[0]?.id ?? guestFirstTab(guestRole)) as typeof wanted) : wanted;
+
+  // A site that is not online yet gets the "here's what to do next" steps on its Pages tab (the owner, not an invited guest).
+  const startFacts = tab === "pages" && !guestRole ? await loadHubStartFacts(site).catch(() => null) : null;
+  const start = startFacts?.eligible && !startFacts.published ? startFacts : null;
+  const showSolIntro = start ? (await loadV3Sites(ctx.organizationId, ctx.userId).catch(() => [])).length <= 1 : false;
 
   let content: React.ReactNode;
   switch (tab) {
@@ -99,14 +106,14 @@ export default async function SiteHubPage({ params, searchParams }: { params: Pr
       content = (
         <>
           <PagesTab site={site} pages={pages} experience={ctx.experience} plan={ctx.plan} />
-          {guestRole ? null : <AddMoreCards siteId={id} siteName={site.name} features={site.features} pages={examplePages(pages)} />}
+          {guestRole ? <TourAnchorAbsent anchor="hub-add-more" /> : <AddMoreCards siteId={id} siteName={site.name} features={site.features} pages={examplePages(pages)} />}
         </>
       );
     }
   }
 
   return (
-    <HubFrame site={site} tabs={tabs} current={tab} experience={ctx.experience} readOnly={guestRole !== undefined && guestRole !== "editor"} guest={guestRole !== undefined}>
+    <HubFrame site={site} tabs={tabs} current={tab} experience={ctx.experience} readOnly={guestRole !== undefined && guestRole !== "editor"} guest={guestRole !== undefined} start={start ?? undefined} showSolIntro={showSolIntro}>
       {content}
     </HubFrame>
   );

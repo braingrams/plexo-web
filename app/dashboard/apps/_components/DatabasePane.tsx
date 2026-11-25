@@ -324,7 +324,7 @@ export function DatabasePane(props: { appId: string; refreshKey?: number; onAskA
                     </div>
                     {onAskAi && (
                       <Button size="sm" onClick={() => onAskAi(`Fix this database security issue: ${f.message} Suggested fix: ${f.fix}`)}>
-                        <SolGlyph size={12} /> Ask SOL to fix
+                        <SolGlyph size={12} /> Fix this with SOL
                       </Button>
                     )}
                     <button

@@ -32,7 +32,7 @@ describe("when SOL goes quiet for a while", () => {
     expect(container.textContent).toContain("taking longer than usual");
 
     await act(async () => vi.advanceTimersByTime(80_000));
-    expect(container.textContent).toContain("the AI service is slow right now");
+    expect(container.textContent).toContain("SOL is slow right now");
 
     await render(root, [{ type: "text", text: "Let's start. Now the pages." }]);
     expect(container.textContent).not.toContain("Still working");

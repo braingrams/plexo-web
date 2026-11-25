@@ -1,5 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import type { PlanId } from "@/lib/plan/plans";
+import { editedByOwner } from "./startReview";
+import { solPersonalizedOf } from "./solMarks";
 import { auth } from "@/server/authDynamo";
 import { ensureActiveOrganization } from "@/server/orgDynamo";
 import { User } from "@/lib/db/coreEntities";
@@ -17,6 +19,9 @@ import type { SiteKindLabel } from "./sites";
 import { readSiteBrand, type SiteBrand } from "./brandLook";
 import { countryName } from "@/lib/countries";
 import { workspaceOwner, planFromOwner } from "@/lib/plan/workspacePlan";
+import { resolveSiteBrand } from "@/lib/brand/resolveSiteBrand";
+import { isPublished } from "./tasks";
+import { brandStepDone } from "./brandLook";
 import { getTierFeatures, siteBadgeChoice, type SiteBadgeChoice } from "@/lib/subscription";
 
 export type HubContext = { userId: string; organizationId: string; experience: Experience; plan: PlanId; brand: Record<string, unknown> | null };
@@ -297,4 +302,21 @@ export async function loadHubSiteCards(organizationId: string, userId: string): 
       return { id: s.id, name: s.name, kind: hubKindLabel(features), status: s.status, address: s.address ?? null, visits7d: views, editHref: editHrefFor(s.id, t?.sourceType), app: isAppKind(hubKindLabel(features)) };
     }),
   );
+}
+
+/** What the "Your website is ready" steps need to know about a site (the same facts Home's "Finish up" reads). */
+export async function loadHubStartFacts(site: Pick<HubSite, "id" | "address" | "sourceType" | "deployed">): Promise<import("./startSteps").StartFacts> {
+  const eligible = site.sourceType === "BUILDER" && !site.deployed;
+  if (!eligible) return { eligible: false, published: true, hasAddress: !!site.address, brandDone: true, edited: true, openedEditor: true, personalizedWithSol: false };
+  const { data: t } = await Template.get({ id: site.id }).go({ attributes: ["createdAt", "updatedAt", "startReviewedAt", "activeVersionId", "liveBuildId", "brand", "compiledHtml", "draftHtml", "solPersonalizedAt", "solContactGivenAt"] }).catch(() => ({ data: null }));
+  const own = await resolveSiteBrand({ siteId: site.id }).catch(() => null).then((r) => (r ? { logoUrl: r.logoUrl, noLogo: r.noLogo, colors: r.colours.map((c) => c.value) } : readSiteBrand(t?.brand)));
+  return {
+    eligible: true,
+    published: isPublished(t),
+    hasAddress: !!site.address,
+    brandDone: brandStepDone(own),
+    edited: editedByOwner(t),
+    openedEditor: !!t?.startReviewedAt,
+    personalizedWithSol: solPersonalizedOf(t),
+  };
 }

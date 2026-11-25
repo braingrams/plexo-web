@@ -63,7 +63,7 @@ async function suggestProductRowsFromSource(
   const spent = { inputTokens: usage?.inputTokens ?? 0, outputTokens: usage?.outputTokens ?? 0 };
   if (truncated) {
     throw new ImportReadError(
-      "The catalog produced too many products for the AI to finish reading in one pass — try splitting the file into smaller batches.",
+      "The catalog produced too many products for SOL to finish reading in one pass — try splitting the file into smaller batches.",
       spent,
     );
   }
@@ -221,7 +221,7 @@ export async function POST(
     }
     if (dataRows.length === 0) {
       return NextResponse.json(
-        { error: "The AI couldn't find any products in that file." },
+        { error: "SOL couldn't find any products in that file." },
         { status: 400 },
       );
     }

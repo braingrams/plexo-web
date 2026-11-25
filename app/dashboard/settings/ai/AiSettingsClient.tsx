@@ -23,7 +23,7 @@ const TIER_OPTIONS: Array<{ label: string; value: AiTier; desc: string }> = [
 ];
 
 const ACCESS_MODE_OPTIONS: Array<{ value: AiAccessMode; label: string; desc: string }> = [
-  { value: "SYSTEM", label: "System AI", desc: "Plexo's own credit balance pays" },
+  { value: "SYSTEM", label: "Included with your plan", desc: "Your plan's credits pay" },
   { value: "BYOK", label: "Bring Your Own Key", desc: "Your own provider key pays, no credits used" },
   { value: "HOST_MANAGED", label: "Host-Managed", desc: "Your app authorizes & bills its own users" },
 ];
@@ -143,7 +143,7 @@ export function AiSettingsClient({ initialApiKeys, canUseHostManagedAi }: { init
       {backTo && safeReturnTo(backTo, "") ? (
         <a href={safeReturnTo(backTo)} style={{ display: "inline-block", marginBottom: "0.75rem", fontSize: "0.82rem", color: "var(--plx-link, var(--brand))", textDecoration: "none" }}>← Back to what you were doing</a>
       ) : null}
-      <PageHeader eyebrow="Developer" title="SOL (AI)" subtitle="SOL is Plexo's AI. Choose whether it runs on Plexo's AI (paid from your AI credits) or your own AI key." />
+      <PageHeader eyebrow="Developer" title="SOL" subtitle="Choose whether SOL runs on the credits included with your plan or on your own AI key." />
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.5rem" }}>
         <div style={{ background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)", border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", borderRadius: 16, padding: "1.5rem" }}>
@@ -264,7 +264,7 @@ export function AiSettingsClient({ initialApiKeys, canUseHostManagedAi }: { init
                             AI Provider
                           </span>
                           <div style={{ padding: "0.65rem 0.75rem", borderRadius: 9, border: "1px solid color-mix(in srgb, var(--plx-text, #fff) 8%, transparent)", background: "color-mix(in srgb, var(--plx-text, #fff) 3%, transparent)" }}>
-                            <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--plx-text, rgba(240,242,255,0.75))" }}>Plexo&apos;s managed AI</p>
+                            <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--plx-text, rgba(240,242,255,0.75))" }}>Included with your plan</p>
                             <p style={{ fontSize: "0.68rem", color: "var(--plx-faint, rgba(240,242,255,0.3))" }}>Automatically selected and maintained by Plexo — nothing to configure here.</p>
                           </div>
                         </div>

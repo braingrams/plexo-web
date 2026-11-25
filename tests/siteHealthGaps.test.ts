@@ -336,7 +336,7 @@ describe("4. Titles and picture descriptions written once", () => {
     h.credits.available = 1;
     const r = await writeTitles("u1", "Mama Tee", pages);
     expect(r).toMatchObject({ ok: false });
-    expect(!r.ok && r.error).toMatch(/enough AI credits/);
+    expect(!r.ok && r.error).toMatch(/enough credits/);
     expect(h.generate).not.toHaveBeenCalled();
     expect(h.charged).toEqual([]);
   });

@@ -185,16 +185,25 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
     }
   };
 
-  if (frame === "none") return <div className="plx-shell" data-chrome="none"><NavProgress />{children}</div>;
-
-  const brand = <Brand orgBranding={orgBranding} />;
-  const switcher = beginner ? <SiteSwitcher sites={sites} currentSiteId={currentSiteId} onSelect={onSiteSelect} /> : null;
-
   // Phones: four main places + "More" when there are extras, otherwise up to five.
   const primary = nav.filter((n) => n.primary);
   const overflow = nav.filter((n) => !n.primary);
   const tabs = overflow.length ? primary.filter((n) => n.id !== "settings").slice(0, 4) : primary.slice(0, 5);
   const moreItems = nav.filter((n) => !tabs.includes(n));
+
+  // Tell the walkthrough which parts of the shell this page has, so it only points at what is on screen.
+  const chromeFrame = frame === "editor" ? "editor" : frame === "none" ? "none" : "full";
+  const chromeMenu = frame !== "none" && view === "menu";
+  const chromeSolTab = chromeFrame === "full" && tabs.some((n) => n.id === "sol");
+  const reportShell = tour.reportShell;
+  useEffect(() => {
+    reportShell({ frame: chromeFrame, sidebarMenu: chromeMenu, folded: collapsed, tabbarSol: chromeSolTab });
+  }, [reportShell, chromeFrame, chromeMenu, collapsed, chromeSolTab]);
+
+  if (frame === "none") return <div className="plx-shell" data-chrome="none"><NavProgress />{children}</div>;
+
+  const brand = <Brand orgBranding={orgBranding} />;
+  const switcher = beginner ? <SiteSwitcher sites={sites} currentSiteId={currentSiteId} onSelect={onSiteSelect} /> : null;
 
   return (
     <div className="plx-shell" data-collapsed={collapsed ? "" : undefined} data-frame={frame === "editor" ? "editor" : undefined}>
@@ -232,7 +241,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
               {nav.map((item) => {
                 const Icon = ICONS[item.icon];
                 return (
-                  <Link key={item.id} href={item.href} className="plx-nav__link" aria-current={active === item.id ? "page" : undefined} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined}>
+                  <Link key={item.id} href={item.href} className="plx-nav__link" aria-current={active === item.id ? "page" : undefined} title={collapsed ? item.label : undefined} aria-label={collapsed ? item.label : undefined} data-tour={item.id === "sol" ? "ask-sol-menu" : undefined}>
                     <Icon size={20} aria-hidden />
                     <span className="plx-nav__label">{item.label}</span>
                     <LinkPending />
@@ -290,7 +299,7 @@ function ShellFrame({ user, experience, nav, sites, currentSiteId, workspaces = 
         {tabs.map((item) => {
           const Icon = ICONS[item.icon];
           return (
-            <Link key={item.id} href={item.href} className="plx-tabbar__item" aria-current={active === item.id ? "page" : undefined}>
+            <Link key={item.id} href={item.href} className="plx-tabbar__item" aria-current={active === item.id ? "page" : undefined} data-tour={item.id === "sol" ? "ask-sol-menu" : undefined}>
               <span className="plx-tabbar__pip">
                 <Icon size={21} aria-hidden />
               </span>

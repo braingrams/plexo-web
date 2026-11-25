@@ -161,7 +161,7 @@ export async function planGeneration(key: ResolvedAiKey, input: GenerateInput): 
       return { error: "Host-Managed AI access is not fully configured for this account (missing webhook URL/secret).", status: 503 };
     }
     if (!key.aiApiKey) {
-      return { error: "Host-Managed AI access requires the account's own AI provider key. Add one in Settings — Plexo's system key is not used in this mode.", status: 503 };
+      return { error: "Host-managed AI needs your own AI key. Add one in Settings → AI: the AI included with your plan isn't used in this mode.", status: 503 };
     }
     let providerApiKey: string;
     try {
@@ -232,7 +232,7 @@ export async function runGeneration(
           const balance = await ensureCreditPeriod(key.userId);
           if (balance.available < estimateWorstCaseCost(plan.provider, input.concreteTier, input.mode, approxInputChars(input), maxTokens)) {
             throw new GenerationStoppedError(
-              "Your page needed a longer answer than your remaining AI credits cover. Top up in Settings → Subscription, or try a shorter description.",
+              "Your page needed a longer answer than your remaining credits cover. Top up in Settings → Subscription, or try a shorter description.",
             );
           }
         }

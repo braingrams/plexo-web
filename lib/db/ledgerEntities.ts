@@ -15,7 +15,7 @@ export const CreditLedgerEntry = new Entity(
     attributes: {
       id: { type: "string", required: true },
       userId: { type: "string", required: true },
-      type: { type: ["MONTHLY_GRANT", "TOPUP_PURCHASE", "AI_USAGE", "REFUND", "ADJUSTMENT"] as const, required: true },
+      type: { type: ["MONTHLY_GRANT", "FIRST_SITE_GRANT", "TOPUP_PURCHASE", "AI_USAGE", "REFUND", "ADJUSTMENT"] as const, required: true },
       amount: { type: "number", required: true }, // positive = credit added, negative = spent
       balanceAfter: { type: "number", required: true },
       description: { type: "string" },

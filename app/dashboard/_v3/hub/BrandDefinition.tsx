@@ -272,7 +272,7 @@ export function BrandDefinition({ siteId, siteName, own, defaults, sourceType, r
             {outcome ? (
               <div className="plx-inlinemsg" role="status" style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-start" }}>
                 <span>{outcome.text}</span>
-                {outcome.askSol ? <ButtonLink href={solHref} variant="secondary" size="sm" leftIcon={<SolGlyph size={16} />}>Ask SOL to restyle my pages</ButtonLink> : null}
+                {outcome.askSol ? <ButtonLink href={solHref} variant="secondary" size="sm" leftIcon={<SolGlyph size={16} />}>Restyle my pages with SOL</ButtonLink> : null}
               </div>
             ) : !canApply ? (
               <p className="plx-small">This site was built another way, so Plexo saves your look and SOL can restyle its pages with it.</p>

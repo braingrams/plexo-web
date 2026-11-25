@@ -83,6 +83,8 @@ export const User = new Entity(
       allowanceBalance: { type: "number", default: 0 },
       topupBalance: { type: "number", default: 0 },
       allowanceResetAt: { type: "string", default: () => new Date().toISOString() },
+      // When the one-time "first site" credit gift was given (lib/credits/value.ts). Set once, never cleared.
+      firstSiteGrantAt: { type: "string" },
       // Credits held for AI turns that are running right now — { [turnId]: { credits, expiresAt } },
       // with heldCredits the cached sum of the live ones. See holdCredits in
       // lib/db/ledgerOperations.ts: it's what stops two chats at once spending the same credits.
@@ -247,6 +249,9 @@ export const User = new Entity(
       // Promo banners (lib/promos) this person closed: { [promoId]: versionTheyClosed }. A promo
       // the admin edits gets a new version, so an updated message is shown again.
       dismissedPromos: { type: "any" },
+      // SOL's one-time "Hi, I'm SOL" hello on their first visit to SOL was seen or closed (or they sent a first message), so it never shows again
+      // on any device. app/dashboard/_v3/sol/SolIntroCard.tsx, POST /api/dashboard/sol-intro.
+      solIntroSeenAt: { type: "string" },
     },
     indexes: {
       primary: {

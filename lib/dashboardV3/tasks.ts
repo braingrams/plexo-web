@@ -17,6 +17,8 @@ export type SiteFacts = {
   hasColors: boolean;
   /** The owner has edited the site since it was made (words, contact details, links...). */
   edited: boolean;
+  /** The "Review and edit your pages" step is done: the owner edited something, or opened the editor from the hub's steps (remembered on the site). The hub panel reads the same fact. */
+  reviewed: boolean;
   productCount: number;
   /** Bank-transfer details or live card keys are in place. */
   paymentsReady: boolean;
@@ -52,6 +54,7 @@ export const EMPTY_FACTS: SiteFacts = {
   logoSkipped: false,
   hasColors: false,
   edited: false,
+  reviewed: false,
   productCount: 0,
   paymentsReady: false,
   postCount: 0,
@@ -75,7 +78,7 @@ export type TaskDef = { id: TaskId; title: string; description: string; kind: Ta
 const design: TaskDef = { id: "design", title: "Pick a design", description: "You chose one that fits you. You can change it any time.", kind: "auto", help: "Choosing a design", done: (f) => f.hasSite };
 const brand: TaskDef = { id: "brand", title: "Add your logo and colours", description: "So your site looks like you.", kind: "link", help: "Adding your logo and colours", done: (f) => (f.hasColors && (f.hasLogo || f.logoSkipped)) || f.ownDesign || (f.hasAddress && f.published) };
 /** Choosing the web address and going online used to be two steps that said almost the same thing. They are one: pick the address, tap once, you're online. */
-const finish: TaskDef = { id: "finish", title: "Finish up", description: "Pick your web address and put your site online, in one tap. You can keep editing after.", kind: "finish", help: "Finishing up", done: (f) => f.hasAddress && f.published };
+const finish: TaskDef = { id: "finish", title: "Finish up", description: "Choose your web address and publish your website, in one tap. You can keep editing after.", kind: "finish", help: "Finishing up", done: (f) => f.hasAddress && f.published };
 
 const pay: TaskDef = { id: "pay", title: "Choose how you get paid", description: "Card payments or a bank transfer, whichever suits you.", kind: "pay", help: "Getting paid", done: (f) => f.paymentsReady };
 
@@ -96,7 +99,7 @@ const VARIANTS: Record<TaskVariant, TaskDef[]> = {
   business: [
     design,
     brand,
-    { id: "words", title: "Check the words on your pages", description: "Make sure it says what you want, the way you'd say it.", kind: "link", help: "Editing the words on your site", done: (f) => f.edited || f.personalizedWithSol },
+    { id: "words", title: "Review and edit your pages", description: "We started you with a design filled in with your details. Change any words, pictures or colours.", kind: "link", help: "Editing the words on your site", done: (f) => f.reviewed || f.edited || f.personalizedWithSol },
     { id: "contact", title: "Add your contact details", description: "Phone, email and where to find you.", kind: "link", help: "Adding contact details", done: (f) => f.edited || f.contactProvided },
     finish,
   ],

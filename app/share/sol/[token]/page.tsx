@@ -61,7 +61,7 @@ export default async function SharedSolConversation({ params }: { params: Promis
 
       <footer style={{ borderTop: "1px solid rgba(255,255,255,0.07)", padding: "1.5rem 0" }}>
         <div style={{ ...column, display: "flex", justifyContent: "space-between", alignItems: "center", gap: "1rem", flexWrap: "wrap", fontSize: "0.8rem", color: "rgba(240,242,255,0.55)" }}>
-          <span>SOL is Plexo&apos;s AI assistant for building and running your website.</span>
+          <span>SOL builds and runs websites on Plexo.</span>
           <Link href="/" style={{ color: "#c4b5fd", fontWeight: 600, textDecoration: "none" }}>Try Plexo →</Link>
         </div>
       </footer>

@@ -316,6 +316,14 @@ textarea.plx-input { min-height: 112px; line-height: 1.5; resize: vertical; }
 .plx-tour-shield { position: fixed; inset: 0; z-index: 94; }
 .plx-tour-card { position: fixed; z-index: 96; width: min(360px, calc(100vw - 32px)); background: var(--plx-surface); color: var(--plx-text); border-radius: 18px; box-shadow: var(--plx-shadow-overlay); border: 1px solid var(--plx-border); padding: 20px; display: flex; flex-direction: column; gap: 10px; animation: plx-pop .2s cubic-bezier(.2, .8, .2, 1); transition: top .3s cubic-bezier(.2, .8, .2, 1), left .3s cubic-bezier(.2, .8, .2, 1); }
 .plx-tour-card__step { font-size: 13px; font-weight: 800; color: var(--plx-deep); }
+.plx-tour-card__head { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.plx-tour-card__head--mascot .plx-tour-card__title { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.plx-tour-mascot { display: grid; place-items: center; flex: none; }
+.plx-tour-mascot img { display: block; height: 84px; width: auto; }
+@media (max-width: 640px) { .plx-tour-mascot img { height: 68px !important; } }
+/* Several things lit at once: one dim layer with a hole per ring, and the rings draw only their outline. */
+.plx-tour-dim { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 94; pointer-events: none; }
+.plx-tour-spot--multi { box-shadow: none; }
 .plx-tour-card__title { margin: 0; font-size: 19px; font-weight: 800; letter-spacing: -0.01em; }
 .plx-tour-card__body { margin: 0; font-size: 15px; color: var(--plx-muted); line-height: 1.55; }
 .plx-tour-card__foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; }

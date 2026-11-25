@@ -22,7 +22,7 @@ export function creditUpgradeLine(offer: CreditUpgradeOffer, planName: string): 
 
 // ── The out-of-credits answer for API / MCP / SOL clients ────────────────────────────────
 
-const OUT_OF_CREDITS_TEXT = /enough AI credits|out of AI credits|used all your AI credits|insufficient_credits/i;
+const OUT_OF_CREDITS_TEXT = /needs more credits|enough credits|out of credits|used (?:up )?all your credits|enough AI credits|out of AI credits|used all your AI credits|insufficient_credits/i;
 
 /** The three ways forward, as paths on the app (relative; the dashboard adds the origin). */
 export const OUT_OF_CREDITS_LINKS = {
@@ -41,5 +41,5 @@ export function aiRefusalBody(refusal: { error: string; status: number }): Recor
 
 /** The same, as a sentence for text-only places (MCP tool errors, WhatsApp). */
 export function outOfCreditsSentence(baseUrl = (process.env.NEXT_PUBLIC_APP_URL || "https://plexo.charisol.io").replace(/\/$/, "")): string {
-  return `You're out of AI credits. Top up: ${baseUrl}${OUT_OF_CREDITS_LINKS.topUpUrl} · Use your own AI key: ${baseUrl}${OUT_OF_CREDITS_LINKS.ownKeyUrl} · Or upgrade for more every month: ${baseUrl}${OUT_OF_CREDITS_LINKS.upgradeUrl}`;
+  return `SOL needs more credits to do this. Top up: ${baseUrl}${OUT_OF_CREDITS_LINKS.topUpUrl} · Use your own AI key: ${baseUrl}${OUT_OF_CREDITS_LINKS.ownKeyUrl} · Or upgrade for more every month: ${baseUrl}${OUT_OF_CREDITS_LINKS.upgradeUrl}`;
 }

@@ -61,7 +61,7 @@ export function SettingsPreview({ section }: { section: SettingsSectionId }) {
           payments={[
             { id: "p1", paidAt: daysAgo(11), description: "Starter plan, monthly", detail: null, amountCents: 1200, refundedCents: 0, currency: "usd", status: "PAID", receiptNumber: "PX-1041", cardLast4: "4242", failureReason: null },
             { id: "p2", paidAt: daysAgo(41), description: "Starter plan, monthly", detail: null, amountCents: 1200, refundedCents: 0, currency: "usd", status: "PAID", receiptNumber: "PX-0988", cardLast4: "4242", failureReason: null },
-            { id: "p3", paidAt: daysAgo(60), description: "2,500 AI credits", detail: null, amountCents: 500, refundedCents: 0, currency: "usd", status: "PAID", receiptNumber: "PX-0950", cardLast4: "4242", failureReason: null },
+            { id: "p3", paidAt: daysAgo(60), description: "2,500 credits", detail: null, amountCents: 500, refundedCents: 0, currency: "usd", status: "PAID", receiptNumber: "PX-0950", cardLast4: "4242", failureReason: null },
           ]}
           card={{ cardBrand: "visa", cardLast4: "4242", cardExpMonth: 8, cardExpYear: 2028 }}
         />

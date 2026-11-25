@@ -4,6 +4,7 @@ import { findRootTemplateId, onTemplateSaved } from "@/lib/siteLayoutCore";
 import { publishTemplateDraft } from "@/lib/templateVersions";
 import { currentDesign, formatLabel, loadSiteRows, saveEdit } from "@/lib/mcp/v2Pages";
 import { lookTokens, type BrandLook, type LookApplied } from "@/lib/dashboardV3/brandLook";
+import { logoCommandFor } from "@/lib/sites/headerLogo";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = any;
@@ -20,6 +21,10 @@ export async function applySiteLook(input: { organizationId: string; userId: str
   const out: LookApplied = { updated: 0, needsPublish: 0, skipped: 0, logoPlaced: false };
   const rootId = await findRootTemplateId(siteId, null);
   const rows: Row[] = await loadSiteRows({ organizationId }, rootId);
+  const { data: layout } = await SiteLayout.get({ templateId: rootId }).go();
+  const wantsLogo = !!look.logoUrl || input.hadLogo;
+  // A site made from a marketplace design has no shared header: each page carries its own header section, and the logo is in that.
+  const logoInPages = wantsLogo && !layout?.headerTemplateId;
 
   for (const row of rows) {
     if (formatLabel(row) !== "v2") {
@@ -28,12 +33,22 @@ export async function applySiteLook(input: { organizationId: string; userId: str
     }
     const hadDraft = !!row.draftJson;
     const wasLive = !!row.activeVersionId;
-    const res = await saveEdit(row, [{ op: "setBrand", tokens }], { live: false });
+    const commands: unknown[] = [{ op: "setBrand", tokens }];
+    let pageLogoAt = -1;
+    if (logoInPages) {
+      const pageLogo = logoCommandFor(await currentDesign(row).catch(() => null), look.logoUrl ?? "");
+      if (pageLogo) {
+        pageLogoAt = commands.length;
+        commands.push(pageLogo);
+      }
+    }
+    const res = await saveEdit(row, commands, { live: false });
     if (!res.saved) {
       out.skipped++;
       continue;
     }
     out.updated++;
+    if (pageLogoAt >= 0 && look.logoUrl && res.results?.[pageLogoAt]?.ok) out.logoPlaced = true;
     if (wasLive && !hadDraft) {
       const { data: fresh } = await Template.get({ id: row.id }).go();
       if (fresh?.draftHtml) {
@@ -46,8 +61,6 @@ export async function applySiteLook(input: { organizationId: string; userId: str
   }
 
   // The shared header and footer (one per site), where the logo lives.
-  const { data: layout } = await SiteLayout.get({ templateId: rootId }).go();
-  const wantsLogo = !!look.logoUrl || input.hadLogo;
   for (const [id, isHeader] of [[layout?.headerTemplateId, true], [layout?.footerTemplateId, false]] as const) {
     if (!id) continue;
     const { data: frag } = await Template.get({ id }).go();
@@ -79,7 +92,19 @@ export async function applySiteLogo(input: { organizationId: string; siteId: str
   const rootId = await findRootTemplateId(input.siteId, null);
   const { data: layout } = await SiteLayout.get({ templateId: rootId }).go();
   const id = layout?.headerTemplateId;
-  if (!id) return { placed: false };
+  if (!id) {
+    // No shared header (a site made from a marketplace design): the logo goes in the header section of each page that has one.
+    const rows: Row[] = await loadSiteRows({ organizationId: input.organizationId }, rootId);
+    let placedAny = false;
+    for (const row of rows) {
+      if (formatLabel(row) !== "v2") continue;
+      const command = logoCommandFor(await currentDesign(row).catch(() => null), input.logoUrl);
+      if (!command) continue;
+      const res = await saveEdit(row, [command], { live: false });
+      if (res.saved) placedAny = true;
+    }
+    return { placed: placedAny };
+  }
   const { data: frag } = await Template.get({ id }).go();
   if (!frag || frag.organizationId !== input.organizationId || formatLabel(frag) !== "v2") return { placed: false };
   const design = await currentDesign(frag);

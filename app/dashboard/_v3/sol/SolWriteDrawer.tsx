@@ -91,7 +91,7 @@ export function SolWriteDrawer<T>({
       setSpent(creditsSpent(before, after));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "";
-      if (/out of (ai )?credits|not enough credits|top up/i.test(msg)) setBroke(true);
+      if (/out of (ai )?credits|not enough credits|needs more credits|top up/i.test(msg)) setBroke(true);
       else setError(msg || "SOL couldn't finish that. Please try again.");
       setPhase(result ? "result" : "ask");
     } finally {
@@ -152,7 +152,7 @@ export function SolWriteDrawer<T>({
           <div role="alert" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <SolOutOfCredits onDismiss={() => setBroke(false)} onToppedUp={() => void run()} />
             <p className="plx-small">
-              Prefer to use your own AI account instead? <Link href="/dashboard/settings/ai">Add your own key</Link> and writing won&apos;t use credits.
+              Prefer to use your own AI key instead? <Link href="/dashboard/settings/ai">Add your own key</Link> and writing won&apos;t use credits.
             </p>
           </div>
         ) : null}

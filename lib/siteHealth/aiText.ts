@@ -56,10 +56,10 @@ async function preflight(userId: string, inputChars: number, maxOutputTokens: nu
   try {
     const balance = await ensureCreditPeriod(userId);
     const worst = estimateWorstCaseCost("bedrock_claude", "BASIC", "edit_element", inputChars, maxOutputTokens);
-    if (balance.available < worst) return "You do not have enough AI credits left this month to write these. Your pages stay as they are. You can add credits, or type the texts yourself.";
+    if (balance.available < worst) return "SOL does not have enough credits left this month to write these. Your pages stay as they are. You can add credits, or type the texts yourself.";
   } catch (err) {
     console.error("site health: could not check credits:", err instanceof Error ? err.message : "unknown error");
-    return "We could not check your AI credits just now. Please try again in a moment.";
+    return "We could not check your credits just now. Please try again in a moment.";
   }
   return null;
 }

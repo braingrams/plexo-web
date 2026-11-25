@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  afterCreateHref, afterFork, appHref, createArgs, defaultSiteName, designPicks, limitNote, MORE_WAYS, MOVE_PATH, NEW_SITE_GOALS, newSiteRedirect, parseCreateRequest, STARTS,
+  markSiteJustMade, JUST_MADE_COOKIE, afterCreateHref, afterFork, appHref, createArgs, defaultSiteName, designPicks, limitNote, MORE_WAYS, MOVE_PATH, noticeFor, noticeMessages, readNotice, NEW_SITE_GOALS, newSiteRedirect, parseCreateRequest, STARTS,
 } from "../lib/dashboardV3/newSite";
 
 describe("fork", () => {
@@ -91,11 +91,51 @@ describe("marketplace designs in the new flow", () => {
   });
 });
 
-describe("where the owner lands after creating the site", () => {
-  it("a site SOL personalized goes to the dashboard, where Finish up and Publish are waiting", () => {
-    expect(afterCreateHref("abc", true)).toBe("/dashboard");
+describe("sites made by upload or WordPress move", () => {
+  it("become the current site and are flagged as just made, so Home continues the guided steps", () => {
+    const set: Array<[string, string]> = [];
+    markSiteJustMade({ cookies: { set: (n, v) => { set.push([n, v]); } } }, "s1");
+    expect(set).toEqual([["plexo-site", "s1"], [JUST_MADE_COOKIE, "s1"]]);
   });
-  it("any other new site opens its own page, where the pages and the editor are", () => {
-    expect(afterCreateHref("abc", false)).toBe("/dashboard/sites/abc");
+});
+
+describe("where the owner lands after creating the site", () => {
+  it("always the dashboard home, where the new site's steps (Review and edit your pages, Finish up) are waiting", () => {
+    expect(afterCreateHref()).toBe("/dashboard");
+  });
+  it("never the site's own hub page, whether or not SOL personalized it", () => {
+    expect(afterCreateHref()).not.toContain("/sites/");
+  });
+});
+
+describe("the note about what could not be carried over", () => {
+  it("keeps only plain text, trimmed, without repeats, a handful at most", () => {
+    expect(noticeMessages(["  A   piece of text  ", "A piece of text", 5, null, { x: 1 }, ""])).toEqual(["A piece of text"]);
+    expect(noticeMessages(Array.from({ length: 9 }, (_, i) => `note ${i}`))).toHaveLength(5);
+    expect(noticeMessages("nope")).toEqual([]);
+    expect(noticeMessages(undefined)).toEqual([]);
+  });
+  it("has nothing to say when there is nothing to say", () => {
+    expect(noticeFor("s1", [])).toBeNull();
+    expect(noticeFor("", ["x"])).toBeNull();
+    expect(noticeFor("s1", ["Check these"])).toEqual({ siteId: "s1", messages: ["Check these"] });
+  });
+  it("is read back only for the site it was written for", () => {
+    const raw = JSON.stringify(noticeFor("s1", ["Check these"]));
+    expect(readNotice(raw, "s1")).toEqual({ siteId: "s1", messages: ["Check these"] });
+    expect(readNotice(raw, "s2")).toBeNull();
+    expect(readNotice("not json", "s1")).toBeNull();
+    expect(readNotice(null, "s1")).toBeNull();
+  });
+});
+
+describe("create request carries the previewed design", () => {
+  it("keeps brandedHtml and a valid brandColor, drops an oversized or malformed one", () => {
+    const ok = parseCreateRequest({ goal: "business-site", name: "Aria", designId: "d", brandedHtml: "<html>x</html>", brandColor: "#2255EE" });
+    expect(ok.ok && ok.value.brandedHtml).toBe("<html>x</html>");
+    expect(ok.ok && ok.value.brandColor).toBe("#2255EE");
+    const bad = parseCreateRequest({ goal: "business-site", name: "Aria", designId: "d", brandedHtml: "x".repeat(2_000_001), brandColor: "blue" });
+    expect(bad.ok && bad.value.brandedHtml).toBeUndefined();
+    expect(bad.ok && bad.value.brandColor).toBeUndefined();
   });
 });

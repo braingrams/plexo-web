@@ -241,7 +241,7 @@ export function HeroDesignPreview({
             </button>
           </div>
 
-          {/* Personalize with SOL */}
+          {/* Make it yours with SOL */}
           {onPersonalize && (
             <Button
               size="sm"
@@ -251,7 +251,7 @@ export function HeroDesignPreview({
               disabled={!!studio || !html}
               title="SOL rewrites this design's words for your business and adds your logo"
             >
-              {personalized ? "Re-personalize with SOL" : "Personalize with SOL"}
+              {personalized ? "Rewrite this with SOL" : "Make it yours with SOL"}
             </Button>
           )}
         </div>

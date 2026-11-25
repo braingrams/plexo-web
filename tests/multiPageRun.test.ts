@@ -28,7 +28,7 @@ describe("runOnPages", () => {
     let n = 0;
     const out = await runOnPages({ pages, question: "q", deps: deps({ ask: async () => (++n === 2 ? "You don't have enough credits" : "ok") }), onProgress: () => {} });
     expect(out.map((s) => s.status)).toEqual(["done", "no-credits", "no-credits"]);
-    expect(out[2].note).toContain("out of AI credits");
+    expect(out[2].note).toContain("out of credits");
   });
   it("one failing page does not stop the others", async () => {
     const out = await runOnPages({ pages, question: "q", deps: deps({ apply: vi.fn().mockRejectedValueOnce(new Error("Couldn't save")).mockResolvedValue({ saved: true, message: "", before: null }) }), onProgress: () => {} });
@@ -60,7 +60,7 @@ describe("wording", () => {
   });
   it("explains the credit cost, or that none is used with an own key", () => {
     expect(creditNote({ paidBy: "own-key", total: 0, balance: null, perPage: [] })).toContain("own AI key");
-    expect(creditNote({ paidBy: "plexo", total: 12.2, balance: 300, perPage: [4, 8] })).toBe("Uses up to about 13 AI credits (usually less). You have 300.");
+    expect(creditNote({ paidBy: "plexo", total: 12.2, balance: 300, perPage: [4, 8] })).toBe("Uses up to about 13 credits (usually less). You have 300.");
     expect(creditNote(null)).toBe("");
   });
 });

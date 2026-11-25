@@ -38,7 +38,7 @@ describe("formatAiActivityDescription", () => {
   });
 
   it("falls back to activity type label when description is missing", () => {
-    expect(formatAiActivityDescription(null, "AI_USAGE")).toBe("AI help");
+    expect(formatAiActivityDescription(null, "AI_USAGE")).toBe("SOL work");
     expect(formatAiActivityDescription(null, "MONTHLY_GRANT")).toBe("Your monthly credits");
     expect(formatAiActivityDescription(null, "TOPUP_PURCHASE")).toBe("Credits you bought");
     expect(formatAiActivityDescription("", null)).toBe("Credits");

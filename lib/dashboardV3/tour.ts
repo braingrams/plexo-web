@@ -22,22 +22,110 @@ export type TourState = {
   updatedAt?: string;
 };
 
+/**
+ * What Home is showing right now. Home renders a different set of things per view, so a step that points
+ * at something only one view has (the numbers tiles, the "next step" card) must only be offered there.
+ * guided = setup steps still to do; live = the site is online and shows its numbers; quiet = online but its numbers could not load; all = the every-site
+ * list (pros and people with several sites); none = no site yet.
+ */
+export type HomeView = "guided" | "finishing" | "live" | "quiet" | "all" | "none";
+
+/** How wide the screen is, matching the dashboard's own breakpoints: phone <= 640, tablet <= 1023 (menu in a bottom bar), desktop above. */
+export type TourViewport = "phone" | "tablet" | "desktop";
+
+/**
+ * What the shell is showing on the current page (reported by the shell itself), so shell-wide steps are only
+ * offered where their anchor exists. `frame`: full = top bar + menu; editor = the page editor (menu only, folded);
+ * none = no dashboard chrome at all (a hosted app screen).
+ */
+export type ShellChrome = {
+  frame: "full" | "editor" | "none";
+  /** The desktop sidebar is showing the main menu (not SOL's conversation list). */
+  sidebarMenu: boolean;
+  /** The desktop sidebar is folded to icons (the site switcher is hidden then). */
+  folded: boolean;
+  /** "Ask SOL" is one of the buttons in the phone's bottom bar. */
+  tabbarSol: boolean;
+};
+
 export type TourContext = {
+  /** Which Home view is on screen (reported by Home itself). Unknown until Home has been seen: then no step is filtered by it. */
+  homeView?: HomeView;
   /** The site the beginner view is showing, for steps that live on a site's own pages. */
   siteId?: string | null;
   experience?: "beginner" | "intermediate" | "pro";
   /** What kind of site that is, so steps about tabs it doesn't have (Products on a blog) are left out. */
   siteKind?: string | null;
+  /** The screen size class (reported by the tour engine): steps whose anchors are hidden at that size are left out. */
+  viewport?: TourViewport;
+  /** What the shell shows right now; see ShellChrome. */
+  chrome?: ShellChrome;
+  /** Anchors a page has said it does not render for this person, as "route|anchor" keys (see absentKey). Steps that only point at those are left out. */
+  absent?: readonly string[];
 };
+
+/** The page identity used to scope "this page does not show that": path plus the site tab; trailing slash and the default Pages tab are ignored. */
+export function routeKey(pathname: string, search: string = ""): string {
+  const [pathPart, rest] = pathname.split("#")[0].split("?") as [string, string | undefined];
+  const path = pathPart.replace(/\/+$/, "") || "/";
+  const tab = new URLSearchParams(rest ?? search).get("tab");
+  return tab && tab !== "pages" ? `${path}?tab=${tab}` : path;
+}
+
+export const absentKey = (route: string, anchor: string) => `${routeKey(route)}|${anchor}`;
+
+/** The anchors a step points at, in order (the first visible one is where the card sits). */
+export function stepAnchors(step: Pick<TourStep, "anchor" | "anchors">): string[] {
+  return step.anchors?.length ? step.anchors : [step.anchor];
+}
+
+/** Hidden by the layout at a screen size or shell state, whatever page it is: no point offering a step that points only at these. */
+export function anchorHiddenByLayout(anchor: string, ctx: Pick<TourContext, "viewport" | "chrome">): boolean {
+  const narrow = ctx.viewport === "phone" || ctx.viewport === "tablet";
+  if (narrow && anchor === "theme-switch") return true; // the top-bar appearance switch is desktop-only; narrow screens have it inside More
+  if (ctx.viewport === "desktop" && ctx.chrome?.frame === "full" && ctx.chrome.folded && (anchor === "site-switcher" || anchor === "site-switcher-panel")) return true;
+  return false;
+}
+
+/** Is this anchor on screen on the page the shell is showing right now? Unknown shell state counts as yes. */
+export function anchorOnThisPage(anchor: string, ctx: Pick<TourContext, "viewport" | "chrome">): boolean {
+  const c = ctx.chrome;
+  if (!c || !ctx.viewport) return true;
+  if (c.frame === "none") return false;
+  const narrow = ctx.viewport !== "desktop";
+  switch (anchor) {
+    case "main-nav":
+      return narrow ? c.frame === "full" : c.sidebarMenu;
+    case "site-switcher":
+      return narrow ? c.frame === "full" : c.sidebarMenu && !c.folded;
+    case "site-switcher-panel":
+      return !narrow && c.sidebarMenu && !c.folded;
+    case "ask-sol":
+    case "help-menu":
+      return c.frame === "full";
+    case "theme-switch":
+      return !narrow && c.frame === "full";
+    case "ask-sol-menu":
+      return narrow ? c.tabbarSol : c.sidebarMenu;
+    default:
+      return true;
+  }
+}
+
+/** A shell-wide step none of whose anchors exist on the page the person is on (the page editor, a hosted app, SOL's chat list). */
+export function shellStepBlocked(step: Pick<ResolvedTourStep, "route" | "anchor" | "anchors">, ctx: Pick<TourContext, "viewport" | "chrome">): boolean {
+  if (step.route !== "*") return false;
+  return !stepAnchors(step).some((a) => anchorOnThisPage(a, ctx));
+}
 
 /** The site tabs a kind of site shows (mirrors lib/dashboardV3/hubTabs.ts hubTabs; a store that also blogs just skips Blog at the screen). */
 export function siteTabsForKind(kind: string | null | undefined, experience?: string): string[] {
-  if (kind === "Server app" || kind === "Uploaded app") return ["app", "address", "visits", "health", "settings", ...(experience === "pro" ? ["advanced"] : [])];
+  if (kind === "Server app" || kind === "Uploaded app") return ["app", "address", "visits", "health", "settings", "more", ...(experience === "pro" ? ["advanced"] : [])];
   const tabs = ["pages"];
   if (kind === "Online store") tabs.push("products", "orders");
   if (kind === "Blog") tabs.push("blog");
   if (kind === "Course") tabs.push("course");
-  tabs.push("brand", "address", "visits", "health", "settings");
+  tabs.push("brand", "address", "visits", "health", "settings", "more");
   if (experience === "pro") tabs.push("advanced");
   return tabs;
 }
@@ -46,6 +134,8 @@ export type TourStep = {
   id: string;
   /** Matches an element's `data-tour` attribute. Missing on screen → the step is skipped. */
   anchor: string;
+  /** Point at several things at once (the top bar box AND the menu item). The first one on screen is where the card sits; hidden ones are never waited for. Defaults to just `anchor`. */
+  anchors?: string[];
   /** The page it lives on ("*" = any page: shell-wide things), or a function of the context; null = skip it. */
   route: string | ((ctx: TourContext) => string | null);
   title: string;
@@ -56,6 +146,10 @@ export type TourStep = {
   order: number;
   /** A site tab this step is about: left out for sites that don't have that tab. */
   siteTab?: string;
+  /** Only on these Home views (set it on steps that point at something Home shows in some views only). Default: every view. */
+  homeViews?: HomeView[];
+  /** Draw SOL's mark beside the title, for the step that introduces SOL. */
+  mascot?: "sol";
   /** Not shown on phones (e.g. it points at a panel that takes the whole bottom of a phone screen). */
   desktopOnly?: boolean;
   placement?: "top" | "bottom" | "left" | "right" | "auto";
@@ -73,12 +167,27 @@ export function resolveTourSteps(registry: readonly TourStep[], mode: TourMode, 
     // Replaying one part includes every step of that part, short or detailed.
     if (area ? step.area !== area : !step.tours.includes(mode)) continue;
     if (step.experiences && ctx.experience && !step.experiences.includes(ctx.experience)) continue;
+    if (step.homeViews && ctx.homeView && !step.homeViews.includes(ctx.homeView)) continue;
+    if (step.desktopOnly && ctx.viewport === "phone") continue;
     if (step.siteTab && ctx.siteKind && !siteTabsForKind(ctx.siteKind, ctx.experience).includes(step.siteTab)) continue;
     const route = typeof step.route === "function" ? step.route(ctx) : step.route;
     if (!route) continue;
-    out.push({ ...step, route });
+    // Up front: only anchors this screen size can show, and none a page has said it does not render for this person.
+    const anchors = stepAnchors(step).filter((a) => !anchorHiddenByLayout(a, ctx) && !(route !== "*" && ctx.absent?.includes(absentKey(route, a))));
+    if (!anchors.length) continue;
+    out.push({ ...step, anchor: anchors[0], anchors, route });
   }
   return out;
+}
+
+/**
+ * The step to carry on from when the one they were on has just left the list (Home reported a view without it, a page said it
+ * does not have it): the next one in order, null = it was the last. A step id that no longer exists at all restarts from the first.
+ */
+export function stepAfterRemoved(registry: readonly TourStep[], removedId: string, steps: readonly ResolvedTourStep[]): ResolvedTourStep | null {
+  const gone = registry.find((s) => s.id === removedId);
+  if (!gone) return steps[0] ?? null;
+  return steps.find((s) => s.order > gone.order) ?? null;
 }
 
 /** Ask "Want a quick tour?" only the first time they arrive. */

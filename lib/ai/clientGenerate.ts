@@ -54,7 +54,7 @@ export async function generateWithProgress(
   if (res.status === 404 && !contentType.includes("json")) return generateBuffered(body);
   if (!res.ok || !contentType.includes("ndjson") || !res.body) {
     const errorBody = await res.json().catch(() => null);
-    throw new Error(aiErrorMessage(res.status, errorBody, "The AI couldn't finish this. Try again."));
+    throw new Error(aiErrorMessage(res.status, errorBody, "SOL couldn't finish this. Try again."));
   }
 
   const reader = res.body.getReader();
@@ -96,6 +96,6 @@ async function generateBuffered(body: AiRequestBody): Promise<{ summary: string;
     throw new Error(AI_UNREACHABLE);
   }
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(aiErrorMessage(res.status, data, "The AI couldn't finish this. Try again."));
+  if (!res.ok) throw new Error(aiErrorMessage(res.status, data, "SOL couldn't finish this. Try again."));
   return data as { summary: string; result: unknown };
 }

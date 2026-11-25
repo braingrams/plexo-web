@@ -3,7 +3,7 @@
  * their business name where the design has its sample name, and their chosen colour where the design has its accent.
  * Pure and browser-safe. The words and layout are never touched beyond the name, so it can't break a design.
  */
-import { applyTextNodes, extractTextNodes } from "./htmlText";
+import { applyTextNodes, decodeEntities, extractTextNodes } from "./htmlText";
 
 const HEX = /^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i;
 
@@ -118,6 +118,15 @@ export function sampleNamesOnPage(html: string, designName: string | undefined):
   return Array.from(new Set(found)).sort((a, b) => b.length - a.length);
 }
 
+/** swapBrandName for one piece of text (a field of a design's JSON): the same rule for what counts as the sample name and for keeping ALL CAPS. */
+export function swapNameInText(text: string, sample: string, name: string): string {
+  const single = !/\s/.test(sample) && /[A-Z]/.test(sample);
+  const re = single
+    ? new RegExp(`(?<![A-Za-z])(?:${escapeRe(sample)}|${escapeRe(sample.toUpperCase())})(?![A-Za-z]|-[a-z])`, "g")
+    : new RegExp(`(?<![A-Za-z])${escapeRe(sample)}(?![A-Za-z])`, "gi");
+  return text.replace(re, (hit) => (hit === hit.toUpperCase() && /[A-Z]/.test(hit) ? name.toUpperCase() : name));
+}
+
 /** Puts the owner's name wherever the design says its sample business name (keeping ALL CAPS where the design shouts it). */
 export function swapBrandName(html: string, sample: string, name: string): string {
   // A one-word name only counts as written or in capitals: "larch-wood floors" is not the brand "Larch".
@@ -138,21 +147,104 @@ export function swapBrandName(html: string, sample: string, name: string): strin
  * The accent's other shades (a darker one for small text, a lighter tint for a highlight) move to the owner's colour too,
  * keeping their own lightness, so a purple button never sits beside a rust-coloured label.
  */
-function recolourShades(html: string, oldAccent: string, newColor: string): string {
+/**
+ * What a colour the design writes becomes when its accent moves to the owner's colour: the accent itself becomes the colour,
+ * its other shades (a darker one for small text, a lighter tint for a highlight) follow it keeping their own lightness, so a purple
+ * button never sits beside a rust-coloured label. Anything unrelated (greys, other hues) is returned unchanged.
+ */
+export function recolourHex(hit: string, oldAccent: string, newColor: string): string {
+  if (!HEX.test(hit)) return hit;
+  const hex = expand(hit);
+  const target = expand(newColor);
+  if (hex === target) return hit;
+  if (hex === expand(oldAccent)) return target;
   const [oh, os] = toHsl(oldAccent);
   const [nh, ns] = toHsl(newColor);
-  if (os < 0.3) return html;
-  return html.replace(/#[0-9a-fA-F]{6}\b/g, (hit) => {
-    const hex = expand(hit);
-    if (hex === expand(newColor)) return hit;
-    const [h, s, l] = toHsl(hex);
-    const apart = Math.min(Math.abs(h - oh), 360 - Math.abs(h - oh));
-    if (apart > 14 || s < 0.35 || l < 0.12 || l > 0.9) return hit;
-    return fromHsl([nh, Math.min(1, (s / os) * ns), l]);
-  });
+  if (os < 0.3 || hit.length !== 7) return hit;
+  const [h, s, l] = toHsl(hex);
+  const apart = Math.min(Math.abs(h - oh), 360 - Math.abs(h - oh));
+  if (apart > 14 || s < 0.35 || l < 0.12 || l > 0.9) return hit;
+  return fromHsl([nh, Math.min(1, (s / os) * ns), l]);
 }
 
-export type BrandPreviewInput = { name?: string; color?: string; designName?: string };
+function recolourShades(html: string, oldAccent: string, newColor: string): string {
+  const [, os] = toHsl(oldAccent);
+  if (os < 0.3) return html;
+  return html.replace(/#[0-9a-fA-F]{6}\b/g, (hit) => recolourHex(hit, oldAccent, newColor));
+}
+
+/** The owner's description only becomes page copy when it reads like a real sentence about the business, not like a design instruction. */
+const MIN_ABOUT_CHARS = 25;
+const DESIGN_TALK = /\b(i want|i need|i would like|i'd like|make (it|me|the)|should (look|be)|looks?|design|website|web ?site|colou?rs?|layout|theme|fonts?|style|modern|minimal(ist)?|sleek)\b/i;
+
+/** The description as a sentence for the page, no longer than `max` characters (cut at a sentence, else a word); null when it should not be used. */
+export function descriptionCopy(about: string | undefined, max: number): string | null {
+  const text = (about ?? "").replace(/\s+/g, " ").trim();
+  if (text.length < MIN_ABOUT_CHARS || max < MIN_ABOUT_CHARS || DESIGN_TALK.test(text)) return null;
+  let out = text;
+  if (out.length > max) {
+    const slice = out.slice(0, max);
+    const sentence = Math.max(slice.lastIndexOf(". "), slice.lastIndexOf("! "), slice.lastIndexOf("? "));
+    if (sentence >= MIN_ABOUT_CHARS - 1) out = slice.slice(0, sentence + 1);
+    else {
+      const word = slice.lastIndexOf(" ");
+      if (word < MIN_ABOUT_CHARS) return null;
+      out = slice.slice(0, word).replace(/[\s,;:\-–—]+$/, "").replace(/\s+(and|or|but|the|a|an|of|to|for|with|in|at|on)$/i, "");
+    }
+  }
+  out = out.charAt(0).toUpperCase() + out.slice(1);
+  return /[.!?]$/.test(out) ? out : `${out}.`;
+}
+
+type TaggedText = { id: number; text: string; tag: string };
+
+/** The page's visible text in the same numbering as extractTextNodes, with the element each piece sits directly in. */
+function taggedTexts(html: string): TaggedText[] {
+  const out: TaggedText[] = [];
+  let id = 0;
+  let tag = "";
+  const re = /<!--[\s\S]*?-->|<(script|style|noscript|svg|template|textarea|iframe)\b[\s\S]*?<\/\1\s*>|<(\/?)([a-z][a-z0-9-]*)[^>]*>|<[^>]+>/gi;
+  let last = 0;
+  const visit = (chunk: string) => {
+    if (!/[\p{L}\p{N}]/u.test(chunk)) return;
+    out.push({ id: id++, text: decodeEntities(chunk).replace(/\s+/g, " ").trim(), tag });
+  };
+  for (const m of html.matchAll(re)) {
+    visit(html.slice(last, m.index ?? 0));
+    last = (m.index ?? 0) + m[0].length;
+    if (m[3]) tag = m[2] ? "" : m[3].toLowerCase();
+    else tag = "";
+  }
+  visit(html.slice(last));
+  return out;
+}
+
+const escapeAttr = (s: string) => s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+/**
+ * Puts the owner's description where the design has its intro line: the first real sentence of body copy after the main heading
+ * (the hero's sub-copy), and the page's search description when it has one. Conservative on purpose: it does nothing unless the
+ * description reads like a sentence about the business, and never makes the line more than 1.6 times longer than the design's own.
+ */
+export function applyDescription(html: string, about: string | undefined): string {
+  if (!about || descriptionCopy(about, 10_000) === null) return html;
+  let out = html;
+  const texts = taggedTexts(html);
+  const h1 = texts.find((t) => t.tag === "h1");
+  if (h1) {
+    const after = texts.filter((t) => t.id > h1.id).slice(0, 6);
+    const intro = after.find((t) => (t.tag === "p" || t.tag === "span" || t.tag === "div") && t.text.length >= 40 && t.text.split(" ").length >= 7);
+    if (intro) {
+      const copy = descriptionCopy(about, Math.floor(intro.text.length * 1.6));
+      if (copy) out = applyTextNodes(out, { [String(intro.id)]: copy });
+    }
+  }
+  const meta = descriptionCopy(about, 160);
+  if (meta) out = out.replace(/(<meta\b[^>]*\bname=["']description["'][^>]*\bcontent=)(["'])[\s\S]*?\2/i, (_all, head: string) => `${head}"${escapeAttr(meta)}"`);
+  return out;
+}
+
+export type BrandPreviewInput = { name?: string; color?: string; designName?: string; /** What the owner wrote about their business: becomes the design's intro line when it reads like a real sentence. */ about?: string };
 
 /** The design with the owner's name and colour on it. Anything missing or unusable is simply left as the design has it. */
 export function brandPreviewHtml(html: string, input: BrandPreviewInput): string {
@@ -165,6 +257,8 @@ export function brandPreviewHtml(html: string, input: BrandPreviewInput): string
       out = swapBrandName(out, sample, name.slice(0, 60));
     }
   }
+
+  out = applyDescription(out, input.about);
 
   const color = input.color && HEX.test(input.color) ? expand(input.color) : null;
   if (color) {

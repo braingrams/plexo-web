@@ -122,7 +122,7 @@ export function MultiPageSolDialog({ siteId, currentPageId, onClose, onChanged, 
     <div role="presentation" onMouseDown={(e) => e.target === e.currentTarget && stage !== "running" && onClose()} style={{ position: "fixed", inset: 0, zIndex: 120, display: "grid", placeItems: "center", background: "rgba(8,10,16,.6)", backdropFilter: "blur(6px)", padding: 12 }}>
       <div role="dialog" aria-modal="true" aria-labelledby="multi-sol-title" style={{ width: "min(94vw, 640px)", maxHeight: "92vh", overflowY: "auto", background: surface, color: ink, borderRadius: 18, border: `1px solid ${line}`, boxShadow: "0 24px 60px rgba(0,0,0,.45)", padding: 22, display: "grid", gap: 16 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <h2 id="multi-sol-title" style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, flex: 1 }}>Ask SOL about several pages</h2>
+          <h2 id="multi-sol-title" style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, flex: 1 }}>Change several pages with SOL</h2>
           {stage !== "running" && <button type="button" onClick={onClose} aria-label="Close" style={{ ...btn, width: 44, padding: 0, display: "grid", placeItems: "center", border: "none" }}><X size={18} aria-hidden /></button>}
         </div>
 
@@ -155,7 +155,7 @@ export function MultiPageSolDialog({ siteId, currentPageId, onClose, onChanged, 
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap" }}>
               <button type="button" style={btn} onClick={onClose}>Cancel</button>
               <button type="button" style={{ ...primary, opacity: canStart ? 1 : 0.5, cursor: canStart ? "pointer" : "default" }} disabled={!canStart} onClick={() => void start()}>
-                Ask SOL on {ids.length || ""} {ids.length === 1 ? "page" : "pages"}
+                Change {ids.length || ""} {ids.length === 1 ? "page" : "pages"}
               </button>
             </div>
           </>

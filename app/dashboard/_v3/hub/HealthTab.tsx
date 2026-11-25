@@ -134,7 +134,7 @@ function IssueRow({ issue, busy, editHref, onFix, onUndo, onSolFix }: { issue: I
           ) : (
             !done && (
               <>
-                <Button size="sm" variant="secondary" leftIcon={<SolGlyph size={15} />} onClick={() => onSolFix(issue)}>Ask SOL to fix</Button>
+                <Button size="sm" variant="secondary" leftIcon={<SolGlyph size={15} />} onClick={() => onSolFix(issue)}>Fix this with SOL</Button>
                 {editHref && issue.editorHint === "editor" ? <ButtonLink size="sm" variant="ghost" href={withQuery(editHref, issue.where?.find((w) => w.editor)?.editor)} leftIcon={<Pencil size={15} aria-hidden />}>{issue.where?.some((w) => w.editor) ? "Take me to it" : "Open the editor"}</ButtonLink> : null}
               </>
             )
@@ -408,7 +408,7 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
     studio.runScript<Fixed>({
       title: target === "all" ? "Fixing your site" : `Fixing "${target.title}"`,
       script: async (api) => {
-        api.say(target === "all" ? "I'll go through everything that slows your site down or makes it hard for Google and AI assistants to read, and fix what I can." : `I'll fix **${target.title}** on your site.`);
+        api.say(target === "all" ? "I'll go through everything that slows your site down or makes it hard for Google and AI tools to read, and fix what I can." : `I'll fix **${target.title}** on your site.`);
         return api.step("sol_fix_site", async () => {
           const res = await fetch(`/api/v1/sites/${siteId}/health/sol-fix`, {
             method: "POST",
@@ -430,14 +430,14 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
 
   const report = data?.last?.report ?? null;
   const when = data?.last ? new Date(data.last.createdAt).toLocaleString("en", { dateStyle: "medium", timeStyle: "short" }) : null;
-  const sub = "How fast your site opens, and how easy it is for Google and AI assistants to understand.";
+  const sub = "How fast your site opens, and how easy it is for Google and AI tools to understand.";
 
   if (loading)
     return (
       <>
         <TabBar title="Site health" sub={sub} />
         <Card padding="lg" style={{ minHeight: 220, display: "grid", placeItems: "center" }}>
-          <OptimisticLoader steps={["Checking site health…", "Testing speed and responsiveness…", "Analyzing SEO and assistant readiness…"]} subtitle="Running health diagnostics" />
+          <OptimisticLoader steps={["Checking site health…", "Testing speed and responsiveness…", "Analyzing SEO and AI visibility…"]} subtitle="Running health diagnostics" />
         </Card>
       </>
     );
@@ -501,7 +501,7 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
             <div className="plx-hrings">
               <Ring score={current?.scores?.speed ?? null} label="Speed" hint={device === "phone" ? "How fast people see your page on a phone" : "How fast people see your page on a computer"} delta={device === "phone" ? dSpeed : null} />
               <Ring score={current?.scores?.search ?? null} label="Search" hint="How well Google can read it" />
-              <Ring score={report.aeo?.score ?? null} label="AI visibility" hint="How easily AI assistants can use it" delta={dAeo} />
+              <Ring score={report.aeo?.score ?? null} label="AI visibility" hint="How easily AI tools can use it" delta={dAeo} />
             </div>
             <div className="plx-hrings plx-hrings--small">
               <Ring size={84} score={current?.scores?.easyToUse ?? null} label="Easy to use" hint="For everyone, including screen readers" />
@@ -653,10 +653,10 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
             }}
           >
             <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--plx-text)" }}>
-              ⚡ Uses AI credits {solTarget === "all" ? "(usually ~150–250 credits)" : "(usually ~100–150 credits)"}
+              ⚡ Uses credits {solTarget === "all" ? "(usually ~150–250 credits)" : "(usually ~100–150 credits)"}
             </span>
             <span style={{ fontSize: "0.78rem", color: "var(--plx-muted)" }}>
-              SOL does the full work in one pass. If you don&apos;t want to use AI credits, you can use standard fixes or open the editor to fix it manually.
+              SOL does the full work in one pass. If you don&apos;t want to use credits, you can use standard fixes or open the editor to fix it manually.
             </span>
           </div>
         </div>
@@ -705,7 +705,7 @@ export function HealthTab({ siteId, siteName, live, editHref }: { siteId: string
                 {preview.loaded.texts.skipped ? <p className="plx-hnote">We left {preview.loaded.texts.skipped} {preview.loaded.texts.kind === "titles" ? "pages" : "pictures"} alone because we could not read {preview.loaded.texts.skipped === 1 ? "it" : "them"} well enough to describe honestly.</p> : null}
                 <div className="plx-htexts__bar">
                   <Button size="sm" variant="secondary" leftIcon={<RefreshCw size={16} />} loading={!!preview.regenerating} loadingLabel="Writing again…" onClick={regenerate}>Write them again</Button>
-                  <span className="plx-hnote">{preview.loaded.texts.credits ? `Writing these used about ${preview.loaded.texts.credits} AI credit${preview.loaded.texts.credits === 1 ? "" : "s"}. ` : "Nothing is charged to look at these again. "}Writing again uses a little more.</span>
+                  <span className="plx-hnote">{preview.loaded.texts.credits ? `Writing these used about ${preview.loaded.texts.credits} credit${preview.loaded.texts.credits === 1 ? "" : "s"}. ` : "Nothing is charged to look at these again. "}Writing again uses a little more.</span>
                 </div>
               </div>
             ) : null}

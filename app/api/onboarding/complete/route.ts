@@ -9,6 +9,8 @@ import { completeOnboarding, OnboardingError } from "@/lib/onboarding/complete";
 import { applyNewSiteBrandChoice } from "@/lib/brand/siteBrand";
 import { setUpBrandInBackground } from "@/lib/strata/autoSetupBackground";
 import { parseBrandChoice } from "@/lib/brand/brandModel";
+import { CURRENT_SITE_COOKIE } from "@/lib/dashboardV3/sites";
+import { JUST_MADE_COOKIE } from "@/lib/dashboardV3/newSite";
 
 /** "Use this design" / "Skip, just personalise": save the answers, build the site with site_create, finish onboarding. */
 export async function POST(request: NextRequest): Promise<NextResponse> {
@@ -38,7 +40,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const brand = choice && result.site ? await applyNewSiteBrandChoice({ siteId: result.site.id, userId: resolved.userId, organizationId: resolved.organizationId, choice }) : undefined;
     // No choice made: set the brand up in Strata by itself, in the background.
     if (!choice && result.site) setUpBrandInBackground({ siteId: result.site.id, userId: resolved.userId, organizationId: resolved.organizationId });
-    return NextResponse.json(brand ? { ...result, brand } : result);
+    const res = NextResponse.json(brand ? { ...result, brand } : result);
+    // The new site is the one Home shows, with its guided steps first (the same as "Make a new website").
+    if (result.site) {
+      res.cookies.set(CURRENT_SITE_COOKIE, result.site.id, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+      res.cookies.set(JUST_MADE_COOKIE, result.site.id, { path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax" });
+    }
+    return res;
   } catch (err) {
     if (err instanceof MarketplaceUseError) return NextResponse.json({ error: err.message, ...err.extra, needsPurchase: err.status === 403 && !err.extra.plan }, { status: err.status });
     if (err instanceof OnboardingError) return NextResponse.json({ error: err.message }, { status: 400 });

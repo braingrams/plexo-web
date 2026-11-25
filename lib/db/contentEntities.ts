@@ -54,6 +54,13 @@ export const Template = new Entity(
       // back: the TemplateRevision (made by POST /api/templates/:id/convert-to-v2) holding its
       // classic design. Cleared when the owner goes back.
       classicBackupId: { type: "string" },
+      // When the owner opened the editor from the hub's "Your website is ready" steps (POST /api/templates/:id/start-review): the
+      // "Review and edit your pages" step is done for this site, on every device. lib/dashboardV3/startReview.ts.
+      startReviewedAt: { type: "string" },
+      // When SOL personalized this site, and when the owner gave SOL their contact details. Kept here (not only as markers in the page
+      // HTML) because the editor's recompiles drop the HTML markers. lib/dashboardV3/solMarks.ts reads them (and the legacy markers).
+      solPersonalizedAt: { type: "string" },
+      solContactGivenAt: { type: "string" },
       // Set while a page that was turned from blocks into editable code (POST /api/templates/:id/convert-to-code) can still
       // go back: the TemplateRevision holding its block design, and when it was converted. Cleared when the owner goes back.
       blocksBackupId: { type: "string" },

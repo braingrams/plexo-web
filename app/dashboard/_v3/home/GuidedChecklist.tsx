@@ -35,7 +35,7 @@ export function GuidedChecklist({ site, progress, commerceEnabled, baseDomain, d
             </ButtonLink>
             {go.href !== go.solHref ? (
               <ButtonLink href={go.solHref} variant="secondary" size="lg" leftIcon={<SolGlyph size={18} />}>
-                Ask SOL to do it
+                Do this with SOL
               </ButtonLink>
             ) : null}
           </div>

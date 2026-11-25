@@ -10,7 +10,7 @@ import { buildPageChoices, searchPageChoices, type PageChoice, type PickablePage
  * "Edit website": asks which page to change (Home, About, …) and then opens it. A site with only its homepage opens straight
  * away, since there is nothing to choose.
  */
-export function EditWebsiteButton({ siteId, fallbackHref }: { siteId: string; fallbackHref: string }) {
+export function EditWebsiteButton({ siteId, fallbackHref, label = "Edit website", variant, onStart }: { siteId: string; fallbackHref: string; /** What the button says (a brand-new site says "Review and edit your pages"). */ label?: string; variant?: "primary" | "secondary"; /** Called when editing starts, so the next-steps panel can tick "Review". */ onStart?: () => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [choices, setChoices] = useState<PageChoice[] | null>(null);
@@ -20,6 +20,7 @@ export function EditWebsiteButton({ siteId, fallbackHref }: { siteId: string; fa
   const search = useRef<HTMLInputElement>(null);
 
   async function start() {
+    onStart?.();
     setError(null);
     setQuery("");
     setOpen(true);
@@ -53,8 +54,8 @@ export function EditWebsiteButton({ siteId, fallbackHref }: { siteId: string; fa
 
   return (
     <>
-      <Button leftIcon={<Pencil size={16} aria-hidden />} onClick={() => void start()}>
-        Edit website
+      <Button variant={variant} leftIcon={<Pencil size={16} aria-hidden />} onClick={() => void start()}>
+        {label}
       </Button>
       <Modal
         open={open}

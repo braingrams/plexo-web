@@ -57,7 +57,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   if ("error" in solRoute) return NextResponse.json({ error: solRoute.error }, { status: solRoute.status });
   const { route } = solRoute;
   if (route.provider === "openai") {
-    return NextResponse.json({ error: "Rebuilding a picture needs an AI that can see images. Switch to Plexo's AI or a Claude or Gemini key in Settings." }, { status: 400 });
+    return NextResponse.json({ error: "SOL can't read pictures with your current AI setting. Switch to the AI included with your plan, or a Claude or Gemini key, in Settings → AI." }, { status: 400 });
   }
   const tier = tierFor(route, solRoute.plan, "MEDIUM");
   // A picture costs roughly one token per 750 pixels; hold generously for it.
@@ -81,7 +81,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
     usage = result.usage;
     if (result.truncated) {
-      return NextResponse.json({ error: "This picture has too much in it for the AI to describe in one go. Try a simpler or smaller picture." }, { status: 422 });
+      return NextResponse.json({ error: "This picture has too much in it for SOL to describe in one go. Try a simpler or smaller picture." }, { status: 422 });
     }
     let spec: unknown;
     try {
@@ -91,7 +91,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     }
     return NextResponse.json({ spec });
   } catch (err) {
-    return NextResponse.json({ error: err instanceof Error && err.message ? "The AI couldn't read this picture. Try again in a moment." : "The AI couldn't read this picture." }, { status: 502 });
+    return NextResponse.json({ error: err instanceof Error && err.message ? "SOL couldn't read this picture. Try again in a moment." : "SOL couldn't read this picture." }, { status: 502 });
   } finally {
     // What was used is charged even when the answer couldn't be used (Plexo's AI only; see chargeFor).
     await chargeFor(userId, route, tier, "image_to_design", usage).catch(() => undefined);

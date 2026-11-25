@@ -39,8 +39,8 @@ export async function generateImage({ apiKey, prompt }: { apiKey: string; prompt
       const noFreeTier = /free_tier[\s\S]*?limit["':]*\s*0/i.test(raw);
       throw new ImageGenerationError(
         noFreeTier
-          ? "Image generation is unavailable — the AI provider account needs billing enabled for image models."
-          : "Image generation is temporarily rate-limited by the AI provider — please try again in a minute.",
+          ? "Image generation is unavailable — the account behind your AI key needs billing enabled for images."
+          : "Image generation is temporarily rate-limited — please try again in a minute.",
       );
     }
     throw new ImageGenerationError("Image generation failed — please try again.");

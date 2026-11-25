@@ -8,12 +8,15 @@ import { ALL_SITES_PATH } from "@/lib/dashboardV3/allSites";
 import type { HomeProps } from "./homeTypes";
 import { Button, ButtonLink, Card, HelpVideoLink } from "../ui";
 import { GuidedChecklist } from "./GuidedChecklist";
+import { NewSiteNotice } from "./NewSiteNotice";
 import { ActivityCard, StatGrid, VisitsCard } from "./LiveDashboard";
 import { AllSites } from "./AllSites";
 import { AskSolCard, CopyLinkButton, OtherActionsCard, ShopActionsCard, SitePreviewCard } from "./SideCards";
 import { SkippedHome } from "./SkippedHome";
 import { AddMoreCards } from "../hub/AddMore";
 import { ProViewNudge } from "./ProViewNudge";
+import { useOptionalTour } from "../tour/TourProvider";
+import type { HomeView as TourHomeView } from "@/lib/dashboardV3/tour";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -33,10 +36,22 @@ const SOL_IDEAS: Record<string, string> = {
 export function HomeView(props: HomeProps) {
   const { mode, site, all, brand, experience, firstName, baseDomain, newSiteHref, demo, tuneHref, siteCount = 0 } = props;
   // The colourful all-sites screen is for the simple view; pros already see everything together.
-  const allSitesCta = siteCount > 0 && experience !== "pro";
+  // (A pro who just made a website sees its steps first, so they get the way to the full list too.)
+  const allSitesCta = siteCount > 0 && (experience !== "pro" || mode === "site");
   const [celebrate, setCelebrate] = useState(false);
   // Finishing happens at the bottom of the steps; bring the "Copy link" and "Go to my dashboard" buttons into view.
   const celebrating = celebrate && !!site?.progress.allDone;
+  // Tell the tour which version of Home this is, so it only points at things that are actually here.
+  const tour = useOptionalTour();
+  const reportHomeView = tour?.reportHomeView;
+  // "finishing" = the setup steps are done but the "You're live" card is still up: there is no "next step" card to point at.
+  const tourView: TourHomeView =
+    mode === "all" ? "all" : mode === "none" || !site ? "none" : !site.progress.allDone || celebrate ? (site.progress.tasks.some((t) => t.state === "current") ? "guided" : "finishing") : site.stats ? "live" : "quiet";
+  useEffect(() => {
+    reportHomeView?.(tourView);
+  }, [reportHomeView, tourView]);
+  // Leaving Home: the tour keeps the last view for other pages, but knows no Home card is on screen any more.
+  useEffect(() => () => reportHomeView?.(null), [reportHomeView]);
   useEffect(() => {
     if (celebrating) scrollHomeToTop();
   }, [celebrating]);
@@ -69,6 +84,7 @@ export function HomeView(props: HomeProps) {
       <Page allSitesCta={allSitesCta} tuneHref={tuneHref} experience={experience} demo={demo} eyebrow={`${greeting()}, ${firstName}`} title={title}>
         <div className="plx-page__grid">
           <section data-tour="home-main" style={{ display: "flex", flexDirection: "column", gap: 20, minWidth: 0 }}>
+            <NewSiteNotice siteId={site.site.id} />
             {celebrate && progress.allDone ? (
               <Card tone="tint" padding="lg" style={{ display: "flex", flexDirection: "column", gap: 16, borderColor: "var(--plx-brand)" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -116,8 +132,8 @@ export function HomeView(props: HomeProps) {
   return (
     <Page allSitesCta={allSitesCta} tuneHref={tuneHref} experience={experience} demo={demo} eyebrow={`${greeting()}, ${firstName}`} title={site.site.name}>
       {stats ? <StatGrid stats={stats.stats} /> : null}
-      <div className="plx-home__body">
-        <section data-tour="home-main" className="plx-home__main">
+      <div className="plx-home__body" data-tour={stats ? undefined : "home-main"}>
+        <section data-tour={stats ? "home-main" : undefined} className="plx-home__main">
           {stats ? <ActivityCard stats={stats} site={site.site} experience={experience} /> : null}
           {stats ? <VisitsCard days={stats.visitsByDay ?? new Array(7).fill(0)} /> : null}
         </section>

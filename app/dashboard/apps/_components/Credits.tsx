@@ -76,7 +76,7 @@ export function CreditsMeter({ credits, monthly, open, onToggle }: { credits: nu
       type="button"
       onClick={onToggle}
       aria-expanded={open}
-      aria-label={credits === null ? "AI credits" : `${n(credits)} AI credits left`}
+      aria-label={credits === null ? "Credits" : `${n(credits)} credits left`}
       style={{ display: "inline-flex", alignItems: "center", gap: 9, padding: "0.38rem 0.7rem", borderRadius: 10, cursor: "pointer", fontFamily: "inherit", color: C.text, background: "transparent", border: `1px solid ${low ? C.warning : C.border}` }}
     >
       <span style={{ width: 54 }}>{credits !== null && <Bar credits={credits} monthly={monthly} />}</span>
@@ -122,10 +122,10 @@ export function CreditsPanel({ credits, monthly, onPick, onClose }: { credits: n
   }, [onClose]);
   const low = credits !== null && isLow(credits, monthly);
   return (
-    <div ref={ref} role="dialog" aria-label="AI credits" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 360, zIndex: 80, padding: "1rem", borderRadius: 16, background: C.panelSolid, border: `1px solid ${C.borderStrong}`, boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", gap: 12 }}>
+    <div ref={ref} role="dialog" aria-label="Credits" style={{ position: "absolute", top: "calc(100% + 8px)", right: 0, width: 360, zIndex: 80, padding: "1rem", borderRadius: 16, background: C.panelSolid, border: `1px solid ${C.borderStrong}`, boxShadow: "0 24px 60px -20px rgba(0,0,0,0.7)", display: "flex", flexDirection: "column", gap: 12 }}>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
         <span style={{ fontSize: "clamp(1.25rem, 4.8vw, 1.6rem)", fontWeight: 800 }}>{credits === null ? "—" : n(Math.max(0, credits))}</span>
-        <span style={{ fontSize: "0.76rem", color: C.muted }}>AI credits left</span>
+        <span style={{ fontSize: "0.76rem", color: C.muted }}>Credits left</span>
       </div>
       {credits !== null && <Bar credits={credits} monthly={monthly} height={8} />}
       {monthly !== null && <div style={{ fontSize: "0.74rem", color: C.faint }}>Your plan adds {n(monthly)} credits each month.</div>}
@@ -150,7 +150,7 @@ export function OutOfCreditsCard({ midTurn, onPick, onDismiss, onOpenCode }: { m
     <div style={{ marginBottom: 8, padding: "0.9rem", borderRadius: 14, border: `1.5px solid ${C.text}`, background: C.panelSolid, display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "0.9rem", fontWeight: 800 }}>{midTurn ? "SOL ran out of credits partway through" : "You’ve used all your AI credits"}</div>
+          <div style={{ fontSize: "0.9rem", fontWeight: 800 }}>{midTurn ? "SOL ran out of credits partway through" : "You’ve used all your credits"}</div>
           <div style={{ fontSize: "0.78rem", color: C.muted, marginTop: 3, lineHeight: 1.5 }}>
             {midTurn ? "Everything it built so far is saved. Top up and SOL carries on from where it stopped." : "Top up to keep going. Your message is kept and SOL carries on as soon as you’re done."}
           </div>
@@ -241,7 +241,7 @@ export function TopUpSheet({ pack, returnTo, startingCredits, onDone, onClose }:
         </button>
       </div>
       <div style={{ display: "flex", justifyContent: "space-between", margin: "1rem 1.1rem 0", padding: "0.7rem 0.85rem", borderRadius: 12, background: "var(--ed-w-050)", fontSize: "0.86rem" }}>
-        <span>{n(pack.credits)} AI credits</span>
+        <span>{n(pack.credits)} credits</span>
         <strong>{pack.price ?? ""}</strong>
       </div>
       <div style={{ flex: 1, minHeight: 0, overflow: "auto", margin: "1rem 1.1rem", borderRadius: 14, background: "#fff" }}>

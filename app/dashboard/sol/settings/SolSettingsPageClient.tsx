@@ -184,7 +184,7 @@ export function ClassicSolSettings({ initialPreferences }: { initialPreferences:
 
             <Row
               title="Custom instructions"
-              description="Layered on top of the tone above, the same way custom instructions work in other AI assistants."
+              description="Layered on top of the tone above, so SOL follows them every time."
               tall
               control={
                 <>

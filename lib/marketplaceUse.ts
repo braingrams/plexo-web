@@ -3,6 +3,7 @@ import { planGateBody } from "@/lib/plan/planGate";
 import { randomUUID } from "node:crypto";
 
 import { recompileCopiedV2Page } from "@/lib/v2/copy";
+import { parseV2Design } from "@/lib/v2/design";
 import { uploadObject } from "@/lib/storage";
 import { Template, TemplateAsset, TemplatePurchase } from "@/lib/db/contentEntities";
 import type { resolveUser } from "@/lib/auth/resolveUser";
@@ -26,12 +27,17 @@ export class MarketplaceUseError extends Error {
  * RAW_UPLOAD asset copying), landing in the caller's organization as a brand new root
  * template subject to their plan's normal template-count limit. Shared by
  * POST /api/v1/marketplace/templates/:id/use and SOL's create_site_from_template.
+ *
+ * `deriveDesign` (new-editor designs only) lets the "Make a new website" flow start the copy from a personalized version of the listing's
+ * design (the owner's name, SOL's words...): it is handed the LISTING (read here, after the free/owned/plan checks, never taken from the
+ * browser), and what it returns is validated with parseV2Design before it is stored; anything invalid is dropped and the design is copied as
+ * the maker made it. `designApplied` says whether the derived design is the one the new site holds.
  */
 export async function useMarketplaceTemplate(
   resolved: ResolvedUser,
   id: string,
-  opts: { name?: string } = {},
-): Promise<{ id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; designFormat: string }> {
+  opts: { name?: string; deriveDesign?: (listing: { id: string; name: string; designJson: unknown }) => Promise<unknown> | unknown } = {},
+): Promise<{ id: string; name: string; kind: "EMAIL" | "LANDING_PAGE"; designFormat: string; designApplied: boolean }> {
   const { data: listing } = await Template.get({ id }).go();
   if (!listing || listing.marketplaceStatus !== "PUBLISHED") throw new MarketplaceUseError("We could not find that design. It may have been taken down.", 404);
 
@@ -79,7 +85,21 @@ export async function useMarketplaceTemplate(
         compiledHtml: listing.compiledHtml,
       }).go();
       await Promise.all(copiedAssets.map((a) => TemplateAsset.create({ id: randomUUID(), ...a }).go()));
-      return { id: newId, name, kind: listing.kind, designFormat };
+      return { id: newId, name, kind: listing.kind, designFormat, designApplied: false };
+    }
+  }
+
+  let designJson = listing.designJson;
+  let designApplied = false;
+  if (opts.deriveDesign && designFormat === "v2" && listing.sourceType === "BUILDER" && listing.kind === "LANDING_PAGE") {
+    try {
+      const derived = await opts.deriveDesign({ id: listing.id, name: listing.name, designJson: listing.designJson });
+      if (derived && parseV2Design(derived).ok) {
+        designJson = derived as typeof listing.designJson;
+        designApplied = true;
+      }
+    } catch (err) {
+      console.error(`Could not personalize the copy of design ${listing.id} (using the design as made):`, err);
     }
   }
 
@@ -91,9 +111,9 @@ export async function useMarketplaceTemplate(
     kind: listing.kind,
     designFormat,
     sourceType: listing.sourceType,
-    designJson: listing.designJson,
+    designJson,
     compiledHtml: listing.compiledHtml,
   }).go();
   await recompileCopiedV2Page(newId);
-  return { id: newId, name, kind: listing.kind, designFormat };
+  return { id: newId, name, kind: listing.kind, designFormat, designApplied };
 }

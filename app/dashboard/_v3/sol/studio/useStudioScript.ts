@@ -85,7 +85,7 @@ export function useStudioScript<R>(script: (api: StudioApi) => Promise<R>, opts:
       if (!live()) return;
       if (e instanceof StudioCreditsError) {
         setCreditInfo(e.info);
-        setError("SOL needs more AI credits to carry on. Add some and try again: nothing was changed.");
+        setError("SOL needs more credits to do this. Add some and try again: nothing was changed.");
       } else setError(e instanceof Error && e.message ? e.message : "SOL hit a snag. Please try again: nothing was changed.");
     }
   }, []);

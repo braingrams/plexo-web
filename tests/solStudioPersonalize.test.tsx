@@ -95,7 +95,7 @@ describe("SOL Studio personalizing a design", () => {
     handler = () => ({ status: 402, json: { outOfCredits: true, availableCredits: 2, error: "x" } });
     const { host, onApplied } = await mount();
     expect(host.querySelector('[data-testid="credit-modal"]')?.textContent).toContain("credits 2");
-    expect(host.textContent).toContain("needs more AI credits");
+    expect(host.textContent).toContain("needs more credits");
     expect(onApplied).not.toHaveBeenCalled();
   });
 

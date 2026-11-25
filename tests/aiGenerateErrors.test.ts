@@ -30,10 +30,10 @@ describe("AI generation", () => {
 
   it("provider failures read as what happened and what to do — never the SDK's wording", async () => {
     const { friendlyProviderError } = await import("@/lib/ai/providerErrors");
-    expect(friendlyProviderError({ status: 401, message: "invalid x-api-key" })).toMatch(/rejected this account's API key/);
-    expect(friendlyProviderError({ status: 429, message: "rate_limit_error" })).toMatch(/rate-limiting/);
+    expect(friendlyProviderError({ status: 401, message: "invalid x-api-key" })).toMatch(/AI key was rejected/);
+    expect(friendlyProviderError({ status: 429, message: "rate_limit_error" })).toMatch(/rate-limited/);
     expect(friendlyProviderError({ status: 529, message: "Overloaded" })).toMatch(/very busy/);
-    expect(friendlyProviderError(new Error("Request timed out."))).toMatch(/didn't respond in time/);
+    expect(friendlyProviderError(new Error("Request timed out."))).toMatch(/didn't get an answer in time/);
     expect(friendlyProviderError(new Error("Streaming is required for operations that may take longer than 10 minutes"))).not.toMatch(/Streaming/);
   });
 
@@ -41,6 +41,6 @@ describe("AI generation", () => {
     expect(aiErrorMessage(504, null)).toMatch(/longer than we can wait/);
     expect(aiErrorMessage(502, {})).toMatch(/longer than we can wait/);
     expect(aiErrorMessage(500, { error: "The AI service is very busy right now. Try again in a minute." })).toBe("The AI service is very busy right now. Try again in a minute.");
-    expect(aiErrorMessage(402, {})).toMatch(/out of AI credits/);
+    expect(aiErrorMessage(402, {})).toMatch(/needs more credits/);
   });
 });

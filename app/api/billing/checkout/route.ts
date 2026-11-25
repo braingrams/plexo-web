@@ -216,7 +216,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             price_data: {
               currency: region.currency.toLowerCase(),
               unit_amount: amountMinor,
-              product_data: { name: `${credits.toLocaleString("en-US")} AI credits` },
+              product_data: { name: `${credits.toLocaleString("en-US")} credits` },
             },
           },
         ],

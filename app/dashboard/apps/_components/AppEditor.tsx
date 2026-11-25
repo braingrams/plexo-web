@@ -729,7 +729,7 @@ export function AppEditor(props: {
               setCodeMode((v) => !v);
               setMoreOpen(false);
             }}
-            title="Edit the code yourself — no AI credits used"
+            title="Edit the code yourself — no credits used"
             style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "0.45rem 0.8rem", borderRadius: 10, cursor: "pointer", fontFamily: C.mono, fontSize: "0.8rem", fontWeight: 600, border: codeMode ? "none" : `1px solid ${C.border}`, background: codeMode ? C.text : "transparent", color: codeMode ? C.bg : C.muted }}
           >
             <Code2 size={14} /> Code

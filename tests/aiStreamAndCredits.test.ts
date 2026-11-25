@@ -58,10 +58,10 @@ describe("AI generation progress and credit checks", () => {
     const stop = generateBuilderAction({
       ...base,
       beforeAttempt: async (_m, attempt) => {
-        if (attempt > 1) throw new GenerationStoppedError("Your page needed a longer answer than your remaining AI credits cover.");
+        if (attempt > 1) throw new GenerationStoppedError("Your page needed a longer answer than your remaining credits cover.");
       },
     });
-    await expect(stop).rejects.toThrow(/remaining AI credits/);
+    await expect(stop).rejects.toThrow(/remaining credits/);
     expect(provider.calls).toHaveLength(1); // the AI was never called a second time
   });
 });

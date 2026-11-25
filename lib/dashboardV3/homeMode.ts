@@ -23,10 +23,11 @@ export function homeEntry(sites: SiteSummary[], cookieValue?: string | null): Ho
 
 /**
  * "none": no sites at all. "all": the dense everything-together Home (pros with any sites, and intermediate people
- * once the current site is online). "site": the guided steps, then that site's dashboard.
+ * once the current site is online). "site": the guided steps, then that site's dashboard. A site just made always opens on its steps.
  */
-export function homeMode(input: { siteCount: number; experience: Experience; currentAllDone: boolean }): HomeMode {
+export function homeMode(input: { siteCount: number; experience: Experience; currentAllDone: boolean; /** The current site is the one made a moment ago ("Make a new website" sets a cookie): its steps come first for everyone, pros included, until it is online. */ justMade?: boolean }): HomeMode {
   if (input.siteCount <= 0) return "none";
+  if (input.justMade && !input.currentAllDone) return "site";
   if (input.experience === "pro") return "all";
   if (input.experience === "intermediate" && input.currentAllDone) return "all";
   return "site";

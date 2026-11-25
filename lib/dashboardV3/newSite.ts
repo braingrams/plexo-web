@@ -9,7 +9,9 @@ import { INDUSTRIES, STYLES } from "@/lib/onboarding/understandWords";
 import { pickDesigns, type DesignChoice } from "@/lib/onboarding/designs";
 import { siteCreateArgs } from "@/lib/onboarding/complete";
 import { getTierFeatures } from "@/lib/subscription";
+import { CURRENT_SITE_COOKIE } from "@/lib/dashboardV3/sites";
 import { nextPlanUp, planLabel, toPlanId, PLAN } from "@/lib/plan/plans";
+import { cleanLogo, parseSolPart, type SolPart } from "@/lib/onboarding/designEditRequest";
 
 export const NEW_SITE_PATH = "/dashboard/sites/new";
 export const DESIGNS_PATH = "/dashboard/marketplace";
@@ -52,7 +54,7 @@ export const isAppGoal = (goal: string): boolean => goal === "app";
 export const MORE_WAYS: { id: string; title: string; href: string }[] = [
   { id: "upload", title: "Upload my own files", href: UPLOAD_PATH },
   { id: "app", title: "Build an app with SOL", href: solHref("I want to build an app people can sign into. Ask me what it should do, then build it.") },
-  { id: "sol", title: "Ask SOL to build it", href: solHref("Build me a website. Ask me what it is for, then make it.") },
+  { id: "sol", title: "Build it with SOL", href: solHref("Build me a website. Ask me what it is for, then make it.") },
 ];
 
 export const appHref = (name: string): string =>
@@ -129,7 +131,10 @@ export function paidDesignFrom(search: string): string | null {
   return id && /^[\w-]{1,80}$/.test(id) ? id : null;
 }
 
-export type CreateRequest = { goal: NewSiteGoal; name: string; designId: string; marketDesignId?: string; personalizedHtml?: string; /** What the owner said the website is for and should look like: shapes the design picked and the words on the site. */ about?: string; /** What SOL understood from it (only the allowed words). */ industry?: string; style?: string };
+export type CreateRequest = { goal: NewSiteGoal; name: string; designId: string; marketDesignId?: string; personalizedHtml?: string; /** The design exactly as the owner saw it in the preview (their name, colour and description on it) when SOL did not rewrite it: this is what the site is made with. */ brandedHtml?: string; /** The colour the preview was recoloured to (#rrggbb), so the design's own colour data follows. */ brandColor?: string; /** What the owner said the website is for and should look like: shapes the design picked and the words on the site. */ about?: string; /** What SOL understood from it (only the allowed words). */ industry?: string; style?: string; /** A new-editor marketplace design: SOL's part of the personalization (its words by number, sections it removed, the kind of business, whether contact details were given). The design itself is rebuilt on the server from the listing; this is only the small recipe. */ designEdits?: SolPart; /** The logo the preview showed (an address), so the site keeps the same logo as the preview. */ brandLogoUrl?: string };
+
+/** The most branded design HTML a create request carries (a design is well under this; anything bigger is left out rather than refused). */
+export const MAX_BRANDED_HTML_CHARS = 2_000_000;
 
 export function parseCreateRequest(body: unknown): { ok: true; value: CreateRequest } | { ok: false; error: string } {
   const b = (body ?? {}) as Record<string, unknown>;
@@ -139,10 +144,14 @@ export function parseCreateRequest(body: unknown): { ok: true; value: CreateRequ
   if (!name) return { ok: false, error: "Give your website a name, like your business name." };
   const market = typeof b.marketDesignId === "string" && b.marketDesignId.trim() ? b.marketDesignId.trim() : undefined;
   const personalizedHtml = typeof b.personalizedHtml === "string" && b.personalizedHtml.trim() ? b.personalizedHtml.trim() : undefined;
+  const brandedHtml = typeof b.brandedHtml === "string" && b.brandedHtml.trim() && b.brandedHtml.length <= MAX_BRANDED_HTML_CHARS ? b.brandedHtml.trim() : undefined;
+  const brandColor = typeof b.brandColor === "string" && /^#[0-9a-f]{6}$/i.test(b.brandColor.trim()) ? b.brandColor.trim() : undefined;
   const about = typeof b.about === "string" ? clean(b.about).slice(0, 500) : "";
   const industry = (INDUSTRIES as readonly string[]).find((i) => i === b.industry);
   const style = (STYLES as readonly string[]).find((i) => i === b.style);
-  return { ok: true, value: { goal, name: name.slice(0, 80), designId: typeof b.designId === "string" ? b.designId : "", ...(market ? { marketDesignId: market } : {}), ...(personalizedHtml ? { personalizedHtml } : {}), ...(about ? { about } : {}), ...(industry ? { industry } : {}), ...(style ? { style } : {}) } };
+  const designEdits = market && b.designEdits && typeof b.designEdits === "object" ? parseSolPart(b.designEdits) : undefined;
+  const brandLogoUrl = cleanLogo(b.brandLogoUrl);
+  return { ok: true, value: { goal, name: name.slice(0, 80), designId: typeof b.designId === "string" ? b.designId : "", ...(market ? { marketDesignId: market } : {}), ...(personalizedHtml ? { personalizedHtml } : {}), ...(brandedHtml ? { brandedHtml } : {}), ...(brandColor ? { brandColor } : {}), ...(about ? { about } : {}), ...(industry ? { industry } : {}), ...(style ? { style } : {}), ...(designEdits ? { designEdits } : {}), ...(brandLogoUrl ? { brandLogoUrl } : {}) } };
 }
 
 /** The arguments for site_create: the same ones onboarding builds. */
@@ -176,11 +185,56 @@ export function newSiteRedirect(opts: { newDashboard: boolean; classic?: string 
   return opts.newDashboard && classic !== "1" ? NEW_SITE_PATH : null;
 }
 
+/** Set when a website is made: Home then shows that site's guided steps first (see homeMode), whichever view the person usually has. */
+export const JUST_MADE_COOKIE = "plexo-just-made";
+
 /**
- * Where the owner lands right after "Create my website". A site SOL already personalized has its words, colours and details, so there
- * is nothing left to edit before it goes online: they go to the dashboard, where "Finish up" and Publish are waiting. Any other new
- * site opens its own page, where the pages and the editor are.
+ * Where the owner lands right after "Create my website": always the dashboard home, whether or not SOL personalized the site. Home
+ * shows the new site's guided steps ("Review and edit your pages", "Finish up"...), so the next thing to do is always in front of
+ * them, never a hub of tabs with no obvious next step.
  */
-export function afterCreateHref(siteId: string, personalizedWithSol: boolean): string {
-  return personalizedWithSol ? "/dashboard" : `/dashboard/sites/${siteId}`;
+export function afterCreateHref(): string {
+  return "/dashboard";
+}
+
+/**
+ * Makes a site that was just created (made, uploaded or moved from WordPress) the owner's current site and flags it as just made, so
+ * Home opens on its guided steps. Called by every route that creates a site the owner then lands on.
+ */
+export function markSiteJustMade(res: { cookies: { set: (name: string, value: string, opts: { path: string; maxAge: number; sameSite: "lax" }) => unknown } }, siteId: string): void {
+  res.cookies.set(CURRENT_SITE_COOKIE, siteId, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+  res.cookies.set(JUST_MADE_COOKIE, siteId, { path: "/", maxAge: 60 * 60 * 24 * 30, sameSite: "lax" });
+}
+
+/** Where a note about the new site waits for Home to show it (sessionStorage survives the move from this page to the dashboard). */
+export const NEW_SITE_NOTICE_KEY = "plexo-new-site-notice";
+
+export type NewSiteNotice = { siteId: string; messages: string[] };
+
+/** The plain-words notes from a create response (`warnings`): only text, trimmed, no repeats, a handful. Anything else is dropped. */
+export function noticeMessages(warnings: unknown): string[] {
+  if (!Array.isArray(warnings)) return [];
+  const out: string[] = [];
+  for (const w of warnings) {
+    const text = typeof w === "string" ? w.replace(/\s+/g, " ").trim().slice(0, 400) : "";
+    if (text && !out.includes(text)) out.push(text);
+  }
+  return out.slice(0, 5);
+}
+
+/** What to keep for Home, or null when there is nothing to say. */
+export function noticeFor(siteId: string, warnings: unknown): NewSiteNotice | null {
+  const messages = noticeMessages(warnings);
+  return siteId && messages.length ? { siteId, messages } : null;
+}
+
+/** Reads the saved note back; only when it belongs to the site Home is showing. */
+export function readNotice(raw: string | null | undefined, siteId: string): NewSiteNotice | null {
+  try {
+    const v = JSON.parse(raw ?? "") as Partial<NewSiteNotice>;
+    const messages = noticeMessages(v.messages);
+    return v.siteId === siteId && messages.length ? { siteId, messages } : null;
+  } catch {
+    return null;
+  }
 }

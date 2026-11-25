@@ -2,7 +2,8 @@
  * Every step of the product walkthrough, in order (see lib/dashboardV3/tour.ts for how to add
  * one). The foundation covers the shell; each section adds its own steps here with an anchor
  * (`data-tour="…"`) on its page. Steps whose anchor isn't on screen (e.g. hidden on phones) are
- * skipped automatically, so a step never points at nothing.
+ * skipped automatically, so a step never points at nothing. Steps that only exist on one Home view say so with
+ * `homeViews`, so they are left out up front (no wait, and "N of M" stays right).
  *
  * `route: "*"` = shell-wide; the step shows on whatever page the tour is on.
  */
@@ -19,7 +20,7 @@ export const TOUR_AREAS: TourArea[] = [
   { id: "add-more", title: "Adding more to your site", desc: "A shop, blog, bookings, a course or an email sign-up, on the same site." },
   { id: "store", title: "Products and orders", desc: "What you sell and the orders that come in." },
   { id: "extras", title: "Emails", desc: "Emails you send to your customers." },
-  { id: "settings", title: "Settings", desc: "Profile, plan and billing, team, domains, branding, emails, AI tools and moving sites." },
+  { id: "settings", title: "Settings", desc: "Profile, plan and billing, team, domains, branding, emails, connecting Claude or ChatGPT, and moving sites." },
 ];
 
 const siteRoute = (tab: string) => (ctx: TourContext) => (ctx.siteId ? `/dashboard/sites/${ctx.siteId}?tab=${tab}` : null);
@@ -27,6 +28,7 @@ const siteRoute = (tab: string) => (ctx: TourContext) => (ctx.siteId ? `/dashboa
 export const TOUR_STEPS: TourStep[] = [
   {
     id: "home-intro",
+    homeViews: ["guided", "finishing", "live", "quiet"],
     area: "home",
     anchor: "home-main",
     route: "/dashboard",
@@ -38,6 +40,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "home-next-step",
+    homeViews: ["guided"],
     area: "home",
     anchor: "home-current-task",
     route: "/dashboard",
@@ -49,6 +52,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "home-your-site",
+    homeViews: ["guided", "finishing", "live", "quiet"],
     area: "home",
     anchor: "home-site-card",
     route: "/dashboard",
@@ -60,6 +64,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "home-numbers",
+    homeViews: ["live"],
     area: "home",
     anchor: "home-stats",
     route: "/dashboard",
@@ -71,6 +76,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "home-all-sites",
+    homeViews: ["all"],
     area: "sites",
     anchor: "home-sites",
     route: "/dashboard",
@@ -78,17 +84,6 @@ export const TOUR_STEPS: TourStep[] = [
     body: "Every site you've made, with whether it's online and how it's doing this week.",
     tours: ["detailed"],
     order: 17,
-    placement: "auto",
-  },
-  {
-    id: "home-another",
-    area: "sites",
-    anchor: "home-create-another",
-    route: "/dashboard",
-    title: "All my websites",
-    body: "One button to see every site, switch between them, or start another. Your first one keeps running as it is.",
-    tours: ["detailed"],
-    order: 18,
     placement: "auto",
   },
   {
@@ -129,11 +124,15 @@ export const TOUR_STEPS: TourStep[] = [
     id: "ask-sol",
     area: "around",
     anchor: "ask-sol",
+    // The box (or icon) in the top bar AND the "Ask SOL" menu item: both are ways to reach me, so both light up. Whichever is hidden on this screen is simply left out.
+    anchors: ["ask-sol", "ask-sol-menu"],
     route: "*",
-    title: "Ask SOL for anything",
-    body: "Type what you want in your own words, like “add a pricing page”, and SOL makes it for you.",
+    mascot: "sol",
+    title: "Hi, I'm SOL",
+    body: "I can build and change your website for you — just tell me what you want. Start from the top bar or from Ask SOL in the menu, in your own words, like “add a pricing page”.",
     tours: ["short", "detailed"],
-    order: 40,
+    order: 11,
+    placement: "bottom",
   },
   {
     id: "site-hub",
@@ -200,8 +199,8 @@ export const TOUR_STEPS: TourStep[] = [
     area: "settings",
     anchor: "plan-credits",
     route: "/dashboard/settings/plan",
-    title: "AI credits",
-    body: "These are what SOL spends when it builds for you. Add more here if you run low.",
+    title: "Credits",
+    body: "Credits are what SOL uses each time it builds or changes something for you. Add more here if you run low.",
     tours: ["detailed"],
     order: 912,
   },
@@ -261,7 +260,7 @@ export const TOUR_STEPS: TourStep[] = [
     anchor: "connect-cards",
     route: "/dashboard/settings/connect",
     title: "Use Claude or ChatGPT",
-    body: "Copy one link, follow three steps, then ask your AI tool to change your site.",
+    body: "Copy one link, follow three steps, then ask Claude or ChatGPT to change your site.",
     tours: ["detailed"],
     order: 950,
   },
@@ -284,16 +283,6 @@ export const TOUR_STEPS: TourStep[] = [
     body: "API keys and tools for building with Plexo. Only shown up front if you chose the Everything view.",
     tours: ["detailed"],
     order: 970,
-  },
-  {
-    id: "home-add-more",
-    area: "add-more",
-    anchor: "hub-add-more",
-    route: "/dashboard",
-    title: "Add more to this site",
-    body: "A shop, a blog, bookings, a course or an email sign-up. Each one is added to this same website, not a new one.",
-    tours: ["detailed"],
-    order: 19,
   },
   {
     id: "sites-list",
@@ -327,16 +316,18 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "site-pages",
+    siteTab: "pages",
     area: "site",
     anchor: "hub-pages",
     route: siteRoute("pages"),
     title: "Your pages",
-    body: "Every page of this site is here. Open one to change it, or use More above to add, reorder or ask SOL about several pages.",
+    body: "Every page of this site is here. Open one to change it, or use More above to add or reorder pages, or have SOL change several at once.",
     tours: ["detailed"],
     order: 102,
   },
   {
     id: "site-add-page",
+    siteTab: "pages",
     area: "site",
     anchor: "hub-add-page",
     route: siteRoute("pages"),
@@ -347,6 +338,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "site-add-more",
+    siteTab: "pages",
     area: "add-more",
     anchor: "hub-add-more",
     route: siteRoute("pages"),
@@ -400,6 +392,7 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "site-brand",
+    siteTab: "brand",
     area: "site",
     anchor: "hub-brand",
     route: siteRoute("brand"),
@@ -451,13 +444,14 @@ export const TOUR_STEPS: TourStep[] = [
   },
   {
     id: "site-settings-more",
+    siteTab: "more",
     area: "add-more",
     anchor: "hub-add-more",
-    route: siteRoute("settings"),
-    title: "Add more from here too",
-    body: "The same \u201cAdd more to your site\u201d options are on this page, so you never have to hunt for them.",
+    route: siteRoute("more"),
+    title: "Add more from the More tab too",
+    body: "The same \u201cAdd more to your site\u201d options are in the More tab, so you never have to hunt for them.",
     tours: ["detailed"],
-    order: 171,
+    order: 181,
   },
   {
     id: "site-set-general",

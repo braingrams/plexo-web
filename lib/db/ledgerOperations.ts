@@ -4,7 +4,7 @@ import { docClient } from "./client";
 import { User } from "./coreEntities";
 import { CreditLedgerEntry, StripeEvent } from "./ledgerEntities";
 import type { SubscriptionPlan } from "@/lib/subscription";
-import { planMonthlyCredits } from "@/lib/credits/value";
+import { firstSiteGrantCredits, planMonthlyCredits } from "@/lib/credits/value";
 import { allowancePlan } from "@/lib/plan/entitlement";
 import { planLabel } from "@/lib/plan/plans";
 import { computeCostUsd, creditsForUsd } from "@/lib/credits/pricing";
@@ -329,6 +329,39 @@ export async function chargeUsage(
   return { creditsCharged: credits, allowanceBalance, topupBalance, overdrawnBy };
 }
 
+/**
+ * The one-time first-site gift (lib/credits/value.ts): a Free account gets enough AI to build and
+ * polish its first website without ever meeting a top-up screen. Goes into the top-up bucket, so
+ * it doesn't expire with the month. Exactly-once: the write only succeeds while `firstSiteGrantAt`
+ * is unset, so two requests racing to grant it (or a retry) can never give it twice — the loser's
+ * condition fails and it just carries on with what the winner wrote.
+ */
+async function grantFirstSiteCredits(user: UserItem): Promise<void> {
+  const credits = firstSiteGrantCredits();
+  if (credits <= 0) return;
+  const topupBalance = user.topupBalance ?? 0;
+  const allowanceBalance = user.allowanceBalance ?? 0;
+  const updateUser = User.patch({ id: user.id })
+    .set({ topupBalance: topupBalance + credits, firstSiteGrantAt: new Date().toISOString() })
+    .where((attr, op) => `${op.notExists(attr.firstSiteGrantAt)} AND ${op.eq(attr.topupBalance, topupBalance)}`)
+    .params();
+  const createEntry = CreditLedgerEntry.create({
+    id: crypto.randomUUID(),
+    userId: user.id,
+    type: "FIRST_SITE_GRANT",
+    amount: credits,
+    balanceAfter: allowanceBalance + topupBalance + credits,
+    description: "A gift to build your first site",
+  }).params();
+  try {
+    await docClient.send(buildTransactWrite(updateUser, createEntry));
+  } catch (err) {
+    // Lost a race (someone else granted, or the balance moved): the caller re-reads. If the
+    // balance merely moved, the next balance check tries again; the flag still guards "once".
+    if (!isRetryableContention(err)) throw err;
+  }
+}
+
 export interface CreditBalance {
   allowanceBalance: number;
   topupBalance: number;
@@ -350,7 +383,14 @@ const ALLOWANCE_PERIOD_MS = 30 * 24 * 60 * 60 * 1000;
 export async function ensureCreditPeriod(userId: string): Promise<CreditBalance> {
   const { data } = await User.get({ id: userId }).go();
   if (!data) throw new Error(`ensureCreditPeriod: user ${userId} not found`);
-  const user = data as UserItem;
+  let user = data as UserItem;
+  // Every AI path reads the balance here, so this is where the one-time first-site gift lands:
+  // before anyone is ever told they're out of credits while building their first site.
+  if (!user.firstSiteGrantAt && allowancePlan(user) === "FREE") {
+    await grantFirstSiteCredits(user);
+    const { data: fresh } = await User.get({ id: userId }).go();
+    if (fresh) user = fresh as UserItem;
+  }
   const allowanceBalance = user.allowanceBalance ?? 0;
   const topupBalance = user.topupBalance ?? 0;
   const allowanceResetAt = user.allowanceResetAt ?? new Date(0).toISOString();

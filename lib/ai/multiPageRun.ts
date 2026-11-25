@@ -53,8 +53,8 @@ export async function runOnPages(opts: {
       }
       const reply = await opts.deps.ask({ question: opts.question, page, signal: opts.signal });
       if (opts.deps.isOutOfCredits(reply)) {
-        set(i, { status: "no-credits", note: "You ran out of AI credits before SOL could start this page." });
-        stopFrom(i + 1, "no-credits", "Not started: out of AI credits");
+        set(i, { status: "no-credits", note: "SOL ran out of credits before it could start this page." });
+        stopFrom(i + 1, "no-credits", "Not started: out of credits");
         return states;
       }
       const parsed = opts.deps.parse(reply);
@@ -96,8 +96,8 @@ export function undoableStates(states: PageRunState[]): PageRunState[] {
 /** Worst-case credits for the pages SOL will actually work on, in plain words. */
 export function creditNote(est: { paidBy: string; total: number; balance: number | null; perPage: number[] } | null): string {
   if (!est) return "";
-  if (est.paidBy !== "plexo") return "Uses your own AI key, so no Plexo credits are used.";
+  if (est.paidBy !== "plexo") return "Uses your own AI key, so no credits are used.";
   const up = Math.max(1, Math.ceil(est.total));
   const bal = est.balance === null ? "" : ` You have ${Math.floor(est.balance).toLocaleString()}.`;
-  return `Uses up to about ${up.toLocaleString()} AI credits (usually less).${bal}`;
+  return `Uses up to about ${up.toLocaleString()} credits (usually less).${bal}`;
 }

@@ -14,7 +14,7 @@ import { NO_SELECTION, selectionToChoice, type PickerSelection } from "@/lib/das
 import { createStrataAdapter } from "@/app/dashboard/apps/_components/strataAdapter";
 import { CURRENT_SITE_COOKIE } from "@/lib/dashboardV3/sites";
 import {
-  afterCreateHref, afterFork, appHref, paidDesignFrom, PAID_RETRY, PENDING_KEY, readPending, defaultSiteName, isAppGoal, limitNote, MORE_WAYS, NEW_SITE_GOALS, OTHER_EDITOR_HREF, STARTS,
+  afterCreateHref, afterFork, appHref, paidDesignFrom, PAID_RETRY, PENDING_KEY, readPending, defaultSiteName, isAppGoal, limitNote, MORE_WAYS, NEW_SITE_NOTICE_KEY, noticeFor, NEW_SITE_GOALS, OTHER_EDITOR_HREF, STARTS,
   type NewSiteGoal, type Start,
 } from "@/lib/dashboardV3/newSite";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
@@ -24,7 +24,7 @@ import { BrandStepContent } from "./BrandStepContent";
 import type { PickerDesign } from "../designs/DesignPicker";
 import { CreditModal } from "../sol/CreditModal";
 import { SolPersonalizeModal } from "./SolPersonalizeModal";
-import { PersonalizeStudio, type PersonalizeResult } from "./PersonalizeStudio";
+import { PersonalizeStudio, type PersonalizeResult, type SolEdits } from "./PersonalizeStudio";
 
 export type NewSiteContext = {
   plan: string;
@@ -35,7 +35,7 @@ export type NewSiteContext = {
 };
 
 type Screen = "fork" | "goal" | "brand" | "look" | "all" | "making";
-type Design = { id: string; name: string; description: string; html?: string };
+type Design = { id: string; name: string; description: string; html?: string; /** A new-editor design: its preview and the new site are built by the server from the design itself. */ v2?: boolean };
 
 const STEP_TITLE: Record<Screen, string> = { fork: "", goal: "What is it for?", brand: "Choose colours & logo", look: "Pick a look", all: "All designs", making: "Making your website" };
 const STEP_NO: Record<Screen, number> = { fork: 0, goal: 1, brand: 2, look: 3, all: 3, making: 4 };
@@ -84,6 +84,10 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   useEffect(() => () => { if (backTimer.current) window.clearTimeout(backTimer.current); }, []);
   const [isPersonalized, setIsPersonalized] = useState(false);
   const [personalizedHtml, setPersonalizedHtml] = useState<string | null>(null);
+  /** SOL's part of a personalized new-editor design (words by number, sections removed...), and the design it belongs to. */
+  const [solEdits, setSolEdits] = useState<{ designId: string; edits: SolEdits } | null>(null);
+  /** The server-built preview of a new-editor design with the owner's name, description, colour and logo on it (null until it arrives). */
+  const [v2Html, setV2Html] = useState<{ key: string; html: string } | null>(null);
   const [availableCredits, setAvailableCredits] = useState<number | null>(null);
   const [creditCost, setCreditCost] = useState(20);
   const [paidBy, setPaidBy] = useState<"plexo" | "own-key">("plexo");
@@ -121,9 +125,29 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   const chosenDesign = designs.find((d) => d.id === designId) ?? designs[0] ?? null;
   // The design as the owner will see it: their name and chosen colour on it from the start, before SOL does anything.
   const brandedHtml = useMemo(
-    () => (chosenDesign?.html ? brandPreviewHtml(chosenDesign.html, { name: name.trim(), color: brand?.colors?.[0], designName: chosenDesign.name }) : null),
-    [chosenDesign?.html, chosenDesign?.name, name, brand?.colors],
+    () => (chosenDesign?.html ? brandPreviewHtml(chosenDesign.html, { name: name.trim(), color: brand?.colors?.[0], designName: chosenDesign.name, about: about.trim() }) : null),
+    [chosenDesign?.html, chosenDesign?.name, name, about, brand?.colors],
   );
+  // A new-editor design is previewed from its own design data: the server edits the design (name, description, colour, logo) and compiles it with the
+  // compiler the editor and publisher use, so the preview is what the editor will hold and what publishes. Until it arrives (or if it can't) the
+  // page-text preview above stands in.
+  const v2Key = chosenDesign?.v2 ? JSON.stringify([chosenDesign.id, name.trim(), about.trim(), brand?.colors ?? [], brand?.logoUrl ?? ""]) : "";
+  useEffect(() => {
+    if (!chosenDesign?.v2 || preview?.mock || personalizedHtml) return;
+    let alive = true;
+    const timer = window.setTimeout(() => {
+      fetch("/api/onboarding/personalize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stage: "preview", designId: chosenDesign.id, profile: { goal: goal || "business-site", brand: { ...(brand ?? {}), name: name.trim(), ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}) } } }),
+      })
+        .then((r) => r.json().catch(() => null))
+        .then((data) => { if (alive && typeof data?.html === "string") setV2Html({ key: v2Key, html: data.html }); })
+        .catch(() => {});
+    }, 300);
+    return () => { alive = false; window.clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [v2Key, personalizedHtml]);
   const pickGoal = (g: NewSiteGoal) => {
     setGoal(g);
     if (!nameEdited) setName(defaultSiteName(context.brand?.name, g, context.siteNames));
@@ -171,6 +195,8 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     setDesigns([]);
     setLoadingDesigns(true);
     setPersonalizedHtml(null);
+    setSolEdits(null);
+    setV2Html(null);
     setIsPersonalized(false);
     const id = ++request.current;
     try {
@@ -247,6 +273,7 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
   /** SOL finished: the preview now shows the personalized design. */
   const personalized = (result: PersonalizeResult) => {
     setPersonalizedHtml(result.html);
+    setSolEdits(chosenDesign?.v2 && result.edits ? { designId: chosenDesign.id, edits: result.edits } : null);
     setIsPersonalized(true);
     if (typeof result.creditsRemaining === "number") setAvailableCredits(result.creditsRemaining);
     // Hand the owner straight back to the preview, now showing their words, once they have seen SOL say it is done.
@@ -254,14 +281,15 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     if (backTimer.current) window.clearTimeout(backTimer.current);
     backTimer.current = window.setTimeout(() => {
       setStudioRun(null);
-      toast.show({ title: "SOL personalized your design", description: "This is how it looks now. Not quite right? Press Re-personalize.", tone: "success" });
+      toast.show({ title: "SOL made your design yours", description: "SOL wrote these headlines for your business. Edit any of them or ask for another version with Rewrite this with SOL.", tone: "success" });
     }, 1400);
   };
 
   /** Makes the site (from the kit design, or from a marketplace design) and opens it. */
-  const make = async (extra: { designId?: string; marketDesignId?: string }, who: { goal: NewSiteGoal; name: string }, tries = 1) => {
+  const make = async (extra: { designId?: string; marketDesignId?: string; /** A new-editor design: SOL's part of it. The server rebuilds the design from the listing; no page HTML is sent for such a design. */ designEdits?: SolEdits; /** The design as the owner saw it: SOL's version, or the one with their name, colour and description on it. */ html?: { personalized?: string; branded?: string } }, who: { goal: NewSiteGoal; name: string }, tries = 1) => {
     setError("");
     setScreen("making");
+    const { html: approved, ...design } = extra;
     try {
       if (preview?.mock) { await new Promise((r) => setTimeout(r, 600)); setScreen("look"); return; }
       for (let i = 0; i < tries; i++) {
@@ -271,8 +299,11 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
           body: JSON.stringify({
             goal: who.goal,
             name: who.name,
-            ...extra,
-            ...(personalizedHtml ? { personalizedHtml } : {}),
+            ...design,
+            ...(approved?.personalized ? { personalizedHtml: approved.personalized } : {}),
+            ...(!approved?.personalized && approved?.branded ? { brandedHtml: approved.branded } : {}),
+            ...(brand?.colors?.[0] ? { brandColor: brand.colors[0] } : {}),
+            ...(extra.marketDesignId && brand?.logoUrl ? { brandLogoUrl: brand.logoUrl } : {}),
             ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}),
             ...(feel ? { industry: feel.industry, style: feel.style } : {}),
             ...(selectionToChoice(brandPick) ? { brand: selectionToChoice(brandPick) } : {}),
@@ -283,10 +314,16 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
           if (data.brand?.ok && data.brand.project?.name) toast.show({ title: `Your "${data.brand.project.name}" brand is on your website`, tone: "success" });
           else if (data.brand && !data.brand.ok && data.brand.message) toast.show({ title: "Your website is ready", description: data.brand.message, tone: "info" });
           try { document.cookie = `${CURRENT_SITE_COOKIE}=${encodeURIComponent(data.site.id)}; Path=/; Max-Age=${60 * 60 * 24 * 365}; SameSite=Lax`; sessionStorage.removeItem(PENDING_KEY); } catch { /* the server set it too */ }
+          // Anything that could not be carried over automatically is told in plain words: now, and again on the dashboard (this page is about
+          // to be replaced, so the note waits in the browser for Home to show it until the owner closes it).
+          const note = noticeFor(data.site.id, data.warnings);
+          if (note) {
+            try { sessionStorage.setItem(NEW_SITE_NOTICE_KEY, JSON.stringify(note)); } catch { /* the toast below still says it */ }
+            toast.show({ title: "Your website is ready. A few things to check", description: note.messages[0], tone: "info" });
+          }
           onClose?.();
-          // A site SOL already personalized has its words, colours and details: there is nothing left to edit before it goes online,
-          // so the owner lands on the dashboard (where "Finish up" and Publish are waiting), not in the editing area.
-          router.push(afterCreateHref(data.site.id, Boolean(personalizedHtml)));
+          // Always the dashboard: it shows this website's next steps ("Review and edit your pages", "Finish up"), whether or not SOL personalized it.
+          router.push(afterCreateHref());
           router.refresh();
           return;
         }
@@ -299,8 +336,24 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     }
   };
   const isKit = ["home-sales", "home-showcase", "home-simple", "home-shop", "home-blog"].includes(designId);
-  const create = () => (goal ? make(isKit ? { designId } : { marketDesignId: designId, designId }, { goal, name: name.trim() }) : undefined);
-  const useMarketDesign = (d: PickerDesign) => (goal ? make({ marketDesignId: d.id }, { goal, name: name.trim() }) : undefined);
+  // What the site is made from is what the owner saw: SOL's version of the design they previewed, or that design with their name,
+  // colour and description on it. (SOL's version belongs to the design it was made for, never to another one picked later.)
+  const approvedFor = (id: string): { personalized?: string; branded?: string } | undefined =>
+    chosenDesign && chosenDesign.id === id ? { ...(personalizedHtml ? { personalized: personalizedHtml } : {}), ...(brandedHtml ? { branded: brandedHtml } : {}) } : undefined;
+  const create = () => {
+    if (!goal) return undefined;
+    const v2 = chosenDesign?.id === designId && chosenDesign.v2 === true;
+    return make({ ...(isKit ? { designId } : { marketDesignId: designId, designId }), ...(v2 && solEdits?.designId === designId ? { designEdits: solEdits.edits } : {}), html: v2 ? undefined : approvedFor(designId) }, { goal, name: name.trim() });
+  };
+  const useMarketDesign = (d: PickerDesign) => {
+    if (!goal) return undefined;
+    // A new-editor design needs no page HTML: the server builds the site from the design with the owner's name, description, colour and logo.
+    if (d.v2) return make({ marketDesignId: d.id, ...(solEdits?.designId === d.id ? { designEdits: solEdits.edits } : {}) }, { goal, name: name.trim() });
+    const own = approvedFor(d.id);
+    // A design picked from "All designs" gets the same treatment the preview gives: the owner's name, colour and description on it.
+    const branded = own ? undefined : d.html ? brandPreviewHtml(d.html, { name: name.trim(), color: brand?.colors?.[0], designName: d.name, about: about.trim() }) : undefined;
+    return make({ marketDesignId: d.id, html: own ?? (branded ? { branded } : undefined) }, { goal, name: name.trim() });
+  };
 
   // Back from paying for a design in the card window (?paidDesign=): make the site from it with what they had typed.
   const resumed = useRef(false);
@@ -459,12 +512,12 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
     );
   }
 
-  const displayHtml = personalizedHtml ?? brandedHtml;
+  const displayHtml = personalizedHtml ?? (chosenDesign?.v2 && v2Html && v2Html.key === v2Key ? v2Html.html : brandedHtml);
 
   return (
     <>
       <div className="plx-ns__top">{back(brandStep ? "brand" : "goal")}<p className="plx-ns__step">{stepText("look", brandStep)}</p></div>
-      {heading(`Pick a look for ${name.trim() || "your website"}`, "Tailored to your brand and goals. Preview on desktop or mobile, personalize with SOL, or explore all designs.")}
+      {heading(`Pick a look for ${name.trim() || "your website"}`, "Tailored to your brand and goals. Preview on desktop or mobile, make it yours with SOL, or explore all designs.")}
       {error ? <GateOrError error={error}><Notice kind="warning" title="Something went wrong">{error}</Notice></GateOrError> : null}
       {typeUsed && !loadingDesigns ? (
         <div className="plx-ns__kind">
@@ -486,11 +539,11 @@ function Steps({ mode, context, onClose, preview }: { mode: "dialog" | "page"; c
         siteName={name.trim()}
         onPersonalize={askToPersonalize}
         studio={
-          studioRun !== null && chosenDesign?.html ? (
+          studioRun !== null && (chosenDesign?.html || chosenDesign?.v2) ? (
             <PersonalizeStudio
               key={studioRun}
               profile={{ goal: goal || "business-site", brand: { ...(brand ?? {}), name: name.trim(), ...(about.trim() ? { about: about.trim().slice(0, 500) } : {}) } }}
-              design={{ id: chosenDesign.id, name: chosenDesign.name, description: chosenDesign.description, html: brandedHtml ?? chosenDesign.html }}
+              design={{ id: chosenDesign.id, name: chosenDesign.name, description: chosenDesign.description, html: brandedHtml ?? chosenDesign.html ?? "", v2: chosenDesign.v2 }}
               creditCost={creditCost}
               onApplied={personalized}
               onClose={() => setStudioRun(null)}

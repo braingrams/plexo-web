@@ -22,7 +22,7 @@ export type PlanView = { id: PlanId; name: string; tagline: string; price: strin
 const TAGLINES: Record<PlanId, string> = {
   FREE: "Try Plexo with one live website.",
   STARTER: "For a growing business with its own web address.",
-  PRO: "For people who build a lot, with more websites and more AI help.",
+  PRO: "For people who build a lot, with more websites and more credits for SOL.",
   ENTERPRISE: "Your own brand everywhere, with a dedicated contact.",
 };
 
@@ -51,7 +51,7 @@ export function planView(id: PlanId, prices: PriceSource = {}): PlanView {
   included.push(f.maxPublishedSites === null ? "As many live websites as you like" : f.maxPublishedSites === 1 ? "1 live website" : `${f.maxPublishedSites} live websites`);
   included.push(f.maxPublishedPagesPerSite === null ? "Every page of your site online" : "Your homepage online (other pages stay saved)");
   included.push(f.customDomainEnabled ? "Your own web address, like mybusiness.com" : "A free Plexo web address");
-  included.push(`AI help worth ${money(PLAN_MONTHLY_AI_USD[id])} every month`);
+  included.push(`Credits for SOL worth ${money(PLAN_MONTHLY_AI_USD[id])} every month`);
   if (f.teamSeats > 0) included.push(`Room for ${count(f.teamSeats, "teammate", "teammates")}`);
   if (f.commerceEnabled) included.push("An online store to sell products");
   if (f.brandingRemovalEnabled) included.push("No \u201cHosted with Plexo\u201d bar on your site");
@@ -115,8 +115,9 @@ export function creditView(allowance: number, topup: number, resetAt: string, no
 
 export const ACTIVITY_LABELS: Record<string, string> = {
   MONTHLY_GRANT: "Your monthly credits",
+  FIRST_SITE_GRANT: "A gift to build your first site",
   TOPUP_PURCHASE: "Credits you bought",
-  AI_USAGE: "AI help",
+  AI_USAGE: "SOL work",
   REFUND: "Refund",
   ADJUSTMENT: "Adjustment",
 };

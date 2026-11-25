@@ -787,7 +787,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
             type="button"
             onClick={() => setSolOpen((o) => !o)}
             aria-pressed={solOpen}
-            title="Ask SOL to change this page for you. You see the result before it is kept. Uses AI credits."
+            title="Change this page with SOL. You see the result before it is kept. Uses credits."
             style={{
               display: "inline-flex", alignItems: "center", gap: "0.4rem",
               padding: "0.45rem 0.9rem", borderRadius: 8, fontSize: "0.8rem", fontWeight: 700,
@@ -796,7 +796,7 @@ export function RawFileEditor({ templateId, siteId, templateName, templateKind, 
               color: "var(--ed-t-800)", cursor: "pointer",
             }}
           >
-            <SolIcon size={16} /> Ask SOL
+            <SolIcon size={16} /> Change this with SOL
           </button>
           <button
             type="button"

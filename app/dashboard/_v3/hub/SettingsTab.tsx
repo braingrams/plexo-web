@@ -19,6 +19,7 @@ import { errMsg, hubApi } from "./hubApi";
 import { shopHref } from "@/lib/dashboardV3/shopSections";
 import { advancedHref, advancedKind } from "@/lib/dashboardV3/hubAdvanced";
 import { MigrationHistory } from "../settings/MigrationHistory";
+import { TourAnchorAbsent } from "../tour/TourAnchorAbsent";
 
 export function SettingsTab({ site, features, experience }: { site: HubFrameSite & Pick<HubSite, "badge">; features: HubFeatures; experience: string }) {
   const router = useRouter();
@@ -85,6 +86,7 @@ export function SettingsTab({ site, features, experience }: { site: HubFrameSite
     <>
       <TabBar title="Settings" sub="Everything about this site, in one place." />
       <div className="plx-hs plx-hs--solo" data-tour="hub-settings">
+        <TourAnchorAbsent anchor="hub-set-more" absent={!shopLinks.length} />
         <div className="plx-hs__body">
           <section id="set-general" className="plx-hs__sec" data-tour="hub-set-general">
             <h3 className="plx-hs__h">General</h3>

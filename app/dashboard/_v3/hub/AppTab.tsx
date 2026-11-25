@@ -202,7 +202,7 @@ export function AppTab({ siteId, siteName, info, only, experience }: { siteId: s
           <p className="plx-body">Add the page to your project, then {server ? (git?.linked ? "save it on GitHub and your app updates by itself." : "upload a new version.") : "upload a new version."}</p>
           <div className="plx-hub__actions">
             {git?.linked && git.repo ? <ButtonLink href={`https://github.com/${git.repo}`} target="_blank" rel="noreferrer" leftIcon={<Code2 size={18} aria-hidden />}>Open code on GitHub</ButtonLink> : null}
-            <ButtonLink href={solPage} variant={git?.linked ? "secondary" : "primary"} leftIcon={<SolGlyph size={18} />}>Ask SOL to add a page</ButtonLink>
+            <ButtonLink href={solPage} variant={git?.linked ? "secondary" : "primary"} leftIcon={<SolGlyph size={18} />}>Add a page with SOL</ButtonLink>
           </div>
         </div>
       </Modal>

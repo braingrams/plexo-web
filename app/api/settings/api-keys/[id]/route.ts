@@ -131,7 +131,7 @@ export async function PATCH(
     }
     if (!aiApiKey) {
       return NextResponse.json(
-        { error: "Host-Managed AI access requires the account's own AI provider key. Plexo's system key is never used in this mode." },
+        { error: "Host-managed AI needs your own AI key. The AI included with your plan is never used in this mode." },
         { status: 400 },
       );
     }

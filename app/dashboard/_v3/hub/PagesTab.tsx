@@ -127,7 +127,7 @@ export function PagesTab({ site, pages, experience, plan }: { /** The owner's pl
                     ) : null}
                     {canSol ? (
                       <button type="button" role="menuitem" onClick={() => { setMore(false); setAskingSol(true); }}>
-                        <SolIcon size={18} /> Ask SOL about several pages
+                        <SolIcon size={18} /> Change several pages with SOL
                       </button>
                     ) : null}
                   </div>

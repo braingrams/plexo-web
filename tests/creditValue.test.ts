@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PLAN_MONTHLY_AI_USD, planMonthlyCredits } from "@/lib/credits/value";
+import { PLAN_MONTHLY_AI_USD, firstSiteGrantCredits, planMonthlyCredits } from "@/lib/credits/value";
 import { creditsForCompletedTopup } from "@/lib/credits/topupOffer";
 import type Stripe from "stripe";
 import { DEFAULT_PRICE_BOOK, creditsForTopupAmount, regionById } from "@/lib/billing/pricing";
@@ -20,6 +20,12 @@ describe("AI credit value", () => {
     expect(planMonthlyCredits("PRO")).toBe(2_000);
     expect(planMonthlyCredits("ENTERPRISE")).toBe(3_000);
     expect(planMonthlyCredits("ULTRA")).toBe(2_000); // retired name reads as Pro
+  });
+
+  it("the one-time first-site gift is $0.60 of AI, three times a Free month", () => {
+    expect(firstSiteGrantCredits()).toBe(600);
+    vi.stubEnv("CREDIT_USD_VALUE", "0.002");
+    expect(firstSiteGrantCredits()).toBe(300);
   });
 
   it("top-ups are $1 per 1,000 credits (NGN 1,500 in Nigeria)", () => {

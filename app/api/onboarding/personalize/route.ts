@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { sanitizeBuildProfile } from "@/lib/dashboardV3/profile";
 import { describePlace } from "@/lib/onboarding/place";
+import { personalizeDesign } from "./designStage";
 import { PlainError, extractTextNodes, finishDesign, gaveContactDetails, planPersonalization, writeCopy, MAX_NODES } from "@/lib/onboarding/solPersonalize";
 
 export const maxDuration = 120;
 
 /**
  * GET: Returns the credit cost and available credit balance for template personalization.
- * Adheres to SOL Rule 1: BYOK users pay 0 credits; Plexo AI users pay based on real model token cost.
+ * Adheres to SOL Rule 1: BYOK users pay 0 credits; Plexo-credit users pay based on real model token cost.
  */
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
@@ -51,7 +52,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
  *   "plan"   → { domain, summary, questions }       SOL reads the brand + design, decides what to ask.
  *   "write"  → { replacements }                      SOL rewrites the design's words (charged).
  *   "finish" → { html, summary, creditsRemaining }   puts it together; no AI, no charge.
- * Follows the SOL engine rules (lib/ai/solEngine.ts): which AI (Plexo's or the owner's own key),
+ * With `designId` (a new-editor marketplace design) the same stages work on the design's own data instead of its page text, and there is
+ * a fourth, "preview" (no SOL, no charge): see ./designStage.ts.
+ * Follows the SOL engine rules (lib/ai/solEngine.ts): whose credits pay (Plexo's or the owner's own key),
  * which tier, and an affordability check before each AI stage.
  */
 /** Where the owner is: the network edge's city and country when it forwards them, else the browser's time zone and language. */
@@ -72,26 +75,35 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const resolved = await resolveUser(request);
     if (!resolved) return NextResponse.json({ error: "Please sign in again to continue." }, { status: 401 });
 
-    const { solRouteForUser, tierFor, checkCanAfford } = await import("@/lib/ai/solEngine");
-    const solRoute = await solRouteForUser(resolved.userId);
-    if ("error" in solRoute) return NextResponse.json({ error: solRoute.error }, { status: solRoute.status });
-
     const body = await request.json().catch(() => ({}));
-    const stage = body.stage === "plan" || body.stage === "write" || body.stage === "finish" ? (body.stage as "plan" | "write" | "finish") : null;
+    const stage = body.stage === "plan" || body.stage === "write" || body.stage === "finish" || body.stage === "preview" ? (body.stage as "plan" | "write" | "finish" | "preview") : null;
     if (!stage) return NextResponse.json({ error: "Something went wrong starting SOL. Please try again." }, { status: 400 });
     const parsed = sanitizeBuildProfile(body.profile ?? {});
     if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
-
     const text = (v: unknown, max: number) => (typeof v === "string" && v.trim() ? v.trim().slice(0, max) : undefined);
-    const design = { name: text(body.templateName, 200), description: text(body.templateDescription, 600) };
-    const templateHtml = typeof body.templateHtml === "string" && body.templateHtml.trim() ? body.templateHtml : undefined;
-    if (!templateHtml) return NextResponse.json({ error: "Pick a design first, then ask SOL to personalize it." }, { status: 400 });
-    if (templateHtml.length > 2_000_000) return NextResponse.json({ error: "This design is too large to personalize. Pick another one." }, { status: 413 });
-
     const brandInfo = parsed.value.brand;
     const brand = { name: text(brandInfo?.name, 120) ?? "Your Brand", about: text(brandInfo?.about, 500) ?? "", goal: parsed.value.goal || "business-site", place: ownerPlace(request, body.place) };
     const { ensureCreditPeriod } = await import("@/lib/db/ledgerOperations");
     const balanceOf = () => ensureCreditPeriod(resolved.userId).catch(() => ({ available: 0, total: 0 }));
+
+    // A new-editor marketplace design is personalized on its own design data (lib/onboarding/designEdit.ts): the server loads it by id, the
+    // browser never sends design JSON. Anything else (classic, uploaded) keeps the page-text path below.
+    const designId = typeof body.designId === "string" ? body.designId.trim() : "";
+    if (designId) {
+      const { loadListingForEdit } = await import("@/lib/onboarding/designEdit");
+      const listing = await loadListingForEdit(designId);
+      if (listing) return await personalizeDesign({ request, body, stage, listing, resolved, brand, brandInfo, text, balanceOf });
+    }
+    if (stage === "preview") return NextResponse.json({ error: "This design can't be previewed that way. Pick it again to see it." }, { status: 400 });
+
+    const { solRouteForUser, tierFor, checkCanAfford } = await import("@/lib/ai/solEngine");
+    const solRoute = await solRouteForUser(resolved.userId);
+    if ("error" in solRoute) return NextResponse.json({ error: solRoute.error }, { status: solRoute.status });
+
+    const design = { name: text(body.templateName, 200), description: text(body.templateDescription, 600) };
+    const templateHtml = typeof body.templateHtml === "string" && body.templateHtml.trim() ? body.templateHtml : undefined;
+    if (!templateHtml) return NextResponse.json({ error: "Pick a design first, then ask SOL to personalize it." }, { status: 400 });
+    if (templateHtml.length > 2_000_000) return NextResponse.json({ error: "This design is too large to personalize. Pick another one." }, { status: 413 });
 
     if (stage === "finish") {
       const replacements: Record<string, string> = {};
@@ -114,7 +126,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     const cannotAfford = await checkCanAfford(resolved.userId, solRoute.route, tier, "edit_raw_html", approxChars);
     if (cannotAfford) {
       const balance = await balanceOf();
-      return NextResponse.json({ error: "You don't have enough AI credits to personalize your website with SOL. Top up to continue.", outOfCredits: true, availableCredits: balance.available }, { status: 402 });
+      return NextResponse.json({ error: "SOL needs more credits to do this. Add some and carry on, or create your website now and make it yours later.", outOfCredits: true, availableCredits: balance.available }, { status: 402 });
     }
     const ctx = { route: solRoute.route, tier, userId: resolved.userId };
 

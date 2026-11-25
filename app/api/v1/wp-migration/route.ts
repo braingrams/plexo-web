@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { markSiteJustMade } from "@/lib/dashboardV3/newSite";
 import { WpMigrationJob } from "@/lib/db/importEntities";
 import { resolveMigrationAccess } from "@/lib/wpMigration/access";
 import { continueInBackground } from "@/lib/wpMigration/background";
@@ -58,5 +59,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     );
   }
   if (body.drivenByDashboard !== true) await continueInBackground(result.templateId, result.jobId);
-  return NextResponse.json({ jobId: result.jobId, templateId: result.templateId }, { status: 201 });
+  const res = NextResponse.json({ jobId: result.jobId, templateId: result.templateId }, { status: 201 });
+  // The moved site is a new site: make it the current one and let Home open on its guided steps when the owner is done here.
+  markSiteJustMade(res, result.templateId);
+  return res;
 }

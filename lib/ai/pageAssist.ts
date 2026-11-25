@@ -111,7 +111,7 @@ export async function prepareAssist(
     if (refusal) return { refused: refusal };
     const ceiling = estimateWorstCaseCost(route.provider, tier, "page_assist", approxInputChars);
     const held = await holdCredits(userId, holdId, ceiling);
-    if (!held.held) return { refused: { status: 402, error: "You don't have enough AI credits for this right now. Top up in Settings → Subscription, or add your own AI provider key in Settings → AI." } };
+    if (!held.held) return { refused: { status: 402, error: "SOL needs more credits to do this. Top up in Settings → Subscription, or add your own AI key in Settings → AI." } };
   }
 
   return {

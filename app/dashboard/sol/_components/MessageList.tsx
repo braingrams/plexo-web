@@ -240,7 +240,7 @@ function QuietNote({ activity }: { activity: string }) {
   if (quietFor < 45_000) return null;
   return (
     <span role="status" style={{ fontSize: "0.78rem", color: "rgba(240,242,255,0.55)" }}>
-      {quietFor < 120_000 ? "Still working — this step is taking longer than usual." : "Still working — the AI service is slow right now. Nothing is lost; SOL will carry on."}
+      {quietFor < 120_000 ? "Still working — this step is taking longer than usual." : "Still working — SOL is slow right now. Nothing is lost; SOL will carry on."}
     </span>
   );
 }

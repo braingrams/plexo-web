@@ -12,7 +12,7 @@ export type TaskLink = {
   href: string;
   /** What the button does, in plain words. */
   label: string;
-  /** A prefilled message for SOL ("Ask SOL to do it"). */
+  /** A prefilled message for SOL ("Do this with SOL"). */
   solHref: string;
 };
 

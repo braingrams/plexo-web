@@ -79,7 +79,7 @@ export function useStudioChat({ prompt, siteId }: { prompt: string; siteId?: str
   const question = paused && paused.name === ASK_USER_QUESTION_TOOL_NAME ? paused : null;
   const streaming = stream.outcome === "streaming";
   const credit = creditDismissed ? null : stream.creditInfo;
-  const error = startError ?? (stream.outcome === "credit_exhausted" ? "SOL needs more AI credits to carry on. Add some and try again." : stream.outcome === "error" ? stream.errorMessage || "SOL hit a snag. Please try again." : null);
+  const error = startError ?? (stream.outcome === "credit_exhausted" ? "SOL needs more credits to do this. Add some and try again." : stream.outcome === "error" ? stream.errorMessage || "SOL hit a snag. Please try again." : null);
   const finished = stream.outcome === "idle" && !starting && messages.some((m) => m.role === "assistant");
 
   const resume = (body: { answers: AskUserAnswer[] } | { decision: "confirmed" | "declined" }) => {

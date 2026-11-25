@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, ChevronDown, ExternalLink, Eye, Pencil, Upload } from "lucide-react";
 import { Badge, Button, ButtonLink, HelpMedia, ScrollRail, StatusPill, TabLinks } from "../ui";
 import { EditWebsiteButton } from "./EditWebsiteButton";
+import { StartPanel, markStartReviewed, type StartPanelFacts } from "./StartPanel";
+import { EDIT_LABEL_LIVE, EDIT_LABEL_NEW } from "@/lib/dashboardV3/startSteps";
 import { liveHref, previewHref } from "@/lib/dashboardV3/siteLinks";
 import { hubTabHref, type HubTab, type HubTabId } from "@/lib/dashboardV3/hubTabs";
 import type { Experience } from "@/lib/dashboardV3/nav";
@@ -79,7 +81,7 @@ function FoldedSiteActions({ site }: { site: HubFrameSite }) {
   );
 }
 
-export function HubFrame({ site, tabs, current, experience, children, readOnly = false, guest = false }: { site: HubFrameSite; tabs: HubTab[]; current: HubTabId; experience: Experience; children: React.ReactNode; /** This person may look but not change the site: no Edit button. */ readOnly?: boolean; /** A member invited to this site only: no link into the web address settings. */ guest?: boolean }) {
+export function HubFrame({ site, tabs, current, experience, children, readOnly = false, guest = false, start, showSolIntro = false }: { site: HubFrameSite; tabs: HubTab[]; current: HubTabId; experience: Experience; children: React.ReactNode; /** Set for a site that is not online yet: shows "here's what to do next" and renames the main button. */ start?: StartPanelFacts; /** Show SOL's one-time hello inside those steps (the owner's first site). */ showSolIntro?: boolean;/** This person may look but not change the site: no Edit button. */ readOnly?: boolean; /** A member invited to this site only: no link into the web address settings. */ guest?: boolean }) {
   const currentHref = hubTabHref(site.id, current);
   return (
     <div className="plx-page plx-hub" data-tour="hub-main">
@@ -117,7 +119,7 @@ export function HubFrame({ site, tabs, current, experience, children, readOnly =
               {site.editHref.startsWith("/dashboard/apps/") ? "Edit app" : "Update app"}
             </ButtonLink>
           ) : (
-            <EditWebsiteButton siteId={site.id} fallbackHref={site.editHref} />
+            <EditWebsiteButton siteId={site.id} fallbackHref={site.editHref} label={start ? EDIT_LABEL_NEW : EDIT_LABEL_LIVE} variant={start && current === "pages" ? "secondary" : undefined} onStart={start ? () => markStartReviewed(site.id) : undefined} />
           )}
         </div>
       </header>
@@ -128,6 +130,7 @@ export function HubFrame({ site, tabs, current, experience, children, readOnly =
 
       <div className="plx-hub__body">
         {experience === "beginner" ? <HelpMedia title={HELP[current]} caption="A short clip that shows exactly this step." /> : null}
+        {start && current === "pages" ? <StartPanel siteId={site.id} siteName={site.name} facts={start} fallbackHref={site.editHref} canEdit={!readOnly} showSolIntro={showSolIntro} /> : null}
         {children}
       </div>
     </div>

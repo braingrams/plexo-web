@@ -81,7 +81,7 @@ export function DonationsClient({ templateId, initial }: { templateId: string; i
       <div style={card}>
         <h2 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--cmx-text, #f0f2ff)", margin: "0 0 0.8rem" }}>Donation forms</h2>
         {data.campaigns.length === 0 ? (
-          <p style={muted}>No donation forms yet. Create one, then paste its embed code into any page — or add it with the AI builder.</p>
+          <p style={muted}>No donation forms yet. Create one, then paste its embed code into any page — or add it with SOL.</p>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {data.campaigns.map((c) => (

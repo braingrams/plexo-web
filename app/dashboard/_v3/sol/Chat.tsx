@@ -14,6 +14,7 @@ import { SolComposer } from "./Composer";
 import { CreditModal } from "./CreditModal";
 import { greetingFor, SUGGESTIONS } from "./logic";
 import { SolMark } from "./Message";
+import { SolIntroView, useSolIntro } from "./SolIntroCard";
 import { Messages } from "./Messages";
 import { ShareDialog } from "./ShareDialog";
 import { useSolV3 } from "./SolV3Context";
@@ -64,7 +65,7 @@ export function CreditsPill({ refreshKey }: { refreshKey?: number }) {
   }, [refreshKey]);
   if (credits === null) return null;
   return (
-    <Link href="/dashboard/settings/subscription" className="sol3-credits" data-low={credits < 50} title="Your AI credits. Tap to add more.">
+    <Link href="/dashboard/settings/subscription" className="sol3-credits" data-low={credits < 50} title="Your credits. Tap to add more.">
       <b>{credits.toLocaleString()}</b> <span className="sol3-credits__word">credits</span>
       {credits < 50 ? <span className="sol3-credits__top">· Add more</span> : null}
     </Link>
@@ -170,9 +171,12 @@ function Empty({ userName, composer, props }: { userName: string | null; compose
   const first = userName?.trim().split(/\s+/)[0];
   const [hour, setHour] = useState<number | null>(null);
   useEffect(() => setHour(new Date().getHours()), []);
+  // First visit: SOL says hello (and offers three ideas) in place of the greeting and the idea tiles, so nothing is added above the chat box.
+  const intro = useSolIntro(true);
   return (
     <div className="sol3-empty">
       <div className="sol3-empty__in">
+        {intro.visible ? <SolIntroView onDismiss={intro.dismiss} onPick={(p) => props.composer.onSend(p, [])} /> : (
         <div className="sol3-empty__hero">
           <span className="sol3-empty__mark" aria-hidden>
             <SolMark size={30} />
@@ -183,12 +187,13 @@ function Empty({ userName, composer, props }: { userName: string | null; compose
           </h1>
           <p>What would you like to make today?</p>
         </div>
+        )}
         <div className="sol3-empty__composer">
           <SiteChip />
           {props.inlineError ? <p className="sol3-error" role="alert">{props.inlineError}</p> : null}
           {composer}
         </div>
-        <div className="sol3-sugg" role="list" aria-label="Ideas to start with">
+        {intro.visible ? null : <div className="sol3-sugg" role="list" aria-label="Ideas to start with">
           {SUGGESTIONS.map((s) => {
             const Icon = SUGGESTION_ICONS[s.id] ?? Globe;
             return (
@@ -198,7 +203,7 @@ function Empty({ userName, composer, props }: { userName: string | null; compose
               </button>
             );
           })}
-        </div>
+        </div>}
       </div>
     </div>
   );

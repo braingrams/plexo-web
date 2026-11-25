@@ -40,6 +40,20 @@ export const PLAN_MONTHLY_AI_USD: Record<SubscriptionPlan, number> = {
   ENTERPRISE: 3,
 };
 
+/**
+ * The one-time "first site" grant: AI value given once to every Free account, on top of the
+ * monthly allowance, so building and polishing a first website never hits a paywall. It lands
+ * in the top-up bucket (it doesn't expire or reset), covers the template personalize / first
+ * generation and a round of follow-up edits, and can only ever be granted once per account.
+ * $0.60 ≈ 600 credits at the default rate.
+ */
+export const FIRST_SITE_GRANT_USD = 0.6;
+
+/** Credits in the one-time first-site grant. */
+export function firstSiteGrantCredits(): number {
+  return grantCreditsForUsd(FIRST_SITE_GRANT_USD);
+}
+
 /** Whole credits for a dollar amount. Rounded (not ceiled like usage charges) so float noise
  *  (e.g. 0.05 / 0.001 = 50.000000000000004) never adds a stray credit. */
 function grantCreditsForUsd(usd: number): number {

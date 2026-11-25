@@ -17,7 +17,7 @@ export type SolPersonalizeModalProps = {
 };
 
 /**
- * Transparent confirmation dialog before personalizing a template with SOL.
+ * Confirmation dialog before SOL makes a design the owner's own.
  * Explains exactly what SOL will tailor, the credit cost estimate, and current balance.
  */
 export function SolPersonalizeModal({
@@ -54,7 +54,7 @@ export function SolPersonalizeModal({
             <SolGlyph size={18} />
           </div>
           <span style={{ fontSize: 18, fontWeight: 700, color: "var(--plx-heading)" }}>
-            Personalize with SOL
+            Make it yours with SOL
           </span>
         </div>
       }
@@ -70,7 +70,7 @@ export function SolPersonalizeModal({
               leftIcon={<SolGlyph size={14} />}
               onClick={onProceed}
             >
-              Proceed with SOL
+              Make it yours with SOL
             </Button>
           ) : (
             <Button
@@ -78,7 +78,7 @@ export function SolPersonalizeModal({
               leftIcon={<SolGlyph size={14} />}
               onClick={onTopup}
             >
-              Top up AI credits
+              Get credits for SOL
             </Button>
           )}
         </div>
@@ -129,7 +129,7 @@ export function SolPersonalizeModal({
           </div>
         </div>
 
-        {/* AI Credit Balance & Estimation */}
+        {/* Credit balance and estimate */}
         <div
           style={{
             padding: 14,
@@ -158,12 +158,12 @@ export function SolPersonalizeModal({
             </div>
             <div>
               <div style={{ fontSize: 13, fontWeight: 600, color: "var(--plx-heading)" }}>
-                {isByok ? "Your AI Provider Key" : "AI Credit Cost"}
+                {isByok ? "Your own provider key" : "What it uses"}
               </div>
               <div style={{ fontSize: 12, color: "var(--plx-muted)" }}>
                 {isByok
-                  ? "Billed directly by your provider (0 Plexo credits)"
-                  : `Up to ${creditCost} ${creditCost === 1 ? "credit" : "credits"} for the whole page. You only pay for what SOL uses.`}
+                  ? "Billed by your provider, so it uses none of your Plexo credits"
+                  : `Up to ${creditCost} ${creditCost === 1 ? "credit" : "credits"} for the whole page. You only use what SOL needs.`}
               </div>
             </div>
           </div>
@@ -188,7 +188,7 @@ export function SolPersonalizeModal({
 
         {!hasCredits && (
           <div style={{ fontSize: 12, color: "var(--plx-muted)", textAlign: "center" }}>
-            You need at least {creditCost} {creditCost === 1 ? "credit" : "credits"} to personalize this template. Click below to add credits and continue seamlessly.
+            SOL needs more credits to do this: about {creditCost} {creditCost === 1 ? "credit" : "credits"}. Add some and pick up right where you are, or just create your website now and make it yours later.
           </div>
         )}
       </div>

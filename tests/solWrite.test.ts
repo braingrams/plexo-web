@@ -14,8 +14,8 @@ describe("solWrite", () => {
   it("explains the cost", () => {
     expect(costNote({ paidBy: "own-key", enough: true, estimatedCredits: null, balance: null }, 5)).toMatch(/own AI key/);
     expect(costNote({ paidBy: "plexo", enough: true, estimatedCredits: 12, balance: 1500 }, null)).toBe("About 12 credits. You have 1,500 left.");
-    expect(costNote(null, 40)).toBe("Uses AI credits. You have 40 left.");
-    expect(costNote(null, null)).toBe("Uses AI credits.");
+    expect(costNote(null, 40)).toBe("SOL uses credits for this. You have 40 left.");
+    expect(costNote(null, null)).toBe("SOL uses credits for this.");
   });
 });
 

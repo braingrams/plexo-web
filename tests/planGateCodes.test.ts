@@ -57,7 +57,7 @@ describe("the plan that lifts a limit is one that actually helps", () => {
   });
 });
 
-describe("running out of AI credits", () => {
+describe("running out of credits", () => {
   it("offers the next plan with more credits, using the amounts in lib/credits/value.ts", () => {
     const free = creditUpgradeOffer("FREE");
     expect(free).toEqual({ plan: "STARTER", credits: planMonthlyCredits("STARTER"), currentCredits: planMonthlyCredits("FREE") });
@@ -65,7 +65,7 @@ describe("running out of AI credits", () => {
     expect(creditUpgradeOffer("ENTERPRISE")).toBeNull();
   });
   it("tags the out-of-credits refusal with the three ways forward, leaves others alone", () => {
-    const body = aiRefusalBody({ status: 402, error: "You don't have enough AI credits for this." });
+    const body = aiRefusalBody({ status: 402, error: "SOL needs more credits to do this." });
     expect(body).toMatchObject({ code: "OUT_OF_CREDITS", topUpUrl: expect.any(String), ownKeyUrl: expect.any(String), upgradeUrl: expect.any(String) });
     expect(aiRefusalBody({ status: 403, error: "AI is not enabled for this account." })).toEqual({ error: "AI is not enabled for this account." });
     expect(outOfCreditsSentence("https://x.io")).toMatch(/Top up.*own AI key.*upgrade/i);

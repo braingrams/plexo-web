@@ -134,7 +134,7 @@ function checklistFix(item: ChecklistItem, templateId: string, siteName: string)
   if (item.id === "payments") return { kind: "link", label: "Connect payments", href: `/dashboard/commerce/${templateId}/settings/payments` };
   if (item.id === "payments-other") return { kind: "link", label: "Open your shop", href: `/dashboard/commerce/${templateId}` };
   if (item.id === "team-access") return { kind: "link", label: "Invite your team", href: "/dashboard/settings/team" };
-  return { kind: "sol", label: "Ask SOL to fix", prompt: `On my site "${siteName}", which I just moved from WordPress, please sort this out: ${item.label}. ${item.detail}` };
+  return { kind: "sol", label: "Fix this with SOL", prompt: `On my site "${siteName}", which I just moved from WordPress, please sort this out: ${item.label}. ${item.detail}` };
 }
 
 /** Everything in the report that wants a look, worst first, each with a plain reason and a fix. */
@@ -152,7 +152,7 @@ export function reportIssues(report: Report, templateId: string): Issue[] {
       id: "pages-failed", severity: "needs",
       title: `${failedPages.length} ${plural(failedPages.length, "page didn't", "pages didn't")} copy`,
       detail: `${list(failedPages.map((p) => p.title))}. WordPress may have been slow or the page is private.`,
-      fix: { kind: "sol", label: "Ask SOL to fix", prompt: `On "${site}", these pages didn't copy from WordPress: ${list(failedPages.map((p) => p.title), 10)}. Please rebuild them.` },
+      fix: { kind: "sol", label: "Fix this with SOL", prompt: `On "${site}", these pages didn't copy from WordPress: ${list(failedPages.map((p) => p.title), 10)}. Please rebuild them.` },
     });
   }
   if (report.failedFiles.length) {
@@ -160,7 +160,7 @@ export function reportIssues(report: Report, templateId: string): Issue[] {
       id: "files-failed", severity: "look",
       title: `${report.failedFiles.length} ${plural(report.failedFiles.length, "picture or file didn't", "pictures and files didn't")} copy`,
       detail: `${list(report.failedFiles.map((f) => f.path.split("/").pop() || f.path))}. Visitors may see a gap where they were.`,
-      fix: { kind: "sol", label: "Ask SOL to fix", prompt: `On "${site}", these files didn't copy from WordPress: ${list(report.failedFiles.map((f) => f.path), 8)}. Please help me replace them.` },
+      fix: { kind: "sol", label: "Fix this with SOL", prompt: `On "${site}", these files didn't copy from WordPress: ${list(report.failedFiles.map((f) => f.path), 8)}. Please help me replace them.` },
     });
   }
   if (report.brokenLinks.length) {
@@ -168,11 +168,11 @@ export function reportIssues(report: Report, templateId: string): Issue[] {
       id: "links-broken", severity: "look",
       title: `${report.brokenLinks.length} ${plural(report.brokenLinks.length, "link leads", "links lead")} nowhere`,
       detail: `For example ${report.brokenLinks[0].href} on ${report.brokenLinks[0].from}. ${report.brokenLinks[0].reason}`,
-      fix: { kind: "sol", label: "Ask SOL to fix", prompt: `On "${site}", fix these broken links: ${list(report.brokenLinks.map((l) => `${l.href} (on ${l.from})`), 8)}.` },
+      fix: { kind: "sol", label: "Fix this with SOL", prompt: `On "${site}", fix these broken links: ${list(report.brokenLinks.map((l) => `${l.href} (on ${l.from})`), 8)}.` },
     });
   }
   for (const p of report.plugins.filter((x) => x.outcome === "NEEDS_ATTENTION")) {
-    out.push({ id: `plugin:${p.slug}`, severity: "look", title: `${p.name} needs a look`, detail: p.explanation, fix: { kind: "sol", label: "Ask SOL to fix", prompt: `On "${site}", I used the WordPress plugin "${p.name}". ${p.explanation} Please recreate what it did.` } });
+    out.push({ id: `plugin:${p.slug}`, severity: "look", title: `${p.name} needs a look`, detail: p.explanation, fix: { kind: "sol", label: "Fix this with SOL", prompt: `On "${site}", I used the WordPress plugin "${p.name}". ${p.explanation} Please recreate what it did.` } });
   }
   const seen = new Set<string>();
   return out.filter((i) => (seen.has(i.id) ? false : (seen.add(i.id), true))).sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "needs" ? -1 : 1));

@@ -210,7 +210,7 @@ export function AiImportDialog({
           <div style={{ display: "grid", gap: "1rem" }}>
             <p style={{ fontSize: "0.82rem", color: "var(--cmx-muted, rgba(240,242,255,0.55))" }}>
               Upload a CSV or PDF product catalog. SOL reads it and lines the
-              products up with your product list — no column setup needed. Uses AI credits.
+              products up with your product list — no column setup needed. Uses credits.
             </p>
             <label
               style={{

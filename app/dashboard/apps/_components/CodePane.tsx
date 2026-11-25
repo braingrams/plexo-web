@@ -639,7 +639,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
               ) : files === null ? (
                 <p style={{ padding: "0.6rem 0.8rem", margin: 0, fontSize: "0.75rem", color: C.muted }}>Loading files…</p>
               ) : files.length === 0 ? (
-                <Empty title="No files yet">Create a file, or ask the assistant to build something.</Empty>
+                <Empty title="No files yet">Create a file, or ask SOL to build something.</Empty>
               ) : tree.length === 0 ? (
                 <p style={{ padding: "0.6rem 0.8rem", margin: 0, fontSize: "0.75rem", color: C.muted }}>No files match “{filter.trim()}”.</p>
               ) : (
@@ -648,7 +648,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
                 </ul>
               )}
             </div>
-            <p style={{ margin: 0, padding: "0.6rem 0.8rem", borderTop: `1px solid ${C.border}`, fontSize: "0.72rem", color: C.muted, lineHeight: 1.5 }}>Edits here don&rsquo;t use AI credits.</p>
+            <p style={{ margin: 0, padding: "0.6rem 0.8rem", borderTop: `1px solid ${C.border}`, fontSize: "0.72rem", color: C.muted, lineHeight: 1.5 }}>Edits here don&rsquo;t use credits.</p>
           </aside>
         )}
 
@@ -697,7 +697,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
           )}
           {activeTab?.removed && isDirty(activeTab) && (
             <div style={{ padding: "0.4rem 0.6rem" }}>
-              <Notice tone="warning">This file was removed (maybe by the assistant). Saving will put it back with your edits.</Notice>
+              <Notice tone="warning">This file was removed (maybe by SOL). Saving will put it back with your edits.</Notice>
             </div>
           )}
           {notice && (
@@ -714,7 +714,7 @@ export function CodePane(props: { appId: string; openRequest?: { path: string; l
           <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
             {!activeTab ? (
               <Empty title={files?.length ? "Pick a file to edit" : "Nothing open"}>
-                Choose a file on the left. Changes save automatically and the preview rebuilds — no AI credits used.
+                Choose a file on the left. Changes save automatically and the preview rebuilds — no credits used.
                 {narrow && !treeOpen && (
                   <div style={{ marginTop: "0.8rem" }}>
                     <Button size="sm" onClick={() => setTreeOpen(true)} aria-label="Show files">
@@ -830,7 +830,7 @@ function BinaryPreview({ tab }: { tab: Tab }) {
   return (
     <div style={{ height: "100%", overflow: "auto", padding: "1.5rem", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
       <Empty title="This file can't be edited here">
-        {tab.path} isn&apos;t a text file{tab.contentType ? ` (${tab.contentType})` : ""}. Replace it by uploading a new one or asking the assistant.
+        {tab.path} isn&apos;t a text file{tab.contentType ? ` (${tab.contentType})` : ""}. Replace it by uploading a new one or asking SOL.
       </Empty>
       {isImage && (
         // eslint-disable-next-line @next/next/no-img-element

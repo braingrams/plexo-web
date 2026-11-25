@@ -64,6 +64,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       owned: owned.has(d.id),
       bestFit: d.bestFit,
       html: d.compiledHtml ?? null,
+      /** A new-editor design: previewed and personalized on its own data (the browser asks the server for its preview). */
+      v2: d.designFormat === "v2" && d.sourceType === "BUILDER",
     })),
     total: filtered.length,
     page: pageOf.page,

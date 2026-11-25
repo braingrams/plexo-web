@@ -59,7 +59,7 @@ export function ProductBrowser({ products, currency, onOpen, onBulk, bulkBusy }:
   const showSearch = products.length > 4;
 
   return (
-    <div className="plx-pbrowse" data-tour="hub-products">
+    <div className="plx-pbrowse">
       <div className="plx-toolbar">
         {showSearch ? <Input label="Search your products" hideLabel type="search" fieldClassName="plx-hsearch" placeholder="Search your products" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} /> : <span />}
         <div className="plx-ptools">

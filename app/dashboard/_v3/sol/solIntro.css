@@ -1,0 +1,18 @@
+/* SOL's one-time hello. Strata tokens; the fallbacks only matter where it sits inside the app editor's own dark panel. */
+.sol-intro { position: relative; box-sizing: border-box; width: 100%; max-width: 720px; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 16px; align-items: start; padding: clamp(14px, 3vw, 20px); padding-right: 52px; border: 1px solid var(--plx-border, rgba(255,255,255,.14)); border-radius: 16px; background: var(--plx-elevated, #181d30); color: var(--plx-text, #f0f2ff); text-align: left; }
+.sol-intro__mark { display: grid; place-items: end center; align-self: end; min-width: 72px; }
+.sol-intro__title { margin: 0; font-size: clamp(20px, 3.4vw, 24px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.2; color: var(--plx-text, #f0f2ff); }
+.sol-intro__body { margin: 4px 0 0; font-size: 15px; line-height: 1.5; color: var(--plx-muted, #aab0c8); max-width: 52ch; }
+.sol-intro__prompts { grid-column: 1 / -1; margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.sol-intro__prompt { font: inherit; font-size: 14px; font-weight: 600; min-height: 44px; padding: 0 16px; border-radius: 999px; border: 1px solid var(--plx-border, rgba(255,255,255,.22)); background: var(--plx-surface, #11152a); color: var(--plx-text, #f0f2ff); cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.sol-intro__prompt:hover { border-color: var(--plx-border-strong, var(--plx-brand, #8b9bff)); background: var(--plx-tint, rgba(139,155,255,.12)); }
+.sol-intro__prompt:focus-visible, .sol-intro__x:focus-visible { outline: 2px solid var(--plx-focus, #8b9bff); outline-offset: 2px; }
+.sol-intro__x { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--plx-border, rgba(255,255,255,.22)); border-radius: 10px; background: var(--plx-surface, #11152a); color: var(--plx-muted, #aab0c8); cursor: pointer; }
+.sol-intro__x:hover { background: var(--plx-tint, rgba(139,155,255,.12)); color: var(--plx-text, #f0f2ff); }
+@media (max-width: 560px) {
+  .sol-intro { grid-template-columns: minmax(0, 1fr); }
+  .sol-intro__mark { place-items: start; }
+  .sol-intro__mark img { height: 108px !important; }
+  .sol-intro__prompts { flex-direction: column; margin-top: 8px; }
+  .sol-intro__prompt { width: 100%; text-align: left; }
+}

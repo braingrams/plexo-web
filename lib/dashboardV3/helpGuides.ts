@@ -88,7 +88,7 @@ const GUIDES: Record<string, Guide> = {
     steps: [
       s("tab", "Your site", "Blog", "Open the Blog tab."),
       s("button", "Blog", "Write a post", "Tap Write a post, add a title and some words."),
-      s("button", "Blog", "Publish", "Tap Publish. Or ask SOL to draft it for you."),
+      s("button", "Blog", "Publish", "Tap Publish. Or let SOL draft it for you."),
     ],
   },
   "Adding your first lesson": {
@@ -127,7 +127,7 @@ const GUIDES: Record<string, Guide> = {
     steps: [
       s("button", "Home", "The open step", "The open step has what you need. Do it right there."),
       s("choice", "Home", "A tick", "When it is done it gets a tick and the next one opens."),
-      s("button", "Home", "Tell SOL what you want", "Stuck? Ask SOL to do a step for you."),
+      s("button", "Home", "Tell SOL what you want", "Stuck? Let SOL do a step for you."),
     ],
   },
   // Site hub tabs
@@ -202,10 +202,10 @@ const GUIDES: Record<string, Guide> = {
     ],
   },
   "How to update your app": {
-    intro: "Ask SOL for changes and put them online.",
+    intro: "Tell SOL what to change, then put it online.",
     steps: [
       s("tab", "Your site", "App", "Open the App tab."),
-      s("button", "App", "Ask SOL to change it", "Describe the change you want."),
+      s("button", "App", "Change it with SOL", "Describe the change you want."),
       s("button", "App", "Put my app online", "Put the new version online when you like it."),
     ],
   },
@@ -218,7 +218,7 @@ export function guideFor(title: string): Guide {
       intro: "Here is the idea.",
       steps: [
         s("button", "Your dashboard", "The button on this step", "Use the button on the step you are on."),
-        s("button", "Your dashboard", "Tell SOL what you want", "Or ask SOL to do it for you."),
+        s("button", "Your dashboard", "Tell SOL what you want", "Or let SOL do it for you."),
       ],
     }
   );

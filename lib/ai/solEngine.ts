@@ -21,8 +21,8 @@ import { User } from "@/lib/db/coreEntities";
 //   3. Paying: before running, the account must cover the worst case of the next call; after,
 //      what was actually used is charged (lib/db/ledgerOperations.ts).
 
-export const SOL_UNAVAILABLE = "Plexo's AI isn't available right now. Add your own AI provider key in Settings → AI to keep going, or try again later.";
-export const SOL_NOT_ENOUGH_CREDITS = "You don't have enough AI credits for this. Top up in Settings → Subscription, or add your own AI provider key in Settings → AI.";
+export const SOL_UNAVAILABLE = "SOL isn't available right now. Try again in a moment, or add your own AI key in Settings → AI to keep going.";
+export const SOL_NOT_ENOUGH_CREDITS = "SOL needs more credits to do this. Top up in Settings → Subscription, or add your own AI key in Settings → AI.";
 const KEY_UNREADABLE = "Your saved AI key couldn't be read. Please enter it again in Settings → AI.";
 
 export type SolRoute = { provider: AiProvider; apiKey: string; paidBy: "plexo" | "own-key" };

@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { pageZoom } from "@/lib/dashboardV3/pageZoom";
-import type { ResolvedTourStep } from "@/lib/dashboardV3/tour";
+import { stepAnchors, type ResolvedTourStep } from "@/lib/dashboardV3/tour";
 import { computePlacement, intersectBox, isInView, padBox, scrollDeltaForSheet, usesSheet, type Box, type Placement } from "@/lib/dashboardV3/tourPlacement";
+import { SolMascot } from "../sol/SolMascot";
 import { Button } from "../ui/Button";
 import { Portal, trapTab } from "../ui/portal";
 
@@ -45,7 +46,15 @@ export function measureTarget(el: HTMLElement): Box | null {
   return box;
 }
 
-const same = (a: Box | null, b: Box | null) => (a === b) || (!!a && !!b && a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height);
+const sameBox = (a: Box | null, b: Box | null) => (a === b) || (!!a && !!b && a.top === b.top && a.left === b.left && a.width === b.width && a.height === b.height);
+const sameBoxes = (a: (Box | null)[], b: (Box | null)[]) => a.length === b.length && a.every((x, i) => sameBox(x, b[i]));
+
+/** Still laid out on screen (a phone and a desktop copy of an anchor can both exist; the hidden one has no size). */
+function isShown(el: HTMLElement): boolean {
+  if (!el.isConnected) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden";
+}
 
 type Props = {
   step: ResolvedTourStep;
@@ -64,11 +73,15 @@ type Props = {
  * card off the element, and on a phone becomes a bottom sheet with the element scrolled into view above it.
  */
 export function CoachMark({ step, index, total, onNext, onBack, onSkip, onPause, onMissing }: Props) {
-  const [rect, setRect] = useState<Box | null>(null);
+  // One ring per anchor that is on screen right now (the first is where the card sits). A step can point at several things at once.
+  const [rects, setRects] = useState<Box[]>([]);
+  const rect = rects[0] ?? null;
+  const maskId = `plx-tour-mask-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const anchors = stepAnchors(step);
   const [placement, setPlacement] = useState<Placement | null>(null);
   const [sheet, setSheet] = useState(false);
   const card = useRef<HTMLDivElement>(null);
-  const target = useRef<HTMLElement | null>(null);
+  const targets = useRef<(HTMLElement | null)[]>([]);
   const cardSize = useRef({ width: 0, height: 0 });
   const [cardTick, setCardTick] = useState(0);
   const last = index === total - 1;
@@ -78,7 +91,8 @@ export function CoachMark({ step, index, total, onNext, onBack, onSkip, onPause,
     let cancelled = false;
     let raf = 0;
     let lastSeen = 0;
-    let lastBox: Box | null = null;
+    let lastBoxes: (Box | null)[] = [];
+    let lastPrimary: HTMLElement | null = null;
     const startedAt = Date.now();
     let scrolled = false;
 
@@ -105,24 +119,42 @@ export function CoachMark({ step, index, total, onNext, onBack, onSkip, onPause,
         onMissing();
         return;
       }
-      let el = target.current;
-      if (!el || !el.isConnected) el = target.current = visibleAnchor(step.anchor);
-      if (el) {
+      // Every anchor of the step that is on screen right now. Hidden ones (the other layout's copy) are simply not there: never waited for.
+      let found: HTMLElement[] = [];
+      anchors.forEach((name, i) => {
+        let el = targets.current[i] ?? null;
+        if (!el || !isShown(el)) el = targets.current[i] = visibleAnchor(name);
+        if (el) found.push(el);
+      });
+      // On a phone the card is a sheet over the bottom of the screen: a ring under it (the bottom bar) would be hidden, so leave it out.
+      if (found.length > 1 && usesSheet(window.innerWidth)) {
+        const limit = window.innerHeight - ((cardSize.current.height || 240) * pageZoom(found[0]) + 16);
+        const clear = found.filter((el) => el.getBoundingClientRect().bottom <= limit);
+        if (clear.length) found = clear;
+      }
+      if (found.length) {
         lastSeen = Date.now();
+        const primary = found[0];
+        if (primary !== lastPrimary) {
+          lastPrimary = primary;
+          scrolled = false;
+        }
         if (!scrolled) {
           scrolled = true;
-          bring(el);
+          bring(primary);
         }
-        const box = measureTarget(el);
-        if (!same(box, lastBox)) {
-          lastBox = box;
-          if (box) {
+        const boxes = found.map((el) => measureTarget(el));
+        if (!sameBoxes(boxes, lastBoxes)) {
+          lastBoxes = boxes;
+          const shown = found.flatMap((el, i) => {
+            const box = boxes[i];
+            if (!box) return [];
             const z = pageZoom(el); // measured in what you see, placed in the dashboard's own units
-            setRect(padBox({ top: box.top / z, left: box.left / z, width: box.width / z, height: box.height / z }, PAD));
-          } else {
-            // Scrolled out of its own panel: bring it back rather than pointing at nothing.
-            scrolled = false;
-          }
+            return [padBox({ top: box.top / z, left: box.left / z, width: box.width / z, height: box.height / z }, PAD)];
+          });
+          if (shown.length) setRects(shown);
+          // The first one scrolled out of its own panel: bring it back rather than pointing at nothing.
+          if (!boxes[0]) scrolled = false;
         }
       } else if (Date.now() - (lastSeen || startedAt) > WAIT_FOR_ANCHOR_MS) {
         onMissing();
@@ -137,7 +169,7 @@ export function CoachMark({ step, index, total, onNext, onBack, onSkip, onPause,
     };
     // onMissing is stable enough per step (keyed by step id).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step.anchor]);
+  }, [step.id, anchors.join("|")]);
 
   // The card's own size (it changes with text length and screen width).
   useEffect(() => {
@@ -200,7 +232,23 @@ export function CoachMark({ step, index, total, onNext, onBack, onSkip, onPause,
   return (
     <Portal>
       <div className="plx-tour-shield" aria-hidden onClick={(e) => e.stopPropagation()} />
-      {rect ? <div className="plx-tour-spot" style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }} aria-hidden /> : null}
+      {rects.length > 1 ? (
+        // Several things lit at once: one dim layer with a hole for each (stacked shadows would dim one ring through another).
+        <svg className="plx-tour-dim" aria-hidden>
+          <defs>
+            <mask id={maskId}>
+              <rect width="100%" height="100%" fill="white" />
+              {rects.map((r, i) => (
+                <rect key={i} x={r.left} y={r.top} width={r.width} height={r.height} rx={14} fill="black" />
+              ))}
+            </mask>
+          </defs>
+          <rect width="100%" height="100%" mask={`url(#${maskId})`} style={{ fill: "var(--plx-spotlight)" }} />
+        </svg>
+      ) : null}
+      {rects.map((r, i) => (
+        <div key={i} className={`plx-tour-spot${rects.length > 1 ? " plx-tour-spot--multi" : ""}`} style={{ top: r.top, left: r.left, width: r.width, height: r.height }} aria-hidden />
+      ))}
       <div
         ref={card}
         role="dialog"
@@ -222,9 +270,16 @@ export function CoachMark({ step, index, total, onNext, onBack, onSkip, onPause,
             Skip tour
           </button>
         </div>
-        <h2 id={`tour-${step.id}-title`} className="plx-tour-card__title">
-          {step.title}
-        </h2>
+        <div className={step.mascot === "sol" ? "plx-tour-card__head plx-tour-card__head--mascot" : "plx-tour-card__head"}>
+          {step.mascot === "sol" ? (
+            <span className="plx-tour-mascot" aria-hidden>
+              <SolMascot size={84} waving />
+            </span>
+          ) : null}
+          <h2 id={`tour-${step.id}-title`} className="plx-tour-card__title">
+            {step.title}
+          </h2>
+        </div>
         <p id={`tour-${step.id}-body`} className="plx-tour-card__body">
           {step.body}
         </p>

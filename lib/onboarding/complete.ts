@@ -39,7 +39,7 @@ export type CompleteDeps = {
   /** Runs site_create; returns what it made. */
   createSite: (args: Record<string, unknown>) => Promise<{ siteId: string; name: string; warnings?: string[] }>;
   /** Makes the site from a real marketplace design (free or already bought), named after the business. */
-  createFromMarketDesign?: (designId: string, name: string) => Promise<{ siteId: string; name: string }>;
+  createFromMarketDesign?: (designId: string, name: string) => Promise<{ siteId: string; name: string; warnings?: string[] }>;
 };
 
 export type CompleteResult = { site: { id: string; name: string; goal: SolBuildGoal } | null; warnings: string[] };
@@ -65,6 +65,7 @@ export async function completeOnboarding(input: { profile: unknown; designId?: s
     if (input.marketDesignId && deps.createFromMarketDesign) {
       const made = await deps.createFromMarketDesign(input.marketDesignId, profile.brand.name!);
       site = { id: made.siteId, name: made.name, goal: profile.goal! };
+      warnings = made.warnings ?? [];
     } else {
       const args = siteCreateArgs(profile, input.designId ?? "");
       if (!args) throw new OnboardingError("Pick what you'd like to make first.");

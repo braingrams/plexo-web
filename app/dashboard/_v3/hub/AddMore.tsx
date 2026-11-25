@@ -10,6 +10,7 @@ import { addOnsFor, hubTabHref, type AddOnId, type HubFeatures } from "@/lib/das
 import { solStudioHref } from "@/lib/dashboardV3/solStudioLink";
 import { addMoreExample, type ExamplePage } from "@/lib/dashboardV3/addMoreExamples";
 import { errMsg, hubApi } from "./hubApi";
+import { TourAnchorAbsent } from "../tour/TourAnchorAbsent";
 
 /** A little picture of what each add-on gives you, drawn with tokens so it follows the theme. */
 function Art({ id }: { id: AddOnId }) {
@@ -76,7 +77,8 @@ export function AddMoreCards({ siteId, siteName, features, pages = [] }: { siteI
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cards = addOnsFor(features);
-  if (!cards.length) return null;
+  // Nothing to add (an app manages its own features through SOL): tell the walkthrough, so it does not wait for this section.
+  if (!cards.length) return <TourAnchorAbsent anchor="hub-add-more" />;
   const what = which ? WHAT[which] : null;
   const example = which ? addMoreExample(which, siteName, pages) : null;
 
@@ -115,6 +117,7 @@ export function AddMoreCards({ siteId, siteName, features, pages = [] }: { siteI
   return (
     <>
     <section aria-labelledby="addmore" data-tour="hub-add-more" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <TourAnchorAbsent anchor="hub-add-more" absent={false} />
       <div>
         <h2 id="addmore" className="plx-h2">Add more to your site</h2>
         <p className="plx-hub__sub">Turn these on whenever you need them. They are added to &ldquo;{siteName}&rdquo;, the site you are in, not to a new one. Each takes about a minute.</p>

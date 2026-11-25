@@ -45,11 +45,11 @@ export function CreditModal({ creditInfo, returnTo, onClose }: { creditInfo: Cre
       onClose={onClose}
       width={checkoutSecret ? 600 : 520}
       closeOnBackdrop={!checkoutSecret}
-      title={checkoutSecret ? "Add credits" : "You're out of credits"}
+      title={checkoutSecret ? "Add credits" : "SOL needs more credits"}
       description={
         checkoutSecret
           ? undefined
-          : `This needs about ${creditInfo.requiredCredits.toLocaleString()} credits and you have ${creditInfo.availableCredits.toLocaleString()} left. Add some and your message will be waiting right where you left it.`
+          : `SOL needs about ${creditInfo.requiredCredits.toLocaleString()} credits to do this and you have ${creditInfo.availableCredits.toLocaleString()}. Add some and you carry on right where you left off.`
       }
     >
       {checkoutSecret ? (
@@ -89,7 +89,7 @@ export function CreditModal({ creditInfo, returnTo, onClose }: { creditInfo: Cre
             </p>
           ) : null}
           <p className="plx-small" style={{ margin: "4px 0 0" }}>
-            You&apos;ll come straight back to this chat once it&apos;s paid.
+            You&apos;ll come straight back here once it&apos;s paid.
           </p>
           <div style={{ display: "flex", justifyContent: "flex-end" }}>
             <Button variant="ghost" onClick={onClose}>

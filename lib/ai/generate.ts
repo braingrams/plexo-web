@@ -433,7 +433,7 @@ export async function generateBuilderAction(params: GenerateParams): Promise<Gen
       }
       if (secondError instanceof TruncatedResponseError) {
         throw new Error(
-          "The page was too long for the AI to finish in one go. Try a shorter or more focused description.",
+          "The page was too long for SOL to finish in one go. Try a shorter or more focused description.",
         );
       }
       const reason = secondError instanceof Error ? secondError.message : "unknown error";

@@ -87,14 +87,14 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply, dock
       const credits = await checkAiCredits(request);
       if (credits && !credits.enough) {
         setInsufficientCredits(credits.paidBy === "plexo" && credits.estimatedCredits !== null);
-        setError(credits.message ?? "You don't have enough AI credits for this.");
+        setError(credits.message ?? "SOL needs more credits to do this. Add some, then try again.");
         return;
       }
       const data = await generateWithProgress(request, setProgress);
       setResult({ summary: data.summary, html: data.result as string });
     } catch (err) {
       const message = err instanceof Error ? err.message : "SOL couldn't finish that. Please try again.";
-      if (/enough AI credits|out of AI credits/i.test(message)) setInsufficientCredits(true);
+      if (/enough (AI )?credits|out of (AI )?credits|needs more credits/i.test(message)) setInsufficientCredits(true);
       setError(message);
     } finally {
       setGenerating(false);
@@ -215,7 +215,7 @@ export function RawAiEditPanel({ templateKind, currentHtml, useAi, onApply, dock
           }}>
             {isLargePage && <IconWarning />}
             {isLargePage
-              ? `This page is fairly large (~${pageSizeKb}KB) — SOL reads all of it for each edit, so edits here use more AI credits than on a small page.`
+              ? `This page is fairly large (~${pageSizeKb}KB) — SOL reads all of it for each edit, so edits here use more credits than on a small page.`
               : "SOL changes only what you ask for and shows you the result before anything is saved."}
           </p>
           <SolHandoff draft={prompt} />

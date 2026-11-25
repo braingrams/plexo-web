@@ -143,7 +143,7 @@ export function ManagePagesList({ siteId, siteName, pages }: { siteId: string; s
               <Input label="Page address" help={`Will be: ${edit.page.path.replace(/[^/]*$/, "")}${cleanPathPart(edit.slug) || "…"}`} value={edit.slug} onChange={(e) => setEdit({ ...edit, slug: e.target.value })} autoComplete="off" />
             )}
             {!edit.page.isRoot ? (
-              <ButtonLink href={solHome(edit.page)} variant="link" size="sm" leftIcon={<SolGlyph size={16} />}>Want this as your home page? Ask SOL</ButtonLink>
+              <ButtonLink href={solHome(edit.page)} variant="link" size="sm" leftIcon={<SolGlyph size={16} />}>Make this your home page with SOL</ButtonLink>
             ) : null}
             {editError ? <p className="plx-field__error" role="alert">{editError}</p> : null}
           </div>

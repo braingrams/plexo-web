@@ -1,4 +1,4 @@
-import { NEW_SITE_PATH } from "@/lib/dashboardV3/newSite";
+import { JUST_MADE_COOKIE, NEW_SITE_PATH } from "@/lib/dashboardV3/newSite";
 import { cookies } from "next/headers";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
 import { loadV3Sites } from "@/lib/dashboardV3/loadShell";
@@ -43,7 +43,8 @@ export async function V3Home({ user, organizationId, userId }: { user: HomeUser;
     );
   }
   // The site they last picked if it still exists, else the most recently edited one (and the cookie gets repaired).
-  const { current, fixCookieTo } = homeEntry(sites, (await cookies()).get(CURRENT_SITE_COOKIE)?.value);
+  const jar = await cookies();
+  const { current, fixCookieTo } = homeEntry(sites, jar.get(CURRENT_SITE_COOKIE)?.value);
   const brandOf = (s: { brand?: SiteBrand }) => {
     const b = displayBrand(s.brand, profile?.brand);
     return { name: profile?.brand?.name, color: b.colors?.[0], logoUrl: b.logoUrl };
@@ -65,7 +66,7 @@ export async function V3Home({ user, organizationId, userId }: { user: HomeUser;
   const progress = computeTasks(variant, facts);
 
   // Pros always see everything together. Intermediate people see everything once the current site is online.
-  const mode = homeMode({ siteCount: sites.length, experience, currentAllDone: progress.allDone });
+  const mode = homeMode({ siteCount: sites.length, experience, currentAllDone: progress.allDone, justMade: jar.get(JUST_MADE_COOKIE)?.value === current.id });
   if (mode === "all") {
     // Every site is listed; the first 24 (most recently edited) also load their numbers, which keeps the page quick.
     const rows: HomeSiteRow[] = await Promise.all(

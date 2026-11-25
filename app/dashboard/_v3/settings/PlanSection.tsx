@@ -13,6 +13,7 @@ import { isPaidPlanId, type PaidPlanId, PLAN, RETIRED_PLAN, TrialPlanId } from "
 import { currencySymbolFor, maxTopupAmount, minTopupAmount } from "@/lib/billing/pricing";
 import { useTopupPacks, type TopupPackInfo } from "../../_components/useTopupPacks";
 import { Badge, Button, ButtonLink, Card, Modal, SegmentedControl } from "../ui";
+import { TourAnchorAbsent } from "../tour/TourAnchorAbsent";
 import { getTierFeatures } from "@/lib/subscription";
 import { planMonthlyCredits } from "@/lib/credits/value";
 import { creditMeter, usageMeter } from "@/lib/dashboardV3/settingsUsage";
@@ -233,6 +234,7 @@ export function PlanSection(props: PlanSectionProps) {
       purpose="What you have, what you're using, and what you've paid."
       below={
         <>
+        <TourAnchorAbsent anchor="plan-upgrade" absent={!upgrades.length} />
         {upgrades.length ? (
           <section id="plans" className="plx-sp__main" data-tour="plan-upgrade" aria-labelledby="up-h" style={{ scrollMarginTop: 90 }}>
             <div>
@@ -283,7 +285,7 @@ export function PlanSection(props: PlanSectionProps) {
             </div>
           </section>
           ) : null}
-      <Panel title="AI credits" description="Credits are what SOL uses when it builds or writes for you." data-tour="plan-credits" flush>
+      <Panel title="Credits" description="Credits are what SOL uses when it builds or writes for you." data-tour="plan-credits" flush>
           <div style={{ padding: "0 28px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span className="plx-bigstat">{credits.total.toLocaleString("en-US")}</span>
@@ -381,7 +383,7 @@ export function PlanSection(props: PlanSectionProps) {
             </div>
           </div>
           <div style={{ borderTop: "1px solid var(--plx-border)" }}>
-            <h3 className="plx-h3" style={{ padding: "20px 28px 4px" }}>Recent AI use</h3>
+            <h3 className="plx-h3" style={{ padding: "20px 28px 4px" }}>Recent SOL use</h3>
             {activity.length === 0 ? (
               <p className="plx-body" style={{ padding: "4px 28px 24px" }}>Nothing yet. When SOL builds something for you, it shows up here.</p>
             ) : (
@@ -458,7 +460,7 @@ export function PlanSection(props: PlanSectionProps) {
             <AsideCard title="What happens if…" icon={HelpCircle}>
               <ul>
                 <li><ArrowRight size={16} aria-hidden /> <span><b>I upgrade?</b> The new plan starts straight away, and only the difference is charged.</span></li>
-                <li><ArrowRight size={16} aria-hidden /> <span><b>I run out of AI credits?</b> Top up any time. Credits you buy never expire.</span></li>
+                <li><ArrowRight size={16} aria-hidden /> <span><b>I run out of credits?</b> Top up any time. Credits you buy never expire.</span></li>
                 <li><ArrowRight size={16} aria-hidden /> <span><b>I cancel?</b> You keep your plan until the end of what you&apos;ve paid for. Nothing is deleted.</span></li>
               </ul>
             </AsideCard>
@@ -471,7 +473,7 @@ export function PlanSection(props: PlanSectionProps) {
             <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <AsideStats items={[
                 { label: siteMeter.limit ? "Sites live" : "Sites", value: siteMeter.limit ? `${siteMeter.used} of ${siteMeter.limit}` : siteMeter.used, tone: siteMeter.tone === "ok" ? undefined : "warn" },
-                { label: "AI credits left", value: allowanceBalance.toLocaleString("en-US"), tone: creditsMeter.tone === "full" ? "bad" : creditsMeter.tone === "near" ? "warn" : "ok" },
+                { label: "Credits left", value: allowanceBalance.toLocaleString("en-US"), tone: creditsMeter.tone === "full" ? "bad" : creditsMeter.tone === "near" ? "warn" : "ok" },
               ]} />
             </div>
           </AsideCard>
@@ -507,7 +509,7 @@ export function PlanSection(props: PlanSectionProps) {
           {siteMeter.limit ? (
             <UsageMeter label="Live websites" meter={siteMeter} hint={siteMeter.tone === "full" ? "All used. Upgrade to put more sites live." : siteMeter.tone === "near" ? "Nearly all used." : undefined} />
           ) : null}
-          <UsageMeter label="AI credits" meter={creditsMeter} hint={credits.low || credits.negative ? "Running low. Top up below." : `Refill in ${credits.resetsInDays} day${credits.resetsInDays === 1 ? "" : "s"}`} />
+          <UsageMeter label="Credits" meter={creditsMeter} hint={credits.low || credits.negative ? "Running low. Top up below." : `Refill in ${credits.resetsInDays} day${credits.resetsInDays === 1 ? "" : "s"}`} />
           <UsageMeter label="Products" meter={productMeter} hint={features.maxCommerceProducts === 0 ? "Selling products comes with Starter." : productMeter.tone !== "ok" ? "Nearly full." : undefined} />
           <UsageMeter label="Teammates" meter={seatMeter} hint={features.teamSeats === 0 ? "Inviting people comes with Starter." : seatMeter.tone === "full" ? "All seats used." : undefined} />
         </div>

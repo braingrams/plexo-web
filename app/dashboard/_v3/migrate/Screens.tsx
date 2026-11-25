@@ -10,6 +10,7 @@ import { Badge, Button, ButtonLink, Card, CardHeader, Input, ProgressBar, Segmen
 import { Disclosure, IssueList, Note, StatCard, Track, VStepper } from "./pieces";
 import { estimateMigrationSeconds, formatDuration } from "@/lib/wpMigration/estimate";
 import { addressProblem, blogStatus, moveStages, movePercent, planGate, reportIssues, reportSummary, solHref } from "@/lib/wpMigration/moveView";
+import { afterCreateHref } from "@/lib/dashboardV3/newSite";
 import type { ExistingMigration, JobStatus, DomainRow, Plugin, Preview, Report } from "@/app/dashboard/migrate/wordpress/wizard/types";
 
 const PAGES_DOMAIN = process.env.NEXT_PUBLIC_PAGES_DOMAIN || "plexopages.com";
@@ -466,7 +467,7 @@ function DoneHero({ host, templateId }: { host: string; templateId: string }) {
           <p className="plx-mv__sub" style={{ margin: 0 }}>{host} now opens your Plexo site. Every page kept its address. It's safe to cancel your old WordPress hosting.</p>
           <div className="plx-mvrow" style={{ justifyContent: "center", marginTop: 8 }}>
             <ButtonLink size="lg" href={`https://${host}`} target="_blank" rel="noreferrer" rightIcon={<ExternalLink size={18} />}>Visit my site</ButtonLink>
-            <ButtonLink size="lg" variant="secondary" href={`/dashboard/sites/${templateId}`}>Go to my site</ButtonLink>
+            <ButtonLink size="lg" variant="secondary" href={afterCreateHref()}>Go to my dashboard</ButtonLink>
           </div>
         </div>
       </Card>

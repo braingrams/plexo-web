@@ -10,6 +10,7 @@ import { usageMeter } from "@/lib/dashboardV3/settingsUsage";
 import { errMsg, hubApi } from "../hub/hubApi";
 import { AsideCard, Notice, Panel, SettingsPageShell, UsageMeter } from "./bits";
 import { GateOrError } from "../../_components/UpgradePrompt";
+import { TourAnchorAbsent } from "../tour/TourAnchorAbsent";
 
 export type TeamMember = { id: string; userId: string; role: string; scopedTemplateIds: string[]; siteAccess?: SiteAccess; name: string; email: string };
 export type TeamInvite = { id: string; email: string; role: string; scopedTemplateIds: string[]; siteAccess?: SiteAccess; createdAt: string };
@@ -155,6 +156,7 @@ export function TeamSection({ currentUserId, currentRole, organizationName, memb
         })}
       </Panel>
 
+      <TourAnchorAbsent anchor="team-invite" absent={!canManage} />
       {canManage ? (
         <Panel title="Invite someone" description="They get an email. Nothing changes until they say yes." data-tour="team-invite">
           <div className="plx-sform plx-sform--wide">

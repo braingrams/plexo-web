@@ -21,6 +21,9 @@ export interface MarketplaceListItem {
   publishedAt: string | null;
   purchaseCount: number;
   compiledHtml?: string | null;
+  /** "v2" for a design made in the new editor (the onboarding flow personalizes those on their design data). */
+  designFormat?: string | null;
+  sourceType?: string | null;
 }
 
 const PAGE_SIZE = 24;
@@ -169,5 +172,7 @@ export async function listPublishedPageDesigns(): Promise<MarketplaceListItem[]>
     publishedAt: t.marketplacePublishedAt ?? null,
     purchaseCount: counts.get(t.id) ?? 0,
     compiledHtml: t.compiledHtml,
+    designFormat: t.designFormat ?? "v1",
+    sourceType: t.sourceType ?? null,
   }));
 }

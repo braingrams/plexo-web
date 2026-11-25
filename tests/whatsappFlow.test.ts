@@ -189,7 +189,7 @@ describe("WhatsApp inbound flow", () => {
     linked();
     h.state.prepareMessages = vi.fn(async () => ({ ok: false as const, status: 402, body: { error: "insufficient_credits" } }));
     await processInboundMessage(msg("m1", "build me a site"));
-    expect(lastSent()).toMatch(/used up your AI credits/);
+    expect(lastSent()).toMatch(/SOL needs more credits/);
     expect(lastSent()).not.toMatch(/insufficient_credits/);
   });
 

@@ -35,11 +35,13 @@ export function BlogTab({ siteId, experience }: { siteId: string; experience: st
       <TabBar title="Your blog" sub="Write posts and share them with the world." action={actions} />
       {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}
       {posts === null && !error ? (
-        <Card padding="lg" style={{ minHeight: 220, display: "grid", placeItems: "center" }}>
+        <Card padding="lg" style={{ minHeight: 220, display: "grid", placeItems: "center" }} data-tour="hub-blog">
           <OptimisticLoader steps={["Loading your blog posts…", "Preparing articles, view counts and drafts…"]} subtitle="Fetching your published stories and drafts" />
         </Card>
       ) : posts && posts.length === 0 ? (
-        <EmptyState title="Write your first post" body="Tell people what's new. Open the editor and ask SOL to draft it for you, or write it yourself." action={actions} />
+        <div data-tour="hub-blog">
+          <EmptyState title="Write your first post" body="Tell people what's new. Open the editor and ask SOL to draft it for you, or write it yourself." action={actions} />
+        </div>
       ) : posts ? (
         <div data-tour="hub-blog">
           <div className="plx-toolbar plx-toolbar--end"><ListModeToggle mode={mode} onChange={setMode} /></div>

@@ -1302,7 +1302,7 @@ export function TemplateEditorClient({
     <EditorHeaderRight
       modeSwitch={canConvertToCode && !isReadOnlyRole ? <BlockModeSwitch onPick={setConvertTo} /> : undefined}
       manyPages={templateKind === "LANDING_PAGE" && !isBlogLayout && !isReadOnlyRole && !(isV2 && !beginner) ? (
-        <button type="button" onClick={() => setManyPagesOpen(true)} title="Ask SOL to change several pages in one go" style={isV2 ? undefined : { display: "inline-flex", alignItems: "center", gap: "0.4rem", minHeight: 40, padding: "0 0.8rem", borderRadius: 9, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-t-600)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 600, whiteSpace: "nowrap" }}>
+        <button type="button" onClick={() => setManyPagesOpen(true)} title="Change several pages with SOL in one go" style={isV2 ? undefined : { display: "inline-flex", alignItems: "center", gap: "0.4rem", minHeight: 40, padding: "0 0.8rem", borderRadius: 9, border: "1px solid var(--ed-w-100)", background: "transparent", color: "var(--ed-t-600)", cursor: "pointer", fontFamily: "inherit", fontSize: "0.8rem", fontWeight: 600, whiteSpace: "nowrap" }}>
           SOL on several pages
         </button>
       ) : undefined}

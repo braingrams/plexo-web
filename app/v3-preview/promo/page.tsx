@@ -18,7 +18,7 @@ const ROWS: { label: string; promo: PromoView }[] = [
   { label: "Image + dark", promo: { ...base, tone: "dark", imageUrl: IMG } },
   { label: "Image + brand", promo: { ...base, tone: "brand", imageUrl: IMG } },
   { label: "For developers", promo: { ...base, feature: "developers", audience: "developers", tone: "light", headline: "Did you know you can use the Plexo Editor in your own apps?", body: "Drop the Plexo page editor into your own app with the SDK.", buttonLabel: "See how", href: "/dashboard/settings/developers" } },
-  { label: "Headline only", promo: { ...base, body: "", headline: "Meet SOL, your website assistant", feature: "sol", buttonLabel: "Ask SOL", tone: "light" } },
+  { label: "Headline only", promo: { ...base, body: "", headline: "Meet SOL, built into Plexo", feature: "sol", buttonLabel: "Ask SOL", tone: "light" } },
   { label: "Very long text", promo: { ...base, headline: "Already have a website on WordPress, Wix or Squarespace somewhere else?", body: "Move all your pages, posts, pictures and forms across in a few minutes and we do all of the heavy lifting for you, free of charge." } },
 ];
 

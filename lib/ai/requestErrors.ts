@@ -2,18 +2,18 @@
 // by every dashboard screen that calls /api/v1/ai/generate, so they all explain it the
 // same way. The server's own error (already plain words) wins whenever there is one.
 
-export const AI_UNREACHABLE = "We couldn't reach Plexo to run the AI. Check your connection and try again.";
+export const AI_UNREACHABLE = "We couldn't reach Plexo to run SOL. Check your connection and try again.";
 
-export function aiErrorMessage(status: number, body: { error?: unknown } | null | undefined, fallback = "The AI couldn't finish this. Try again."): string {
+export function aiErrorMessage(status: number, body: { error?: unknown } | null | undefined, fallback = "SOL couldn't finish this. Try again."): string {
   if (body && typeof body.error === "string" && body.error.trim()) return body.error;
   if (status === 504 || status === 502 || status === 503) {
-    return "This took longer than we can wait for the AI. Try again — a shorter request, or the faster quality option, usually finishes in time.";
+    return "This took longer than we can wait for SOL. Try again — a shorter request, or the faster quality option, usually finishes in time.";
   }
-  if (status === 402) return "You're out of AI credits — top up, or add your own API key in Settings.";
+  if (status === 402) return "SOL needs more credits to do this. Top up, or add your own AI key in Settings.";
   return fallback;
 }
 
 /** True when an AI reply is the "you're out of credits" explanation (from the server or from aiErrorMessage). */
 export function isOutOfCreditsReply(reply: string): boolean {
-  return /enough AI credits|out of AI credits|used all your AI credits/i.test(reply);
+  return /needs more credits|enough credits|out of credits|used (?:up )?all your credits|enough AI credits|out of AI credits|used all your AI credits/i.test(reply);
 }

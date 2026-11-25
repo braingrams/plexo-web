@@ -257,7 +257,7 @@ export function EmailHtmlEditor({ templateId, templateName, initialHtml, useAi, 
       const credits = await checkAiCredits(request);
       if (credits && !credits.enough) {
         setBroke(credits.paidBy === "plexo" && credits.estimatedCredits !== null);
-        throw new Error(credits.message ?? "You don't have enough AI credits for this.");
+        throw new Error(credits.message ?? "SOL needs more credits to do this. Add some, then try again.");
       }
       const data = await generateWithProgress(request, () => undefined);
       commit(data.result as string);
@@ -265,7 +265,7 @@ export function EmailHtmlEditor({ templateId, templateName, initialHtml, useAi, 
       setNote({ tone: "ok", text: data.summary || "Done. Your email is updated." });
     } catch (e) {
       const m = e instanceof Error ? e.message : "SOL couldn't finish that. Please try again.";
-      if (/enough AI credits|out of AI credits/i.test(m)) setBroke(true);
+      if (/enough (AI )?credits|out of (AI )?credits|needs more credits/i.test(m)) setBroke(true);
       setNote({ tone: "bad", text: m });
     } finally {
       setBusy(null);
@@ -323,7 +323,7 @@ export function EmailHtmlEditor({ templateId, templateName, initialHtml, useAi, 
           {useAi ? (
             <div style={{ padding: "0.7rem 1rem", borderTop: "1px solid var(--ed-w-080)", display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", gap: 8 }}>
-                <input value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && busy === null && void askSol()} placeholder="Ask SOL to change it: “make the button green and the heading shorter”" aria-label="Ask SOL to change this email" style={{ flex: 1, font: "inherit", fontSize: "0.88rem", padding: "0.55rem 0.8rem", borderRadius: 10, border: "1px solid var(--ed-w-120, rgba(128,128,128,.35))", background: "var(--ed-w-050)", color: "var(--ed-text)" }} />
+                <input value={prompt} onChange={(e) => setPrompt(e.target.value)} onKeyDown={(e) => e.key === "Enter" && busy === null && void askSol()} placeholder="Ask SOL to change it: “make the button green and the heading shorter”" aria-label="Change this email with SOL" style={{ flex: 1, font: "inherit", fontSize: "0.88rem", padding: "0.55rem 0.8rem", borderRadius: 10, border: "1px solid var(--ed-w-120, rgba(128,128,128,.35))", background: "var(--ed-w-050)", color: "var(--ed-text)" }} />
                 <button type="button" disabled={busy !== null || !prompt.trim()} onClick={() => void askSol()} style={{ ...btn, background: "var(--ed-cta)", color: "var(--ed-on-brand)", border: 0 }}>{busy === "sol" ? "SOL is working…" : "Change it"}</button>
               </div>
               {broke ? <SolOutOfCredits onDismiss={() => setBroke(false)} onToppedUp={() => { setBroke(false); setNote(null); void askSol(); }} /> : null}

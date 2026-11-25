@@ -48,6 +48,13 @@ describe("homeMode", () => {
     expect(homeMode({ siteCount: 3, experience: "intermediate", currentAllDone: false })).toBe("site");
     expect(homeMode({ siteCount: 3, experience: "intermediate", currentAllDone: true })).toBe("all");
   });
+  it("a site just made opens on its steps for everyone, pros too, until it is online", () => {
+    expect(homeMode({ siteCount: 5, experience: "pro", currentAllDone: false, justMade: true })).toBe("site");
+    expect(homeMode({ siteCount: 5, experience: "intermediate", currentAllDone: false, justMade: true })).toBe("site");
+    expect(homeMode({ siteCount: 5, experience: "pro", currentAllDone: true, justMade: true })).toBe("all");
+    expect(homeMode({ siteCount: 5, experience: "pro", currentAllDone: false, justMade: false })).toBe("all");
+    expect(homeMode({ siteCount: 0, experience: "pro", currentAllDone: false, justMade: true })).toBe("none");
+  });
   it("skipped onboarding never produces the empty screen for someone with sites (it is not an input)", () => {
     const entry = homeEntry(many, undefined);
     expect(entry.current).not.toBeNull();

@@ -147,7 +147,7 @@ export function TuneWizard({ initialProfile, sites, currentSiteId, mock = false 
             <div className="ob-stack">
               <div>
                 <h1 className="ob-title">What would you like to do with {site ? <>&ldquo;{site.name}&rdquo;</> : "it"}?</h1>
-                <p className="ob-lead">SOL is Plexo&apos;s assistant. It looks at your site first, then makes the change with you.</p>
+                <p className="ob-lead">SOL looks at your site first, then makes the change with you.</p>
               </div>
               <div className="ob-choices" role="radiogroup" aria-label="What to do">
                 {TUNE_ACTIONS.map((a) => (

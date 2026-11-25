@@ -567,7 +567,7 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
       if (credits && !credits.enough) {
         // Plexo's AI and not enough credits → SOL's top-up card; anything else is a plain message.
         if (credits.paidBy === "plexo" && credits.estimatedCredits !== null) setOutOfCredits(true);
-        else setError(credits.message ?? "You don't have enough AI credits for this.");
+        else setError(credits.message ?? "SOL needs more credits to do this. Add some, or build your site without SOL.");
         return;
       }
 
@@ -579,7 +579,7 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
         // "AI is not enabled for this account" is the one error a first-time user is likely
         // to hit — point them at the fix instead of leaving a bare permission error.
         const message = err instanceof Error ? err.message : "SOL couldn't build your site. Please try again.";
-        if (/enough AI credits|out of AI credits/i.test(message)) setOutOfCredits(true);
+        if (/enough (AI )?credits|out of (AI )?credits|needs more credits/i.test(message)) setOutOfCredits(true);
         else setError(/not enabled/i.test(message) ? "SOL isn't turned on for your account yet. Turn it on in Settings → AI, then try again." : message);
         return;
       }
@@ -805,7 +805,7 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
                     transition: "background 0.15s, color 0.15s",
                   }}
                 >
-                  Build with AI
+                  Build with SOL
                 </button>
                 <button
                   type="button"
@@ -938,7 +938,7 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
                     >
                       <p style={{ margin: 0, fontSize: "13px", fontWeight: 650 }}>Turn on SOL to build from a description</p>
                       <p style={{ margin: 0, fontSize: "12px", color: "var(--text-muted)", lineHeight: 1.6 }}>
-                        SOL isn&rsquo;t on for your account yet. Turning it on uses Plexo&rsquo;s AI, paid from your AI
+                        SOL isn&rsquo;t on for your account yet. Turning it on uses your plan&rsquo;s
                         credits — no setup needed. You can switch to your own AI key any time in{" "}
                         <Link href="/dashboard/settings/ai" target="_blank" style={{ color: "var(--brand)" }}>
                           Settings
@@ -1001,7 +1001,7 @@ export function NewSiteWizard({ onClose, plan = PLAN.FREE }: { onClose?: () => v
                         disabled={aiGenerating || !aiPrompt.trim() || (pageType === "html" && !agreed)}
                         style={{ ...primaryButtonStyle(!aiGenerating && !!aiPrompt.trim() && (pageType !== "html" || agreed)), alignSelf: "flex-start", cursor: aiGenerating ? "wait" : "pointer" }}
                       >
-                        {aiGenerating ? (aiStage === "checking" ? "Checking your AI credits…" : aiStage === "saving" ? "Saving your site…" : "Writing your site…") : "Generate my site"}
+                        {aiGenerating ? (aiStage === "checking" ? "Checking your credits…" : aiStage === "saving" ? "Saving your site…" : "Writing your site…") : "Generate my site"}
                       </button>
                       {aiGenerating && aiStage === "writing" && (
                         <div style={{ display: "flex", flexDirection: "column", gap: 6, maxWidth: 420 }} aria-live="polite">

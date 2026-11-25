@@ -1,4 +1,5 @@
 import { templateLimitGate } from "@/lib/plan/limitGates";
+import { markSiteJustMade } from "@/lib/dashboardV3/newSite";
 import { limitGateResponse } from "@/lib/plan/planGateResponse";
 import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
@@ -273,7 +274,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   // straight away. Best effort: the upload has already succeeded.
   await import("@/lib/brand/siteBrand").then((m) => m.refreshBrandMapping(template.id)).catch((err) => console.warn(`[upload-raw] ${template.id}: brand matching skipped`, err));
 
-  return NextResponse.json({
+  const res = NextResponse.json({
     success: true,
     templateId: template.id,
     name: template.name,
@@ -281,4 +282,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     subPagesCreated,
     message: "Site uploaded. Link it to a subdomain or custom domain from Domain Management to go live.",
   });
+  // A new site (not a sub-page): make it the current one and let Home open on its guided steps, like "Make a new website" does.
+  if (!parentIdInput) markSiteJustMade(res, template.id);
+  return res;
 }

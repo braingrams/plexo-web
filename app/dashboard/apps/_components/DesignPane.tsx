@@ -497,7 +497,7 @@ export function DesignPane(props: {
               <span style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                 <span style={{ flex: 1, minWidth: 220 }}>This page isn't linked into your app yet, so visitors can't reach {current.route}.</span>
                 <Button size="sm" onClick={() => props.onAskSol(`Show my designed pages in the app: render the routes exported as designRoutes from src/plexo-canvas/routes.tsx inside <Routes> in src/App.tsx (before the catch-all route), then rebuild.`)}>
-                  <MessageSquare size={13} /> Ask SOL to link it
+                  <MessageSquare size={13} /> Link it with SOL
                 </Button>
               </span>
             </Notice>

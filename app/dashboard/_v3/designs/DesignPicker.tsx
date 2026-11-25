@@ -30,7 +30,7 @@ import { Badge, Button, EmptyState, Input, Modal, Notice, OptimisticLoader, Segm
 import { DesignPreview } from "./DesignPreview";
 import "./designs.css";
 
-export type PickerDesign = { id: string; name: string; category: string | null; description: string | null; priceCents: number; owned: boolean; bestFit: boolean; html: string | null };
+export type PickerDesign = { id: string; name: string; category: string | null; description: string | null; priceCents: number; owned: boolean; bestFit: boolean; html: string | null; /** A new-editor design: the server builds its preview and the new site from its design data, so the browser sends no page HTML for it. */ v2?: boolean };
 type Price = "any" | "free" | "paid";
 
 export type DesignPickerProps = {

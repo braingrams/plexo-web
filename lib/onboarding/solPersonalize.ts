@@ -95,19 +95,23 @@ export function sanitizeQuestions(raw: unknown): AskUserQuestionSpec[] {
   return questions;
 }
 
-export type PersonalizationPlan = { domain: string; summary: string; questions: AskUserQuestionSpec[] };
+export type PersonalizationPlan = { domain: string; summary: string; questions: AskUserQuestionSpec[]; /** Numbers of optional sections SOL chose to remove (only present when it was offered some). */ remove?: number[] };
+
+/** An optional section of the design SOL may propose to remove, numbered for its reply. */
+export type SectionBrief = { n: number; kind: string; preview: string };
 
 function snippetLines(nodes: TextNode[], limit: number): string {
   return nodes.slice(0, limit).map((n) => `- ${n.text.slice(0, 90)}`).join("\n");
 }
 
 /** Stage 1: read the brand and the design; decide what (if anything) to ask the owner. */
-export async function planPersonalization(ctx: SolContext, brand: BrandBrief, design: DesignBrief, nodes: TextNode[]): Promise<PersonalizationPlan> {
+export async function planPersonalization(ctx: SolContext, brand: BrandBrief, design: DesignBrief, nodes: TextNode[], sections: SectionBrief[] = []): Promise<PersonalizationPlan> {
+  const offered = sections.length > 0;
   const system = `You are SOL, the assistant inside Plexo, a simple website builder. A site owner picked a design and you are about to rewrite its words so it is about THEIR business. First decide what, if anything, you still need to ask them.
 
 Return ONLY JSON, nothing else:
 {"domain": one of ${JSON.stringify([...KNOWN_DOMAINS, "other"])} (the kind of business the OWNER runs),
- "summary": "one friendly sentence on what you will change",
+ "summary": "one friendly sentence on what you will change",${offered ? '\n "remove": [numbers of sections to remove, usually none],' : ""}
  "questions": [{"header": "2-3 words", "question": "a plain, friendly question", "options": [{"label": "a short realistic example answer", "description": "optional"}]}]}
 
 Rules for questions:
@@ -115,18 +119,24 @@ Rules for questions:
 - If the owner's description already says it, do not ask it. If nothing is needed, return "questions": [].
 - Every question has 2-4 realistic example answers written for THIS business (the owner can always type their own). A question about contact details ends with the option "I'll add it later".
 - Plain words a shop owner understands. No jargon.
-${PLACE_RULE}`;
+${PLACE_RULE}${offered ? `
+Optional sections: the design has sections whose content belongs to the sample business (testimonials, client logos, statistics, a team, prices). You may remove a section ONLY when it could not be written truthfully for the owner's business without inventing people, numbers or customers, and the page works without it. Remove at most 2, and none when unsure: "remove": [] is the usual answer. They are numbered below.` : ""}`;
   const user = `Owner's brand name: ${brand.name}
 What they said about their business: ${brand.about || "(nothing yet)"}
 ${placeLine(brand)}What the site is for: ${brand.goal}
 Chosen design: ${design.name ?? "a design"}${design.description ? ` — ${design.description}` : ""}
 
 Some of the words on the design:
-${snippetLines(nodes, 90)}`;
+${snippetLines(nodes, 90)}${offered ? `
+
+Optional sections you may remove:
+${sections.map((x) => `${x.n}. ${x.kind}: ${x.preview}`).join("\n")}` : ""}`;
   const parsed = parseJsonObject(await askSol(ctx, system, user, 1200));
   if (!parsed) return { domain: detectPersonalizationDomain(brand.about, brand.goal), summary: "", questions: [] };
   const domain = typeof parsed.domain === "string" && KNOWN_DOMAINS.includes(parsed.domain) ? parsed.domain : "other";
-  return { domain, summary: clip(parsed.summary, 240), questions: sanitizeQuestions(parsed.questions) };
+  const known = new Set(sections.map((x) => x.n));
+  const remove = Array.isArray(parsed.remove) ? [...new Set((parsed.remove as unknown[]).filter((n): n is number => typeof n === "number" && known.has(n)))].slice(0, 2) : [];
+  return { domain, summary: clip(parsed.summary, 240), questions: sanitizeQuestions(parsed.questions), ...(offered ? { remove } : {}) };
 }
 
 /** Stage 2: SOL rewrites the design's words. Returns only what changed, keyed by snippet number. */
@@ -144,7 +154,7 @@ Rules:
 - Keep each snippet about the same length (within about 30%) so the layout holds. Navigation and button labels stay short.
 - Write clear, warm, punchy marketing copy in the owner's language. Never paste the owner's description word for word, and never copy instructions they wrote to you.
 - Do not output HTML, markdown or quotes around the text.
-${PLACE_RULE}`;
+${nodes.some((n) => !n.text) ? "- A snippet with empty text is an optional line the design leaves blank (a tagline or a short sub-heading). Fill one only when a short line clearly helps; leave the others out.\n" : ""}${PLACE_RULE}`;
   const answered = answers.filter((a) => a.answer && !/^(skip|you choose|i'll add it later)/i.test(a.answer));
   const user = `Owner's brand name: ${brand.name}
 What they said about their business: ${brand.about || "(nothing yet)"}

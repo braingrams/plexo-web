@@ -43,7 +43,7 @@ export function planHighlights(plan: PlanId): { label: string; value: string }[]
     { label: "Store", value: f.commerceEnabled ? `${f.maxCommerceProducts.toLocaleString("en-US")} products${f.ownPaymentKeysEnabled ? ", your own payment keys" : ""}` : "—" },
     { label: "Blog", value: f.blogEnabled ? "Unlimited posts" : "—" },
     { label: "Email templates", value: custom(plan, String(f.maxEmailTemplates)) },
-    { label: "AI credits / month", value: planMonthlyCredits(plan).toLocaleString("en-US") },
+    { label: "Credits / month", value: planMonthlyCredits(plan).toLocaleString("en-US") },
     { label: "Domains", value: domains },
     { label: "Plexo badge", value: f.whiteLabelEnabled ? "Your own brand" : f.brandingRemovalEnabled ? "Removable" : "Shown" },
     { label: "Team", value: f.teamSeats === 0 ? "Just you" : custom(plan, `${f.teamSeats} teammates`) },
@@ -224,7 +224,7 @@ export function PlanPicker({
       </div>
       {trialAvailable && currentPlan === PLAN.FREE && (
         <p style={{ fontSize: "0.72rem", color: "var(--plx-muted, rgba(240,242,255,0.45))", marginTop: "0.6rem" }}>
-          The free trial gives you Starter or Pro for 14 days, no card needed. Custom domains, taking real payments and your own branding switch on once you pay. The trial doesn&apos;t add AI credits.
+          The free trial gives you Starter or Pro for 14 days, no card needed. Custom domains, taking real payments and your own branding switch on once you pay. The trial doesn&apos;t add credits.
         </p>
       )}
       {clientSecret && <StripeCheckoutModal clientSecret={clientSecret} onClose={() => setClientSecret(null)} />}

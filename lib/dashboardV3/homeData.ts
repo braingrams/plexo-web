@@ -1,4 +1,6 @@
 import "server-only";
+import { editedByOwner, reviewedByOwner } from "./startReview";
+import { solContactOf, solPersonalizedOf } from "./solMarks";
 /**
  * Everything the v3 Home reads for a site: the facts behind the guided steps (lib/dashboardV3/
  * tasks.ts) and the numbers on the live dashboard. Every read is wrapped so a hiccup in one
@@ -18,7 +20,6 @@ import type { SiteSummary } from "./sites";
 import type { SolBuildProfile } from "@/lib/ai/solBuildContext";
 
 const DAY = 86_400_000;
-const EDITED_AFTER_MS = 120_000;
 
 async function safe<T>(label: string, run: () => Promise<T>, fallback: T): Promise<T> {
   try {
@@ -35,7 +36,7 @@ export type SiteHomeData = { variant: TaskVariant; facts: SiteFacts; commerceEna
 export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile | undefined): Promise<SiteHomeData> {
   const id = site.id;
   const [tpl, settings, products, campaigns, posts, lessons, funnel] = await Promise.all([
-    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "liveBuildId", "sourceType", "brand", "compiledHtml", "draftHtml"] })).data, null),
+    safe("site", async () => (await Template.get({ id }).go({ attributes: ["id", "createdAt", "updatedAt", "activeVersionId", "liveBuildId", "sourceType", "brand", "compiledHtml", "draftHtml", "startReviewedAt", "solPersonalizedAt", "solContactGivenAt"] })).data, null),
     safe("store settings", async () => (await CommerceSettings.get({ templateId: id }).go()).data, null),
     safe("products", async () => (await CommerceProduct.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
     safe("campaigns", async () => (await CommerceDonationCampaign.query.primary({ templateId: id }).go({ limit: 1, attributes: ["id"] })).data, []),
@@ -50,10 +51,8 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
   const commerceEnabled = Boolean(settings?.enabled) && (hasProducts || !hasDonations);
   const acceptsDonations = hasDonations || Boolean(settings?.donationsEnabled && !settings?.enabled);
   const variant = taskVariantFor({ kind: site.kind, sells: commerceEnabled, hasDonations: acceptsDonations, productCount: products.length }, profile?.goal);
-  const created = tpl?.createdAt ? Date.parse(tpl.createdAt) : NaN;
-  const updated = tpl?.updatedAt ? Date.parse(tpl.updatedAt) : NaN;
   const lessonCount = lessons.filter((l) => l.kind !== "WELCOME").length;
-  const edited = Number.isFinite(created) && Number.isFinite(updated) && updated - created > EDITED_AFTER_MS;
+  const edited = editedByOwner(tpl);
   const cardsReady =
     settings?.paymentProvider === "PLATFORM_PAYSTACK" ||
     settings?.paymentProvider === "PLATFORM_STRIPE" ||
@@ -61,11 +60,8 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
     ((!settings?.paymentProvider || settings?.paymentProvider === "BYO_PAYSTACK") && !!settings?.paystackLivePublicKey && !!settings?.paystackLiveSecretKeyEncrypted);
   const bankReady = !!settings?.bankTransferEnabled && !!settings?.bankTransferAccountNumber;
   const ownDesign = tpl?.sourceType === "RAW_UPLOAD";
-  const personalizedWithSol = Boolean(
-    tpl?.compiledHtml?.includes('data-sol-personalized="true"') ||
-    tpl?.draftHtml?.includes('data-sol-personalized="true"')
-  );
-  const contactProvided = Boolean(tpl?.compiledHtml?.includes('data-sol-contact="true"') || tpl?.draftHtml?.includes('data-sol-contact="true"'));
+  const personalizedWithSol = solPersonalizedOf(tpl);
+  const contactProvided = solContactOf(tpl);
   const facts: SiteFacts = {
     ...EMPTY_FACTS,
     hasSite: true,
@@ -74,6 +70,7 @@ export async function loadSiteFacts(site: SiteSummary, profile: SolBuildProfile 
     logoSkipped: own?.noLogo === true,
     hasColors: !!own?.colors?.length,
     edited,
+    reviewed: reviewedByOwner(tpl),
     productCount: products.length,
     paymentsReady: cardsReady || bankReady,
     postCount: posts.length,

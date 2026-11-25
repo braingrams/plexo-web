@@ -64,7 +64,7 @@ export const PROMO_FEATURES: PromoFeature[] = [
   { id: "sell", label: "Sell products", icon: "ShoppingBag", headline: "Start selling on your website", body: "Add products, take payments and track orders in one place.", buttonLabel: "Start selling", href: "/dashboard/sol?new=1&draft=I%20want%20to%20sell%20products%20on%20my%20website", tone: "light" },
   { id: "blog", label: "Start a blog", icon: "PenLine", headline: "Share news with a blog", body: "Write posts that bring visitors back. No setup needed.", buttonLabel: "Start a blog", href: "/dashboard/blog", tone: "light" },
   { id: "course", label: "Start a course", icon: "GraduationCap", headline: "Teach what you know", body: "Turn your knowledge into a course people can sign up for.", buttonLabel: "Start a course", href: "/dashboard/learners", tone: "light" },
-  { id: "sol", label: "Ask SOL", icon: "MessageCircle", headline: "Not sure where to start?", body: "Tell SOL what you want in your own words and it does the work.", buttonLabel: "Ask SOL", href: "/dashboard/sol?new=1", tone: "light" },
+  { id: "sol", label: "SOL", icon: "MessageCircle", headline: "Not sure where to start?", body: "Tell SOL what you want in your own words and it does the work.", buttonLabel: "Start with SOL", href: "/dashboard/sol?new=1", tone: "light" },
   { id: "developers", label: "Developers: use the editor in your own apps", icon: "CodeXml", headline: "Did you know you can use the Plexo Editor in your own apps?", body: "Drop the Plexo page editor into your own app with the SDK.", buttonLabel: "See how", href: "/dashboard/settings/developers", tone: "light" },
   { id: "custom", label: "Custom", icon: "Megaphone", headline: "", body: "", buttonLabel: "Learn more", href: "/dashboard", tone: "light" },
 ];

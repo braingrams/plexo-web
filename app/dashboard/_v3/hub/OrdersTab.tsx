@@ -137,6 +137,7 @@ export function OrdersTab({ siteId, currency, hideHeader }: { siteId: string; cu
       </div>
       {orders && orders.length ? <p className="plx-count" aria-live="polite">{total} order{total === 1 ? "" : "s"}{q || filter ? (total === 1 ? " matches" : " match") : ""}</p> : null}
       {error ? <GateOrError error={error}><div className="plx-inlinemsg plx-inlinemsg--bad" role="alert">{error}</div></GateOrError> : null}
+      <div data-tour="hub-orders">
       {orders === null && !error ? (
         <Card padding="lg" style={{ minHeight: 200, display: "grid", placeItems: "center" }}>
           <OptimisticLoader steps={["Loading your orders…", "Checking payment confirmations…"]} subtitle="Fetching your order history" />
@@ -144,7 +145,7 @@ export function OrdersTab({ siteId, currency, hideHeader }: { siteId: string; cu
       ) : orders && orders.length === 0 ? (
         q || filter ? <EmptyState title="No orders match" body="Try a different word, or show all your orders." illustration={<Inbox size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} /> : <EmptyState title="No orders yet" body="When someone buys from your shop, the order shows up here and we email you. Share your site to get your first one." illustration={<Inbox size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />
       ) : orders ? (
-        <Card padding="none" className="plx-listcard" data-tour="hub-orders">
+        <Card padding="none" className="plx-listcard">
           <ul className="plx-list">
             {orders.map((o) => {
               const l = orderLabel(o);
@@ -168,6 +169,7 @@ export function OrdersTab({ siteId, currency, hideHeader }: { siteId: string; cu
           </ul>
         </Card>
       ) : null}
+      </div>
       {pages > 1 ? (
         <div className="plx-hub__bar">
           <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>

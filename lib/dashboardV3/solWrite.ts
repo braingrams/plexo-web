@@ -18,12 +18,12 @@ export type CostCheck = { paidBy: "plexo" | "own-key" | "host"; enough: boolean;
 /** The line above the prompt: what this will cost and what's left, or that it's free (their own key / included). */
 export function costNote(check: CostCheck, balance: number | null): string {
   const n = (v: number) => v.toLocaleString("en-US");
-  if (check?.paidBy === "own-key") return "This uses your own AI key, so it doesn't use any Plexo credits.";
+  if (check?.paidBy === "own-key") return "This uses your own AI key, so it doesn't use any credits.";
   if (check?.paidBy === "host") return "This is included with your account.";
   const left = check?.balance ?? balance;
   const est = check?.estimatedCredits ?? null;
   if (est !== null && left !== null) return `About ${n(est)} credits. You have ${n(left)} left.`;
   if (est !== null) return `About ${n(est)} credits.`;
-  if (left !== null) return `Uses AI credits. You have ${n(left)} left.`;
-  return "Uses AI credits.";
+  if (left !== null) return `SOL uses credits for this. You have ${n(left)} left.`;
+  return "SOL uses credits for this.";
 }

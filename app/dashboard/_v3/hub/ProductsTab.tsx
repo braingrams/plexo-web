@@ -175,11 +175,13 @@ export function ProductsTab({ siteId, products, currency, experience, startNew }
           </Button>
         </div>
       ) : null}
+      <div data-tour="hub-products">
       {full && section === "discounts" ? <DiscountsPanel siteId={siteId} currency={currency} /> : full && section === "delivery" ? <DeliveryPanel siteId={siteId} currency={currency} /> : products.length === 0 ? (
         <EmptyState title="Add your first product" body="A name, a price and a photo is all it takes. Your shop, basket and checkout are already set up for you." action={<Button leftIcon={<Plus size={18} aria-hidden />} onClick={() => open()}>Add a product</Button>} illustration={<Package size={72} aria-hidden style={{ color: "var(--plx-deep)" }} />} />
       ) : (
         <ProductBrowser products={products} currency={currency} onOpen={open} onBulk={bulk} bulkBusy={bulkBusy} />
       )}
+      </div>
 
       <Modal
         open={!!form}

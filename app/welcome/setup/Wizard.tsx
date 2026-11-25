@@ -15,12 +15,20 @@ import {
   ABOUT_IDEAS, EXPERIENCES, FEELS, GOALS, HEX, PALETTE, PREVIEW_FROM_STEP, STEP_COUNT, EMPTY_DRAFT,
   canContinue, draftFromBuildProfile, draftToBuildProfile, goalMakesSite, resumeStep, waitingHint, type OnboardingDraft,
 } from "@/lib/onboarding/flow";
+import { afterCreateHref, NEW_SITE_NOTICE_KEY, noticeFor } from "@/lib/dashboardV3/newSite";
 import { ContinueLaterButton } from "./ContinueLater";
 import { ScaledFrame } from "./ScaledFrame";
 import { DesignPicker, type PickerDesign } from "@/app/dashboard/_v3/designs/DesignPicker";
 
 type Design = { id: string; name: string; description: string; html?: string };
 type Done = { siteName: string | null; kind: "site" | "personalised" | "app"; siteId?: string };
+
+/** Anything that could not be carried over to the new site waits in the browser for the dashboard to say, in plain words, until the owner closes it. */
+function keepNotice(siteId: string, warnings: unknown): void {
+  const note = noticeFor(siteId, warnings);
+  if (!note) return;
+  try { sessionStorage.setItem(NEW_SITE_NOTICE_KEY, JSON.stringify(note)); } catch { /* fine: it is only a note */ }
+}
 
 async function post<T>(url: string, body: unknown): Promise<{ ok: true; data: T } | { ok: false; error: string }> {
   try {
@@ -156,7 +164,8 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
       if (r.ok && data.site) {
         try { localStorage.removeItem(storeKey); } catch { /* fine */ }
         setDone({ siteName: data.site.name, kind: "site", siteId: data.site.id });
-        router.push(`/dashboard/sites/${data.site.id}`);
+        keepNotice(data.site.id, data.warnings);
+        router.push(afterCreateHref());
         return;
       }
       if (data?.needsPurchase && i < tries - 1) { await new Promise((res) => setTimeout(res, 2000)); continue; }
@@ -180,10 +189,11 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
     setError("");
     const designId = draft.designId || designs.designs[0]?.id || "";
     if (mock) { setDone({ siteName: draft.name, kind: skipSite ? "personalised" : "site" }); setBusy(false); return; }
-    const r = await post<{ site: { name: string } | null }>("/api/onboarding/complete", { profile, designId, skipSite, brand: skipSite ? undefined : selectionToChoice(brandPick) });
+    const r = await post<{ site: { id: string; name: string } | null; warnings?: string[] }>("/api/onboarding/complete", { profile, designId, skipSite, brand: skipSite ? undefined : selectionToChoice(brandPick) });
     setBusy(false);
     if (!r.ok) { setError(r.error); return; }
     try { localStorage.removeItem(storeKey); } catch { /* fine */ }
+    if (r.data.site) keepNotice(r.data.site.id, r.data.warnings);
     setDone({ siteName: r.data.site?.name ?? null, kind: r.data.site ? "site" : draft.goal === "app" ? "app" : "personalised" });
   };
 
@@ -219,7 +229,7 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
                   ? "Next, tell Sol what your app should do and it builds it with you, sign-in included."
                   : "Your dashboard now shows what matters for what you're making."}
             </p>
-            <Button size="lg" rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => router.push(done.kind === "app" ? "/dashboard/sol" : done.siteId ? `/dashboard/sites/${done.siteId}` : "/dashboard")}>
+            <Button size="lg" rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => router.push(done.kind === "app" ? "/dashboard/sol" : afterCreateHref())}>
               {done.kind === "app" ? "Talk to Sol" : "Go to my dashboard"}
             </Button>
           </div>
@@ -358,7 +368,7 @@ export function Wizard({ userId, initialProfile, hasSites, mock = false }: { use
       <div className="ob-col">
         <div>
           <h1 className="ob-title">Apps are built with Sol</h1>
-          <p className="ob-lead">Sol is Plexo&apos;s assistant. Tell it what your app should do and it builds it with you, sign-in included, so there&apos;s no design to pick here.</p>
+          <p className="ob-lead">Tell SOL what your app should do and it builds it with you, sign-in included, so there&apos;s no design to pick here.</p>
         </div>
         {error ? <p className="ob-error" role="alert">{error}</p> : null}
         {actions(<Button size="lg" loading={busy} rightIcon={<ArrowRight size={18} aria-hidden />} onClick={() => finish(true)}>Save and meet Sol</Button>)}

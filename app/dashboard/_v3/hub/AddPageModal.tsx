@@ -87,7 +87,7 @@ export function AddPageModal({ open, onClose, siteName, rootId, pages, isApp, si
 
   const footer = isApp ? (
     <ButtonLink href={solDraft} leftIcon={<SolGlyph size={18} />}>
-      Ask SOL to build this page
+      Add this page with SOL
     </ButtonLink>
   ) : needsAup ? (
     <>
@@ -101,7 +101,7 @@ export function AddPageModal({ open, onClose, siteName, rootId, pages, isApp, si
   ) : (
     <>
       <ButtonLink href={solDraft} variant="secondary" leftIcon={<SolGlyph size={18} />}>
-        Ask SOL to build this page
+        Add this page with SOL
       </ButtonLink>
       <Button loading={busy} onClick={() => create()}>
         Add page

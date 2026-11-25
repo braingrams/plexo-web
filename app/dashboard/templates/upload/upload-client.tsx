@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, Code2, ExternalLink, FileArchive, FileCode, UploadCloud, X } from "lucide-react";
 import { Button, ButtonLink, Card, Input, Notice, PreviewViewportFrame } from "../../_v3/ui";
+import { afterCreateHref } from "@/lib/dashboardV3/newSite";
 
 type UploadMode = "file" | "paste";
 
@@ -184,11 +185,11 @@ export function UploadRawClient() {
 
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 8 }}>
               <ButtonLink
-                href={`/dashboard/sites/${result.templateId}`}
+                href={afterCreateHref()}
                 variant="primary"
                 rightIcon={<ArrowRight size={16} />}
               >
-                Go to Website Hub
+                Continue setting up
               </ButtonLink>
               <ButtonLink
                 href={`/dashboard/templates/${result.templateId}`}

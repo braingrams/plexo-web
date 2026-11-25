@@ -70,7 +70,7 @@ export function EmailChoices({ onBlank, onDesign, onSol }: { onBlank: () => void
       </button>
       <a className="plx-echoice" href={solEmailHref()} onClick={onSol} data-testid="email-choice-sol">
         <span className="plx-echoice__icon"><SolGlyph size={26} /></span>
-        <b>Ask SOL to write it for me</b>
+        <b>Write it with SOL</b>
         <span>Tell SOL who it is for. SOL writes and designs it.</span>
       </a>
     </div>

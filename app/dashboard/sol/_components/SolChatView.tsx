@@ -17,6 +17,7 @@ import { useSolStream } from "./useSolStream";
 import { useSolSidebar } from "./SolSidebarContext";
 import { registerSolReadinessTask, resolveSolReadinessTask } from "./solReadinessGate";
 import { SolChatFrame } from "../../_v3/sol/Chat";
+import { SolIntroView, markSolIntroSeen, useSolIntro } from "../../_v3/sol/SolIntroCard";
 import { useSolV3 } from "../../_v3/sol/SolV3Context";
 import { type SiteContext } from "../../_v3/sol/logic";
 import {
@@ -155,6 +156,8 @@ export function SolChatView({
   initialSite?: SiteContext | null;
 }) {
   const v3 = useSolV3();
+  // SOL's one-time hello, for the old look and for SOL inside the app editor (the new look draws its own in SolChatFrame).
+  const intro = useSolIntro(!(v3 && !embedded));
   const lockedModelTier = lockedModelTierProp ?? embedded?.lockedModelTier;
   const { bumpRefresh, setActiveConversationIdOverride } = useSolSidebar();
   const [conversation, setConversation] = useState<ConversationSummary | null>(initialConversation);
@@ -475,6 +478,8 @@ export function SolChatView({
     // the dashboard's current site is only a hint, so SOL still asks when it has more than one site and none was chosen.
     const site = v3 && !embedded ? { ...(v3.site ? { siteId: v3.site.id, siteChosen: true } : {}), siteHintId: readCurrentSiteCookie() } : undefined;
     setInlineError(null);
+    // The first message ends SOL's "Hi, I'm SOL" hello for good (typed, an idea tapped, or sent by a host).
+    markSolIntroSeen();
     // "" (not undefined) actually empties the box: a message put back after running out of
     // credits and then resent from the top-up card otherwise stayed in it after sending.
     setComposerRestoreText("");
@@ -673,7 +678,9 @@ export function SolChatView({
         // keeps once a conversation starts — with the starting ideas just above it.
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
           <div style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: "1.25rem" }}>
-            {embedded.emptyTitle && (
+            {intro.visible ? (
+              <SolIntroView onDismiss={intro.dismiss} onPick={(p) => void handleSend(p, [])} />
+            ) : embedded.emptyTitle && (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.8rem" }}>
                 <h2 style={{ margin: 0, fontFamily: "var(--font-heading), sans-serif", fontSize: "1.15rem", fontWeight: 700, color: "#f0f2ff" }}>{embedded.emptyTitle}</h2>
                 {embedded.emptySuggestions && (
@@ -702,7 +709,9 @@ export function SolChatView({
         </div>
       ) : isEmpty ? (
         <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "0 1.25rem", gap: "1.75rem" }}>
-          {embedded?.emptyTitle ? (
+          {intro.visible ? (
+            <SolIntroView onDismiss={intro.dismiss} onPick={(p) => void handleSend(p, [])} />
+          ) : embedded?.emptyTitle ? (
             <div style={{ textAlign: "center", display: "flex", flexDirection: "column", gap: "0.9rem", alignItems: "center" }}>
               <h2 style={{ margin: 0, fontFamily: "var(--font-heading), sans-serif", fontSize: "1.25rem", fontWeight: 700, color: "#f0f2ff" }}>{embedded.emptyTitle}</h2>
               {embedded.emptySuggestions && (

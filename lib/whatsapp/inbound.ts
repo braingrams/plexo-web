@@ -86,7 +86,7 @@ const HELP_TEXT =
   "Commands:\n• **NEW** — start a fresh conversation\n• **STOP** — disconnect this number from Plexo\n• **HELP** — show this again";
 
 function notLinkedText(): string {
-  return `Hi! I'm SOL, Plexo's assistant. This number isn't connected to a Plexo account yet.\n\nOpen ${appBaseUrl()}${SOL_SETTINGS_PATH}, tap **Connect WhatsApp**, and send the message it prepares for you — it takes about 10 seconds.`;
+  return `Hi! I'm SOL, your Plexo helper. This number isn't connected to a Plexo account yet.\n\nOpen ${appBaseUrl()}${SOL_SETTINGS_PATH}, tap **Connect WhatsApp**, and send the message it prepares for you — it takes about 10 seconds.`;
 }
 
 // ---- storage helpers -----------------------------------------------------------------------------------
@@ -192,7 +192,7 @@ async function reply(phone: string, markdown: string): Promise<void> {
 const TRY_AGAIN = "Something went wrong on my side. Please try again in a moment.";
 
 function outOfCreditsText(): string {
-  return `You've used up your AI credits, so I can't take that on right now.\n\nTop up: ${appBaseUrl()}${OUT_OF_CREDITS_LINKS.topUpUrl}\nOr use your own AI key: ${appBaseUrl()}${OUT_OF_CREDITS_LINKS.ownKeyUrl}\nOr upgrade for more credits every month: ${appBaseUrl()}${OUT_OF_CREDITS_LINKS.upgradeUrl}\n\nI'll be right back once that's done.`;
+  return `SOL needs more credits to do this.\n\nTop up: ${appBaseUrl()}${OUT_OF_CREDITS_LINKS.topUpUrl}\nOr use your own AI key: ${appBaseUrl()}${OUT_OF_CREDITS_LINKS.ownKeyUrl}\nOr upgrade for more credits every month: ${appBaseUrl()}${OUT_OF_CREDITS_LINKS.upgradeUrl}\n\nSOL will pick this up as soon as that's done.`;
 }
 
 type Attachments = Extract<PreparedMedia, { ok: true }>["attachments"];

@@ -312,7 +312,7 @@ export function SolModeSwitch({
           type="button"
           onClick={enterSol}
           aria-pressed={active === "sol"}
-          title="SOL — your AI agent"
+          title="SOL"
           style={{
             ...segmentBase,
             background: active === "sol" ? "linear-gradient(135deg, rgba(var(--brand-rgb),0.32), rgba(var(--brand-deep-rgb),0.22))" : "transparent",

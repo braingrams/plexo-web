@@ -12,7 +12,7 @@ import { PLAN_LABELS, type PlanId, PLAN, RETIRED_PLAN } from "@/lib/plan/plans";
 import { currencySymbolFor, minTopupAmount, type BillingInterval } from "@/lib/billing/pricing";
 import { formatAiActivityDescription } from "@/lib/dashboardV3/billingView";
 
-type LedgerEntryType = "MONTHLY_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
+type LedgerEntryType = "MONTHLY_GRANT" | "FIRST_SITE_GRANT" | "TOPUP_PURCHASE" | "AI_USAGE" | "REFUND" | "ADJUSTMENT";
 
 type LedgerEntry = {
   id: string;
@@ -49,8 +49,9 @@ type FunnelSlotsSummary = { total: number; used: number; hasSlotAvailable: boole
 
 const TYPE_LABELS: Record<LedgerEntryType, string> = {
   MONTHLY_GRANT: "Monthly grant",
+  FIRST_SITE_GRANT: "First-site gift",
   TOPUP_PURCHASE: "Credit purchase",
-  AI_USAGE: "AI generation",
+  AI_USAGE: "SOL work",
   REFUND: "Refund",
   ADJUSTMENT: "Adjustment",
 };
@@ -318,7 +319,7 @@ export function BillingSection({ plan, paying = plan !== PLAN.FREE, planNote = n
             Billing &amp; Credits
           </h2>
           <p style={{ fontSize: "0.75rem", color: "var(--plx-faint, rgba(240,242,255,0.35))" }}>
-            AI features you use without your own AI key draw from this balance.
+            SOL draws from this balance, unless you use your own AI key.
           </p>
         </div>
         <span
